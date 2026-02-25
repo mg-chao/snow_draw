@@ -179,14 +179,16 @@ class _NoopHitTester implements ElementHitTester {
   }) => false;
 }
 
-class _CountingTaskEncoder implements ElementRenderTaskEncoder<_TaskTestData> {
+final class _CountingTaskEncoder
+    extends TypedElementRenderTaskEncoder<_TaskTestData> {
   _CountingTaskEncoder(this._counters);
 
   final _RenderCounters _counters;
 
   @override
-  List<RenderTask> encodeTasks({
+  List<RenderTask> encodeTypedTasks({
     required ElementState element,
+    required _TaskTestData data,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) {
@@ -205,12 +207,14 @@ class _CountingTaskEncoder implements ElementRenderTaskEncoder<_TaskTestData> {
   }
 }
 
-class _ThrowingTaskEncoder implements ElementRenderTaskEncoder<_TaskTestData> {
+final class _ThrowingTaskEncoder
+    extends TypedElementRenderTaskEncoder<_TaskTestData> {
   const _ThrowingTaskEncoder();
 
   @override
-  List<RenderTask> encodeTasks({
+  List<RenderTask> encodeTypedTasks({
     required ElementState element,
+    required _TaskTestData data,
     String? localeTag,
     TextMetricsService? textMetricsService,
   }) => throw StateError('test-only failing task encoder');

@@ -3,7 +3,6 @@ import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/dependency_interfaces.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry_interface.dart';
 import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 import 'package:snow_draw_core/draw/elements/types/free_draw/free_draw_data.dart';
@@ -30,7 +29,7 @@ class _Deps implements CreateElementReducerDeps {
   final DrawConfig config;
 
   @override
-  final ElementRegistry elementRegistry;
+  final DefaultElementRegistry elementRegistry;
 
   @override
   final IdGenerator idGenerator;

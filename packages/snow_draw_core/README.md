@@ -19,7 +19,7 @@ Core must not depend on `package:flutter` or `dart:ui`.
 
 ## Integration Contract
 
-Backends should consume core via `DrawContext` and `ElementRegistry`, then
+Backends should consume core via `DrawContext` and `DefaultElementRegistry`, then
 execute frame plans emitted by core task encoders and `FrameRenderPlanBuilder`.
 
 Purity and dependency constraints are validated by workspace guard scripts.

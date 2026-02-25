@@ -312,7 +312,6 @@ class SelectPlugin extends DrawInputPlugin {
     intent: intent,
     position: position,
     config: drawContext.config,
-    editOperations: drawContext.editOperations,
   );
 
   Future<void> _updateEditFromEvent(PointerMoveInputEvent event) => dispatch(

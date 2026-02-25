@@ -37,7 +37,7 @@ void main() {
       );
 
       expect(registry.registeredTypeIds, isNotEmpty);
-      expect(registry, isA<ElementRegistry>());
+      expect(registry, isA<DefaultElementRegistry>());
       expect(arrow.strokeStyle, StrokeStyle.dotted);
       expect(normalizedArrowPoints.length, 2);
       expect(interaction, isA<InteractionState>());

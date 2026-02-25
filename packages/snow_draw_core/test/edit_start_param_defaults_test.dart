@@ -75,7 +75,6 @@ void main() {
         intent: const StartRotateIntent(),
         position: DrawPoint.zero,
         config: context.config,
-        editOperations: context.editOperations,
       );
 
       expect(mapped, isNotNull);

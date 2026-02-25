@@ -5,7 +5,6 @@ import 'package:snow_draw_core/draw/edit/core/edit_operation.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_operation_params.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_result.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_session_service.dart';
-import 'package:snow_draw_core/draw/edit/edit_operation_registry_interface.dart';
 import 'package:snow_draw_core/draw/edit/edit_operations.dart';
 import 'package:snow_draw_core/draw/edit/move/move_operation.dart';
 import 'package:snow_draw_core/draw/edit/preview/edit_preview.dart';
@@ -140,7 +139,7 @@ DrawState _selectedRectangleState() => DrawState(
   application: ApplicationState.initial(),
 );
 
-final class _SingleOperationRegistry implements EditOperationRegistry {
+final class _SingleOperationRegistry implements DefaultEditOperationRegistry {
   _SingleOperationRegistry(this._operation);
 
   final EditOperation _operation;

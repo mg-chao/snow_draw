@@ -56,10 +56,5 @@ class ArrowBindingTargetCache {
     required DrawPoint from,
     required DrawPoint to,
     required double threshold,
-  }) {
-    if (threshold <= 0) {
-      return false;
-    }
-    return from.distanceSquared(to) <= threshold * threshold;
-  }
+  }) => from.distanceSquared(to) <= threshold * threshold;
 }

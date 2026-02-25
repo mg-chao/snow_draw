@@ -97,7 +97,7 @@ class ElementRenderer {
     required Canvas canvas,
     required ElementState element,
     required double scaleFactor,
-    required ElementRegistry elementRegistry,
+    required DefaultElementRegistry elementRegistry,
     TextMetricsService? textMetricsService,
     Locale? locale,
   }) {
@@ -117,7 +117,7 @@ class ElementRenderer {
   bool _renderTaskIfAvailable({
     required Canvas canvas,
     required ElementState element,
-    required ElementRegistry elementRegistry,
+    required DefaultElementRegistry elementRegistry,
     TextMetricsService? textMetricsService,
     Locale? locale,
   }) {

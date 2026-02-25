@@ -3,7 +3,6 @@ import '../../config/draw_config.dart';
 import '../../types/draw_point.dart';
 import '../../types/edit_operation_id.dart';
 import '../../utils/edit_intent_detector.dart';
-import '../edit_operation_registry_interface.dart';
 import 'edit_operation_params.dart';
 
 typedef EditIntentResolver =
@@ -31,20 +30,13 @@ class EditIntentToOperationMapper {
   final EditIntentResolver _resolver;
 
   /// Returns a [StartEdit] action, or `null` if the intent is not mapped.
-  ///
-  /// Returns `null` when the resolved operation id is not registered in
-  /// [editOperations], avoiding unknown-operation starts.
   StartEdit? mapToStartEdit({
     required EditIntent intent,
     required DrawPoint position,
     required DrawConfig config,
-    required EditOperationRegistry editOperations,
   }) {
     final resolved = _resolver(intent, config);
     if (resolved == null) {
-      return null;
-    }
-    if (editOperations.getOperation(resolved.operationId) == null) {
       return null;
     }
     return StartEdit(

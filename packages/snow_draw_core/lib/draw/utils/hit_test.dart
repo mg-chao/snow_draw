@@ -4,7 +4,7 @@ import 'package:meta/meta.dart';
 
 import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
-import '../elements/core/element_registry_interface.dart';
+import '../elements/core/element_registry.dart';
 import '../elements/core/element_type_id.dart';
 import '../elements/types/serial_number/serial_number_data.dart';
 import '../elements/types/text/text_data.dart';
@@ -187,7 +187,7 @@ class HitTest {
     required DrawStateView stateView,
     required DrawPoint position,
     required SelectionConfig config,
-    required ElementRegistry registry,
+    required DefaultElementRegistry registry,
     double? tolerance,
     ElementTypeId<ElementData>? filterTypeId,
   }) {
@@ -558,7 +558,7 @@ class HitTest {
   bool _testElement(
     ElementState element,
     DrawPoint position,
-    ElementRegistry registry,
+    DefaultElementRegistry registry,
     double tolerance,
   ) {
     final definition = registry.getDefinition(element.typeId);
@@ -730,7 +730,7 @@ class _HitTestCacheKey {
   final SelectionConfig config;
   final double tolerance;
   final ElementTypeId<ElementData>? filterTypeId;
-  final ElementRegistry registry;
+  final DefaultElementRegistry registry;
   final int positionX;
   final int positionY;
 

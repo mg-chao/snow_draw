@@ -1,7 +1,7 @@
 import '../../utils/id_generator.dart';
 import '../config/draw_config.dart';
-import '../edit/edit_operation_registry_interface.dart';
-import '../elements/core/element_registry_interface.dart';
+import '../edit/edit_operations.dart';
+import '../elements/core/element_registry.dart';
 import '../events/event_bus.dart';
 import '../services/log/log_service.dart';
 import '../services/text/text_metrics_service.dart';
@@ -9,7 +9,7 @@ import '../services/text/text_metrics_service.dart';
 /// Lightweight dependency interfaces to avoid service-locator coupling.
 abstract interface class CreateElementReducerDeps {
   DrawConfig get config;
-  ElementRegistry get elementRegistry;
+  DefaultElementRegistry get elementRegistry;
   IdGenerator get idGenerator;
   TextMetricsService get textMetricsService;
 }
@@ -40,5 +40,5 @@ abstract interface class InteractionReducerDeps
         TextEditReducerDeps,
         SelectionReducerDeps,
         ElementReducerDeps {
-  EditOperationRegistry get editOperations;
+  DefaultEditOperationRegistry get editOperations;
 }

@@ -23,7 +23,7 @@ void main() {
   });
 }
 
-class _CustomElementRegistryProxy implements ElementRegistry {
+class _CustomElementRegistryProxy implements DefaultElementRegistry {
   _CustomElementRegistryProxy();
 
   final DefaultElementRegistry _delegate = DefaultElementRegistry();

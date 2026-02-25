@@ -1,7 +1,6 @@
 import 'core/element_data.dart';
 import 'core/element_definition.dart';
 import 'core/element_registry.dart';
-import 'core/element_registry_interface.dart';
 import 'types/arrow/arrow_definition.dart';
 import 'types/filter/filter_definition.dart';
 import 'types/free_draw/free_draw_definition.dart';
@@ -15,7 +14,7 @@ import 'types/text/text_definition.dart';
 ///
 /// Call this when constructing a draw context to populate its element
 /// registry.
-void registerBuiltInElements(ElementRegistry registry) {
+void registerBuiltInElements(DefaultElementRegistry registry) {
   for (final definition in _builtInDefinitions) {
     final typeValue = definition.typeId.value;
     if (!registry.supportsTypeValue(typeValue)) {
@@ -25,7 +24,9 @@ void registerBuiltInElements(ElementRegistry registry) {
 }
 
 /// Resolves [elementRegistry] and registers all built-in definitions.
-ElementRegistry resolveElementRegistry({ElementRegistry? elementRegistry}) {
+DefaultElementRegistry resolveElementRegistry({
+  DefaultElementRegistry? elementRegistry,
+}) {
   final resolved = elementRegistry ?? DefaultElementRegistry();
   registerBuiltInElements(resolved);
   return resolved;

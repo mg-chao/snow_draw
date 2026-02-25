@@ -1,6 +1,6 @@
 import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
-import '../elements/core/element_registry_interface.dart';
+import '../elements/core/element_registry.dart';
 import '../elements/core/element_type_id.dart';
 import '../elements/types/arrow/arrow_like_data.dart';
 import '../elements/types/arrow/arrow_points.dart';
@@ -30,7 +30,7 @@ class EditIntentDetector {
     required DrawPoint position,
     required bool isShiftPressed,
     required SelectionConfig config,
-    required ElementRegistry registry,
+    required DefaultElementRegistry registry,
     ElementTypeId<ElementData>? filterTypeId,
   }) {
     final arrowPointIntent = _detectArrowPointIntent(

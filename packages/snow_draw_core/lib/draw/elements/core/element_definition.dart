@@ -2,9 +2,9 @@ import 'package:meta/meta.dart';
 
 import 'creation_strategy.dart';
 import 'element_data.dart';
-import 'element_render_task_encoder.dart';
 import 'element_hit_tester.dart';
 import 'element_type_id.dart';
+import 'typed_element_render_task_encoder.dart';
 
 /// Definition for a single element type.
 ///
@@ -29,5 +29,5 @@ class ElementDefinition<T extends ElementData> {
   final CreationStrategy? creationStrategy;
 
   /// Core-owned render-task encoder used by backends.
-  final ElementRenderTaskEncoder<T> taskEncoder;
+  final TypedElementRenderTaskEncoder<T> taskEncoder;
 }

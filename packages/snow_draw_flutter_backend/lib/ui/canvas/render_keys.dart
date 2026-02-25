@@ -82,7 +82,7 @@ class SceneCanvasRenderKey {
   final Map<String, ElementState> previewElementsById;
 
   /// Element registry for rendering.
-  final ElementRegistry elementRegistry;
+  final DefaultElementRegistry elementRegistry;
 
   /// Text metrics service used while encoding text-based scenes.
   final TextMetricsService textMetricsService;

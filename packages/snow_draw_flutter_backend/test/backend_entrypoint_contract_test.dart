@@ -58,9 +58,9 @@ void main() {
     test('fails fast for custom read-only registries', () {
       expect(
         () => createFlutterDrawContext(
-          elementRegistry: const _ReadOnlyElementRegistry(),
+          elementRegistry: _ReadOnlyElementRegistry(),
         ),
-        throwsA(isA<ArgumentError>()),
+        throwsA(isA<UnsupportedError>()),
       );
     });
 
@@ -92,60 +92,14 @@ void main() {
   });
 }
 
-class _ReadOnlyElementRegistry implements ElementRegistry {
-  const _ReadOnlyElementRegistry();
-
-  @override
-  ElementDefinition<T>? getDefinition<T extends ElementData>(
-    ElementTypeId<T> typeId,
-  ) => null;
-
-  @override
-  ElementDefinition<ElementData>? getDefinitionByValue(String typeValue) =>
-      null;
-
-  @override
-  Iterable<ElementTypeId<ElementData>> get registeredTypeIds =>
-      const <ElementTypeId<ElementData>>[];
-
-  @override
-  bool supports<T extends ElementData>(ElementTypeId<T> typeId) => false;
-
-  @override
-  bool supportsTypeValue(String typeValue) => false;
-}
-
-class _MutableElementRegistryProxy implements MutableElementRegistry {
-  _MutableElementRegistryProxy();
-
-  final _delegate = DefaultElementRegistry();
-
-  @override
-  ElementDefinition<T>? getDefinition<T extends ElementData>(
-    ElementTypeId<T> typeId,
-  ) => _delegate.getDefinition(typeId);
-
-  @override
-  ElementDefinition<ElementData>? getDefinitionByValue(String typeValue) =>
-      _delegate.getDefinitionByValue(typeValue);
-
-  @override
-  Iterable<ElementTypeId<ElementData>> get registeredTypeIds =>
-      _delegate.registeredTypeIds;
-
+class _ReadOnlyElementRegistry extends DefaultElementRegistry {
   @override
   void register<T extends ElementData>(ElementDefinition<T> definition) {
-    _delegate.register(definition);
+    throw UnsupportedError('Read-only registry');
   }
-
-  @override
-  bool supports<T extends ElementData>(ElementTypeId<T> typeId) =>
-      _delegate.supports(typeId);
-
-  @override
-  bool supportsTypeValue(String typeValue) =>
-      _delegate.supportsTypeValue(typeValue);
 }
+
+class _MutableElementRegistryProxy extends DefaultElementRegistry {}
 
 class _StubTextMetricsService implements TextMetricsService {
   const _StubTextMetricsService();

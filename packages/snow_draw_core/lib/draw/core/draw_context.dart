@@ -2,9 +2,8 @@ import '../../utils/id_generator.dart';
 import '../config/config_manager.dart';
 import '../config/draw_config.dart';
 import '../edit/core/edit_intent_to_operation_mapper.dart';
-import '../edit/edit_operation_registry_interface.dart';
 import '../edit/edit_operations.dart';
-import '../elements/core/element_registry_interface.dart';
+import '../elements/core/element_registry.dart';
 import '../elements/registration.dart';
 import '../events/event_bus.dart';
 import '../services/log/log_service.dart';
@@ -32,8 +31,8 @@ class DrawContext implements InteractionReducerDeps {
        textMetricsService = textMetricsService ?? defaultTextMetricsService;
 
   factory DrawContext.withDefaults({
-    ElementRegistry? elementRegistry,
-    EditOperationRegistry? editOperations,
+    DefaultElementRegistry? elementRegistry,
+    DefaultEditOperationRegistry? editOperations,
     IdGenerator? idGenerator,
     EditIntentToOperationMapper? editIntentMapper,
     ConfigManager? configManager,
@@ -57,9 +56,9 @@ class DrawContext implements InteractionReducerDeps {
     );
   }
   @override
-  final ElementRegistry elementRegistry;
+  final DefaultElementRegistry elementRegistry;
   @override
-  final EditOperationRegistry editOperations;
+  final DefaultEditOperationRegistry editOperations;
   @override
   final IdGenerator idGenerator;
 
@@ -89,8 +88,8 @@ class DrawContext implements InteractionReducerDeps {
   Stream<DrawConfig> get configStream => configManager.stream;
 
   DrawContext copyWith({
-    ElementRegistry? elementRegistry,
-    EditOperationRegistry? editOperations,
+    DefaultElementRegistry? elementRegistry,
+    DefaultEditOperationRegistry? editOperations,
     IdGenerator? idGenerator,
     EditIntentToOperationMapper? editIntentMapper,
     ConfigManager? configManager,

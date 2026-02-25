@@ -8,7 +8,7 @@ import '../../services/log/log_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/snap_guides.dart';
-import '../edit_operation_registry_interface.dart';
+import '../edit_operations.dart';
 import 'edit_error_handler.dart';
 import 'edit_modifiers.dart';
 import 'edit_operation.dart';
@@ -36,7 +36,7 @@ class EditSessionService {
   }) : _log = logService?.edit;
 
   factory EditSessionService.fromRegistry(
-    EditOperationRegistry registry, {
+    DefaultEditOperationRegistry registry, {
     required DrawConfig Function() configProvider,
     LogService? logService,
   }) => EditSessionService(
@@ -44,7 +44,7 @@ class EditSessionService {
     configProvider: configProvider,
     logService: logService,
   );
-  final EditOperationRegistry editOperations;
+  final DefaultEditOperationRegistry editOperations;
   final DrawConfig Function() configProvider;
   final ModuleLogger? _log;
 

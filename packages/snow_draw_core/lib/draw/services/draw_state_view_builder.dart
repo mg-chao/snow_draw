@@ -1,6 +1,6 @@
 import 'package:meta/meta.dart';
 
-import '../edit/edit_operation_registry_interface.dart';
+import '../edit/edit_operations.dart';
 import '../edit/preview/edit_preview_engine.dart';
 import '../models/draw_state.dart';
 import '../models/draw_state_view.dart';
@@ -22,7 +22,7 @@ class DrawStateViewBuilder {
     required this.editOperations,
     EditPreviewEngine? previewEngine,
   }) : _previewEngine = previewEngine ?? _sharedPreviewEngine;
-  final EditOperationRegistry editOperations;
+  final DefaultEditOperationRegistry editOperations;
   final EditPreviewEngine _previewEngine;
 
   DrawStateView build(DrawState state) => _buildUncached(state);

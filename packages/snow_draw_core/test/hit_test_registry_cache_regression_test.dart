@@ -3,9 +3,9 @@ import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/elements/core/element_data.dart';
 import 'package:snow_draw_core/draw/elements/core/element_definition.dart';
 import 'package:snow_draw_core/draw/elements/core/element_hit_tester.dart';
-import 'package:snow_draw_core/draw/elements/core/element_render_task_encoder.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
 import 'package:snow_draw_core/draw/elements/core/element_type_id.dart';
+import 'package:snow_draw_core/draw/elements/core/typed_element_render_task_encoder.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
@@ -104,7 +104,7 @@ class _ToggleHitTester implements ElementHitTester {
 }
 
 final class _NoopTaskEncoder
-    extends ElementRenderTaskEncoder<_TestElementData> {
+    extends TypedElementRenderTaskEncoder<_TestElementData> {
   const _NoopTaskEncoder();
 
   @override
