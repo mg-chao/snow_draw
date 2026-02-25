@@ -220,6 +220,10 @@ class DrawConfig {
 
   static final defaultConfig = DrawConfig();
 
+  /// Returns a new configuration snapshot with direct field overrides.
+  ///
+  /// Style sections are independent: updating [elementStyle] does not
+  /// implicitly rewrite per-element style blocks.
   DrawConfig copyWith({
     SelectionConfig? selection,
     ElementConfig? element,
@@ -236,69 +240,23 @@ class DrawConfig {
     ElementStyleConfig? highlightStyle,
     GridConfig? grid,
     SnapConfig? snap,
-  }) {
-    final nextElementStyle = elementStyle ?? this.elementStyle;
-    final shouldSyncLinkedStyles = nextElementStyle != this.elementStyle;
-
-    ElementStyleConfig resolveLinkedStyle(
-      ElementStyleConfig? explicitStyle,
-      ElementStyleConfig currentStyle,
-    ) {
-      if (explicitStyle != null) {
-        return explicitStyle;
-      }
-      return shouldSyncLinkedStyles ? nextElementStyle : currentStyle;
-    }
-
-    ElementStyleConfig resolveDerivedStyle(
-      ElementStyleConfig? explicitStyle,
-      ElementStyleConfig currentStyle,
-      ElementStyleConfig Function(ElementStyleConfig) derive,
-    ) {
-      if (explicitStyle != null) {
-        return explicitStyle;
-      }
-      if (!shouldSyncLinkedStyles) {
-        return currentStyle;
-      }
-      return derive(nextElementStyle);
-    }
-
-    final nextConfig = DrawConfig(
-      selection: selection ?? this.selection,
-      element: element ?? this.element,
-      canvas: canvas ?? this.canvas,
-      boxSelection: boxSelection ?? this.boxSelection,
-      elementStyle: nextElementStyle,
-      rectangleStyle: resolveLinkedStyle(rectangleStyle, this.rectangleStyle),
-      arrowStyle: resolveLinkedStyle(arrowStyle, this.arrowStyle),
-      lineStyle: resolveLinkedStyle(lineStyle, this.lineStyle),
-      freeDrawStyle: resolveLinkedStyle(freeDrawStyle, this.freeDrawStyle),
-      textStyle: resolveLinkedStyle(textStyle, this.textStyle),
-      serialNumberStyle: resolveDerivedStyle(
-        serialNumberStyle,
-        this.serialNumberStyle,
-        (style) => _deriveSerialNumberStyle(
-          style,
-          serialNumber: this.serialNumberStyle.serialNumber,
-        ),
-      ),
-      filterStyle: resolveDerivedStyle(
-        filterStyle,
-        this.filterStyle,
-        _deriveFilterStyle,
-      ),
-      highlightStyle: resolveDerivedStyle(
-        highlightStyle,
-        this.highlightStyle,
-        _deriveHighlightStyle,
-      ),
-      grid: grid ?? this.grid,
-      snap: snap ?? this.snap,
-    );
-
-    return nextConfig == this ? this : nextConfig;
-  }
+  }) => DrawConfig(
+    selection: selection ?? this.selection,
+    element: element ?? this.element,
+    canvas: canvas ?? this.canvas,
+    boxSelection: boxSelection ?? this.boxSelection,
+    elementStyle: elementStyle ?? this.elementStyle,
+    rectangleStyle: rectangleStyle ?? this.rectangleStyle,
+    arrowStyle: arrowStyle ?? this.arrowStyle,
+    lineStyle: lineStyle ?? this.lineStyle,
+    freeDrawStyle: freeDrawStyle ?? this.freeDrawStyle,
+    textStyle: textStyle ?? this.textStyle,
+    serialNumberStyle: serialNumberStyle ?? this.serialNumberStyle,
+    filterStyle: filterStyle ?? this.filterStyle,
+    highlightStyle: highlightStyle ?? this.highlightStyle,
+    grid: grid ?? this.grid,
+    snap: snap ?? this.snap,
+  );
 
   static ElementStyleConfig _deriveSerialNumberStyle(
     ElementStyleConfig elementStyle, {

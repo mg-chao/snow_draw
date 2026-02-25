@@ -8,12 +8,12 @@ import '../../models/selection_overlay_state.dart';
 import '../../services/grid_snap_service.dart';
 import '../../services/object_snap_service.dart';
 import '../../types/draw_point.dart';
-import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_geometry.dart';
 import '../../types/snap_guides.dart';
+import '../../utils/camera_zoom.dart';
 import '../../utils/selection_calculator.dart';
 import '../../utils/snapping_mode.dart';
 import '../apply/edit_apply.dart';
@@ -66,7 +66,6 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       initialSelectionBounds: typedParams.initialSelectionBounds,
     );
     final selectedIdsAtStart = data.selectedIds;
-    final targetElements = snapshotSelectedElements(state);
     final referenceElements = resolveReferenceElements(
       state,
       selectedIdsAtStart,
@@ -74,10 +73,11 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
     final referenceElementAabbs = ObjectSnapService.buildReferenceAabbs(
       referenceElements,
     );
-    final snapBounds = _resolveSnapBounds(
-      selectedElements: targetElements,
-      fallback: data.startBounds,
-    );
+    final snapBounds =
+        SelectionCalculator.computeSelectionBoundsForElements(
+          data.selectedElements,
+        ) ??
+        data.startBounds;
 
     return MoveEditContext(
       startPosition: position,
@@ -89,7 +89,6 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       snapBoundsAtStart: snapBounds,
       referenceElements: List<ElementState>.unmodifiable(referenceElements),
       referenceElementAabbs: referenceElementAabbs,
-      targetElements: List<ElementState>.unmodifiable(targetElements),
     );
   }
 
@@ -120,53 +119,21 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
       );
     }
 
-    var snapGuides = const <SnapGuide>[];
-    var nextDx = displacement.dx;
-    var nextDy = displacement.dy;
-    final targetOffset = DrawPoint(x: displacement.dx, y: displacement.dy);
-    final targetRect = typedContext.snapBounds.translate(targetOffset);
-    final snapConfig = config.snap;
-    final snappingMode = resolveEffectiveSnappingModeForConfig(
+    final snappedDisplacement = _resolveSnappedDisplacement(
+      state: state,
+      context: typedContext,
+      displacement: displacement,
+      modifiers: modifiers,
       config: config,
-      ctrlPressed: modifiers.snapOverride,
     );
-    final shouldObjectSnap =
-        snappingMode == SnappingMode.object &&
-        (snapConfig.enablePointSnaps || snapConfig.enableGapSnaps);
-    if (snappingMode == SnappingMode.grid) {
-      final snappedRect = gridSnapService.snapRect(
-        rect: targetRect,
-        gridSize: config.grid.size,
-        snapMinX: true,
-        snapMinY: true,
-      );
-      nextDx += snappedRect.minX - targetRect.minX;
-      nextDy += snappedRect.minY - targetRect.minY;
-    } else if (shouldObjectSnap) {
-      final zoom = state.application.view.camera.zoom;
-      final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-      final snapDistance = snapConfig.distance / effectiveZoom;
-      final result = objectSnapService.snapMove(
-        targetRect: targetRect,
-        referenceElements: typedContext.referenceElements,
-        referenceAabbs: typedContext.referenceElementAabbs,
-        snapDistance: snapDistance,
-        targetElements: typedContext.targetElements,
-        targetOffset: targetOffset,
-        enablePointSnaps: snapConfig.enablePointSnaps,
-        enableGapSnaps: snapConfig.enableGapSnaps,
-      );
-      nextDx += result.dx;
-      nextDy += result.dy;
-      if (snapConfig.showGuides) {
-        snapGuides = result.guides;
-      }
-    }
 
-    final nextTransform = MoveTransform(dx: nextDx, dy: nextDy);
+    final nextTransform = MoveTransform(
+      dx: snappedDisplacement.dx,
+      dy: snappedDisplacement.dy,
+    );
     return EditUpdateResult<EditTransform>(
       transform: nextTransform,
-      snapGuides: snapGuides,
+      snapGuides: snappedDisplacement.guides,
     );
   }
 
@@ -227,37 +194,61 @@ class MoveOperation extends EditOperation with StandardFinishMixin {
     newBounds: result.multiSelectBounds!,
   );
 
-  DrawRect _resolveSnapBounds({
-    required List<ElementState> selectedElements,
-    required DrawRect fallback,
+  ({double dx, double dy, List<SnapGuide> guides}) _resolveSnappedDisplacement({
+    required DrawState state,
+    required MoveEditContext context,
+    required ({double dx, double dy}) displacement,
+    required EditModifiers modifiers,
+    required DrawConfig config,
   }) {
-    if (selectedElements.isEmpty) {
-      return fallback;
-    }
-
-    final firstAabb = SelectionCalculator.computeElementWorldAabb(
-      selectedElements.first,
+    final baseDx = displacement.dx;
+    final baseDy = displacement.dy;
+    final targetOffset = DrawPoint(x: baseDx, y: baseDy);
+    final targetRect = context.snapBounds.translate(targetOffset);
+    final snapConfig = config.snap;
+    final snappingMode = resolveEffectiveSnappingModeForConfig(
+      config: config,
+      ctrlPressed: modifiers.snapOverride,
     );
-    var minX = firstAabb.minX;
-    var minY = firstAabb.minY;
-    var maxX = firstAabb.maxX;
-    var maxY = firstAabb.maxY;
-    for (final element in selectedElements.skip(1)) {
-      final aabb = SelectionCalculator.computeElementWorldAabb(element);
-      if (aabb.minX < minX) {
-        minX = aabb.minX;
-      }
-      if (aabb.minY < minY) {
-        minY = aabb.minY;
-      }
-      if (aabb.maxX > maxX) {
-        maxX = aabb.maxX;
-      }
-      if (aabb.maxY > maxY) {
-        maxY = aabb.maxY;
-      }
+
+    switch (snappingMode) {
+      case SnappingMode.grid:
+        final snappedRect = gridSnapService.snapRect(
+          rect: targetRect,
+          gridSize: config.grid.size,
+          snapMinX: true,
+          snapMinY: true,
+        );
+        return (
+          dx: baseDx + snappedRect.minX - targetRect.minX,
+          dy: baseDy + snappedRect.minY - targetRect.minY,
+          guides: const <SnapGuide>[],
+        );
+      case SnappingMode.object:
+        if (!snapConfig.enablePointSnaps && !snapConfig.enableGapSnaps) {
+          break;
+        }
+        final snapDistance = resolveZoomAdjustedDistance(
+          distance: snapConfig.distance,
+          zoom: state.application.view.camera.zoom,
+        );
+        final result = objectSnapService.snapMove(
+          targetRect: targetRect,
+          referenceElements: context.referenceElements,
+          referenceAabbs: context.referenceElementAabbs,
+          snapDistance: snapDistance,
+          enablePointSnaps: snapConfig.enablePointSnaps,
+          enableGapSnaps: snapConfig.enableGapSnaps,
+        );
+        return (
+          dx: baseDx + result.dx,
+          dy: baseDy + result.dy,
+          guides: snapConfig.showGuides ? result.guides : const <SnapGuide>[],
+        );
+      case SnappingMode.none:
+        break;
     }
 
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+    return (dx: baseDx, dy: baseDy, guides: const <SnapGuide>[]);
   }
 }

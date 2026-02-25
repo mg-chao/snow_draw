@@ -13,24 +13,13 @@ import '../../render/text/text_renderer.dart';
 import '../../services/text/flutter_text_layout.dart';
 import '../../services/text/flutter_text_rendering_cache_invalidation.dart';
 import 'cursor_resolver.dart';
-import 'dynamic_canvas_painter.dart';
-import 'dynamic_scene_optimization.dart';
-import 'eraser_stroke_processor.dart';
 import 'filter_shader_manager.dart';
-import 'filter_style_state_change.dart';
 import 'frame_aligned_pointer_move_dispatcher.dart';
 import 'grid_shader_painter.dart';
 import 'highlight_mask_shader_manager.dart';
-import 'highlight_mask_visibility.dart';
-import 'interaction_dynamic_scene_cache.dart';
-import 'interaction_mutation_refresh_plan.dart';
-import 'lightweight_line_edit_state_change.dart';
-import 'pointer_move_dispatch_policy.dart';
 import 'rectangle_shader_manager.dart';
 import 'render_keys.dart';
-import 'serial_number_interaction_classifier.dart';
-import 'text_editing_state_change.dart';
-import 'watermark_visibility.dart';
+import 'scene_canvas_painter.dart';
 
 /// DrawCanvas based on the plugin system.
 ///
@@ -141,7 +130,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   // Keep store synchronization responsive while reducing high-frequency
   // interaction churn that can compete with text overlay rendering.
   static const _textDraftSyncMinInterval = Duration(milliseconds: 24);
-  static const _minOptimizationSavedElementCount = 8;
   static const _strokeWidthSteps = [2.0, 4.0, 7.0];
   static const _fontSizeSteps = [16.0, 21.0, 27.0, 42.0];
   static const _eraserPreviewOpacityFactor = 0.5;
@@ -158,6 +146,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     DrawStateChange.view,
     DrawStateChange.interaction,
   };
+  static const _frameRenderPlanBuilder = FrameRenderPlanBuilder();
 
   VoidCallback? _stateUnsubscribe;
   StreamSubscription<DrawConfig>? _configSubscription;
@@ -199,15 +188,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   final _activePointerIds = <int>{};
   final _eraserPointerIds = <int>{};
   final _pendingErasePreviewElementsById = <String, ElementState>{};
-  var _eraserVolatilePreviewElementIds = <String>{};
-  var _eraserPreviewCacheRevision = 0;
-  var _interactionPreviewRevision = 0;
-  var _filterStyleQualityRestoreRevision = 0;
-  var _lightweightLinePreviewRevision = 0;
-  var _transientDynamicFilterElementIds = const <String>{};
-  DrawStateView? _mergedEraserPreviewStateView;
-  var _mergedEraserPreviewRevision = -1;
-  var _mergedEraserPreviewElements = const <String, ElementState>{};
   final _eraserHitTesterByType =
       <ElementTypeId<ElementData>, ElementHitTester?>{};
   final _eraserCursorPositionNotifier = ValueNotifier<DrawPoint?>(null);
@@ -222,9 +202,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   late final FrameAlignedEventDispatcher<_EraserMoveEvent>
   _eraserMoveDispatcher;
   late final EraserStrokeProcessor _eraserStrokeProcessor;
-  DrawState? _lastObservedState;
-  DrawState? _cachedState;
-  DrawStateView? _cachedStateView;
   SelectionConfig? _cachedInputSelectionConfigSource;
   SelectionConfig? _cachedInputSelectionConfig;
   double? _cachedInputSelectionScale;
@@ -269,18 +246,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       _coords.screenOffsetToWorld(localPosition);
 
   Future<void> _recreatePluginCoordinator() async {
-    // Create dependencies.
-    final dependencies = ControllerDependencies(
-      dispatcher: widget.store.call,
-      stateProvider: widget.store,
+    final inputLog = widget.store.context.log.input;
+
+    final pluginContext = PluginContext(
+      stateProvider: () => widget.store.state,
       contextProvider: () => widget.store.context,
       selectionConfigProvider: () =>
           _resolveSelectionConfigForInput(widget.store.state),
+      dispatcher: widget.store.dispatch,
     );
-    final inputLog = widget.store.context.log.input;
-
-    // Create plugin context.
-    final pluginContext = pluginFactory.createPluginContext(dependencies);
 
     // Build middleware list.
     final middlewares = <InputMiddleware>[
@@ -313,22 +287,26 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       middlewares: middlewares,
     );
 
-    // Register standard plugins.
-    final standardPlugins = pluginFactory.createStandardPlugins(
-      currentToolTypeId: widget.currentToolTypeId,
+    final standardPlugins = <InputPlugin>[
+      EditPlugin(),
+      TextToolPlugin(
+        currentToolTypeId: widget.currentToolTypeId,
+        isSelectionToolActive: widget.isSelectionToolActive,
+      ),
+      CreatePlugin(currentToolTypeId: widget.currentToolTypeId),
+      SelectPlugin(
+        currentToolTypeId: widget.currentToolTypeId,
+        isSelectionToolActive: widget.isSelectionToolActive,
+      ),
+      BoxSelectPlugin(),
+    ];
+    final plugins = <InputPlugin>[...standardPlugins, ...?widget.customPlugins];
+    await _pluginCoordinator.registry.registerAll(plugins);
+
+    _updateToolPlugins(
+      toolTypeId: widget.currentToolTypeId,
       isSelectionToolActive: widget.isSelectionToolActive,
     );
-
-    for (final plugin in standardPlugins) {
-      await _pluginCoordinator.registry.register(plugin);
-    }
-
-    // Register custom plugins.
-    if (widget.customPlugins != null) {
-      for (final plugin in widget.customPlugins!) {
-        await _pluginCoordinator.registry.register(plugin);
-      }
-    }
 
     // Print stats (debug mode).
     if (widget.enableDebugLogging) {
@@ -372,7 +350,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _stateViewBuilder = DrawStateViewBuilder(
       editOperations: widget.store.context.editOperations,
     );
-    _lastObservedState = initialState;
     _syncTextEditingOverlayState(initialState);
     widget.watermarkPreviewListenable?.addListener(
       _handleWatermarkPreviewChange,
@@ -431,9 +408,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         _cancelPendingTextDraftSyncDispatch();
         _lastTextDraftSyncAt = null;
         _textDraftDispatcher.reset();
-        _lastObservedState = widget.store.state;
-        _cachedState = null;
-        _cachedStateView = null;
         _cachedInputSelectionConfigSource = null;
         _cachedInputSelectionConfig = null;
         _cachedInputSelectionScale = null;
@@ -520,26 +494,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   @override
   Widget build(BuildContext context) {
-    final stateView = _buildStateView(widget.store.state);
-    final selectionConfig = _resolveSelectionConfig(widget.store.state);
     final scaleFactor = _effectiveScaleFactor();
     final locale = Localizations.maybeLocaleOf(context);
+    _syncCanvasSnapshotForBuild(locale: locale);
     final textOverlay = _buildTextEditorOverlay(
       scaleFactor: scaleFactor,
       locale: locale,
     );
-    final canvasScene = _resolveCanvasSceneSnapshot(stateView);
     final eraserCursorOverlay = _buildEraserCursorOverlay();
-
-    // Build a single render key for the unified canvas painter.
-    final dynamicRenderKey = _buildDynamicRenderKey(
-      stateView: stateView,
-      selectionConfig: selectionConfig,
-      scaleFactor: scaleFactor,
-      scene: canvasScene,
-      locale: locale,
-    );
-    _setCanvasSnapshot(stateView: stateView, renderKey: dynamicRenderKey);
 
     final paintStack = Listener(
       onPointerDown: _handlePointerDown,
@@ -553,7 +515,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             child: ValueListenableBuilder<_CanvasSnapshot>(
               valueListenable: _canvasSnapshotNotifier,
               builder: (context, snapshot, _) => CustomPaint(
-                painter: DynamicCanvasPainter(
+                painter: SceneCanvasPainter(
                   renderKey: snapshot.renderKey,
                   stateView: snapshot.stateView,
                 ),
@@ -615,20 +577,20 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     final previewElement = view.previewElementsById[interaction.elementId];
-    final sourceElement =
-        previewElement ??
-        view.state.domain.document.getElementById(interaction.elementId);
-    if (sourceElement?.data is! TextData) {
+    final documentElement = view.state.domain.document.getElementById(
+      interaction.elementId,
+    );
+    final sourceElement = previewElement ?? documentElement;
+    if (sourceElement == null || sourceElement.data is! TextData) {
       return null;
     }
-    final element = sourceElement!;
-    if (element.opacity == 0) {
-      return element;
+    if (_doubleEquals(sourceElement.opacity, 0)) {
+      return sourceElement;
     }
-    return element.copyWith(opacity: 0);
+    return sourceElement.copyWith(opacity: 0);
   }
 
-  Map<String, ElementState> _resolveEraserDynamicPreviewElements(
+  Map<String, ElementState> _resolveEraserPreviewElements(
     DrawStateView stateView,
   ) {
     final pending = _pendingErasePreviewElementsById;
@@ -638,119 +600,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (stateView.previewElementsById.isEmpty) {
       return pending;
     }
-    if (identical(_mergedEraserPreviewStateView, stateView) &&
-        _mergedEraserPreviewRevision == _eraserPreviewCacheRevision) {
-      return _mergedEraserPreviewElements;
-    }
-    final merged = Map<String, ElementState>.of(stateView.previewElementsById)
-      ..addAll(pending);
-    _mergedEraserPreviewStateView = stateView;
-    _mergedEraserPreviewRevision = _eraserPreviewCacheRevision;
-    return _mergedEraserPreviewElements =
-        Map<String, ElementState>.unmodifiable(merged);
-  }
-
-  Set<String> _snapshotEraserVolatilePreviewElementIds() {
-    if (_eraserVolatilePreviewElementIds.isEmpty) {
-      return const <String>{};
-    }
-    return _eraserVolatilePreviewElementIds;
-  }
-
-  void _resetEraserVolatilePreviewElementIds() {
-    if (_eraserVolatilePreviewElementIds.isEmpty) {
-      return;
-    }
-    _eraserVolatilePreviewElementIds = <String>{};
-  }
-
-  Set<String> _resolveDynamicPreviewElementIdsForScene(
-    DrawStateView stateView,
-    Map<String, ElementState> previewElementsById,
-  ) {
-    if (previewElementsById.isEmpty) {
-      return const <String>{};
-    }
-    final document = stateView.state.domain.document;
-    final dynamicIds = <String>{};
-    for (final entry in previewElementsById.entries) {
-      final persisted = document.getElementById(entry.key);
-      if (persisted == null || !identical(persisted, entry.value)) {
-        dynamicIds.add(entry.key);
-      }
-    }
-    if (dynamicIds.isEmpty) {
-      return const <String>{};
-    }
-    return Set<String>.unmodifiable(dynamicIds);
-  }
-
-  Set<String>? _mergeDynamicPreviewElementIds(
-    Set<String>? baseIds,
-    Set<String> transientIds,
-  ) {
-    if (transientIds.isEmpty) {
-      return baseIds;
-    }
-    if (baseIds == null || baseIds.isEmpty) {
-      return Set<String>.unmodifiable(transientIds);
-    }
-    final merged = <String>{...baseIds, ...transientIds};
-    return Set<String>.unmodifiable(merged);
-  }
-
-  Set<String> _resolveInteractionDynamicPreviewElementIds({
-    required DrawStateView stateView,
-    required Map<String, ElementState> previewElementsById,
-    required InteractionMutationRefreshPlan plan,
-  }) {
-    if (plan != InteractionMutationRefreshPlan.lightweightLineDynamicOnly) {
-      return _resolveDynamicPreviewElementIdsForScene(
-        stateView,
-        previewElementsById,
-      );
-    }
-
-    final interaction = stateView.state.application.interaction;
-    if (interaction is! EditingState ||
-        !isLightweightLineEditContext(
-          context: interaction.context,
-          document: stateView.state.domain.document,
-        )) {
-      return _resolveDynamicPreviewElementIdsForScene(
-        stateView,
-        previewElementsById,
-      );
-    }
-
-    final selectedIds = interaction.context.selectedIdsAtStart;
-    if (selectedIds.isEmpty || previewElementsById.isEmpty) {
-      return const <String>{};
-    }
-
-    final document = stateView.state.domain.document;
-    final dynamicIds = <String>{};
-    for (final id in selectedIds) {
-      final preview = previewElementsById[id];
-      if (preview == null) {
-        continue;
-      }
-      final persisted = document.getElementById(id);
-      if (persisted == null || !identical(persisted, preview)) {
-        dynamicIds.add(id);
-      }
-    }
-    if (dynamicIds.isEmpty) {
-      return const <String>{};
-    }
-    return Set<String>.unmodifiable(dynamicIds);
-  }
-
-  void _invalidateEraserPreviewSnapshots() {
-    _eraserPreviewCacheRevision += 1;
-    _mergedEraserPreviewRevision = -1;
-    _mergedEraserPreviewElements = const <String, ElementState>{};
-    _mergedEraserPreviewStateView = null;
+    return Map<String, ElementState>.unmodifiable({
+      ...stateView.previewElementsById,
+      ...pending,
+    });
   }
 
   Widget? _buildEraserCursorOverlay() {
@@ -1250,8 +1103,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!mounted || (!hasPendingPreview && !hadPendingPreview)) {
       return;
     }
-    _refreshCanvasSnapshots(widget.store.state, assumeCanvasChanged: true);
-    _resetEraserVolatilePreviewElementIds();
+    _refreshCanvasSnapshot(widget.store.state);
   }
 
   ElementHitTester? _resolveEraserHitTester(ElementState element) {
@@ -1275,8 +1127,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _pendingErasePreviewElementsById[element.id] = element.copyWith(
       opacity: previewOpacity,
     );
-    _eraserVolatilePreviewElementIds.add(element.id);
-    _invalidateEraserPreviewSnapshots();
     return true;
   }
 
@@ -1286,8 +1136,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final ids = _pendingErasePreviewElementsById.keys.toList(growable: false);
     _pendingErasePreviewElementsById.clear();
-    _resetEraserVolatilePreviewElementIds();
-    _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
     try {
       await widget.store.dispatch(DeleteElements(elementIds: ids));
@@ -1309,11 +1157,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     final hadPendingPreview = _pendingErasePreviewElementsById.isNotEmpty;
     _pendingErasePreviewElementsById.clear();
-    _resetEraserVolatilePreviewElementIds();
     if (!hadPendingPreview) {
       return;
     }
-    _invalidateEraserPreviewSnapshots();
     _handleEraserPreviewMutation(hadPendingPreview: true);
   }
 
@@ -1408,10 +1254,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final config = widget.store.config;
 
     // Determine base stroke width from selected elements or config
-    final arrowAverage = _resolveAverageSelectedArrowStrokeWidth(state);
-    final lineAverage = _resolveAverageSelectedLineStrokeWidth(state);
-    final freeDrawAverage = _resolveAverageSelectedFreeDrawStrokeWidth(state);
-    final rectangleAverage = _resolveAverageSelectedStrokeWidth(state);
+    final arrowAverage = resolveAverageSelectedArrowStrokeWidth(state);
+    final lineAverage = resolveAverageSelectedLineStrokeWidth(state);
+    final freeDrawAverage = resolveAverageSelectedFreeDrawStrokeWidth(state);
+    final rectangleAverage = resolveAverageSelectedRectangleStrokeWidth(state);
     final base =
         arrowAverage ??
         lineAverage ??
@@ -1420,10 +1266,10 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         config.arrowStyle.strokeWidth;
 
     // Find next stepped value
-    final next = _findNextSteppedValue(
+    final next = resolveNextSteppedValue(
       base,
       _strokeWidthSteps,
-      delta > 0, // scrolling up decreases value
+      decrease: delta > 0, // scrolling up decreases value
     );
 
     if (_doubleEquals(next, base)) {
@@ -1487,16 +1333,16 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final toolTypeId = widget.currentToolTypeId;
     final base =
         _resolveEditingFontSize(state) ??
-        _resolveAverageSelectedFontSize(state) ??
+        resolveAverageSelectedFontSize(state) ??
         (toolTypeId == SerialNumberData.typeIdToken
             ? config.serialNumberStyle.fontSize
             : config.textStyle.fontSize);
 
     // Find next stepped value
-    final next = _findNextSteppedValue(
+    final next = resolveNextSteppedValue(
       base,
       _fontSizeSteps,
-      delta > 0, // scrolling up decreases value
+      decrease: delta > 0, // scrolling up decreases value
     );
 
     if (_doubleEquals(next, base)) {
@@ -1546,116 +1392,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     return null;
   }
-
-  /// Finds the next stepped value based on current value and scroll direction.
-  ///
-  /// [currentValue] - The current value
-  /// [steps] - List of stepped values (must be sorted in ascending order)
-  /// [decrease] - true to find previous step, false to find next step
-  ///
-  /// Returns the next stepped value, or the current value if at the edge.
-  double _findNextSteppedValue(
-    double currentValue,
-    List<double> steps,
-    bool decrease,
-  ) {
-    if (steps.isEmpty) {
-      return currentValue;
-    }
-
-    if (decrease) {
-      // Find the largest step that is less than current value
-      for (var i = steps.length - 1; i >= 0; i--) {
-        if (steps[i] < currentValue - 0.01) {
-          return steps[i];
-        }
-      }
-      // Already at or below minimum, return first step
-      return steps.first;
-    } else {
-      // Find the smallest step that is greater than current value
-      for (var i = 0; i < steps.length; i++) {
-        if (steps[i] > currentValue + 0.01) {
-          return steps[i];
-        }
-      }
-      // Already at or above maximum, return last step
-      return steps.last;
-    }
-  }
-
-  double? _resolveAverageSelectedMetric(
-    DrawState state,
-    double? Function(ElementData data) metricResolver,
-  ) {
-    final selectedIds = state.domain.selection.selectedIds;
-    if (selectedIds.isEmpty) {
-      return null;
-    }
-
-    final document = state.domain.document;
-    var count = 0;
-    var total = 0.0;
-    for (final id in selectedIds) {
-      final data = document.getElementById(id)?.data;
-      if (data == null) {
-        continue;
-      }
-      final metric = metricResolver(data);
-      if (metric == null) {
-        continue;
-      }
-      total += metric;
-      count += 1;
-    }
-    if (count == 0) {
-      return null;
-    }
-    return total / count;
-  }
-
-  double? _resolveAverageSelectedStrokeWidth(DrawState state) =>
-      _resolveAverageSelectedMetric(state, (data) {
-        if (data is RectangleData) {
-          return data.strokeWidth;
-        }
-        return null;
-      });
-
-  double? _resolveAverageSelectedArrowStrokeWidth(DrawState state) =>
-      _resolveAverageSelectedMetric(state, (data) {
-        if (data is ArrowData) {
-          return data.strokeWidth;
-        }
-        return null;
-      });
-
-  double? _resolveAverageSelectedLineStrokeWidth(DrawState state) =>
-      _resolveAverageSelectedMetric(state, (data) {
-        if (data is LineData) {
-          return data.strokeWidth;
-        }
-        return null;
-      });
-
-  double? _resolveAverageSelectedFreeDrawStrokeWidth(DrawState state) =>
-      _resolveAverageSelectedMetric(state, (data) {
-        if (data is FreeDrawData) {
-          return data.strokeWidth;
-        }
-        return null;
-      });
-
-  double? _resolveAverageSelectedFontSize(DrawState state) =>
-      _resolveAverageSelectedMetric(state, (data) {
-        if (data is TextData) {
-          return data.fontSize;
-        }
-        if (data is SerialNumberData) {
-          return data.fontSize;
-        }
-        return null;
-      });
 
   List<String> _resolveSelectionIds(
     DrawState state,
@@ -1872,7 +1608,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       config: config,
       ctrlPressed: _currentModifiers.control,
     );
-    if (!_shouldPreviewArrowBinding(
+    if (!shouldPreviewArrowBinding(
       snapConfig: config.snap,
       snappingMode: snappingMode,
     )) {
@@ -1892,7 +1628,11 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final searchDistance = ArrowBindingUtils.resolveBindingSearchDistance(
       bindingDistance,
     );
-    final targets = _resolveBindingTargets(state, position, searchDistance);
+    final targets = resolveArrowBindingTargets(
+      state: state,
+      position: position,
+      distance: searchDistance,
+    );
     if (targets.isEmpty) {
       return null;
     }
@@ -1914,40 +1654,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     return candidate.binding.elementId;
-  }
-
-  bool _shouldPreviewArrowBinding({
-    required SnapConfig snapConfig,
-    required SnappingMode snappingMode,
-  }) {
-    if (!snapConfig.enableArrowBinding) {
-      return false;
-    }
-    if (snappingMode == SnappingMode.grid) {
-      return false;
-    }
-    if (snapConfig.enabled && snappingMode == SnappingMode.none) {
-      return false;
-    }
-    return true;
-  }
-
-  List<ElementState> _resolveBindingTargets(
-    DrawState state,
-    DrawPoint position,
-    double distance,
-  ) {
-    final document = state.domain.document;
-    final targets = <ElementState>[];
-    document.visitElementsAtPointTopDown(position, distance, (element) {
-      if (element.opacity <= 0 ||
-          !ArrowBindingUtils.isBindableTarget(element)) {
-        return true;
-      }
-      targets.add(element);
-      return true;
-    });
-    return targets;
   }
 
   ArrowPointHandle? _resolveArrowPointHandleForPosition({
@@ -2109,20 +1815,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return cachedConfig;
     }
 
-    final interaction = selectionConfig.interaction;
-    final render = selectionConfig.render;
-    final scaled = selectionConfig.copyWith(
-      render: render.copyWith(
-        strokeWidth: render.strokeWidth / effectiveScale,
-        cornerRadius: render.cornerRadius / effectiveScale,
-        controlPointSize: render.controlPointSize / effectiveScale,
-      ),
-      padding: selectionConfig.padding / effectiveScale,
-      rotateHandleOffset: selectionConfig.rotateHandleOffset / effectiveScale,
-      interaction: interaction.copyWith(
-        handleTolerance: interaction.handleTolerance / effectiveScale,
-        dragThreshold: interaction.dragThreshold / effectiveScale,
-      ),
+    final scaled = scaleSelectionConfigForInput(
+      selectionConfig: selectionConfig,
+      scaleFactor: effectiveScale,
     );
     _cachedInputSelectionConfigSource = selectionConfig;
     _cachedInputSelectionConfig = scaled;
@@ -2411,7 +2106,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handleWatermarkPreviewChange() {
-    _refreshCanvasSnapshots(widget.store.state, assumeCanvasChanged: true);
+    _refreshCanvasSnapshot(widget.store.state);
   }
 
   WatermarkConfig _resolveEffectiveWatermarkConfig(DrawState state) =>
@@ -2430,320 +2125,114 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       ? SystemMouseCursors.basic
       : _defaultCursor;
 
-  DrawStateView _buildStateView(DrawState state) {
-    final cachedState = _cachedState;
-    final cachedView = _cachedStateView;
-    if (cachedView != null && identical(cachedState, state)) {
-      return cachedView;
-    }
-    final nextView = _stateViewBuilder.build(state);
-    _cachedState = state;
-    _cachedStateView = nextView;
-    return nextView;
-  }
+  DrawStateView _buildStateView(DrawState state) =>
+      _stateViewBuilder.build(state);
 
-  _CanvasSceneSnapshot _resolveCanvasSceneSnapshot(DrawStateView stateView) {
-    final interaction = stateView.state.application.interaction;
-    final promoteEraserPreviewToCanvasScene =
+  _CanvasRenderInputs _resolveCanvasRenderInputs(DrawStateView stateView) {
+    final promoteEraserPreviewToRenderInputs =
         widget.isEraserToolActive &&
         _pendingErasePreviewElementsById.isNotEmpty;
-    late final Set<String> optimizedDynamicElementIds;
-    late final Map<String, ElementState> dynamicPreviewElements;
-    late final int? dynamicPreviewElementsRevision;
-    late final Set<String>? dynamicPreviewElementIds;
-    late final bool optimizedSceneHasPotentialOccluders;
-    if (promoteEraserPreviewToCanvasScene) {
-      optimizedDynamicElementIds = const <String>{};
-      optimizedSceneHasPotentialOccluders = false;
-      dynamicPreviewElements = _resolveEraserDynamicPreviewElements(stateView);
-      dynamicPreviewElementsRevision = _eraserPreviewCacheRevision;
-      dynamicPreviewElementIds = _snapshotEraserVolatilePreviewElementIds();
-    } else {
-      final shouldResolveOptimization =
-          interaction is EditingState || interaction is TextEditingState;
-      final resolvedOptimizationPlan = shouldResolveOptimization
-          ? resolveDynamicSceneOptimizationPlan(view: stateView)
-          : null;
-      final optimizationPlan =
-          _shouldApplyDynamicSceneOptimizationPlan(
-            stateView: stateView,
-            interaction: interaction,
-            plan: resolvedOptimizationPlan,
-          )
-          ? resolvedOptimizationPlan
-          : null;
-      optimizedDynamicElementIds =
-          optimizationPlan?.optimizedElementIds ?? const <String>{};
-      optimizedSceneHasPotentialOccluders =
-          optimizationPlan != null &&
-          _resolveOptimizedSceneHasPotentialOccluders(
-            stateView: stateView,
-            optimizedElementIds: optimizedDynamicElementIds,
-          );
-      dynamicPreviewElements = _previewElementsForCanvas(stateView);
-      dynamicPreviewElementsRevision = null;
-      dynamicPreviewElementIds = _resolveDynamicPreviewElementIdsForScene(
-        stateView,
-        dynamicPreviewElements,
-      );
-    }
-    final mergedDynamicPreviewElementIds = _mergeDynamicPreviewElementIds(
-      dynamicPreviewElementIds,
-      _transientDynamicFilterElementIds,
-    );
-    final preferFastFilterFallback =
-        _transientDynamicFilterElementIds.isNotEmpty;
+    final previewElements = promoteEraserPreviewToRenderInputs
+        ? _resolveEraserPreviewElements(stateView)
+        : _previewElementsForCanvas(stateView);
 
     final creatingSnapshot = _extractCreatingSnapshot(stateView);
     final globalElements = stateView.globalElements;
     final highlightMask = globalElements.highlightMask;
     final watermark = _resolveEffectiveWatermarkConfig(stateView.state);
-    final isHighlightMaskVisible = _isHighlightMaskVisible(
-      stateView: stateView,
-      config: highlightMask,
-    );
-    final watermarkVisible = isWatermarkVisible(watermark);
 
-    return _CanvasSceneSnapshot(
-      dynamicPreviewElements: dynamicPreviewElements,
-      dynamicPreviewElementsRevision: dynamicPreviewElementsRevision,
-      dynamicPreviewElementIds: mergedDynamicPreviewElementIds,
-      optimizedDynamicElementIds: optimizedDynamicElementIds,
-      optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
+    return _CanvasRenderInputs(
+      previewElements: previewElements,
       creatingSnapshot: creatingSnapshot,
-      isHighlightMaskVisible: isHighlightMaskVisible,
       highlightMaskConfig: highlightMask,
-      isWatermarkVisible: watermarkVisible,
       watermarkConfig: watermark,
-      preferFastFilterFallback: preferFastFilterFallback,
       textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
     );
   }
 
-  bool _shouldApplyDynamicSceneOptimizationPlan({
-    required DrawStateView stateView,
-    required InteractionState interaction,
-    required DynamicSceneOptimizationPlan? plan,
-  }) {
-    if (plan == null) {
-      return false;
-    }
-    final optimizedElementIds = plan.optimizedElementIds;
-    if (optimizedElementIds.isEmpty) {
-      return false;
-    }
-
-    final document = stateView.state.domain.document;
-    var lowestOrderIndex = -1;
-    for (final elementId in optimizedElementIds) {
-      final orderIndex = document.getOrderIndex(elementId);
-      if (orderIndex == null) {
-        continue;
-      }
-      if (lowestOrderIndex < 0 || orderIndex < lowestOrderIndex) {
-        lowestOrderIndex = orderIndex;
-      }
-    }
-    if (lowestOrderIndex < 0) {
-      return false;
-    }
-
-    if (_shouldForceLocalizedOptimization(
-      interaction: interaction,
-      document: document,
-    )) {
-      return true;
-    }
-
-    final dynamicTailCount = document.elements.length - lowestOrderIndex;
-    final savedElementCount = dynamicTailCount - optimizedElementIds.length;
-    return savedElementCount >= _minOptimizationSavedElementCount;
-  }
-
-  // Arrow-point, lightweight-line, and single serial-number edits mutate a
-  // very small dynamic subset. Forcing localized optimization avoids
-  // repeatedly painting large dynamic tails when the selected element sits low
-  // in z.
-  bool _shouldForceLocalizedOptimization({
-    required InteractionState interaction,
-    required DocumentState document,
-  }) {
-    if (isLightweightLineEditingInteraction(
-      interaction: interaction,
-      document: document,
-    )) {
-      return true;
-    }
-    if (interaction is EditingState &&
-        interaction.context is ArrowPointEditContext) {
-      return true;
-    }
-    return SerialNumberInteractionClassifier.isSingleSerialNumberEdit(
-      interaction: interaction,
-      document: document,
-    );
-  }
-
-  bool _resolveOptimizedSceneHasPotentialOccluders({
-    required DrawStateView stateView,
-    required Set<String> optimizedElementIds,
-  }) {
-    if (optimizedElementIds.isEmpty) {
-      return false;
-    }
-    final document = stateView.state.domain.document;
-    int? minOrderIndex;
-    for (final elementId in optimizedElementIds) {
-      final orderIndex = document.getOrderIndex(elementId);
-      if (orderIndex == null) {
-        continue;
-      }
-      if (minOrderIndex == null || orderIndex < minOrderIndex) {
-        minOrderIndex = orderIndex;
-      }
-    }
-    if (minOrderIndex == null) {
-      return false;
-    }
-
-    final elements = document.elements;
-    for (var index = minOrderIndex + 1; index < elements.length; index++) {
-      if (!optimizedElementIds.contains(elements[index].id)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  bool _isHighlightMaskVisible({
-    required DrawStateView stateView,
-    required HighlightMaskConfig config,
-  }) {
-    final summary = stateView.highlightMaskSceneSummary;
-    return isHighlightMaskVisible(
-      hasHighlights: summary.hasHighlights,
-      config: config,
-    );
-  }
-
-  DynamicCanvasRenderKey _buildDynamicRenderKey({
+  SceneCanvasRenderKey _buildCanvasRenderKey({
     required DrawStateView stateView,
     required SelectionConfig selectionConfig,
     required double scaleFactor,
-    required _CanvasSceneSnapshot scene,
+    required _CanvasRenderInputs inputs,
     required Locale? locale,
-    int? previewElementsRevisionOverride,
-  }) => _createDynamicRenderKey(
+  }) => _createCanvasRenderKey(
     stateView: stateView,
     selectionConfig: selectionConfig,
     scaleFactor: scaleFactor,
-    creatingElement: scene.creatingSnapshot,
-    textRenderingCacheRevision: scene.textRenderingCacheRevision,
-    previewElementsById: scene.dynamicPreviewElements,
-    previewElementsRevision:
-        previewElementsRevisionOverride ?? scene.dynamicPreviewElementsRevision,
-    dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
-    optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
-    optimizedSceneHasPotentialOccluders:
-        scene.optimizedSceneHasPotentialOccluders,
-    preferFastFilterFallback: scene.preferFastFilterFallback,
-    isHighlightMaskVisible: scene.isHighlightMaskVisible,
-    highlightMaskConfig: scene.highlightMaskConfig,
-    isWatermarkVisible: scene.isWatermarkVisible,
-    watermarkConfig: scene.watermarkConfig,
+    creatingElement: inputs.creatingSnapshot,
+    textRenderingCacheRevision: inputs.textRenderingCacheRevision,
+    previewElementsById: inputs.previewElements,
+    highlightMaskConfig: inputs.highlightMaskConfig,
+    watermarkConfig: inputs.watermarkConfig,
     locale: locale,
   );
 
-  DynamicCanvasRenderKey _buildDynamicRenderKeyFromCachedScene({
-    required DrawStateView stateView,
-    required SelectionConfig selectionConfig,
-    required double scaleFactor,
-    required CreatingElementSnapshot? creatingElement,
-    required InteractionDynamicSceneSnapshot scene,
-    required Locale? locale,
-    int? previewElementsRevision,
-  }) => _createDynamicRenderKey(
-    stateView: stateView,
-    selectionConfig: selectionConfig,
-    scaleFactor: scaleFactor,
-    creatingElement: creatingElement,
-    textRenderingCacheRevision: textRenderingCacheRevisionListenable.value,
-    previewElementsById: scene.previewElementsById,
-    previewElementsRevision: previewElementsRevision,
-    dynamicPreviewElementIds: scene.dynamicPreviewElementIds,
-    optimizedDynamicElementIds: scene.optimizedDynamicElementIds,
-    optimizedSceneHasPotentialOccluders:
-        scene.optimizedSceneHasPotentialOccluders,
-    preferFastFilterFallback: false,
-    isHighlightMaskVisible: scene.isHighlightMaskVisible,
-    highlightMaskConfig: scene.highlightMaskConfig,
-    isWatermarkVisible: scene.isWatermarkVisible,
-    watermarkConfig: scene.watermarkConfig,
-    locale: locale,
-  );
-
-  DynamicCanvasRenderKey _createDynamicRenderKey({
+  SceneCanvasRenderKey _createCanvasRenderKey({
     required DrawStateView stateView,
     required SelectionConfig selectionConfig,
     required double scaleFactor,
     required CreatingElementSnapshot? creatingElement,
     required int textRenderingCacheRevision,
     required Map<String, ElementState> previewElementsById,
-    required Set<String> optimizedDynamicElementIds,
-    required bool optimizedSceneHasPotentialOccluders,
-    required bool preferFastFilterFallback,
-    required bool isHighlightMaskVisible,
     required HighlightMaskConfig highlightMaskConfig,
-    required bool isWatermarkVisible,
     required WatermarkConfig watermarkConfig,
     required Locale? locale,
-    int? previewElementsRevision,
-    Set<String>? dynamicPreviewElementIds,
-  }) => DynamicCanvasRenderKey(
-    creatingElement: creatingElement,
-    effectiveSelection: stateView.effectiveSelection,
-    boxSelectionBounds: _extractBoxSelectionBounds(stateView),
-    selectedIds: stateView.selectedIds,
-    hoveredElementId: _hoveredSelectionElementId,
-    hoveredBindingElementId: _hoveredBindingElementId,
-    hoveredArrowHandle: _hoveredArrowHandle,
-    activeArrowHandle: _resolveActiveArrowHandle(stateView),
-    arrowDeleteIndicatorVisible: _isArrowDeleteIndicatorVisible(stateView),
-    hoverSelectionConfig: _resolveHoverSelectionConfig(),
-    snapGuides: stateView.snapGuides,
-    documentVersion: stateView.state.domain.document.elementsVersion,
-    textRenderingCacheRevision: textRenderingCacheRevision,
-    camera: stateView.state.application.view.camera,
-    previewElementsById: previewElementsById,
-    previewElementsRevision: previewElementsRevision,
-    dynamicPreviewElementIds: dynamicPreviewElementIds,
-    optimizedDynamicElementIds: optimizedDynamicElementIds,
-    optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
-    preferFastFilterFallback: preferFastFilterFallback,
-    scaleFactor: scaleFactor,
-    selectionConfig: selectionConfig,
-    boxSelectionConfig: widget.store.config.boxSelection,
-    snapConfig: widget.store.config.snap,
-    canvasConfig: widget.store.config.canvas,
-    gridConfig: widget.store.config.grid,
-    isHighlightMaskVisible: isHighlightMaskVisible,
-    highlightMaskConfig: highlightMaskConfig,
-    isWatermarkVisible: isWatermarkVisible,
-    watermarkConfig: watermarkConfig,
-    elementRegistry: widget.store.context.elementRegistry,
-    textMetricsService: widget.store.context.textMetricsService,
-    performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
-    locale: locale,
-  );
+  }) {
+    final boxSelectionBounds = _extractBoxSelectionBounds(stateView);
+    final activeArrowHandle = _resolveActiveArrowHandle(stateView);
+    final arrowDeleteIndicatorVisible = _isArrowDeleteIndicatorVisible(
+      stateView,
+    );
+    final hoverSelectionConfig = _resolveHoverSelectionConfig();
+    final boxSelectionConfig = widget.store.config.boxSelection;
+    final snapConfig = widget.store.config.snap;
+    final canvasConfig = widget.store.config.canvas;
+    final gridConfig = widget.store.config.grid;
+    final elementRegistry = widget.store.context.elementRegistry;
+    final framePlan = _frameRenderPlanBuilder.build(
+      view: stateView,
+      scaleFactor: scaleFactor,
+      transientState: FrameRenderTransientState(
+        hoveredElementId: _hoveredSelectionElementId,
+        hoveredBindingElementId: _hoveredBindingElementId,
+        hoveredArrowHandle: _hoveredArrowHandle,
+        activeArrowHandle: activeArrowHandle,
+        arrowDeleteIndicatorVisible: arrowDeleteIndicatorVisible,
+        selectionConfig: selectionConfig,
+        hoverSelectionConfig: hoverSelectionConfig,
+        boxSelectionConfig: boxSelectionConfig,
+        snapConfig: snapConfig,
+        canvasConfig: canvasConfig,
+        gridConfig: gridConfig,
+        highlightMaskConfig: highlightMaskConfig,
+        watermarkConfig: watermarkConfig,
+        boxSelectionBounds: boxSelectionBounds,
+        previewElementsById: previewElementsById,
+      ),
+    );
+
+    return SceneCanvasRenderKey(
+      documentElementsVersion: stateView.state.domain.document.elementsVersion,
+      creatingElement: creatingElement,
+      textRenderingCacheRevision: textRenderingCacheRevision,
+      previewElementsById: previewElementsById,
+      elementRegistry: elementRegistry,
+      textMetricsService: widget.store.context.textMetricsService,
+      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
+      locale: locale,
+      framePlan: framePlan,
+    );
+  }
 
   _CanvasSnapshot _createInitialCanvasSnapshot(DrawState state) {
     final stateView = _buildStateView(state);
-    final scene = _resolveCanvasSceneSnapshot(stateView);
-    final renderKey = _buildDynamicRenderKey(
+    final inputs = _resolveCanvasRenderInputs(stateView);
+    final renderKey = _buildCanvasRenderKey(
       stateView: stateView,
       selectionConfig: _resolveSelectionConfig(state),
       scaleFactor: _effectiveScaleFactor(),
-      scene: scene,
+      inputs: inputs,
       locale: null,
     );
     return _CanvasSnapshot(stateView: stateView, renderKey: renderKey);
@@ -2751,16 +2240,12 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
   void _setCanvasSnapshot({
     required DrawStateView stateView,
-    required DynamicCanvasRenderKey renderKey,
-    bool assumeChanged = false,
+    required SceneCanvasRenderKey renderKey,
   }) {
     final nextSnapshot = _CanvasSnapshot(
       stateView: stateView,
       renderKey: renderKey,
     );
-    if (!assumeChanged && _canvasSnapshotNotifier.value == nextSnapshot) {
-      return;
-    }
     _canvasSnapshotNotifier.value = nextSnapshot;
   }
 
@@ -2768,143 +2253,41 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       Localizations.maybeLocaleOf(context) ??
       _canvasSnapshotNotifier.value.renderKey.locale;
 
-  void _refreshCanvasSnapshots(
-    DrawState state, {
-    bool assumeCanvasChanged = false,
-    int? forcedPreviewElementsRevision,
-  }) {
+  void _syncCanvasSnapshotForBuild({required Locale? locale}) {
+    final currentRenderKey = _canvasSnapshotNotifier.value.renderKey;
+    final currentScale = currentRenderKey.framePlan.scaleFactor;
+    final requestedScale = _effectiveScaleFactor();
+    final targetScale = requestedScale.isFinite && requestedScale > 0
+        ? requestedScale
+        : 1.0;
+    final scaleChanged = !_doubleEquals(currentScale, targetScale);
+    final localeChanged = currentRenderKey.locale != locale;
+    final monitoringChanged =
+        currentRenderKey.performanceMonitoringEnabled !=
+        widget.enablePerformanceMonitoring;
+    if (!scaleChanged && !localeChanged && !monitoringChanged) {
+      return;
+    }
+    _refreshCanvasSnapshot(widget.store.state, localeOverride: locale);
+  }
+
+  void _refreshCanvasSnapshot(DrawState state, {Locale? localeOverride}) {
     if (!mounted) {
       return;
     }
 
     final stateView = _buildStateView(state);
-    final scene = _resolveCanvasSceneSnapshot(stateView);
+    final inputs = _resolveCanvasRenderInputs(stateView);
     final scaleFactor = _effectiveScaleFactor();
-    final locale = _resolveCanvasLocale();
-    final dynamicRenderKey = _buildDynamicRenderKey(
+    final locale = localeOverride ?? _resolveCanvasLocale();
+    final canvasRenderKey = _buildCanvasRenderKey(
       stateView: stateView,
       selectionConfig: _resolveSelectionConfig(state),
       scaleFactor: scaleFactor,
-      scene: scene,
+      inputs: inputs,
       locale: locale,
-      previewElementsRevisionOverride: forcedPreviewElementsRevision,
     );
-    _setCanvasSnapshot(
-      stateView: stateView,
-      renderKey: dynamicRenderKey,
-      assumeChanged: assumeCanvasChanged,
-    );
-  }
-
-  void _refreshCanvasSnapshot(
-    DrawState state, {
-    bool assumeChanged = false,
-    int? forcedPreviewElementsRevision,
-  }) => _refreshCanvasSnapshots(
-    state,
-    assumeCanvasChanged: assumeChanged,
-    forcedPreviewElementsRevision: forcedPreviewElementsRevision,
-  );
-
-  void _refreshCanvasSnapshotForFilterStyleMutation(
-    DrawState state, {
-    required Set<String> changedFilterElementIds,
-  }) {
-    if (changedFilterElementIds.isEmpty) {
-      _refreshCanvasSnapshot(
-        state,
-        assumeChanged: true,
-        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
-      );
-      return;
-    }
-    _transientDynamicFilterElementIds = Set<String>.unmodifiable(
-      changedFilterElementIds,
-    );
-    try {
-      _refreshCanvasSnapshot(
-        state,
-        assumeChanged: true,
-        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
-      );
-    } finally {
-      _transientDynamicFilterElementIds = const <String>{};
-    }
-    _scheduleFilterStyleQualityRestore(state);
-  }
-
-  void _scheduleFilterStyleQualityRestore(DrawState state) {
-    final revision = ++_filterStyleQualityRestoreRevision;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted ||
-          revision != _filterStyleQualityRestoreRevision ||
-          !identical(_lastObservedState, state)) {
-        return;
-      }
-      _refreshCanvasSnapshot(
-        state,
-        assumeChanged: true,
-        forcedPreviewElementsRevision: ++_interactionPreviewRevision,
-      );
-    });
-  }
-
-  /// Reuses cached dynamic-scene metadata for interaction-only updates.
-  ///
-  /// Arrow/line/rectangle/highlight/filter/serial interactions all resolve to
-  /// single-canvas updates while the document topology remains stable.
-  /// Rebuilding full scene metadata on every pointer frame is redundant, so
-  /// this fast path reuses the previous dynamic render key and only resolves
-  /// the latest preview subset.
-  bool _tryRefreshCachedInteractionCanvasSnapshot(
-    DrawState state, {
-    required DrawState previousState,
-    required InteractionMutationRefreshPlan plan,
-  }) {
-    if (!identical(previousState.domain, state.domain) || !mounted) {
-      return false;
-    }
-
-    final previousDynamicSnapshot = _canvasSnapshotNotifier.value;
-    final previousRenderKey = previousDynamicSnapshot.renderKey;
-    if (previousRenderKey.documentVersion !=
-        state.domain.document.elementsVersion) {
-      return false;
-    }
-
-    final stateView = _buildStateView(state);
-    final previewElementsRevision =
-        plan == InteractionMutationRefreshPlan.lightweightLineDynamicOnly
-        ? ++_lightweightLinePreviewRevision
-        : ++_interactionPreviewRevision;
-    final scene = resolveInteractionDynamicSceneFromCachedKey(
-      stateView: stateView,
-      previousRenderKey: previousRenderKey,
-      resolvePreviewElements: _previewElementsForCanvas,
-      resolvePreviewByOptimizedIds: (view, _) =>
-          _previewElementsForCanvas(view),
-      resolveDynamicPreviewElementIds: (view, previewElementsById) =>
-          _resolveInteractionDynamicPreviewElementIds(
-            stateView: view,
-            previewElementsById: previewElementsById,
-            plan: plan,
-          ),
-    );
-    final dynamicRenderKey = _buildDynamicRenderKeyFromCachedScene(
-      stateView: stateView,
-      selectionConfig: _resolveSelectionConfig(state),
-      scaleFactor: _effectiveScaleFactor(),
-      creatingElement: _extractCreatingSnapshot(stateView),
-      scene: scene,
-      locale: _resolveCanvasLocale(),
-      previewElementsRevision: previewElementsRevision,
-    );
-    _setCanvasSnapshot(
-      stateView: stateView,
-      renderKey: dynamicRenderKey,
-      assumeChanged: true,
-    );
-    return true;
+    _setCanvasSnapshot(stateView: stateView, renderKey: canvasRenderKey);
   }
 
   Widget _buildTextEditorOverlay({
@@ -3803,84 +3186,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   }
 
   void _handleStateChange(DrawState state) {
-    final previousState = _lastObservedState;
-    _lastObservedState = state;
-
     _syncTextEditingOverlayState(state);
-    // Keystrokes in text editing mutate only the draft payload and trigger
-    // very high-frequency state updates. Skip cursor hit-testing work and
-    // canvas tree rebuilds; the dedicated text overlay updates itself via
-    // [ValueListenableBuilder].
-    if (previousState != null &&
-        isTextEditingDraftMutationOnly(previous: previousState, next: state)) {
-      if (shouldRefreshDynamicLayerForTextEditingDraftMutation(
-        previous: previousState,
-        next: state,
-      )) {
-        _refreshCanvasSnapshot(
-          state,
-          assumeChanged: true,
-          forcedPreviewElementsRevision: ++_interactionPreviewRevision,
-        );
-      }
-      return;
-    }
-    if (previousState != null) {
-      final interactionMutationPlan = resolveInteractionMutationRefreshPlan(
-        previous: previousState,
-        next: state,
-      );
-      if (interactionMutationPlan != null) {
-        _handleInteractionMutation(
-          state,
-          previousState: previousState,
-          plan: interactionMutationPlan,
-        );
-        return;
-      }
-    }
-
-    if (previousState != null) {
-      final changedFilterElementIds = resolveFilterStyleMutation(
-        previous: previousState,
-        next: state,
-      );
-      if (changedFilterElementIds != null) {
-        _refreshPointerVisualsForState(state);
-        _refreshCanvasSnapshotForFilterStyleMutation(
-          state,
-          changedFilterElementIds: changedFilterElementIds,
-        );
-        return;
-      }
-    }
     _refreshPointerVisualsForState(state);
-    _refreshCanvasSnapshots(state, assumeCanvasChanged: true);
-  }
-
-  void _handleInteractionMutation(
-    DrawState state, {
-    required DrawState previousState,
-    required InteractionMutationRefreshPlan plan,
-  }) {
-    if (_activePointerIds.isEmpty) {
-      _refreshPointerVisualsForState(state);
-    } else {
-      _refreshCursorAndClearHoverForState(state);
-    }
-
-    if (_tryRefreshCachedInteractionCanvasSnapshot(
-      state,
-      previousState: previousState,
-      plan: plan,
-    )) {
-      return;
-    }
-    _refreshCanvasSnapshot(
-      state,
-      assumeChanged: true,
-      forcedPreviewElementsRevision: ++_interactionPreviewRevision,
-    );
+    _refreshCanvasSnapshot(state);
   }
 
   void _handleConfigChange(DrawConfig _) {
@@ -3892,7 +3200,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _cachedInputSelectionScale = null;
 
     _refreshPointerVisualsForState(widget.store.state);
-    _refreshCanvasSnapshots(widget.store.state, assumeCanvasChanged: true);
+    _refreshCanvasSnapshot(widget.store.state);
   }
 
   void _handleTextRenderingCacheInvalidation() {
@@ -3902,7 +3210,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _clearEditingTextLayoutCache();
     _clearEditingPainterLayoutCache();
     unawaited(_refreshAutoResizeTextLayoutsAfterFontLoad());
-    _refreshCanvasSnapshots(widget.store.state, assumeCanvasChanged: true);
+    _refreshCanvasSnapshot(widget.store.state);
   }
 
   void _handleSystemFontsChange() {
@@ -3965,56 +3273,30 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     _pointerMoveDispatcher.reset();
     await _flushPendingTextDraftSync();
     final interaction = widget.store.state.application.interaction;
-    if (interaction is TextEditingState) {
-      await widget.store.dispatch(
-        FinishTextEdit(
-          elementId: interaction.elementId,
-          text: interaction.draftData.text,
-          isNew: interaction.isNew,
-        ),
-      );
-    } else if (interaction is CreatingState) {
-      await widget.store.dispatch(const CancelCreateElement());
-    } else if (interaction is EditingState) {
-      await widget.store.dispatch(const CancelEdit());
-    } else if (interaction is BoxSelectingState) {
-      await widget.store.dispatch(const CancelBoxSelect());
-    } else if (interaction is DragPendingState) {
-      await widget.store.dispatch(const ClearDragPending());
+    final actions = resolveToolChangeResetActions(
+      interaction: interaction,
+      includeClearSelection: true,
+    );
+    for (final action in actions) {
+      await widget.store.dispatch(action);
     }
-
-    await widget.store.dispatch(const ClearSelection());
   }
 }
 
 @immutable
-class _CanvasSceneSnapshot {
-  const _CanvasSceneSnapshot({
-    required this.dynamicPreviewElements,
-    required this.dynamicPreviewElementsRevision,
-    required this.dynamicPreviewElementIds,
-    required this.optimizedDynamicElementIds,
-    required this.optimizedSceneHasPotentialOccluders,
+class _CanvasRenderInputs {
+  const _CanvasRenderInputs({
+    required this.previewElements,
     required this.creatingSnapshot,
-    required this.isHighlightMaskVisible,
     required this.highlightMaskConfig,
-    required this.isWatermarkVisible,
     required this.watermarkConfig,
-    required this.preferFastFilterFallback,
     required this.textRenderingCacheRevision,
   });
 
-  final Map<String, ElementState> dynamicPreviewElements;
-  final int? dynamicPreviewElementsRevision;
-  final Set<String>? dynamicPreviewElementIds;
-  final Set<String> optimizedDynamicElementIds;
-  final bool optimizedSceneHasPotentialOccluders;
+  final Map<String, ElementState> previewElements;
   final CreatingElementSnapshot? creatingSnapshot;
-  final bool isHighlightMaskVisible;
   final HighlightMaskConfig highlightMaskConfig;
-  final bool isWatermarkVisible;
   final WatermarkConfig watermarkConfig;
-  final bool preferFastFilterFallback;
   final int textRenderingCacheRevision;
 }
 
@@ -4023,17 +3305,15 @@ class _CanvasSnapshot {
   const _CanvasSnapshot({required this.stateView, required this.renderKey});
 
   final DrawStateView stateView;
-  final DynamicCanvasRenderKey renderKey;
+  final SceneCanvasRenderKey renderKey;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is _CanvasSnapshot &&
-          identical(other.stateView, stateView) &&
-          other.renderKey == renderKey;
+      other is _CanvasSnapshot && other.renderKey == renderKey;
 
   @override
-  int get hashCode => Object.hash(identityHashCode(stateView), renderKey);
+  int get hashCode => renderKey.hashCode;
 }
 
 @immutable

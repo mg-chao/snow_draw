@@ -1,5 +1,6 @@
 import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
+import 'package:snow_draw_core/draw/config/config_manager.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
@@ -23,13 +24,15 @@ void main() {
     registerBuiltInElements(registry);
 
     final deps = DrawContext.withDefaults(
-      config: DrawConfig(
-        highlightStyle: const ElementStyleConfig(
-          color: DrawColor(0xFF00FF00),
-          textStrokeColor: DrawColor(0xFF0000FF),
-          textStrokeWidth: 3,
-          highlightShape: HighlightShape.ellipse,
-          opacity: 0.4,
+      configManager: ConfigManager(
+        DrawConfig(
+          highlightStyle: const ElementStyleConfig(
+            color: DrawColor(0xFF00FF00),
+            textStrokeColor: DrawColor(0xFF0000FF),
+            textStrokeWidth: 3,
+            highlightShape: HighlightShape.ellipse,
+            opacity: 0.4,
+          ),
         ),
       ),
       elementRegistry: registry,

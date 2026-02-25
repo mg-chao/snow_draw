@@ -2,6 +2,7 @@ import '../../actions/draw_actions.dart';
 import '../../models/camera_state.dart';
 import '../../models/draw_state.dart';
 import '../../types/draw_point.dart';
+import '../../utils/camera_zoom.dart';
 
 DrawState? cameraReducer(DrawState state, DrawAction action) =>
     switch (action) {
@@ -26,7 +27,7 @@ DrawState _handleMoveCamera(DrawState state, MoveCamera action) {
 
 DrawState _handleZoomCamera(DrawState state, ZoomCamera action) {
   final camera = state.application.view.camera;
-  final currentZoom = camera.zoom <= 0 ? 1.0 : camera.zoom;
+  final currentZoom = resolveEffectiveZoom(camera.zoom);
   final targetZoom = CameraState.clampZoom(currentZoom * action.scale);
   if (targetZoom == currentZoom) {
     return state;

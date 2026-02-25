@@ -48,7 +48,7 @@ void main() {
       },
     );
 
-    test('all built-in elements expose scene encoders', () {
+    test('all built-in elements expose task encoders', () {
       final registry = createRegistryWithBuiltIns();
       final builtInTypeValues = <String>{
         rectangleDefinition.typeId.value,
@@ -60,21 +60,19 @@ void main() {
         textDefinition.typeId.value,
         serialNumberDefinition.typeId.value,
       };
-      final missingSceneEncoders = <String>[];
+      final missingDefinitions = <String>[];
 
       for (final typeValue in builtInTypeValues) {
         final definition = registry.getDefinitionByValue(typeValue);
         if (definition == null) {
-          missingSceneEncoders.add(typeValue);
+          missingDefinitions.add(typeValue);
         }
       }
 
       expect(
-        missingSceneEncoders,
+        missingDefinitions,
         isEmpty,
-        reason:
-            'Built-in elements must keep scene encoders to avoid falling back '
-            'to non-scene rendering paths.',
+        reason: 'Built-in elements must resolve from the registry.',
       );
     });
 

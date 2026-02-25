@@ -3,22 +3,7 @@ import '../../models/interaction_state.dart';
 import '../../services/log/log_service.dart';
 import '../../types/edit_operation_id.dart';
 import 'edit_errors.dart';
-import 'edit_result_unified.dart';
-
-/// State transition policy when an edit error occurs.
-enum ErrorStatePolicy { toIdle, keepState }
-
-/// Configuration for error handling behavior.
-class EditErrorHandlerConfig {
-  const EditErrorHandlerConfig({this.statePolicy = ErrorStatePolicy.toIdle});
-  final ErrorStatePolicy statePolicy;
-
-  static const toIdle = EditErrorHandlerConfig();
-
-  static const keepState = EditErrorHandlerConfig(
-    statePolicy: ErrorStatePolicy.keepState,
-  );
-}
+import 'edit_result.dart';
 
 /// Centralized edit error handling utilities.
 class EditErrorHandler {
@@ -26,16 +11,17 @@ class EditErrorHandler {
 
   static final ModuleLogger _fallbackLog = LogService.fallback.edit;
 
-  static EditOperationId? extractOperationId(DrawState state) {
-    final interaction = state.application.interaction;
-    if (interaction is EditingState) {
-      return interaction.operationId;
-    }
-    return null;
-  }
+  static EditOperationId? extractOperationId(DrawState state) =>
+      switch (state.application.interaction) {
+        EditingState(:final operationId) => operationId,
+        _ => null,
+      };
 
-  static DrawState computeNextState(DrawState state, ErrorStatePolicy policy) {
-    if (policy == ErrorStatePolicy.keepState) {
+  static DrawState computeNextState(
+    DrawState state, {
+    required bool keepState,
+  }) {
+    if (keepState) {
       return state;
     }
 
@@ -49,11 +35,11 @@ class EditErrorHandler {
 
   static EditOutcome createFailure({
     required DrawState state,
-    required EditErrorHandlerConfig config,
     required EditFailureReason reason,
     EditOperationId? operationId,
-  }) => (
-    state: computeNextState(state, config.statePolicy),
+    bool keepState = false,
+  }) => EditOutcome(
+    state: computeNextState(state, keepState: keepState),
     failureReason: reason,
     operationId: operationId ?? extractOperationId(state),
   );
@@ -70,26 +56,38 @@ class EditErrorHandler {
       EditTransformTypeMismatchError _ ||
       EditParamsTypeMismatchError _ ||
       AssertionError _ => EditFailureReason.invalidParams,
-
-      EditVersionConflictError(conflictType: 'selection') =>
-        EditFailureReason.selectionChanged,
-      EditVersionConflictError(conflictType: 'elements') =>
-        EditFailureReason.elementsChanged,
-      EditVersionConflictError() => EditFailureReason.operationFailed,
-
-      EditSessionRestoreError(failureType: SessionRestoreFailure.notEditing) =>
-        EditFailureReason.notEditing,
-      EditSessionRestoreError(
-        failureType: SessionRestoreFailure.unknownOperation,
-      ) =>
-        EditFailureReason.unknownOperationId,
-      EditSessionRestoreError(
-        failureType: SessionRestoreFailure.sessionDataInvalid,
-      ) =>
-        EditFailureReason.sessionRestoreFailed,
-
       _ => EditFailureReason.operationFailed,
     };
+  }
+
+  /// Executes [operation] and converts thrown errors to [EditOutcome].
+  static EditOutcome runWithErrorHandling({
+    required DrawState state,
+    required EditOutcome Function() operation,
+    bool keepStateOnFailure = false,
+    EditOperationId? fallbackOperationId,
+    String? operationName,
+    ModuleLogger? log,
+  }) {
+    try {
+      return operation();
+    } on Object catch (error, stackTrace) {
+      if (error is! EditError) {
+        _logUnexpectedError(
+          error,
+          stackTrace,
+          operationName,
+          log: log,
+          operationId: fallbackOperationId,
+        );
+      }
+      return createFailure(
+        state: state,
+        reason: mapExceptionToReason(error),
+        operationId: fallbackOperationId,
+        keepState: keepStateOnFailure,
+      );
+    }
   }
 
   static void _logUnexpectedError(
@@ -105,43 +103,5 @@ class EditErrorHandler {
       data['operationId'] = operationId;
     }
     effectiveLog.error('Unexpected edit error', error, stackTrace, data);
-  }
-}
-
-/// Higher-order wrapper for unified error handling.
-extension EditErrorHandlerExtension on EditErrorHandler {
-  static EditOutcome runWithErrorHandling({
-    required DrawState state,
-    required EditErrorHandlerConfig config,
-    required EditOutcome Function() operation,
-    EditOperationId? fallbackOperationId,
-    String? operationName,
-    ModuleLogger? log,
-  }) {
-    try {
-      return operation();
-    } on EditError catch (error, _) {
-      return EditErrorHandler.createFailure(
-        state: state,
-        config: config,
-        reason: EditErrorHandler.mapExceptionToReason(error),
-        operationId: fallbackOperationId,
-      );
-    } on Object catch (error, stackTrace) {
-      EditErrorHandler._logUnexpectedError(
-        error,
-        stackTrace,
-        operationName,
-        log: log,
-        operationId: fallbackOperationId,
-      );
-
-      return EditErrorHandler.createFailure(
-        state: state,
-        config: config,
-        reason: EditErrorHandler.mapExceptionToReason(error),
-        operationId: fallbackOperationId,
-      );
-    }
   }
 }

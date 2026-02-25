@@ -10,6 +10,7 @@ import '../../../utils/selection_calculator.dart';
 import '../rectangle/rectangle_data.dart';
 import '../serial_number/serial_number_data.dart';
 import '../serial_number/serial_number_layout.dart';
+import '../shared/element_data_codec.dart';
 import '../text/text_data.dart';
 import 'elbow/elbow_geometry.dart';
 import 'elbow/elbow_heading.dart';
@@ -25,20 +26,22 @@ final class ArrowBinding {
   });
 
   factory ArrowBinding.fromJson(Map<String, dynamic> json) {
-    final elementId = json['elementId'] as String?;
-    final anchorJson = json['anchor'];
-    if (elementId == null || anchorJson is! Map) {
-      throw const FormatException('Invalid ArrowBinding payload');
-    }
-    final x = (anchorJson['x'] as num?)?.toDouble() ?? 0.0;
-    final y = (anchorJson['y'] as num?)?.toDouble() ?? 0.0;
-    final mode = ArrowBindingMode.values.firstWhere(
-      (value) => value.name == json['mode'],
-      orElse: () => ArrowBindingMode.orbit,
+    final elementId = ElementDataCodec.decodeString(
+      json['elementId'],
+      fieldName: 'elementId',
+    );
+    final anchor = ElementDataCodec.decodePoint(
+      json['anchor'],
+      fieldName: 'anchor',
+    );
+    final mode = ElementDataCodec.decodeEnumByName(
+      values: ArrowBindingMode.values,
+      raw: json['mode'],
+      fieldName: 'mode',
     );
     return ArrowBinding(
       elementId: elementId,
-      anchor: DrawPoint(x: _clamp01(x), y: _clamp01(y)),
+      anchor: DrawPoint(x: _clamp01(anchor.x), y: _clamp01(anchor.y)),
       mode: mode,
     );
   }
@@ -104,6 +107,23 @@ class ArrowBindingUtils {
     return data is RectangleData ||
         data is TextData ||
         data is SerialNumberData;
+  }
+
+  /// Returns whether either endpoint binding targets any id in [targetIds].
+  static bool isBoundToAnyTargets({
+    required ArrowBinding? startBinding,
+    required ArrowBinding? endBinding,
+    required Set<String> targetIds,
+  }) {
+    if (targetIds.isEmpty) {
+      return false;
+    }
+    final startTargetId = startBinding?.elementId;
+    if (startTargetId != null && targetIds.contains(startTargetId)) {
+      return true;
+    }
+    final endTargetId = endBinding?.elementId;
+    return endTargetId != null && targetIds.contains(endTargetId);
   }
 
   static double resolveBindingGap({required ElementState target}) =>

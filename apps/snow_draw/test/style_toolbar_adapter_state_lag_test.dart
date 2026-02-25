@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:ui' show Color;
 
 import 'package:flutter/foundation.dart';
@@ -147,9 +147,6 @@ class _LaggingStateStore implements DrawStore {
   DrawState get state => _state;
 
   @override
-  DrawState get currentState => _state;
-
-  @override
   DrawConfig get config => _config;
 
   @override
@@ -174,9 +171,6 @@ class _LaggingStateStore implements DrawStore {
     onDone: onDone,
     cancelOnError: cancelOnError,
   );
-
-  @override
-  Future<void> call(DrawAction action) => dispatch(action);
 
   @override
   Future<void> dispatch(DrawAction action) async {

@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/input/input_event.dart';
@@ -9,21 +8,19 @@ import 'package:snow_draw_core/draw/input/plugin_input_coordinator.dart';
 import 'package:snow_draw_core/draw/input/plugin_registry.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
+import 'package:test/test.dart';
 
 void main() {
-  group('PluginRegistry dispatch hooks', () {
-    test('calls onAfterEvent once per plugin with final result', () async {
+  group('PluginRegistry dispatch', () {
+    test('stops propagation after first handled result', () async {
       final context = _createPluginContext();
       final registry = PluginRegistry(context: context);
-      final afterCallsA = <PluginResult?>[];
-      final afterCallsB = <PluginResult?>[];
       var handleCallsB = 0;
 
       final pluginA = _TestPlugin(
         id: 'a',
         priority: 0,
         onHandle: (_) async => const PluginResult.handled(message: 'A handled'),
-        onAfter: (_, result) async => afterCallsA.add(result),
       );
       final pluginB = _TestPlugin(
         id: 'b',
@@ -32,127 +29,25 @@ void main() {
           handleCallsB += 1;
           return const PluginResult.handled(message: 'B handled');
         },
-        onAfter: (_, result) async => afterCallsB.add(result),
       );
 
       await registry.registerAll([pluginA, pluginB]);
 
-      final result = await registry.dispatch(_pointerDown(), DrawState());
+      final result = await registry.dispatch(_pointerDown());
 
       expect(result, const PluginResult.handled(message: 'A handled'));
       expect(handleCallsB, 0);
-      expect(afterCallsA, [result]);
-      expect(afterCallsB, [result]);
     });
 
-    test('still runs onAfterEvent when onBeforeEvent intercepts', () async {
-      final context = _createPluginContext();
-      final registry = PluginRegistry(context: context);
-      final beforeAfterCalls = <PluginResult?>[];
-      final observerAfterCalls = <PluginResult?>[];
-
-      final intercepting = _TestPlugin(
-        id: 'intercept',
-        priority: 0,
-        onBefore: (_) async => true,
-        onHandle: (_) async => const PluginResult.unhandled(),
-        onAfter: (_, result) async => beforeAfterCalls.add(result),
-      );
-      final observer = _TestPlugin(
-        id: 'observer',
-        priority: 10,
-        onHandle: (_) async => const PluginResult.unhandled(),
-        onAfter: (_, result) async => observerAfterCalls.add(result),
-      );
-
-      await registry.registerAll([intercepting, observer]);
-
-      final result = await registry.dispatch(_pointerDown(), DrawState());
-
-      expect(result, isNotNull);
-      expect(result!.isHandled, isTrue);
-      expect(beforeAfterCalls, [result]);
-      expect(observerAfterCalls, [result]);
-    });
-
-    test('continues dispatch when onBeforeEvent throws', () async {
-      final context = _createPluginContext();
-      final registry = PluginRegistry(context: context);
-      var fallbackHandled = 0;
-
-      final throwing = _TestPlugin(
-        id: 'throwing',
-        priority: 0,
-        onBefore: (_) async => throw StateError('before failed'),
-        canHandle: (event, state) => false,
-        onHandle: (_) async => const PluginResult.unhandled(),
-      );
-      final fallback = _TestPlugin(
-        id: 'fallback',
-        priority: 10,
-        onHandle: (_) async {
-          fallbackHandled += 1;
-          return const PluginResult.handled(message: 'fallback handled');
-        },
-      );
-
-      await registry.registerAll([throwing, fallback]);
-
-      final result = await registry.dispatch(_pointerDown(), DrawState());
-
-      expect(result, const PluginResult.handled(message: 'fallback handled'));
-      expect(fallbackHandled, 1);
-    });
-
-    test(
-      'continues dispatch when before-hook logging context is unavailable',
-      () async {
-        final state = DrawState();
-        final context = PluginContext(
-          stateProvider: () => state,
-          contextProvider: () => throw StateError('context unavailable'),
-          selectionConfigProvider: () => DrawConfig.defaultConfig.selection,
-          dispatcher: (_) async {},
-        );
-        final registry = PluginRegistry(context: context);
-        var fallbackHandled = 0;
-
-        final throwing = _TestPlugin(
-          id: 'throwing',
-          priority: 0,
-          onBefore: (_) async => throw StateError('before failed'),
-          canHandle: (_, _) => false,
-          onHandle: (_) async => const PluginResult.unhandled(),
-        );
-        final fallback = _TestPlugin(
-          id: 'fallback',
-          priority: 10,
-          onHandle: (_) async {
-            fallbackHandled += 1;
-            return const PluginResult.handled(message: 'fallback handled');
-          },
-        );
-
-        await registry.registerAll([throwing, fallback]);
-
-        final result = await registry.dispatch(_pointerDown(), state);
-
-        expect(result, const PluginResult.handled(message: 'fallback handled'));
-        expect(fallbackHandled, 1);
-      },
-    );
-
-    test('ignores onBeforeEvent interception from plugins '
-        'that do not support the event type', () async {
+    test('skips plugins that do not support the current event type', () async {
       final context = _createPluginContext();
       final registry = PluginRegistry(context: context);
       var downHandled = 0;
 
-      final moveOnlyInterceptor = _TestPlugin(
-        id: 'move-only-interceptor',
+      final moveOnlyPlugin = _TestPlugin(
+        id: 'move-only',
         priority: 0,
         supportedEventTypes: const {PointerMoveInputEvent},
-        onBefore: (_) async => true,
         canHandle: (_, _) => false,
         onHandle: (_) async => const PluginResult.unhandled(),
       );
@@ -165,45 +60,73 @@ void main() {
         },
       );
 
-      await registry.registerAll([moveOnlyInterceptor, downHandler]);
+      await registry.registerAll([moveOnlyPlugin, downHandler]);
 
-      final result = await registry.dispatch(_pointerDown(), DrawState());
+      final result = await registry.dispatch(_pointerDown());
 
       expect(result, const PluginResult.handled(message: 'down handled'));
       expect(downHandled, 1);
     });
 
-    test(
-      'runs onAfterEvent only for plugins supporting the event type',
-      () async {
-        final context = _createPluginContext();
-        final registry = PluginRegistry(context: context);
-        final downAfterCalls = <PluginResult?>[];
-        final moveAfterCalls = <PluginResult?>[];
+    test('continues dispatch when handleEvent throws', () async {
+      final context = _createPluginContext();
+      final registry = PluginRegistry(context: context);
+      var fallbackHandled = 0;
 
-        final downPlugin = _TestPlugin(
-          id: 'down',
-          priority: 0,
-          onHandle: (_) async => const PluginResult.handled(message: 'down'),
-          onAfter: (_, result) async => downAfterCalls.add(result),
-        );
-        final movePlugin = _TestPlugin(
-          id: 'move',
-          priority: 10,
-          supportedEventTypes: const {PointerMoveInputEvent},
-          onHandle: (_) async => const PluginResult.handled(message: 'move'),
-          onAfter: (_, result) async => moveAfterCalls.add(result),
-        );
+      final throwing = _TestPlugin(
+        id: 'throwing',
+        priority: 0,
+        onHandle: (_) async => throw StateError('handle failed'),
+      );
+      final fallback = _TestPlugin(
+        id: 'fallback',
+        priority: 10,
+        onHandle: (_) async {
+          fallbackHandled += 1;
+          return const PluginResult.handled(message: 'fallback handled');
+        },
+      );
 
-        await registry.registerAll([downPlugin, movePlugin]);
+      await registry.registerAll([throwing, fallback]);
 
-        final result = await registry.dispatch(_pointerDown(), DrawState());
+      final result = await registry.dispatch(_pointerDown());
 
-        expect(result, const PluginResult.handled(message: 'down'));
-        expect(downAfterCalls, [result]);
-        expect(moveAfterCalls, isEmpty);
-      },
-    );
+      expect(result, const PluginResult.handled(message: 'fallback handled'));
+      expect(fallbackHandled, 1);
+    });
+
+    test('continues dispatch when logging context is unavailable', () async {
+      final state = DrawState();
+      final context = PluginContext(
+        stateProvider: () => state,
+        contextProvider: () => throw StateError('context unavailable'),
+        selectionConfigProvider: () => DrawConfig.defaultConfig.selection,
+        dispatcher: (_) async {},
+      );
+      final registry = PluginRegistry(context: context);
+      var fallbackHandled = 0;
+
+      final throwing = _TestPlugin(
+        id: 'throwing',
+        priority: 0,
+        onHandle: (_) async => throw StateError('handle failed'),
+      );
+      final fallback = _TestPlugin(
+        id: 'fallback',
+        priority: 10,
+        onHandle: (_) async {
+          fallbackHandled += 1;
+          return const PluginResult.handled(message: 'fallback handled');
+        },
+      );
+
+      await registry.registerAll([throwing, fallback]);
+
+      final result = await registry.dispatch(_pointerDown());
+
+      expect(result, const PluginResult.handled(message: 'fallback handled'));
+      expect(fallbackHandled, 1);
+    });
   });
 
   group('PluginRegistry registerAll transactional behavior', () {
@@ -224,7 +147,7 @@ void main() {
         expect(okPlugin.loadCount, 1);
         expect(okPlugin.unloadCount, 1);
         expect(failingPlugin.loadCount, 1);
-        expect(failingPlugin.unloadCount, 1);
+        expect(failingPlugin.unloadCount, 0);
         expect(registry.pluginCount, 0);
         expect(registry.isRegistered('ok'), isFalse);
         expect(registry.isRegistered('failing'), isFalse);
@@ -232,7 +155,7 @@ void main() {
     );
 
     test(
-      'rethrows the original onLoad error when rollback logging also fails',
+      'rethrows the original onLoad error without unloading failed plugin',
       () async {
         final state = DrawState();
         final context = PluginContext(
@@ -260,7 +183,7 @@ void main() {
         );
 
         expect(failingPlugin.loadCount, 1);
-        expect(failingPlugin.unloadCount, 1);
+        expect(failingPlugin.unloadCount, 0);
         expect(registry.pluginCount, 0);
         expect(registry.isRegistered('failing'), isFalse);
       },
@@ -649,19 +572,13 @@ class _TestPlugin extends InputPluginBase {
     required super.id,
     required super.priority,
     required Future<PluginResult> Function(InputEvent event) onHandle,
-    Future<bool> Function(InputEvent event)? onBefore,
-    Future<void> Function(InputEvent event, PluginResult? result)? onAfter,
     bool Function(InputEvent event, DrawState state)? canHandle,
     super.supportedEventTypes = const {PointerDownInputEvent},
   }) : _onHandle = onHandle,
-       _onBefore = onBefore,
-       _onAfter = onAfter,
        _canHandle = canHandle,
        super(name: 'TestPlugin($id)');
 
   final Future<PluginResult> Function(InputEvent event) _onHandle;
-  final Future<bool> Function(InputEvent event)? _onBefore;
-  final Future<void> Function(InputEvent event, PluginResult? result)? _onAfter;
   final bool Function(InputEvent event, DrawState state)? _canHandle;
 
   @override
@@ -670,14 +587,6 @@ class _TestPlugin extends InputPluginBase {
 
   @override
   Future<PluginResult> handleEvent(InputEvent event) => _onHandle(event);
-
-  @override
-  Future<bool> onBeforeEvent(InputEvent event) =>
-      _onBefore?.call(event) ?? Future<bool>.value(false);
-
-  @override
-  Future<void> onAfterEvent(InputEvent event, PluginResult? result) =>
-      _onAfter?.call(event, result) ?? Future<void>.value();
 }
 
 class _ProbeSequentialPlugin extends InputPluginBase {

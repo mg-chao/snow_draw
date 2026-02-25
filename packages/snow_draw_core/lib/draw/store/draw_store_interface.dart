@@ -18,6 +18,7 @@ enum DrawStateChange { document, selection, view, interaction }
 /// Input-layer components should depend on this interface so tests can inject
 /// lightweight fake implementations.
 abstract interface class DrawStore implements StateProvider {
+  @override
   DrawState get state;
 
   DrawContext get context;
@@ -35,8 +36,6 @@ abstract interface class DrawStore implements StateProvider {
     void Function()? onDone,
     bool? cancelOnError,
   });
-  Future<void> call(DrawAction action);
-
   Future<void> dispatch(DrawAction action);
 
   VoidCallback listen(
@@ -54,9 +53,7 @@ abstract interface class DrawStore implements StateProvider {
   /// [listener] is invoked when the selected data changes.
   /// [equals] optionally overrides equality; defaults to selector.equals.
   /// [changeTypes] optionally narrows when the selector is re-evaluated.
-  ///
-  /// Passing `null` keeps the legacy behavior and evaluates on all tracked
-  /// state changes.
+  /// Omit (or pass an empty set) to evaluate on all tracked state changes.
   ///
   /// Returns a callback to unsubscribe.
   VoidCallback select<T>(

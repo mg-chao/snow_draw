@@ -84,17 +84,21 @@ final class _ElbowEditContext {
 
   // -- Endpoint drag helpers (replaces _EndpointDragContext) --
 
-  late final bool startActive =
-      (basePoints.isNotEmpty &&
-          incomingPoints.isNotEmpty &&
-          basePoints.first != incomingPoints.first) ||
-      previousStartBinding != startBinding;
+  late final bool startActive = _isEndpointActive(
+    basePoints: basePoints,
+    incomingPoints: incomingPoints,
+    isStart: true,
+    previousBinding: previousStartBinding,
+    nextBinding: startBinding,
+  );
 
-  late final bool endActive =
-      (basePoints.isNotEmpty &&
-          incomingPoints.isNotEmpty &&
-          basePoints.last != incomingPoints.last) ||
-      previousEndBinding != endBinding;
+  late final bool endActive = _isEndpointActive(
+    basePoints: basePoints,
+    incomingPoints: incomingPoints,
+    isStart: false,
+    previousBinding: previousEndBinding,
+    nextBinding: endBinding,
+  );
 
   bool get startWasBound => previousStartBinding != null;
   bool get endWasBound => previousEndBinding != null;
@@ -142,10 +146,8 @@ final class _ElbowEditPipeline {
     required this.lookup,
     this.localPointsOverride,
     this.fixedSegmentsOverride,
-    this.startBindingOverride,
-    this.endBindingOverride,
-    this.startBindingOverrideIsSet = false,
-    this.endBindingOverrideIsSet = false,
+    this.startBindingOverride = _bindingOverrideUnset,
+    this.endBindingOverride = _bindingOverrideUnset,
   });
 
   final ElementState element;
@@ -153,10 +155,8 @@ final class _ElbowEditPipeline {
   final CombinedElementLookup lookup;
   final List<DrawPoint>? localPointsOverride;
   final List<ElbowFixedSegment>? fixedSegmentsOverride;
-  final ArrowBinding? startBindingOverride;
-  final ArrowBinding? endBindingOverride;
-  final bool startBindingOverrideIsSet;
-  final bool endBindingOverrideIsSet;
+  final Object? startBindingOverride;
+  final Object? endBindingOverride;
 
   ElbowEditResult run() {
     final context = _buildContext();
@@ -190,12 +190,10 @@ final class _ElbowEditPipeline {
     );
     final startBinding = _resolveBindingOverride(
       override: startBindingOverride,
-      overrideIsSet: startBindingOverrideIsSet,
       fallback: data.startBinding,
     );
     final endBinding = _resolveBindingOverride(
       override: endBindingOverride,
-      overrideIsSet: endBindingOverrideIsSet,
       fallback: data.endBinding,
     );
     final previousData = element.data is ArrowData
@@ -321,17 +319,18 @@ ElbowEditResult _finalizePath(
   List<DrawPoint> points,
   List<ElbowFixedSegment>? fixedSegments,
 ) {
-  final hasFixed = fixedSegments != null && fixedSegments.isNotEmpty;
+  final effectiveFixedSegments = fixedSegments ?? const <ElbowFixedSegment>[];
+  final hasFixed = effectiveFixedSegments.isNotEmpty;
   final pinned = _collectPinnedPoints(
     points: points,
-    fixedSegments: hasFixed ? fixedSegments : const [],
+    fixedSegments: effectiveFixedSegments,
   );
   final merged = ElbowGeometry.mergeConsecutiveSameHeading(
     points,
     pinned: pinned,
   );
   final resolvedFixed = hasFixed
-      ? _reindexFixedSegments(merged, fixedSegments)
+      ? _reindexFixedSegments(merged, effectiveFixedSegments)
       : null;
   return ElbowEditResult(
     localPoints: merged,
@@ -342,10 +341,46 @@ ElbowEditResult _finalizePath(
 }
 
 ArrowBinding? _resolveBindingOverride({
-  required ArrowBinding? override,
-  required bool overrideIsSet,
+  required Object? override,
   required ArrowBinding? fallback,
-}) => overrideIsSet ? override : (override ?? fallback);
+}) {
+  if (identical(override, _bindingOverrideUnset)) {
+    return fallback;
+  }
+  if (override == null || override is ArrowBinding) {
+    return override as ArrowBinding?;
+  }
+  throw ArgumentError.value(
+    override,
+    'override',
+    'Expected ArrowBinding?, null, or unset marker.',
+  );
+}
+
+bool _isEndpointActive({
+  required List<DrawPoint> basePoints,
+  required List<DrawPoint> incomingPoints,
+  required bool isStart,
+  required ArrowBinding? previousBinding,
+  required ArrowBinding? nextBinding,
+}) =>
+    _didEndpointMove(
+      basePoints: basePoints,
+      incomingPoints: incomingPoints,
+      isStart: isStart,
+    ) ||
+    previousBinding != nextBinding;
+
+bool _didEndpointMove({
+  required List<DrawPoint> basePoints,
+  required List<DrawPoint> incomingPoints,
+  required bool isStart,
+}) =>
+    basePoints.isNotEmpty &&
+    incomingPoints.isNotEmpty &&
+    (isStart
+        ? basePoints.first != incomingPoints.first
+        : basePoints.last != incomingPoints.last);
 
 // ---------------------------------------------------------------------------
 // Geometry helpers (merged from elbow_edit_geometry.dart)

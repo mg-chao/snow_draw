@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:meta/meta.dart';
 
 import '../../elements/types/text/text_data.dart';
+import 'text_layout_constraints.dart';
 
 /// Request payload for text metric computation.
 @immutable
@@ -92,14 +93,14 @@ final class FallbackTextMetricsService implements TextMetricsService {
 
   @override
   TextMetrics measure(TextLayoutRequest request) {
-    final fontSize = _sanitizePositive(
+    final fontSize = sanitizePositiveExtent(
       request.data.fontSize,
       fallback: _defaultFontSize,
     );
     final lineHeight = fontSize * _lineHeightFactor;
     final glyphWidth = math.max(1, fontSize * _glyphWidthFactor).toDouble();
     final text = request.data.text.isEmpty ? ' ' : request.data.text;
-    final maxWidth = _resolveMaxWidth(request.maxWidth);
+    final maxWidth = resolveTextMaxWidth(request.maxWidth);
 
     final lineMetrics = <TextLineMetrics>[];
     for (final line in text.split('\n')) {
@@ -131,9 +132,9 @@ final class FallbackTextMetricsService implements TextMetricsService {
         width = cappedMinWidth;
       }
     }
-    width = _sanitizePositive(width, fallback: glyphWidth);
+    width = sanitizePositiveExtent(width, fallback: glyphWidth);
 
-    final height = _sanitizePositive(
+    final height = sanitizePositiveExtent(
       lineHeight * lineMetrics.length,
       fallback: lineHeight,
     );
@@ -159,7 +160,7 @@ final class FallbackTextMetricsService implements TextMetricsService {
     required double maxWidth,
   }) {
     final graphemeCount = line.isEmpty ? 1 : line.runes.length;
-    final rawWidth = _sanitizePositive(
+    final rawWidth = sanitizePositiveExtent(
       graphemeCount * glyphWidth,
       fallback: glyphWidth,
     );
@@ -173,27 +174,13 @@ final class FallbackTextMetricsService implements TextMetricsService {
     for (var i = 0; i < wraps; i++) {
       final remaining = rawWidth - (maxWidth * i);
       final lineWidth = i == wraps - 1
-          ? _sanitizePositive(remaining, fallback: math.min(rawWidth, maxWidth))
+          ? sanitizePositiveExtent(
+              remaining,
+              fallback: math.min(rawWidth, maxWidth),
+            )
           : maxWidth;
       lineMetrics.add(TextLineMetrics(width: lineWidth, height: lineHeight));
     }
-  }
-
-  static double _resolveMaxWidth(double maxWidth) {
-    if (!maxWidth.isFinite) {
-      return double.infinity;
-    }
-    if (maxWidth <= 0) {
-      return 1;
-    }
-    return maxWidth;
-  }
-
-  static double _sanitizePositive(double value, {required double fallback}) {
-    if (value.isFinite && value > 0) {
-      return value;
-    }
-    return fallback;
   }
 }
 

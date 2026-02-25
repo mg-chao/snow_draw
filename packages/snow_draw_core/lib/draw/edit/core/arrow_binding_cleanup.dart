@@ -1,9 +1,7 @@
 import '../../elements/types/arrow/arrow_data.dart';
-import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
-import '../../elements/types/line/line_data.dart';
 import '../../models/element_state.dart';
 import '../../types/element_style.dart';
 import '../../utils/combined_element_lookup.dart';
@@ -52,11 +50,11 @@ ElementState _unbindArrowElement({
       element: element,
       data: data,
       lookup: lookup,
-      startBindingOverrideIsSet: true,
-      endBindingOverrideIsSet: true,
+      startBindingOverride: null,
+      endBindingOverride: null,
       finalize: true,
     );
-    final rectAndPoints = computeArrowRectAndPoints(
+    final geometry = resolveArrowGeometryUpdate(
       localPoints: unboundElbow.localPoints,
       oldRect: element.rect,
       rotation: element.rotation,
@@ -65,40 +63,28 @@ ElementState _unbindArrowElement({
     final transformedFixedSegments = transformFixedSegments(
       segments: unboundElbow.fixedSegments,
       oldRect: element.rect,
-      newRect: rectAndPoints.rect,
+      newRect: geometry.rect,
       rotation: element.rotation,
     );
-    final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: rectAndPoints.localPoints,
-      rect: rectAndPoints.rect,
-    );
     final updatedData = data.copyWith(
-      points: normalized,
+      points: geometry.normalizedPoints,
       startBinding: null,
       endBinding: null,
       fixedSegments: transformedFixedSegments,
       startIsSpecial: null,
       endIsSpecial: null,
     );
-    return element.copyWith(rect: rectAndPoints.rect, data: updatedData);
+    return element.copyWith(rect: geometry.rect, data: updatedData);
   }
 
-  final updatedData = switch (data) {
-    final ArrowData value => value.copyWith(
-      startBinding: null,
-      endBinding: null,
-      fixedSegments: null,
-      startIsSpecial: null,
-      endIsSpecial: null,
-    ),
-    final LineData value => value.copyWith(
-      startBinding: null,
-      endBinding: null,
-      fixedSegments: null,
-      startIsSpecial: null,
-      endIsSpecial: null,
-    ),
-    _ => data.copyWith(),
-  };
+  final updatedData = _clearBindings(data);
   return element.copyWith(data: updatedData);
 }
+
+ArrowLikeData _clearBindings(ArrowLikeData data) => data.copyWith(
+  startBinding: null,
+  endBinding: null,
+  fixedSegments: null,
+  startIsSpecial: null,
+  endIsSpecial: null,
+);

@@ -3,6 +3,7 @@ import 'package:meta/meta.dart';
 import '../../config/draw_config.dart';
 import '../../models/draw_state.dart';
 import '../../models/interaction_state.dart';
+import '../../services/grid_snap_service.dart';
 import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
@@ -98,7 +99,7 @@ abstract class CreationStrategy {
       );
 
       final baseElement = working.element;
-      final updatedElement = updateResult.data == working.elementData
+      final updatedElement = updateResult.data == working.element.data
           ? baseElement
           : baseElement.copyWith(data: updateResult.data);
 
@@ -111,7 +112,7 @@ abstract class CreationStrategy {
     }
 
     return CreationUpdateResult(
-      data: working.elementData,
+      data: working.element.data,
       rect: working.currentRect,
       creationMode: working.creationMode,
       snapGuides: working.snapGuides,
@@ -138,4 +139,76 @@ abstract class CreationStrategy {
 @immutable
 abstract class PointCreationStrategy extends CreationStrategy {
   const PointCreationStrategy();
+}
+
+/// Casts [data] to [T] for a concrete creation strategy.
+///
+/// Creation strategies are wired by element definition, so receiving a
+/// mismatched data type indicates a programming error.
+T requireCreationDataType<T extends ElementData>({
+  required ElementData data,
+  required String strategyName,
+}) {
+  if (data is T) {
+    return data;
+  }
+  throw StateError(
+    '$strategyName expects $T but received ${data.runtimeType}.',
+  );
+}
+
+/// Casts [CreatingState.elementData] to [T] for a concrete strategy phase.
+T requireCreatingElementDataType<T extends ElementData>({
+  required CreatingState creatingState,
+  required String strategyName,
+}) => requireCreationDataType<T>(
+  data: creatingState.elementData,
+  strategyName: strategyName,
+);
+
+/// Returns whether the creation result should be committed to the document.
+///
+/// The element must satisfy both minimum size and element-level validity
+/// constraints from [config].
+bool shouldCommitCreationResult({
+  required DrawConfig config,
+  required CreatingState creatingState,
+  DrawRect? rect,
+}) {
+  final resolvedRect = rect ?? creatingState.currentRect;
+  final minSize = config.element.minCreateSize;
+  return resolvedRect.width >= minSize &&
+      resolvedRect.height >= minSize &&
+      creatingState.element
+          .copyWith(rect: resolvedRect)
+          .isValidWith(config.element);
+}
+
+/// Builds a standard finish result using the current creation rect.
+CreationFinishResult finishCreationWithCurrentRect({
+  required DrawConfig config,
+  required CreatingState creatingState,
+}) {
+  final rect = creatingState.currentRect;
+  return CreationFinishResult(
+    data: creatingState.elementData,
+    rect: rect,
+    shouldCommit: shouldCommitCreationResult(
+      config: config,
+      creatingState: creatingState,
+      rect: rect,
+    ),
+  );
+}
+
+/// Snaps [point] to the creation grid when grid snapping is active.
+DrawPoint snapCreationPoint({
+  required DrawPoint point,
+  required DrawConfig config,
+  required SnappingMode snappingMode,
+}) {
+  if (snappingMode != SnappingMode.grid) {
+    return point;
+  }
+  return gridSnapService.snapPoint(point: point, gridSize: config.grid.size);
 }

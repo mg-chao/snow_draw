@@ -15,12 +15,6 @@ class DrawState {
     : domain = domain ?? DomainState.empty(),
       application = application ?? ApplicationState.initial();
 
-  /// Factory constructor: create from layered state.
-  factory DrawState.fromLayers({
-    required DomainState domain,
-    required ApplicationState application,
-  }) => DrawState(domain: domain, application: application);
-
   /// Factory method: create initial state.
   factory DrawState.initial({ViewState? view}) => DrawState(
     domain: DomainState.empty(),

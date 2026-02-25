@@ -5,7 +5,6 @@ import '../config/config_manager.dart';
 import '../config/draw_config.dart';
 import '../core/callbacks.dart';
 import '../core/draw_context.dart';
-import '../edit/core/edit_event_factory.dart';
 import '../edit/core/edit_session_service.dart';
 import '../events/event_bus.dart';
 import '../models/draw_state.dart';
@@ -19,7 +18,6 @@ import 'middleware/middleware_pipeline_factory.dart';
 import 'selector.dart';
 import 'snapshot.dart';
 import 'snapshot_builder.dart';
-import 'state_manager.dart';
 
 class DefaultDrawStore implements DrawStore {
   DefaultDrawStore({
@@ -32,15 +30,14 @@ class DefaultDrawStore implements DrawStore {
     EventBus? eventBus,
   }) : _ownsEventBus = eventBus == null && context.eventBus == null,
        _eventBus = eventBus ?? context.eventBus ?? EventBus(),
-       _snapshotBuilder = snapshotBuilder,
-       _editEventController = StreamController<EditSessionEvent>.broadcast() {
+       _snapshotBuilder = snapshotBuilder {
     this.context = context.eventBus == _eventBus
         ? context
         : context.copyWith(eventBus: _eventBus);
 
     _historyManager =
         historyManager ?? HistoryManager(logService: this.context.log);
-    _stateManager = StateManager(initialState ?? DrawState());
+    _state = initialState ?? DrawState();
     _configManager = this.context.configManager;
     _listenerRegistry = ListenerRegistry(
       onError: (error, stackTrace) {
@@ -55,6 +52,7 @@ class DefaultDrawStore implements DrawStore {
     _editSessionService = EditSessionService.fromRegistry(
       this.context.editOperations,
       configProvider: () => _configManager.current,
+      textMetricsService: this.context.textMetricsService,
       logService: this.context.log,
     );
 
@@ -62,7 +60,10 @@ class DefaultDrawStore implements DrawStore {
 
     final services = ActionProcessorServices(
       drawContext: this.context,
-      stateManager: _stateManager,
+      readState: () => _state,
+      writeState: (nextState) {
+        _state = nextState;
+      },
       historyManager: _historyManager,
       configManager: _configManager,
       listenerRegistry: _listenerRegistry,
@@ -72,8 +73,6 @@ class DefaultDrawStore implements DrawStore {
       isBatching: () => _isBatching,
       includeSelectionInHistory: includeSelectionInHistory,
       eventBus: _eventBus,
-      publishEditEvents: _publishEditEvents,
-      enableInteractionMutationFastPath: pipeline == null,
     );
 
     _actionProcessor = ActionProcessor(services: services, pipeline: _pipeline);
@@ -81,13 +80,12 @@ class DefaultDrawStore implements DrawStore {
   @override
   late final DrawContext context;
 
-  late final StateManager _stateManager;
+  late DrawState _state;
   late final ConfigManager _configManager;
   late final ListenerRegistry _listenerRegistry;
 
   late final HistoryManager _historyManager;
   late final EditSessionService _editSessionService;
-  final StreamController<EditSessionEvent> _editEventController;
   final SnapshotBuilder _snapshotBuilder;
   final bool _ownsEventBus;
   final EventBus _eventBus;
@@ -103,10 +101,7 @@ class DefaultDrawStore implements DrawStore {
   var _editSessionSequence = 0;
 
   @override
-  DrawState get state => _stateManager.current;
-
-  @override
-  DrawState get currentState => state;
+  DrawState get state => _state;
 
   bool get canUndo => _historyManager.canUndo;
   bool get canRedo => _historyManager.canRedo;
@@ -139,9 +134,6 @@ class DefaultDrawStore implements DrawStore {
     onDone: onDone,
     cancelOnError: cancelOnError,
   );
-
-  /// Edit diagnostic event stream.
-  Stream<EditSessionEvent> get editEvents => _editEventController.stream;
 
   @override
   VoidCallback listen(
@@ -185,10 +177,7 @@ class DefaultDrawStore implements DrawStore {
     final startState = state;
     _isBatching = true;
     _batchStartState = startState;
-    _batchStartSnapshot = _snapshotBuilder.buildSnapshotFromState(
-      state: startState,
-      includeSelection: includeSelectionInHistory,
-    );
+    _batchStartSnapshot = _buildSnapshot(startState);
     context.log.store.debug('Batch snapshot captured', {
       'elements': startState.domain.document.elements.length,
     });
@@ -203,10 +192,7 @@ class DefaultDrawStore implements DrawStore {
     final startState = _batchStartState;
     final startSnapshot = _batchStartSnapshot;
 
-    final endSnapshot = _snapshotBuilder.buildSnapshotFromState(
-      state: state,
-      includeSelection: includeSelectionInHistory,
-    );
+    final endSnapshot = _buildSnapshot(state);
 
     final recorded = endSnapshot != startSnapshot;
     if (recorded) {
@@ -225,9 +211,6 @@ class DefaultDrawStore implements DrawStore {
     return _actionProcessor.dispatch(action);
   }
 
-  @override
-  Future<void> call(DrawAction action) => dispatch(action);
-
   Future<void> undo() => dispatch(const Undo());
 
   Future<void> redo() => dispatch(const Redo());
@@ -238,25 +221,7 @@ class DefaultDrawStore implements DrawStore {
 
   void restoreHistory(HistoryManagerSnapshot snapshot) {
     _historyManager.restore(snapshot);
-    _actionProcessor.syncHistoryAvailability(emitIfChanged: true);
-  }
-
-  Map<String, dynamic> exportHistoryJson() => exportHistory().toJson();
-
-  void restoreHistoryJson(Map<String, dynamic> json) {
-    final snapshot = HistoryManagerSnapshot.fromJson(
-      json,
-      elementRegistry: context.elementRegistry,
-      onUnknownElement: (info) {
-        context.log.history.warning('Unknown element in history', {
-          'type': info.elementType,
-          'id': info.elementId,
-          'source': info.source,
-          'error': info.error?.toString(),
-        });
-      },
-    );
-    restoreHistory(snapshot);
+    _actionProcessor.syncHistoryAvailability();
   }
 
   void _checkNotDisposed() {
@@ -274,7 +239,6 @@ class DefaultDrawStore implements DrawStore {
     _actionProcessor.dispose();
 
     unawaited(_configManager.dispose());
-    unawaited(_editEventController.close());
     if (_ownsEventBus) {
       unawaited(_eventBus.dispose());
     }
@@ -291,20 +255,9 @@ class DefaultDrawStore implements DrawStore {
     return sessionId;
   }
 
-  void _publishEditEvents(List<EditSessionEvent> events) {
-    for (final event in events) {
-      final operationId = switch (event) {
-        EditStartFailed(:final operationId) => operationId,
-        EditUpdateFailed(:final operationId) => operationId,
-        EditFinishFailed(:final operationId) => operationId,
-        EditCancelled(:final operationId) => operationId,
-        EditCancelFailed(:final operationId) => operationId,
-      };
-      context.log.edit.debug('Edit session event published', {
-        'event': event.runtimeType.toString(),
-        'operationId': operationId,
-      });
-      _editEventController.add(event);
-    }
-  }
+  PersistentSnapshot _buildSnapshot(DrawState sourceState) =>
+      _snapshotBuilder.buildSnapshotFromState(
+        state: sourceState,
+        includeSelection: includeSelectionInHistory,
+      );
 }

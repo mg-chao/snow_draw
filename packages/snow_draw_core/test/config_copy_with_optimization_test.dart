@@ -124,15 +124,16 @@ void main() {
       );
     });
 
-    test('draw config remains stable when nested copyWith is a no-op', () {
+    test('draw config copyWith returns an equal snapshot', () {
       final config = DrawConfig();
-      expectNoOp(
-        config,
-        () => config.copyWith(
-          grid: config.grid.copyWith(size: config.grid.size),
-          snap: config.snap.copyWith(enabled: config.snap.enabled),
-        ),
+
+      final copied = config.copyWith(
+        grid: config.grid.copyWith(size: config.grid.size),
+        snap: config.snap.copyWith(enabled: config.snap.enabled),
       );
+
+      expect(copied, equals(config));
+      expect(copied, isNot(same(config)));
     });
   });
 }

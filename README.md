@@ -17,9 +17,9 @@ or input behavior.
 ## Workspace Architecture
 
 - `packages/snow_draw_core`: pure Dart engine (state/actions/reducers,
-  geometry, scene contracts, serialization).
+  geometry, render-task planning, serialization).
 - `packages/snow_draw_flutter_backend`: Flutter backend (painters,
-  scene primitive renderer, text/shader caches, canvas widgets).
+  render-task execution, text/shader caches, canvas widgets).
 - `apps/snow_draw`: app composition layer (toolbars, adapters,
   `DefaultDrawStore`, `ToolController`).
 
@@ -27,8 +27,9 @@ or input behavior.
 
 Rendering follows an explicit engine/backend split:
 
-1. Core compiles document state into backend-agnostic scene primitives.
-2. Backend renders those primitives with platform APIs.
+1. Core compiles document state into backend-agnostic render tasks/frame
+   plans.
+2. Backend executes those tasks with platform APIs.
 3. App imports backend via package entrypoints only.
 
 This mirrors modern draw-list pipelines (similar in spirit to egui/iced):

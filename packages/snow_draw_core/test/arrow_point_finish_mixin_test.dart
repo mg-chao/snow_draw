@@ -4,7 +4,6 @@ import 'package:snow_draw_core/draw/edit/arrow/arrow_point_operation.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_operation_params.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
@@ -21,8 +20,6 @@ import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
-  setUp(ArrowBindingResolver.instance.invalidate);
-
   group('ArrowPointOperation finish/preview consistency', () {
     test('endpoint drag: preview rect matches finish rect', () {
       final arrow = _arrowElement(

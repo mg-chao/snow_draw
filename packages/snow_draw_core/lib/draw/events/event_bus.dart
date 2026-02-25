@@ -12,52 +12,31 @@ abstract class DrawEvent {
 ///
 /// Provides type-safe event publishing and subscriptions.
 class EventBus {
-  EventBus() : _controller = StreamController<DrawEvent>.broadcast();
+  EventBus() : _typedChannels = {DrawEvent: _TypedChannel<DrawEvent>()};
 
-  final StreamController<DrawEvent> _controller;
-  final Map<Type, _TypedChannelBase> _typedChannels = {};
+  final Map<Type, _TypedChannelBase> _typedChannels;
   Future<void>? _disposeFuture;
+  var _isClosed = false;
 
   /// Event stream.
-  Stream<DrawEvent> get stream => _controller.stream;
+  Stream<DrawEvent> get stream => streamOf<DrawEvent>();
 
   /// Whether there are active listeners.
-  bool get hasListeners =>
-      !_controller.isClosed && (_controller.hasListener || _hasTypedListeners);
+  bool get hasListeners => !_isClosed && _activeTypedChannels.isNotEmpty;
 
   /// Whether the event bus has been disposed.
-  bool get isDisposed => _controller.isClosed;
+  bool get isDisposed => _isClosed;
 
   /// Whether listeners can receive events of type [T].
   ///
-  /// This includes:
-  /// - direct listeners to [T]
-  /// - listeners to supertypes of [T] (for example, [DrawEvent])
-  /// - listeners to the untyped [stream]
+  /// This includes direct listeners, listeners to supertypes of [T]
+  /// (for example, [DrawEvent]), and listeners to subtypes of [T].
   bool hasListenersFor<T extends DrawEvent>() {
-    if (_controller.isClosed) {
+    if (_isClosed) {
       return false;
     }
-    if (_controller.hasListener) {
-      return true;
-    }
-
-    return _typedChannels.values.any(
-      (channel) => channel.hasListeners && channel.acceptsType<T>(),
-    );
-  }
-
-  /// Whether listeners can receive this concrete [event] instance.
-  bool hasListenersForEvent(DrawEvent event) {
-    if (_controller.isClosed) {
-      return false;
-    }
-    if (_controller.hasListener) {
-      return true;
-    }
-
-    return _typedChannels.values.any(
-      (channel) => channel.hasListeners && channel.matches(event),
+    return _activeTypedChannels.any(
+      (channel) => channel.acceptsType<T>() || channel.isSubtypeOf<T>(),
     );
   }
 
@@ -68,23 +47,19 @@ class EventBus {
 
   /// Emit an event and report whether it was dispatched.
   bool tryEmit(DrawEvent event) {
-    if (_controller.isClosed) {
+    if (_isClosed) {
       return false;
     }
 
-    final hasRawListeners = _controller.hasListener;
-    final typedTargets = <_TypedChannelBase>[
-      for (final channel in _typedChannels.values)
-        if (channel.hasListeners && channel.matches(event)) channel,
+    final targets = <_TypedChannelBase>[
+      for (final channel in _activeTypedChannels)
+        if (channel.matches(event)) channel,
     ];
-    if (!hasRawListeners && typedTargets.isEmpty) {
+    if (targets.isEmpty) {
       return false;
     }
 
-    if (hasRawListeners) {
-      _controller.add(event);
-    }
-    for (final channel in typedTargets) {
+    for (final channel in targets) {
       channel.emit(event);
     }
     return true;
@@ -92,28 +67,22 @@ class EventBus {
 
   /// Builds and emits an event only when listeners can receive it.
   bool emitLazy<T extends DrawEvent>(T Function() eventFactory) {
-    if (_controller.isClosed) {
+    if (!hasListenersFor<T>()) {
       return false;
     }
-
-    if (!_controller.hasListener && !_hasPotentialTypedListenersFor<T>()) {
-      return false;
-    }
-
     return tryEmit(eventFactory());
   }
 
   /// Typed stream for a specific event type.
   Stream<T> streamOf<T extends DrawEvent>() {
+    if (_isClosed) {
+      return _closedBroadcastStream<T>();
+    }
+
     final cached = _typedChannels[T];
     if (cached != null) {
       return cached.stream as Stream<T>;
     }
-
-    if (_controller.isClosed) {
-      return Stream<T>.empty();
-    }
-
     final channel = _TypedChannel<T>();
     _typedChannels[T] = channel;
     return channel.stream;
@@ -138,14 +107,14 @@ class EventBus {
     if (pending != null) {
       return pending;
     }
-
+    _isClosed = true;
     final closing = _closeAllControllers();
     _disposeFuture = closing;
     return closing;
   }
 
   Future<void> _closeAllControllers() async {
-    final futures = <Future<void>>[_controller.close()];
+    final futures = <Future<void>>[];
     for (final channel in _typedChannels.values) {
       futures.add(channel.close());
     }
@@ -153,15 +122,19 @@ class EventBus {
     _typedChannels.clear();
   }
 
-  bool get _hasTypedListeners =>
-      _typedChannels.values.any((channel) => channel.hasListeners);
+  Iterable<_TypedChannelBase> get _activeTypedChannels sync* {
+    for (final channel in _typedChannels.values) {
+      if (channel.hasListeners) {
+        yield channel;
+      }
+    }
+  }
+}
 
-  bool _hasPotentialTypedListenersFor<T extends DrawEvent>() =>
-      _typedChannels.values.any(
-        (channel) =>
-            channel.hasListeners &&
-            (channel.acceptsType<T>() || channel.isSubtypeOf<T>()),
-      );
+Stream<T> _closedBroadcastStream<T>() {
+  final controller = StreamController<T>.broadcast();
+  unawaited(controller.close());
+  return controller.stream;
 }
 
 abstract interface class _TypedChannelBase {

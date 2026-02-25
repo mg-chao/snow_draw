@@ -7,72 +7,41 @@ import 'package:meta/meta.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
 import '../../canvas/filter_shader_manager.dart';
 import 'filter_render_diagnostics.dart';
-import 'filter_segment.dart';
-import 'filter_segment_builder.dart';
 
 typedef SceneElementPainter =
     void Function(Canvas canvas, ElementState element);
-
-/// Scope identifier used to isolate cached filter-scene batches.
-enum FilterRenderCacheDomain { canvas }
 
 /// Stable paint-context key used for cross-frame batch picture reuse.
 @immutable
 class FilterRenderCacheContext {
   const FilterRenderCacheContext({
-    required this.domain,
-    required this.documentVersion,
     required this.textRenderingCacheRevision,
     required this.scaleKey,
     required this.localeTag,
+    this.serialConnectorRevision = 0,
   });
 
-  final FilterRenderCacheDomain domain;
-  final int documentVersion;
   final int textRenderingCacheRevision;
   final int scaleKey;
   final String localeTag;
+  final int serialConnectorRevision;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is FilterRenderCacheContext &&
-          other.domain == domain &&
-          other.documentVersion == documentVersion &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.scaleKey == scaleKey &&
-          other.localeTag == localeTag;
+          other.localeTag == localeTag &&
+          other.serialConnectorRevision == serialConnectorRevision;
 
   @override
   int get hashCode => Object.hash(
-    domain,
-    documentVersion,
     textRenderingCacheRevision,
     scaleKey,
     localeTag,
+    serialConnectorRevision,
   );
-}
-
-/// Runtime hints for adaptive filter rendering.
-///
-/// Interaction previews can opt into lower-cost approximations to sustain
-/// frame rate on backends that do not support shader-based filters.
-@immutable
-class FilterRenderHints {
-  const FilterRenderHints({
-    this.interactionPreview = false,
-    this.aggressiveCpuFallback = false,
-  });
-
-  /// Whether this frame is a high-frequency interaction preview.
-  final bool interactionPreview;
-
-  /// Whether CPU-backed filters should prioritize frame rate over fidelity.
-  ///
-  /// This is intended for sustained interactions (for example dragging a
-  /// filter-strength slider on backends without shader support) where keeping
-  /// input latency low is more important than precise filter output.
-  final bool aggressiveCpuFallback;
 }
 
 /// Factory interface for creating filter kernels.
@@ -145,34 +114,15 @@ class FilterSegmentRenderer {
   static const _filterImageCacheLimit = 256;
   static const _clipInfoCacheLimit = 512;
   static const _batchPictureCacheLimit = 96;
-  static const _prefixSceneCacheLimit = 48;
   static const _maxViewportOutset = 72.0;
-  static const _interactiveViewportOutset = 48.0;
-  static const _aggressiveViewportOutset = 36.0;
-  static const _interactiveGaussianMinSigma = 0.35;
-  static const _interactiveGaussianMaxSigma = 7.5;
-  static const _aggressiveGaussianMaxSigma = 5.5;
   static const _interactiveMosaicMinSigma = 1.5;
   static const _interactiveMosaicMaxSigma = 9.0;
-  static const _aggressiveMosaicMaxSigma = 6.5;
   static const _fullQualitySigmaQuantization = 0.125;
-  static const _interactiveSigmaQuantization = 0.25;
-  static const _aggressiveSigmaQuantization = 0.5;
   static const _fullQualityMosaicQuantization = 0.25;
-  static const _interactiveMosaicQuantization = 0.5;
-  static const _aggressiveMosaicQuantization = 1.0;
   static const _fullQualityOffsetQuantization = 0.25;
-  static const _interactiveOffsetQuantization = 0.5;
-  static const _aggressiveOffsetQuantization = 1.0;
   static const _fullQualityBlurDownsampleFactor = 1.0;
-  static const _interactiveBlurDownsampleFactor = 0.75;
-  static const _aggressiveBlurDownsampleFactor = 0.55;
   static const _fullQualityBlurPixelBudget = 1073741824.0;
-  static const _interactiveBlurPixelBudget = 420000;
-  static const _aggressiveBlurPixelBudget = 240000;
   static const _fullQualityColorMatrixPixelBudget = 1073741824.0;
-  static const _interactiveColorMatrixPixelBudget = 640000;
-  static const _aggressiveColorMatrixPixelBudget = 360000;
   static const _largeFilterCoverageThreshold = 0.35;
   static const _hugeFilterCoverageThreshold = 0.72;
   static const _largeCoverageViewportOutsetScale = 0.8;
@@ -203,10 +153,6 @@ class FilterSegmentRenderer {
     maxEntries: _batchPictureCacheLimit,
     onEvict: (entry) => entry.markEvicted(),
   );
-  final _prefixSceneCache = LruCache<_PrefixSceneCacheKey, _CachedPicture>(
-    maxEntries: _prefixSceneCacheLimit,
-    onEvict: (entry) => entry.markEvicted(),
-  );
   final _diagnostics = FilterRenderDiagnosticsCollector();
 
   /// Reusable paint object for `saveLayer` calls.
@@ -235,7 +181,6 @@ class FilterSegmentRenderer {
     _clipInfoCache.clear();
     _filterCache.clear();
     _batchPictureCache.clear();
-    _prefixSceneCache.clear();
   }
 
   /// Paints [elements] in z-order using segmented filter
@@ -246,23 +191,15 @@ class FilterSegmentRenderer {
     required SceneElementPainter paintElement,
     FilterRenderCacheContext? cacheContext,
     Rect? visibleBounds,
-    Set<String> dynamicElementIds = const <String>{},
-    FilterRenderHints renderHints = const FilterRenderHints(),
   }) {
     _diagnostics.beginFrame();
     if (elements.isEmpty) {
       _diagnostics.endFrame();
       return;
     }
-    final runtimePolicy = _resolveRuntimePolicy(renderHints);
+    final runtimePolicy = _resolveRuntimePolicy();
 
-    final baseSegments = _segmentBuilder.build(elements);
-    final segments = dynamicElementIds.isEmpty
-        ? baseSegments
-        : _expandMergedSegmentsForDynamicElements(
-            baseSegments,
-            dynamicElementIds: dynamicElementIds,
-          );
+    final segments = _segmentBuilder.build(elements);
     if (segments.isEmpty) {
       _diagnostics.endFrame();
       return;
@@ -287,31 +224,8 @@ class FilterSegmentRenderer {
     // This avoids creating intermediate PictureRecorder merges
     // between consecutive batches.
     final pending = <_ScenePictureRef>[];
-    var startSegmentIndex = 0;
-    final firstDynamicSegmentIndex = _findFirstDynamicSegmentIndex(
-      segments,
-      dynamicElementIds: dynamicElementIds,
-    );
-    if (cacheContext != null && firstDynamicSegmentIndex > 0) {
-      final prefixScene = _resolveCachedPrefixScene(
-        segments: segments,
-        endSegmentIndex: firstDynamicSegmentIndex,
-        paintElement: paintElement,
-        cacheContext: cacheContext,
-        visibleBounds: visibleBounds,
-        runtimePolicy: runtimePolicy,
-      );
-      if (prefixScene != null) {
-        pending.add(prefixScene);
-        startSegmentIndex = firstDynamicSegmentIndex;
-      }
-    }
 
-    for (
-      var segmentIndex = startSegmentIndex;
-      segmentIndex < segments.length;
-      segmentIndex++
-    ) {
+    for (var segmentIndex = 0; segmentIndex < segments.length; segmentIndex++) {
       final segment = segments[segmentIndex];
       if (segment is ElementBatchSegment) {
         if (segment.elements.isEmpty) {
@@ -325,7 +239,6 @@ class FilterSegmentRenderer {
             idFingerprint: segment.idFingerprint,
             identityFingerprint: segment.identityFingerprint,
             cacheContext: cacheContext,
-            dynamicElementIds: dynamicElementIds,
           ),
         );
         continue;
@@ -348,7 +261,6 @@ class FilterSegmentRenderer {
             filterElement: segment.filterElement,
             data: segment.filterData,
             visibleBounds: visibleBounds,
-            useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
             runtimePolicy: runtimePolicy,
           );
           scene.release();
@@ -359,7 +271,6 @@ class FilterSegmentRenderer {
           filterElement: segment.filterElement,
           data: segment.filterData,
           visibleBounds: visibleBounds,
-          useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
           runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
@@ -378,7 +289,6 @@ class FilterSegmentRenderer {
             scene: scene.picture,
             merged: segment,
             visibleBounds: visibleBounds,
-            dynamicElementIds: dynamicElementIds,
             runtimePolicy: runtimePolicy,
           );
           scene.release();
@@ -388,7 +298,6 @@ class FilterSegmentRenderer {
           scene: scene.picture,
           merged: segment,
           visibleBounds: visibleBounds,
-          dynamicElementIds: dynamicElementIds,
           runtimePolicy: runtimePolicy,
         );
         if (identical(filtered, scene.picture)) {
@@ -404,96 +313,6 @@ class FilterSegmentRenderer {
     _diagnostics.endFrame();
   }
 
-  List<RenderSegment> _expandMergedSegmentsForDynamicElements(
-    List<RenderSegment> segments, {
-    required Set<String> dynamicElementIds,
-  }) {
-    if (segments.isEmpty || dynamicElementIds.isEmpty) {
-      return segments;
-    }
-
-    List<RenderSegment>? expanded;
-    for (var index = 0; index < segments.length; index++) {
-      final segment = segments[index];
-      if (segment is! MergedFilterSegment || segment.filters.length < 2) {
-        if (expanded != null) {
-          expanded.add(segment);
-        }
-        continue;
-      }
-
-      final groups = _splitMergedSegmentByDynamicMembership(
-        segment,
-        dynamicElementIds: dynamicElementIds,
-      );
-      if (groups.length == 1 && identical(groups.first, segment)) {
-        if (expanded != null) {
-          expanded.add(segment);
-        }
-        continue;
-      }
-
-      expanded ??= <RenderSegment>[
-        for (var existingIndex = 0; existingIndex < index; existingIndex++)
-          segments[existingIndex],
-      ];
-      expanded.addAll(groups);
-    }
-
-    return expanded ?? segments;
-  }
-
-  List<RenderSegment> _splitMergedSegmentByDynamicMembership(
-    MergedFilterSegment segment, {
-    required Set<String> dynamicElementIds,
-  }) {
-    final filters = segment.filters;
-    var hasDynamicFilter = false;
-    var hasStaticFilter = false;
-    for (final filter in filters) {
-      if (dynamicElementIds.contains(filter.filterElement.id)) {
-        hasDynamicFilter = true;
-      } else {
-        hasStaticFilter = true;
-      }
-      if (hasDynamicFilter && hasStaticFilter) {
-        break;
-      }
-    }
-    if (!hasDynamicFilter || !hasStaticFilter) {
-      return <RenderSegment>[segment];
-    }
-
-    final split = <RenderSegment>[];
-    final run = <FilterSegment>[];
-    bool? currentIsDynamic;
-
-    void flushRun() {
-      if (run.isEmpty) {
-        return;
-      }
-      if (run.length == 1) {
-        split.add(run.first);
-      } else {
-        split.add(
-          MergedFilterSegment(filters: List<FilterSegment>.unmodifiable(run)),
-        );
-      }
-      run.clear();
-    }
-
-    for (final filter in filters) {
-      final isDynamic = dynamicElementIds.contains(filter.filterElement.id);
-      if (currentIsDynamic != null && currentIsDynamic != isDynamic) {
-        flushRun();
-      }
-      currentIsDynamic = isDynamic;
-      run.add(filter);
-    }
-    flushRun();
-    return split;
-  }
-
   int _findLastFilterSegmentIndex(List<RenderSegment> segments) {
     for (var index = segments.length - 1; index >= 0; index--) {
       final segment = segments[index];
@@ -502,224 +321,6 @@ class FilterSegmentRenderer {
       }
     }
     return -1;
-  }
-
-  int _findFirstDynamicSegmentIndex(
-    List<RenderSegment> segments, {
-    required Set<String> dynamicElementIds,
-  }) {
-    if (segments.isEmpty || dynamicElementIds.isEmpty) {
-      return -1;
-    }
-    for (var index = 0; index < segments.length; index++) {
-      if (_segmentContainsDynamicElement(
-        segments[index],
-        dynamicElementIds: dynamicElementIds,
-      )) {
-        return index;
-      }
-    }
-    return -1;
-  }
-
-  bool _segmentContainsDynamicElement(
-    RenderSegment segment, {
-    required Set<String> dynamicElementIds,
-  }) {
-    if (dynamicElementIds.isEmpty) {
-      return false;
-    }
-    return switch (segment) {
-      ElementBatchSegment(:final elements) => elements.any(
-        (element) => dynamicElementIds.contains(element.id),
-      ),
-      FilterSegment(:final filterElement) => dynamicElementIds.contains(
-        filterElement.id,
-      ),
-      MergedFilterSegment(:final filters) => filters.any(
-        (filter) => dynamicElementIds.contains(filter.filterElement.id),
-      ),
-    };
-  }
-
-  _ScenePictureRef? _resolveCachedPrefixScene({
-    required List<RenderSegment> segments,
-    required int endSegmentIndex,
-    required SceneElementPainter paintElement,
-    required FilterRenderCacheContext cacheContext,
-    required Rect? visibleBounds,
-    required _FilterRuntimePolicy runtimePolicy,
-  }) {
-    if (endSegmentIndex <= 0) {
-      return null;
-    }
-
-    final rangeSignature = _buildSegmentRangeSignature(
-      segments: segments,
-      start: 0,
-      end: endSegmentIndex,
-    );
-    if (rangeSignature.elementCount == 0) {
-      return null;
-    }
-
-    final cacheKey = _PrefixSceneCacheKey(
-      contextSignature: _BatchPictureContextSignature.fromContext(cacheContext),
-      idFingerprint: rangeSignature.idFingerprint,
-      identityFingerprint: rangeSignature.identityFingerprint,
-      elementCount: rangeSignature.elementCount,
-      segmentCount: rangeSignature.segmentCount,
-      visibleBoundsSignature: _VisibleBoundsSignature.fromRect(visibleBounds),
-      interactionPreview: runtimePolicy.preferFastCpuFallback,
-      aggressiveCpuFallback: runtimePolicy.aggressiveCpuFallback,
-    );
-    final cached = _prefixSceneCache.get(cacheKey);
-    if (cached != null) {
-      _diagnostics.markPrefixSceneCacheHit();
-      cached.retain();
-      return _ScenePictureRef.shared(
-        picture: cached.picture,
-        onRelease: cached.release,
-      );
-    }
-
-    _diagnostics.markPrefixSceneCacheMiss();
-    final picture = _composeScenePictureForSegmentRange(
-      segments: segments,
-      startSegmentIndex: 0,
-      endSegmentIndex: endSegmentIndex,
-      paintElement: paintElement,
-      cacheContext: cacheContext,
-      visibleBounds: visibleBounds,
-      dynamicElementIds: const <String>{},
-      runtimePolicy: runtimePolicy,
-    );
-    final cachedEntry = _CachedPicture(picture: picture)..retain();
-    _prefixSceneCache.put(cacheKey, cachedEntry);
-    return _ScenePictureRef.shared(
-      picture: picture,
-      onRelease: cachedEntry.release,
-    );
-  }
-
-  Picture _composeScenePictureForSegmentRange({
-    required List<RenderSegment> segments,
-    required int startSegmentIndex,
-    required int endSegmentIndex,
-    required SceneElementPainter paintElement,
-    required FilterRenderCacheContext? cacheContext,
-    required Rect? visibleBounds,
-    required Set<String> dynamicElementIds,
-    required _FilterRuntimePolicy runtimePolicy,
-  }) {
-    if (startSegmentIndex >= endSegmentIndex) {
-      return _recordEmptyPicture();
-    }
-
-    final pending = <_ScenePictureRef>[];
-    for (
-      var segmentIndex = startSegmentIndex;
-      segmentIndex < endSegmentIndex;
-      segmentIndex++
-    ) {
-      final segment = segments[segmentIndex];
-      if (segment is ElementBatchSegment) {
-        if (segment.elements.isEmpty) {
-          continue;
-        }
-        _diagnostics.markBatch();
-        pending.add(
-          _recordBatch(
-            segment.elements,
-            paintElement,
-            idFingerprint: segment.idFingerprint,
-            identityFingerprint: segment.identityFingerprint,
-            cacheContext: cacheContext,
-            dynamicElementIds: dynamicElementIds,
-          ),
-        );
-        continue;
-      }
-
-      if (pending.isEmpty) {
-        continue;
-      }
-
-      final scene = _flattenPendingScenes(pending);
-      if (scene == null) {
-        continue;
-      }
-
-      if (segment is FilterSegment) {
-        final filtered = _applyFilter(
-          scene: scene.picture,
-          filterElement: segment.filterElement,
-          data: segment.filterData,
-          visibleBounds: visibleBounds,
-          useClipCache: !dynamicElementIds.contains(segment.filterElement.id),
-          runtimePolicy: runtimePolicy,
-        );
-        if (identical(filtered, scene.picture)) {
-          pending.add(scene);
-        } else {
-          scene.release();
-          pending.add(_ScenePictureRef.owned(filtered));
-        }
-        continue;
-      }
-
-      if (segment is MergedFilterSegment) {
-        final filtered = _applyMergedFilter(
-          scene: scene.picture,
-          merged: segment,
-          visibleBounds: visibleBounds,
-          dynamicElementIds: dynamicElementIds,
-          runtimePolicy: runtimePolicy,
-        );
-        if (identical(filtered, scene.picture)) {
-          pending.add(scene);
-        } else {
-          scene.release();
-          pending.add(_ScenePictureRef.owned(filtered));
-        }
-      }
-    }
-
-    final flattened = _flattenPendingScenes(pending, forceOwned: true);
-    if (flattened == null) {
-      return _recordEmptyPicture();
-    }
-    return flattened.picture;
-  }
-
-  _SegmentRangeSignature _buildSegmentRangeSignature({
-    required List<RenderSegment> segments,
-    required int start,
-    required int end,
-  }) {
-    var idFingerprint = _fingerprintSeed;
-    var identityFingerprint = _identityFingerprintSeed;
-    var elementCount = 0;
-    var segmentCount = 0;
-    for (var index = start; index < end; index++) {
-      final segment = segments[index];
-      idFingerprint = _appendFingerprint(
-        idFingerprint,
-        _resolveSegmentIdFingerprint(segment),
-      );
-      identityFingerprint = _appendFingerprint(
-        identityFingerprint,
-        _resolveSegmentIdentityFingerprint(segment),
-      );
-      elementCount += _resolveSegmentElementCount(segment);
-      segmentCount += 1;
-    }
-    return _SegmentRangeSignature(
-      idFingerprint: idFingerprint,
-      identityFingerprint: identityFingerprint,
-      elementCount: elementCount,
-      segmentCount: segmentCount,
-    );
   }
 
   _ScenePictureRef? _flattenPendingScenes(
@@ -755,22 +356,14 @@ class FilterSegmentRenderer {
     pending.clear();
   }
 
-  Picture _recordEmptyPicture() {
-    _diagnostics.markPictureRecorder();
-    return PictureRecorder().endRecording();
-  }
-
   _ScenePictureRef _recordBatch(
     List<ElementState> elements,
     SceneElementPainter paintElement, {
     required int? idFingerprint,
     required int? identityFingerprint,
     required FilterRenderCacheContext? cacheContext,
-    required Set<String> dynamicElementIds,
   }) {
-    final canUseCache =
-        cacheContext != null &&
-        _isBatchCacheEligible(elements, dynamicElementIds);
+    final canUseCache = cacheContext != null && _isBatchCacheEligible(elements);
     if (canUseCache) {
       final cacheKey = _BatchPictureCacheKey(
         contextSignature: _BatchPictureContextSignature.fromContext(
@@ -821,14 +414,12 @@ class FilterSegmentRenderer {
     required ElementState filterElement,
     required FilterData data,
     required Rect? visibleBounds,
-    required bool useClipCache,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareFilterPass(
       filterElement: filterElement,
       data: data,
       visibleBounds: visibleBounds,
-      useClipCache: useClipCache,
       runtimePolicy: runtimePolicy,
     );
     if (prepared == null) {
@@ -845,13 +436,11 @@ class FilterSegmentRenderer {
     required Picture scene,
     required MergedFilterSegment merged,
     required Rect? visibleBounds,
-    required Set<String> dynamicElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareMergedFilterPasses(
       merged: merged,
       visibleBounds: visibleBounds,
-      dynamicElementIds: dynamicElementIds,
       runtimePolicy: runtimePolicy,
     );
     if (prepared.isEmpty) {
@@ -894,14 +483,12 @@ class FilterSegmentRenderer {
     required ElementState filterElement,
     required FilterData data,
     required Rect? visibleBounds,
-    required bool useClipCache,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareFilterPass(
       filterElement: filterElement,
       data: data,
       visibleBounds: visibleBounds,
-      useClipCache: useClipCache,
       runtimePolicy: runtimePolicy,
     );
     canvas.drawPicture(scene);
@@ -926,13 +513,11 @@ class FilterSegmentRenderer {
     required Picture scene,
     required MergedFilterSegment merged,
     required Rect? visibleBounds,
-    required Set<String> dynamicElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = _prepareMergedFilterPasses(
       merged: merged,
       visibleBounds: visibleBounds,
-      dynamicElementIds: dynamicElementIds,
       runtimePolicy: runtimePolicy,
     );
     if (prepared.isEmpty) {
@@ -972,7 +557,6 @@ class FilterSegmentRenderer {
   List<_PreparedFilterPass> _prepareMergedFilterPasses({
     required MergedFilterSegment merged,
     required Rect? visibleBounds,
-    required Set<String> dynamicElementIds,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final prepared = <_PreparedFilterPass>[];
@@ -981,7 +565,6 @@ class FilterSegmentRenderer {
         filterElement: filter.filterElement,
         data: filter.filterData,
         visibleBounds: visibleBounds,
-        useClipCache: !dynamicElementIds.contains(filter.filterElement.id),
         runtimePolicy: runtimePolicy,
       );
       if (pass != null) {
@@ -995,7 +578,6 @@ class FilterSegmentRenderer {
     required ElementState filterElement,
     required FilterData data,
     required Rect? visibleBounds,
-    required bool useClipCache,
     required _FilterRuntimePolicy runtimePolicy,
   }) {
     final rect = filterElement.rect;
@@ -1008,7 +590,7 @@ class FilterSegmentRenderer {
       return null;
     }
 
-    final clip = _resolveClipInfo(filterElement, useCache: useClipCache);
+    final clip = _resolveClipInfo(filterElement, useCache: true);
     final clipCoverageRatio = _resolveCoverageRatio(
       region: clip.bounds,
       visibleBounds: visibleBounds,
@@ -1602,88 +1184,36 @@ class FilterSegmentRenderer {
     }
   }
 
-  _FilterRuntimePolicy _resolveRuntimePolicy(FilterRenderHints renderHints) {
-    final preferFastCpuFallback =
-        renderHints.interactionPreview || renderHints.aggressiveCpuFallback;
-    final aggressiveCpuFallback =
-        preferFastCpuFallback && renderHints.aggressiveCpuFallback;
-    final sigmaQuantizationStep = aggressiveCpuFallback
-        ? _aggressiveSigmaQuantization
-        : preferFastCpuFallback
-        ? _interactiveSigmaQuantization
-        : _fullQualitySigmaQuantization;
-    final mosaicQuantizationStep = aggressiveCpuFallback
-        ? _aggressiveMosaicQuantization
-        : preferFastCpuFallback
-        ? _interactiveMosaicQuantization
-        : _fullQualityMosaicQuantization;
-    final offsetQuantizationStep = aggressiveCpuFallback
-        ? _aggressiveOffsetQuantization
-        : preferFastCpuFallback
-        ? _interactiveOffsetQuantization
-        : _fullQualityOffsetQuantization;
-    final gaussianMaxSigma = aggressiveCpuFallback
-        ? _aggressiveGaussianMaxSigma
-        : preferFastCpuFallback
-        ? _interactiveGaussianMaxSigma
-        : 12.0;
-    final mosaicMaxSigma = aggressiveCpuFallback
-        ? _aggressiveMosaicMaxSigma
-        : _interactiveMosaicMaxSigma;
-    final maxViewportOutset = aggressiveCpuFallback
-        ? _aggressiveViewportOutset
-        : preferFastCpuFallback
-        ? _interactiveViewportOutset
-        : _maxViewportOutset;
-    final blurDownsampleFactor = aggressiveCpuFallback
-        ? _aggressiveBlurDownsampleFactor
-        : preferFastCpuFallback
-        ? _interactiveBlurDownsampleFactor
-        : _fullQualityBlurDownsampleFactor;
-    final blurPixelBudget = aggressiveCpuFallback
-        ? _aggressiveBlurPixelBudget.toDouble()
-        : preferFastCpuFallback
-        ? _interactiveBlurPixelBudget.toDouble()
-        : _fullQualityBlurPixelBudget;
-    final colorMatrixPixelBudget = aggressiveCpuFallback
-        ? _aggressiveColorMatrixPixelBudget.toDouble()
-        : preferFastCpuFallback
-        ? _interactiveColorMatrixPixelBudget.toDouble()
-        : _fullQualityColorMatrixPixelBudget;
-
-    return _FilterRuntimePolicy(
-      preferFastCpuFallback: preferFastCpuFallback,
-      aggressiveCpuFallback: aggressiveCpuFallback,
-      canUseMosaicShader: _kernelFactory.canUseMosaicShader,
-      gaussianMinSigma: preferFastCpuFallback
-          ? _interactiveGaussianMinSigma
-          : 0.5,
-      gaussianMaxSigma: gaussianMaxSigma,
-      mosaicPreviewMinSigma: _interactiveMosaicMinSigma,
-      mosaicPreviewMaxSigma: mosaicMaxSigma,
-      maxViewportOutset: maxViewportOutset,
-      sigmaQuantizationStep: sigmaQuantizationStep,
-      mosaicSizeQuantizationStep: mosaicQuantizationStep,
-      mosaicOffsetQuantizationStep: offsetQuantizationStep,
-      blurDownsampleFactor: blurDownsampleFactor,
-      blurPixelBudget: blurPixelBudget,
-      colorMatrixPixelBudget: colorMatrixPixelBudget,
-      largeCoverageThreshold: _largeFilterCoverageThreshold,
-      hugeCoverageThreshold: _hugeFilterCoverageThreshold,
-      largeCoverageViewportOutsetScale: _largeCoverageViewportOutsetScale,
-      hugeCoverageViewportOutsetScale: _hugeCoverageViewportOutsetScale,
-      largeCoverageSigmaScale: _largeCoverageSigmaScale,
-      hugeCoverageSigmaScale: _hugeCoverageSigmaScale,
-      largeCoverageBlurDownsampleScale: _largeCoverageBlurDownsampleScale,
-      hugeCoverageBlurDownsampleScale: _hugeCoverageBlurDownsampleScale,
-      largeCoveragePixelBudgetScale: _largeCoveragePixelBudgetScale,
-      hugeCoveragePixelBudgetScale: _hugeCoveragePixelBudgetScale,
-      largeCoverageColorMatrixDownsample: _largeCoverageColorMatrixDownsample,
-      hugeCoverageColorMatrixDownsample: _hugeCoverageColorMatrixDownsample,
-      largeCoverageQuantizationScale: _largeCoverageQuantizationScale,
-      hugeCoverageQuantizationScale: _hugeCoverageQuantizationScale,
-    );
-  }
+  _FilterRuntimePolicy _resolveRuntimePolicy() => _FilterRuntimePolicy(
+    preferFastCpuFallback: false,
+    aggressiveCpuFallback: false,
+    canUseMosaicShader: _kernelFactory.canUseMosaicShader,
+    gaussianMinSigma: 0.5,
+    gaussianMaxSigma: 12,
+    mosaicPreviewMinSigma: _interactiveMosaicMinSigma,
+    mosaicPreviewMaxSigma: _interactiveMosaicMaxSigma,
+    maxViewportOutset: _maxViewportOutset,
+    sigmaQuantizationStep: _fullQualitySigmaQuantization,
+    mosaicSizeQuantizationStep: _fullQualityMosaicQuantization,
+    mosaicOffsetQuantizationStep: _fullQualityOffsetQuantization,
+    blurDownsampleFactor: _fullQualityBlurDownsampleFactor,
+    blurPixelBudget: _fullQualityBlurPixelBudget,
+    colorMatrixPixelBudget: _fullQualityColorMatrixPixelBudget,
+    largeCoverageThreshold: _largeFilterCoverageThreshold,
+    hugeCoverageThreshold: _hugeFilterCoverageThreshold,
+    largeCoverageViewportOutsetScale: _largeCoverageViewportOutsetScale,
+    hugeCoverageViewportOutsetScale: _hugeCoverageViewportOutsetScale,
+    largeCoverageSigmaScale: _largeCoverageSigmaScale,
+    hugeCoverageSigmaScale: _hugeCoverageSigmaScale,
+    largeCoverageBlurDownsampleScale: _largeCoverageBlurDownsampleScale,
+    hugeCoverageBlurDownsampleScale: _hugeCoverageBlurDownsampleScale,
+    largeCoveragePixelBudgetScale: _largeCoveragePixelBudgetScale,
+    hugeCoveragePixelBudgetScale: _hugeCoveragePixelBudgetScale,
+    largeCoverageColorMatrixDownsample: _largeCoverageColorMatrixDownsample,
+    hugeCoverageColorMatrixDownsample: _hugeCoverageColorMatrixDownsample,
+    largeCoverageQuantizationScale: _largeCoverageQuantizationScale,
+    hugeCoverageQuantizationScale: _hugeCoverageQuantizationScale,
+  );
 
   _ClipInfo _resolveClipInfo(ElementState element, {required bool useCache}) {
     if (!useCache) {
@@ -1733,23 +1263,8 @@ class FilterSegmentRenderer {
     return _ClipInfo(bounds: path.getBounds(), path: path);
   }
 
-  bool _isBatchCacheEligible(
-    List<ElementState> elements,
-    Set<String> dynamicElementIds,
-  ) {
-    if (elements.isEmpty) {
-      return false;
-    }
-    if (dynamicElementIds.isEmpty) {
-      return true;
-    }
-    for (final element in elements) {
-      if (dynamicElementIds.contains(element.id)) {
-        return false;
-      }
-    }
-    return true;
-  }
+  bool _isBatchCacheEligible(List<ElementState> elements) =>
+      elements.isNotEmpty;
 
   int _batchFingerprint(List<ElementState> elements) {
     var hash = _fingerprintSeed;
@@ -1769,48 +1284,6 @@ class FilterSegmentRenderer {
 
   int _appendFingerprint(int current, int value) =>
       _hashMask & ((current * 31) + value);
-
-  int _resolveSegmentElementCount(RenderSegment segment) => switch (segment) {
-    ElementBatchSegment(:final elements) => elements.length,
-    FilterSegment() => 1,
-    MergedFilterSegment(:final filters) => filters.length,
-  };
-
-  int _resolveSegmentIdFingerprint(RenderSegment segment) => switch (segment) {
-    ElementBatchSegment(:final elements, :final idFingerprint) =>
-      idFingerprint ?? _batchFingerprint(elements),
-    FilterSegment(:final filterElement, :final idFingerprint) =>
-      idFingerprint ??
-          _appendFingerprint(_fingerprintSeed, filterElement.id.hashCode),
-    MergedFilterSegment(:final filters, :final idFingerprint) =>
-      idFingerprint ??
-          filters.fold<int>(
-            _fingerprintSeed,
-            (hash, filter) =>
-                _appendFingerprint(hash, _resolveSegmentIdFingerprint(filter)),
-          ),
-  };
-
-  int _resolveSegmentIdentityFingerprint(RenderSegment segment) =>
-      switch (segment) {
-        ElementBatchSegment(:final elements, :final identityFingerprint) =>
-          identityFingerprint ?? _batchIdentityFingerprint(elements),
-        FilterSegment(:final filterElement, :final identityFingerprint) =>
-          identityFingerprint ??
-              _appendFingerprint(
-                _identityFingerprintSeed,
-                identityHashCode(filterElement),
-              ),
-        MergedFilterSegment(:final filters, :final identityFingerprint) =>
-          identityFingerprint ??
-              filters.fold<int>(
-                _identityFingerprintSeed,
-                (hash, filter) => _appendFingerprint(
-                  hash,
-                  _resolveSegmentIdentityFingerprint(filter),
-                ),
-              ),
-      };
 
   double _resolveCoverageRatio({
     required Rect region,
@@ -1877,7 +1350,7 @@ class FilterSegmentRenderer {
   }
 }
 
-/// Shared filter segment renderer used across static/dynamic canvas layers.
+/// Shared filter segment renderer for the single scene canvas pipeline.
 final filterSegmentRenderer = FilterSegmentRenderer();
 
 enum _FilterCoverageTier { compact, large, huge }
@@ -2170,21 +1643,6 @@ class _FilterRuntimePolicy {
 // Cache keys.
 
 @immutable
-class _SegmentRangeSignature {
-  const _SegmentRangeSignature({
-    required this.idFingerprint,
-    required this.identityFingerprint,
-    required this.elementCount,
-    required this.segmentCount,
-  });
-
-  final int idFingerprint;
-  final int identityFingerprint;
-  final int elementCount;
-  final int segmentCount;
-}
-
-@immutable
 class _ScenePictureRef {
   const _ScenePictureRef._({
     required this.picture,
@@ -2216,38 +1674,42 @@ class _ScenePictureRef {
 @immutable
 class _BatchPictureContextSignature {
   const _BatchPictureContextSignature({
-    required this.domain,
     required this.textRenderingCacheRevision,
     required this.scaleKey,
     required this.localeTag,
+    required this.serialConnectorRevision,
   });
 
   factory _BatchPictureContextSignature.fromContext(
     FilterRenderCacheContext context,
   ) => _BatchPictureContextSignature(
-    domain: context.domain,
     textRenderingCacheRevision: context.textRenderingCacheRevision,
     scaleKey: context.scaleKey,
     localeTag: context.localeTag,
+    serialConnectorRevision: context.serialConnectorRevision,
   );
 
-  final FilterRenderCacheDomain domain;
   final int textRenderingCacheRevision;
   final int scaleKey;
   final String localeTag;
+  final int serialConnectorRevision;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is _BatchPictureContextSignature &&
-          other.domain == domain &&
           other.textRenderingCacheRevision == textRenderingCacheRevision &&
           other.scaleKey == scaleKey &&
-          other.localeTag == localeTag;
+          other.localeTag == localeTag &&
+          other.serialConnectorRevision == serialConnectorRevision;
 
   @override
-  int get hashCode =>
-      Object.hash(domain, textRenderingCacheRevision, scaleKey, localeTag);
+  int get hashCode => Object.hash(
+    textRenderingCacheRevision,
+    scaleKey,
+    localeTag,
+    serialConnectorRevision,
+  );
 }
 
 @immutable
@@ -2259,8 +1721,8 @@ class _BatchPictureCacheKey {
     required this.elementCount,
   });
 
-  /// Signature intentionally excludes document version so stable non-filter
-  /// batches survive filter-only document updates (for example strength drags).
+  /// Signature intentionally tracks only paint-relevant context so stable
+  /// non-filter batches survive unrelated cache-context recreation.
   final _BatchPictureContextSignature contextSignature;
 
   /// Stable-id fingerprint for the batch element order.
@@ -2287,111 +1749,6 @@ class _BatchPictureCacheKey {
     idFingerprint,
     identityFingerprint,
     elementCount,
-  );
-}
-
-@immutable
-class _VisibleBoundsSignature {
-  const _VisibleBoundsSignature._({
-    required this.hasBounds,
-    required this.left,
-    required this.top,
-    required this.right,
-    required this.bottom,
-  });
-
-  factory _VisibleBoundsSignature.fromRect(Rect? bounds) {
-    if (bounds == null) {
-      return const _VisibleBoundsSignature._(
-        hasBounds: false,
-        left: 0,
-        top: 0,
-        right: 0,
-        bottom: 0,
-      );
-    }
-    return _VisibleBoundsSignature._(
-      hasBounds: true,
-      left: (bounds.left * 100).round(),
-      top: (bounds.top * 100).round(),
-      right: (bounds.right * 100).round(),
-      bottom: (bounds.bottom * 100).round(),
-    );
-  }
-
-  final bool hasBounds;
-  final int left;
-  final int top;
-  final int right;
-  final int bottom;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _VisibleBoundsSignature &&
-          other.hasBounds == hasBounds &&
-          other.left == left &&
-          other.top == top &&
-          other.right == right &&
-          other.bottom == bottom;
-
-  @override
-  int get hashCode => Object.hash(hasBounds, left, top, right, bottom);
-}
-
-@immutable
-class _PrefixSceneCacheKey {
-  const _PrefixSceneCacheKey({
-    required this.contextSignature,
-    required this.idFingerprint,
-    required this.identityFingerprint,
-    required this.elementCount,
-    required this.segmentCount,
-    required this.visibleBoundsSignature,
-    required this.interactionPreview,
-    required this.aggressiveCpuFallback,
-  });
-
-  final _BatchPictureContextSignature contextSignature;
-
-  /// Stable-id fingerprint for all segments in the cached prefix range.
-  final int idFingerprint;
-
-  /// Object-identity fingerprint for all segments in the cached prefix range.
-  final int identityFingerprint;
-
-  /// Total number of elements represented by the prefix range.
-  final int elementCount;
-
-  /// Number of render segments represented by the prefix range.
-  final int segmentCount;
-  final _VisibleBoundsSignature visibleBoundsSignature;
-  final bool interactionPreview;
-  final bool aggressiveCpuFallback;
-
-  @override
-  bool operator ==(Object other) =>
-      identical(this, other) ||
-      other is _PrefixSceneCacheKey &&
-          other.contextSignature == contextSignature &&
-          other.idFingerprint == idFingerprint &&
-          other.identityFingerprint == identityFingerprint &&
-          other.elementCount == elementCount &&
-          other.segmentCount == segmentCount &&
-          other.visibleBoundsSignature == visibleBoundsSignature &&
-          other.interactionPreview == interactionPreview &&
-          other.aggressiveCpuFallback == aggressiveCpuFallback;
-
-  @override
-  int get hashCode => Object.hash(
-    contextSignature,
-    idFingerprint,
-    identityFingerprint,
-    elementCount,
-    segmentCount,
-    visibleBoundsSignature,
-    interactionPreview,
-    aggressiveCpuFallback,
   );
 }
 

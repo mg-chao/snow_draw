@@ -10,9 +10,12 @@ import '../../services/draw_state_view_builder.dart';
 import '../../types/draw_point.dart';
 import '../../types/element_style.dart';
 import '../../utils/hit_test.dart';
+import '../double_tap_tracker.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
 import '../pointer_sample_resampler.dart';
+import '../pointer_update_guard.dart';
+import '../policies/drag_threshold_policy.dart';
 
 /// Plugin that handles element creation via the current tool.
 class CreatePlugin extends DrawInputPlugin {
@@ -33,11 +36,11 @@ class CreatePlugin extends DrawInputPlugin {
          },
        );
 
-  static const _doubleClickThreshold = Duration(milliseconds: 500);
-  static const double _doubleClickToleranceMultiplier = 2;
   static const _maxFreeDrawBatchSamples = 96;
+  static const _pointCreationTapTarget = 'point_creation';
 
   final InputRoutingPolicy _routingPolicy;
+  final _doubleTapTracker = DoubleTapTracker<String>();
   DrawStateViewBuilder? _stateViewBuilder;
 
   ElementTypeId<ElementData>? currentToolTypeId;
@@ -45,10 +48,7 @@ class CreatePlugin extends DrawInputPlugin {
   DrawPoint? _pointerDownPosition;
   var _isDragging = false;
   var _isMultiPoint = false;
-  DateTime? _lastClickTime;
-  DrawPoint? _lastClickPosition;
-  DrawPoint? _lastUpdatePosition;
-  KeyModifiers? _lastUpdateModifiers;
+  final _updateGuard = PointerUpdateGuard();
 
   @override
   Future<void> onLoad(PluginContext context) async {
@@ -89,8 +89,7 @@ class CreatePlugin extends DrawInputPlugin {
         _isDragging = false;
         return handled(message: 'Create point start');
       }
-      await dispatch(const FinishCreateElement());
-      return handled(message: 'Create finished');
+      return _finishCreation(message: 'Create finished');
     }
 
     final toolTypeId = currentToolTypeId;
@@ -124,13 +123,14 @@ class CreatePlugin extends DrawInputPlugin {
 
     if (_isPointCreating(state)) {
       final downPosition = _pointerDownPosition;
-      if (downPosition != null && !_isDragging) {
-        final threshold = selectionConfig.interaction.dragThreshold;
-        if (threshold == 0 ||
-            downPosition.distanceSquared(event.position) >=
-                threshold * threshold) {
-          _isDragging = true;
-        }
+      if (downPosition != null &&
+          !_isDragging &&
+          hasReachedDragThreshold(
+            from: downPosition,
+            to: event.position,
+            threshold: selectionConfig.interaction.dragThreshold,
+          )) {
+        _isDragging = true;
       }
     }
 
@@ -145,23 +145,18 @@ class CreatePlugin extends DrawInputPlugin {
       return handled(message: 'Create unchanged');
     }
 
-    if (hasBatchedSamples) {
-      final sampledPoints = resamplePointerSamples(
-        sampledPoints: event.sampledPoints,
-        maxSamples: _maxFreeDrawBatchSamples,
-      );
-      await dispatch(
-        UpdateCreatingElementBatch.frozen(
-          positions: sampledPoints,
-          createFromCenter: event.modifiers.alt,
-          snapOverride: event.modifiers.control,
-        ),
-      );
-      return handled(message: 'Create updated (batched)');
-    }
-
-    await _dispatchCreatingUpdate(event.position, event.modifiers);
-    return handled(message: 'Create updated');
+    final positions = hasBatchedSamples
+        ? resamplePointerSamples(
+            sampledPoints: event.sampledPoints,
+            maxSamples: _maxFreeDrawBatchSamples,
+          )
+        : <DrawPoint>[event.position];
+    await _dispatchCreatingUpdate(positions, event.modifiers);
+    return handled(
+      message: hasBatchedSamples
+          ? 'Create updated (batched)'
+          : 'Create updated',
+    );
   }
 
   Future<PluginResult> _handlePointerHover(PointerHoverInputEvent event) async {
@@ -171,7 +166,7 @@ class CreatePlugin extends DrawInputPlugin {
     if (!_shouldDispatchCreatingUpdate(event.position, event.modifiers)) {
       return handled(message: 'Create hover unchanged');
     }
-    await _dispatchCreatingUpdate(event.position, event.modifiers);
+    await _dispatchCreatingUpdate(<DrawPoint>[event.position], event.modifiers);
     return handled(message: 'Create hover updated');
   }
 
@@ -196,35 +191,50 @@ class CreatePlugin extends DrawInputPlugin {
     final wasMeaningfulDrag =
         wasDragging &&
         downPosition != null &&
-        downPosition.distanceSquared(event.position) >=
-            minCreateSize * minCreateSize;
+        hasReachedDragThreshold(
+          from: downPosition,
+          to: event.position,
+          threshold: minCreateSize,
+        );
     if (wasMeaningfulDrag && !wasMultiPoint) {
-      await dispatch(const FinishCreateElement());
-      _resetPointCreationState();
-      return handled(message: 'Create finished');
+      return _finishCreation(message: 'Create finished', resetPointState: true);
     }
 
     final now = DateTime.now();
     if (!wasMultiPoint) {
       _isMultiPoint = true;
-      _recordClick(event.position, now);
+      _doubleTapTracker.recordTap(
+        target: _pointCreationTapTarget,
+        position: event.position,
+        now: now,
+      );
       return handled(message: 'Create multi-point started');
     }
 
     final isDoubleClick =
-        !wasMeaningfulDrag && _isDoubleClick(event.position, now);
+        !wasMeaningfulDrag &&
+        _doubleTapTracker.isDoubleTap(
+          target: _pointCreationTapTarget,
+          position: event.position,
+          now: now,
+          baseTolerance: selectionConfig.interaction.handleTolerance,
+        );
 
     if (_isElbowArrowCreating(state)) {
-      await _dispatchCreatingUpdate(event.position, event.modifiers);
-      await dispatch(const FinishCreateElement());
-      _resetPointCreationState();
-      return handled(message: 'Create finished (elbow)');
+      await _dispatchCreatingUpdate(<DrawPoint>[
+        event.position,
+      ], event.modifiers);
+      return _finishCreation(
+        message: 'Create finished (elbow)',
+        resetPointState: true,
+      );
     }
 
     if (isDoubleClick) {
-      await dispatch(const FinishCreateElement());
-      _resetPointCreationState();
-      return handled(message: 'Create finished (double-click)');
+      return _finishCreation(
+        message: 'Create finished (double-click)',
+        resetPointState: true,
+      );
     }
 
     await dispatch(
@@ -233,7 +243,11 @@ class CreatePlugin extends DrawInputPlugin {
         snapOverride: event.modifiers.control,
       ),
     );
-    _recordClick(event.position, now);
+    _doubleTapTracker.recordTap(
+      target: _pointCreationTapTarget,
+      position: event.position,
+      now: now,
+    );
     return handled(message: 'Create point added');
   }
 
@@ -263,74 +277,35 @@ class CreatePlugin extends DrawInputPlugin {
   }
 
   bool _isPointCreating(DrawState state) {
-    final interaction = state.application.interaction;
-    return interaction is CreatingState && interaction.isPointCreation;
+    final creating = _creatingState(state);
+    return creating != null && creating.isPointCreation;
   }
 
-  bool _isFreeDrawCreating(DrawState state) {
-    final interaction = state.application.interaction;
-    return interaction is CreatingState &&
-        interaction.elementData is FreeDrawData;
-  }
+  bool _isFreeDrawCreating(DrawState state) =>
+      _creatingState(state)?.elementData is FreeDrawData;
 
-  bool _isElbowArrowCreating(DrawState state) {
-    final interaction = state.application.interaction;
-    if (interaction is! CreatingState) {
-      return false;
-    }
-    final data = interaction.elementData;
-    return data is ArrowLikeData && data.arrowType == ArrowType.elbow;
-  }
-
-  bool _isDoubleClick(DrawPoint position, DateTime now) {
-    final lastTime = _lastClickTime;
-    final lastPosition = _lastClickPosition;
-    if (lastTime == null || lastPosition == null) {
-      return false;
-    }
-    if (now.difference(lastTime) > _doubleClickThreshold) {
-      return false;
-    }
-    final tolerance =
-        selectionConfig.interaction.handleTolerance *
-        _doubleClickToleranceMultiplier;
-    return lastPosition.distanceSquared(position) <= tolerance * tolerance;
-  }
-
-  void _recordClick(DrawPoint position, DateTime now) {
-    _lastClickPosition = position;
-    _lastClickTime = now;
-  }
-
-  void _clearClickState() {
-    _lastClickTime = null;
-    _lastClickPosition = null;
-  }
+  bool _isElbowArrowCreating(DrawState state) =>
+      switch (_creatingState(state)?.elementData) {
+        ArrowLikeData(:final arrowType) => arrowType == ArrowType.elbow,
+        _ => false,
+      };
 
   bool _shouldDispatchCreatingUpdate(
     DrawPoint position,
     KeyModifiers modifiers, {
     bool hasBatchedSamples = false,
-  }) {
-    final previousPosition = _lastUpdatePosition;
-    if (!hasBatchedSamples &&
-        previousPosition != null &&
-        previousPosition.x == position.x &&
-        previousPosition.y == position.y &&
-        _lastUpdateModifiers == modifiers) {
-      return false;
-    }
-    _lastUpdatePosition = position;
-    _lastUpdateModifiers = modifiers;
-    return true;
-  }
+  }) => _updateGuard.shouldDispatch(
+    position: position,
+    modifiers: modifiers,
+    force: hasBatchedSamples,
+  );
 
   Future<void> _dispatchCreatingUpdate(
-    DrawPoint position,
+    List<DrawPoint> positions,
     KeyModifiers modifiers,
   ) => dispatch(
     UpdateCreatingElement(
-      currentPosition: position,
+      positions: positions,
       maintainAspectRatio: modifiers.shift,
       createFromCenter: modifiers.alt,
       snapOverride: modifiers.control,
@@ -357,12 +332,27 @@ class CreatePlugin extends DrawInputPlugin {
     _pointerDownPosition = null;
     _isDragging = false;
     _isMultiPoint = false;
-    _clearClickState();
+    _doubleTapTracker.clear();
   }
 
   void _resetUpdateSignature() {
-    _lastUpdatePosition = null;
-    _lastUpdateModifiers = null;
+    _updateGuard.reset();
+  }
+
+  Future<PluginResult> _finishCreation({
+    required String message,
+    bool resetPointState = false,
+  }) async {
+    await dispatch(const FinishCreateElement());
+    if (resetPointState) {
+      _resetPointCreationState();
+    }
+    return handled(message: message);
+  }
+
+  CreatingState? _creatingState(DrawState state) {
+    final interaction = state.application.interaction;
+    return interaction is CreatingState ? interaction : null;
   }
 
   DrawStateView get _stateView {

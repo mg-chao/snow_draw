@@ -6,13 +6,13 @@ import 'package:snow_draw_core/snow_draw_core.dart';
 
 import '../extensions/draw_color_extensions.dart';
 import 'patterns/stroke_pattern_utils.dart';
-import 'scene/scene_primitive_renderer.dart';
+import 'tasks/flutter_render_task_executor.dart';
 
 final ModuleLogger _renderFallbackLog = LogService.fallback.render;
 
 /// Flutter element renderer.
 ///
-/// Renders elements via backend-agnostic scene primitives.
+/// Renders elements via core-owned render tasks.
 class ElementRenderer {
   const ElementRenderer();
 
@@ -28,7 +28,7 @@ class ElementRenderer {
   static const _unknownElementColor = Color(0xFFB00020);
   static const _selectionDashLength = 6.0;
   static const _selectionGapLength = 4.0;
-  static const _sceneRenderer = ScenePrimitiveRenderer();
+  static const _taskExecutor = FlutterRenderTaskExecutor();
   static final _reportedFallbackWarnings = <String>{};
   static const _maxFallbackWarningCacheEntries = 256;
 
@@ -97,11 +97,11 @@ class ElementRenderer {
     required Canvas canvas,
     required ElementState element,
     required double scaleFactor,
-    required ElementRegistry elementRegistry,
+    required DefaultElementRegistry elementRegistry,
     TextMetricsService? textMetricsService,
     Locale? locale,
   }) {
-    final rendered = _renderSceneIfAvailable(
+    final rendered = _renderTaskIfAvailable(
       canvas: canvas,
       element: element,
       elementRegistry: elementRegistry,
@@ -114,10 +114,10 @@ class ElementRenderer {
     _renderUnknownElement(canvas, element, scaleFactor);
   }
 
-  bool _renderSceneIfAvailable({
+  bool _renderTaskIfAvailable({
     required Canvas canvas,
     required ElementState element,
-    required ElementRegistry elementRegistry,
+    required DefaultElementRegistry elementRegistry,
     TextMetricsService? textMetricsService,
     Locale? locale,
   }) {
@@ -134,16 +134,16 @@ class ElementRenderer {
       return false;
     }
     try {
-      final scene = definition.sceneEncoder.encodeScene(
+      final tasks = definition.taskEncoder.encodeTasks(
         element: element,
         localeTag: locale?.toLanguageTag(),
         textMetricsService: textMetricsService,
       );
-      _sceneRenderer.renderScene(canvas: canvas, scene: scene, locale: locale);
+      _taskExecutor.executeTasks(canvas: canvas, tasks: tasks, locale: locale);
       return true;
     } on Object catch (error, stackTrace) {
       _logFallbackWarningOnce(
-        'Scene renderer failed, using unknown-element fallback',
+        'Task executor failed, using unknown-element fallback',
         key: 'failed:${element.typeId.value}:${error.runtimeType}',
         data: {
           'typeId': element.typeId.value,

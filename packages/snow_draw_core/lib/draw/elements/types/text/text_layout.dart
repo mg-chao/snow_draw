@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
 
+import '../../../services/text/text_layout_constraints.dart';
 import '../../../services/text/text_metrics_service.dart';
 import '../../../types/element_style.dart';
 import 'text_data.dart';
@@ -111,7 +112,7 @@ TextLayoutMetrics layoutText({
   bool isResizing = false,
   TextMetricsService textMetricsService = defaultTextMetricsService,
 }) {
-  final safeMaxWidth = _resolveMaxWidth(maxWidth);
+  final safeMaxWidth = resolveTextMaxWidth(maxWidth);
   final safeMinWidth = _resolveMinWidth(minWidth, safeMaxWidth);
   final request = TextLayoutRequest(
     data: data,
@@ -122,20 +123,23 @@ TextLayoutMetrics layoutText({
   );
   final metrics = textMetricsService.measure(request);
 
-  final lineHeight = _sanitizeExtent(metrics.lineHeight, fallback: 1);
-  final width = _sanitizeExtent(
+  final lineHeight = sanitizePositiveExtent(metrics.lineHeight, fallback: 1);
+  final width = sanitizePositiveExtent(
     metrics.width,
     fallback: safeMinWidth > 0 ? safeMinWidth : 1,
   );
-  final height = _sanitizeExtent(metrics.height, fallback: lineHeight);
+  final height = sanitizePositiveExtent(metrics.height, fallback: lineHeight);
 
   final resolvedLines = metrics.lines.isEmpty
       ? <TextLineMetrics>[TextLineMetrics(width: width, height: lineHeight)]
       : metrics.lines
             .map(
               (line) => TextLineMetrics(
-                width: _sanitizeExtent(line.width, fallback: width),
-                height: _sanitizeExtent(line.height, fallback: lineHeight),
+                width: sanitizePositiveExtent(line.width, fallback: width),
+                height: sanitizePositiveExtent(
+                  line.height,
+                  fallback: lineHeight,
+                ),
               ),
             )
             .toList(growable: false);
@@ -186,7 +190,7 @@ List<TextRangeBox> resolveTextRangeBoxes({
   var top = 0.0;
   for (var i = 0; i < layout.lineMetrics.length; i++) {
     final line = layout.lineMetrics[i];
-    final lineHeight = _sanitizeExtent(
+    final lineHeight = sanitizePositiveExtent(
       line.height,
       fallback: layout.lineHeight,
     );
@@ -220,8 +224,11 @@ List<TextRangeBox> _buildFullLineBoxes(TextLayoutMetrics layout) {
   final boxes = <TextRangeBox>[];
   var top = 0.0;
   for (final line in layout.lineMetrics) {
-    final lineWidth = _sanitizeExtent(line.width, fallback: layout.size.width);
-    final lineHeight = _sanitizeExtent(
+    final lineWidth = sanitizePositiveExtent(
+      line.width,
+      fallback: layout.size.width,
+    );
+    final lineHeight = sanitizePositiveExtent(
       line.height,
       fallback: layout.lineHeight,
     );
@@ -291,16 +298,6 @@ double _resolveAlignedLineX(TextLayoutMetrics layout, double lineWidth) {
   };
 }
 
-double _resolveMaxWidth(double maxWidth) {
-  if (!maxWidth.isFinite) {
-    return double.infinity;
-  }
-  if (maxWidth <= 0) {
-    return 1;
-  }
-  return maxWidth;
-}
-
 double _resolveMinWidth(double? minWidth, double maxWidth) {
   if (minWidth == null ||
       minWidth <= 0 ||
@@ -312,13 +309,6 @@ double _resolveMinWidth(double? minWidth, double maxWidth) {
     return maxWidth;
   }
   return minWidth;
-}
-
-double _sanitizeExtent(double value, {required double fallback}) {
-  if (value.isFinite && value > 0) {
-    return value;
-  }
-  return fallback;
 }
 
 @immutable

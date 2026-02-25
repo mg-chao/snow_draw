@@ -11,6 +11,7 @@ import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/text/text_bounds.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/element_state.dart';
+import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
@@ -37,22 +38,22 @@ class EditApply {
     required Map<String, ElementState> currentElementsById,
   }) {
     final result = <String, ElementState>{};
-    for (final id in selectedIds) {
-      final snapshot = snapshots[id];
-      final current = currentElementsById[id];
-      if (snapshot == null || current == null) {
-        continue;
-      }
-
-      final newCenter = snapshot.center.translate(DrawPoint(x: dx, y: dy));
-      result[id] = current.copyWith(
-        rect: _rectFromCenter(
-          center: newCenter,
-          width: current.rect.width,
-          height: current.rect.height,
-        ),
-      );
-    }
+    final offset = DrawPoint(x: dx, y: dy);
+    _visitSelectedSnapshots<ElementMoveSnapshot>(
+      selectedIds: selectedIds,
+      snapshots: snapshots,
+      currentElementsById: currentElementsById,
+      visitor: (id, snapshot, current) {
+        final newCenter = snapshot.center.translate(offset);
+        result[id] = current.copyWith(
+          rect: _rectFromCenter(
+            center: newCenter,
+            width: current.rect.width,
+            height: current.rect.height,
+          ),
+        );
+      },
+    );
     return result;
   }
 
@@ -65,32 +66,32 @@ class EditApply {
   }) {
     final result = <String, ElementState>{};
     const space = WorldSpace();
-    for (final id in selectedIds) {
-      final snapshot = snapshots[id];
-      final current = currentElementsById[id];
-      if (snapshot == null || current == null) {
-        continue;
-      }
-      final data = current.data;
-      if (data is ArrowLikeData && data.arrowType == ArrowType.elbow) {
-        continue;
-      }
+    _visitSelectedSnapshots<ElementRotateSnapshot>(
+      selectedIds: selectedIds,
+      snapshots: snapshots,
+      currentElementsById: currentElementsById,
+      visitor: (id, snapshot, current) {
+        final data = current.data;
+        if (data is ArrowLikeData && data.arrowType == ArrowType.elbow) {
+          return;
+        }
 
-      final newRotation = snapshot.rotation + deltaAngle;
-      final newCenter = space.rotatePoint(
-        point: snapshot.center,
-        center: pivot,
-        angle: deltaAngle,
-      );
-      result[id] = current.copyWith(
-        rect: _rectFromCenter(
-          center: newCenter,
-          width: current.rect.width,
-          height: current.rect.height,
-        ),
-        rotation: newRotation,
-      );
-    }
+        final newRotation = snapshot.rotation + deltaAngle;
+        final newCenter = space.rotatePoint(
+          point: snapshot.center,
+          center: pivot,
+          angle: deltaAngle,
+        );
+        result[id] = current.copyWith(
+          rect: _rectFromCenter(
+            center: newCenter,
+            width: current.rect.width,
+            height: current.rect.height,
+          ),
+          rotation: newRotation,
+        );
+      },
+    );
     return result;
   }
 
@@ -112,134 +113,100 @@ class EditApply {
         context.resizeMode == ResizeMode.bottom;
 
     final result = <String, ElementState>{};
-    for (final id in selectedIds) {
-      final snapshot = snapshots[id];
-      final current = currentElementsById[id];
-      if (snapshot == null || current == null) {
-        continue;
-      }
-
-      final startElement = current.copyWith(
-        rect: snapshot.rect,
-        rotation: snapshot.rotation,
-      );
-      var resized = _applyResize(
-        element: startElement,
-        startBounds: context.startBounds,
-        newSelectionBounds: newSelectionBounds,
-        scaleX: scaleX,
-        scaleY: scaleY,
-        anchor: anchor,
-        overlayRotation: context.rotation,
-        isSingleSelect: isSingleSelect,
-        hasRotation: hasRotation,
-      );
-
-      if (resized.data is TextData) {
-        resized = _applyTextResize(
-          element: resized,
-          startRect: startElement.rect,
-          anchor: anchor,
-          keepCenter: keepTextCenter,
-          isVerticalResize: isVerticalResize,
+    _visitSelectedSnapshots<ElementResizeSnapshot>(
+      selectedIds: selectedIds,
+      snapshots: snapshots,
+      currentElementsById: currentElementsById,
+      visitor: (id, snapshot, current) {
+        final startElement = current.copyWith(
+          rect: snapshot.rect,
+          rotation: snapshot.rotation,
+        );
+        var resized = _applyResize(
+          element: startElement,
+          startBounds: context.startBounds,
+          newSelectionBounds: newSelectionBounds,
           scaleX: scaleX,
+          scaleY: scaleY,
+          anchor: anchor,
+          overlayRotation: context.rotation,
+          isSingleSelect: isSingleSelect,
+          hasRotation: hasRotation,
         );
-      }
 
-      if (resized.data is SerialNumberData) {
-        resized = _applySerialNumberResize(
-          element: resized,
-          startRect: startElement.rect,
-        );
-      }
+        final resizedData = resized.data;
+        if (resizedData is TextData) {
+          resized = _applyTextResize(
+            element: resized,
+            startRect: startElement.rect,
+            anchor: anchor,
+            keepCenter: keepTextCenter,
+            isVerticalResize: isVerticalResize,
+            scaleX: scaleX,
+            textMetricsService: context.textMetricsService,
+          );
+        } else if (resizedData is SerialNumberData) {
+          resized = _applySerialNumberResize(
+            element: resized,
+            startRect: startElement.rect,
+          );
+        } else if (resizedData is ArrowData) {
+          resized = _applyArrowResize(
+            element: resized,
+            startRect: startElement.rect,
+          );
+        }
 
-      if (resized.data is ArrowData) {
-        resized = _applyArrowResize(
-          element: resized,
-          startRect: startElement.rect,
-        );
-      }
-
-      result[id] = resized;
-    }
+        result[id] = resized;
+      },
+    );
 
     return result;
   }
 
   /// Returns a list where elements with matching ids are replaced.
   ///
-  /// The original order is preserved. When [resolveIndex] is provided, it is
-  /// used as an O(1) id-to-index lookup fast path.
+  /// The original order is preserved.
   static List<ElementState> replaceElementsById({
     required List<ElementState> elements,
     required Map<String, ElementState> replacementsById,
-    // Optional fast path for O(1) id-to-index lookup.
-    // Unresolved ids fall back to a linear scan.
-    int? Function(String id)? resolveIndex,
   }) {
     if (replacementsById.isEmpty || elements.isEmpty) {
       return elements;
     }
 
-    List<ElementState>? result;
-    void applyReplacement(int index, ElementState replacement) {
-      result ??= List<ElementState>.of(elements, growable: false);
-      result![index] = replacement;
-    }
-
-    final pending = <String, ElementState>{};
-    if (resolveIndex != null) {
-      for (final entry in replacementsById.entries) {
-        final index = resolveIndex(entry.key);
-        if (!_isResolvedIndexValid(
-          index: index,
-          id: entry.key,
-          elements: elements,
-        )) {
-          pending[entry.key] = entry.value;
-          continue;
-        }
-
-        final resolvedIndex = index!;
-        final replacement = entry.value;
-        final current = (result ?? elements)[resolvedIndex];
-        if (replacement == current) {
-          continue;
-        }
-
-        applyReplacement(resolvedIndex, replacement);
+    List<ElementState>? updatedElements;
+    for (var index = 0; index < elements.length; index++) {
+      final current = elements[index];
+      final replacement = replacementsById[current.id];
+      if (replacement == null) {
+        continue;
       }
-    } else {
-      pending.addAll(replacementsById);
-    }
-
-    if (pending.isEmpty) {
-      return result ?? elements;
-    }
-
-    for (var i = 0; i < elements.length; i++) {
-      final current = (result ?? elements)[i];
-      final replacement = pending[current.id];
-      if (replacement == null || replacement == current) {
+      if (replacement == current) {
         continue;
       }
 
-      applyReplacement(i, replacement);
+      updatedElements ??= List<ElementState>.of(elements, growable: false);
+      updatedElements[index] = replacement;
     }
-
-    return result ?? elements;
+    return updatedElements ?? elements;
   }
 }
 
-bool _isResolvedIndexValid({
-  required int? index,
-  required String id,
-  required List<ElementState> elements,
+void _visitSelectedSnapshots<S>({
+  required Set<String> selectedIds,
+  required Map<String, S> snapshots,
+  required Map<String, ElementState> currentElementsById,
+  required void Function(String id, S snapshot, ElementState current) visitor,
 }) {
-  if (index == null || index < 0 || index >= elements.length) {
-    return false;
+  for (final id in selectedIds) {
+    final snapshot = snapshots[id];
+    final current = currentElementsById[id];
+    if (snapshot == null || current == null) {
+      continue;
+    }
+    visitor(id, snapshot, current);
   }
-  return elements[index].id == id;
 }
 
 ElementState _applyResize({
@@ -350,6 +317,7 @@ ElementState _applyTextResize({
   required bool keepCenter,
   required bool isVerticalResize,
   required double scaleX,
+  required TextMetricsService textMetricsService,
 }) {
   final originalData = element.data as TextData;
   var data = originalData;
@@ -382,6 +350,7 @@ ElementState _applyTextResize({
       data: data,
       targetHeight: rect.height,
       maxWidth: rect.width,
+      textMetricsService: textMetricsService,
     );
     if ((fittedFontSize - data.fontSize).abs() > _resizeTolerance) {
       data = data.copyWith(fontSize: fittedFontSize);
@@ -394,6 +363,7 @@ ElementState _applyTextResize({
     anchor: anchor,
     data: data,
     keepCenter: keepCenter,
+    textMetricsService: textMetricsService,
   );
   if (data.autoResize) {
     data = data.copyWith(autoResize: false);

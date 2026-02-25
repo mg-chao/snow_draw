@@ -2,8 +2,6 @@ import 'dart:math' as math;
 
 import '../models/draw_state.dart';
 import '../models/element_state.dart';
-import '../models/selection_overlay_state.dart';
-import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 
 class SelectionCalculator {
@@ -33,55 +31,6 @@ class SelectionCalculator {
       bounds = _expandBounds(bounds, computeElementWorldAabb(selected[i]));
     }
     return bounds;
-  }
-
-  static DrawRect? computeOverlayBoundsForSelection({
-    required List<ElementState> selectedElements,
-    required SelectionOverlayState selectionOverlay,
-  }) {
-    if (selectedElements.isEmpty) {
-      return null;
-    }
-    final singleElement = _singleSelectedElement(selectedElements);
-    if (singleElement != null) {
-      return singleElement.rect;
-    }
-
-    return selectionOverlay.multiSelectOverlay?.bounds ??
-        computeSelectionBoundsForElements(selectedElements)!;
-  }
-
-  static double? computeOverlayRotationForSelection({
-    required List<ElementState> selectedElements,
-    required SelectionOverlayState selectionOverlay,
-  }) {
-    if (selectedElements.isEmpty) {
-      return null;
-    }
-
-    final rotation =
-        _singleSelectedElement(selectedElements)?.rotation ??
-        selectionOverlay.multiSelectOverlay?.rotation ??
-        0.0;
-    return rotation == 0.0 ? null : rotation;
-  }
-
-  static DrawPoint? computeOverlayCenterForSelection({
-    required List<ElementState> selectedElements,
-    required SelectionOverlayState selectionOverlay,
-  }) {
-    if (selectedElements.isEmpty) {
-      return null;
-    }
-    final singleElement = _singleSelectedElement(selectedElements);
-    if (singleElement != null) {
-      return singleElement.center;
-    }
-
-    final bounds =
-        selectionOverlay.multiSelectOverlay?.bounds ??
-        computeSelectionBoundsForElements(selectedElements)!;
-    return bounds.center;
   }
 
   static DrawRect computeElementWorldAabb(ElementState element) {

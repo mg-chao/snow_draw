@@ -3,10 +3,12 @@ import 'package:meta/meta.dart';
 import '../../../config/draw_config.dart';
 import '../../../types/draw_color.dart';
 import '../../../types/element_style.dart';
+import '../../../utils/string_normalization.dart';
 import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
+import '../shared/element_data_codec.dart';
 
 @immutable
 final class TextData extends ElementData
@@ -29,44 +31,47 @@ final class TextData extends ElementData
   }) : autoResize = autoResize ?? ConfigDefaults.defaultTextAutoResize;
 
   factory TextData.fromJson(Map<String, dynamic> json) => TextData(
-    text: json['text'] as String? ?? '',
-    color: DrawColor(
-      (json['color'] as int?) ?? ConfigDefaults.defaultColor.toARGB32(),
+    text: ElementDataCodec.decodeString(json['text'], fieldName: 'text'),
+    color: DrawColor(json['color'] as int),
+    fontSize: ElementDataCodec.decodeDouble(
+      json['fontSize'],
+      fieldName: 'fontSize',
     ),
-    fontSize:
-        (json['fontSize'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultTextFontSize,
-    fontFamily: _normalizeOptionalString(json['fontFamily'] as String?),
-    horizontalAlign: _decodeEnum(
+    fontFamily: normalizeOptionalTrimmedString(
+      ElementDataCodec.decodeNullableString(
+        json['fontFamily'],
+        fieldName: 'fontFamily',
+      ),
+    ),
+    horizontalAlign: ElementDataCodec.decodeEnumByName(
       values: TextHorizontalAlign.values,
       raw: json['horizontalAlign'],
-      fallback: ConfigDefaults.defaultTextHorizontalAlign,
+      fieldName: 'horizontalAlign',
     ),
-    verticalAlign: _decodeEnum(
+    verticalAlign: ElementDataCodec.decodeEnumByName(
       values: TextVerticalAlign.values,
       raw: json['verticalAlign'],
-      fallback: ConfigDefaults.defaultTextVerticalAlign,
+      fieldName: 'verticalAlign',
     ),
-    fillColor: DrawColor(
-      (json['fillColor'] as int?) ?? ConfigDefaults.defaultFillColor.toARGB32(),
-    ),
-    fillStyle: _decodeEnum(
+    fillColor: DrawColor(json['fillColor'] as int),
+    fillStyle: ElementDataCodec.decodeEnumByName(
       values: FillStyle.values,
       raw: json['fillStyle'],
-      fallback: ConfigDefaults.defaultFillStyle,
+      fieldName: 'fillStyle',
     ),
-    strokeColor: DrawColor(
-      (json['strokeColor'] as int?) ??
-          ConfigDefaults.defaultTextStrokeColor.toARGB32(),
+    strokeColor: DrawColor(json['strokeColor'] as int),
+    strokeWidth: ElementDataCodec.decodeDouble(
+      json['strokeWidth'],
+      fieldName: 'strokeWidth',
     ),
-    strokeWidth:
-        (json['strokeWidth'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultTextStrokeWidth,
-    cornerRadius:
-        (json['cornerRadius'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultTextCornerRadius,
-    autoResize:
-        json['autoResize'] as bool? ?? ConfigDefaults.defaultTextAutoResize,
+    cornerRadius: ElementDataCodec.decodeDouble(
+      json['cornerRadius'],
+      fieldName: 'cornerRadius',
+    ),
+    autoResize: ElementDataCodec.decodeBool(
+      json['autoResize'],
+      fieldName: 'autoResize',
+    ),
   );
 
   static const typeIdToken = ElementTypeId<TextData>('text');
@@ -131,14 +136,14 @@ final class TextData extends ElementData
 
   @override
   ElementData withStyleUpdate(ElementStyleUpdate update) => copyWith(
-    color: _resolveColor(update.color),
+    color: update.color,
     fontSize: update.fontSize,
     fontFamily: update.fontFamily ?? _fontFamilyUnset,
     horizontalAlign: update.textAlign,
     verticalAlign: update.verticalAlign,
-    fillColor: _resolveColor(update.fillColor),
+    fillColor: update.fillColor,
     fillStyle: update.fillStyle,
-    strokeColor: _resolveColor(update.textStrokeColor),
+    strokeColor: update.textStrokeColor,
     strokeWidth: update.textStrokeWidth,
     cornerRadius: update.cornerRadius,
   );
@@ -200,30 +205,6 @@ final class TextData extends ElementData
     if (identical(fontFamily, _fontFamilyUnset)) {
       return currentFontFamily;
     }
-    return _normalizeOptionalString(fontFamily as String?);
+    return normalizeOptionalTrimmedString(fontFamily as String?);
   }
-
-  static String? _normalizeOptionalString(String? raw) {
-    final trimmed = raw?.trim();
-    if (trimmed == null || trimmed.isEmpty) {
-      return null;
-    }
-    return trimmed;
-  }
-
-  static T _decodeEnum<T extends Enum>({
-    required List<T> values,
-    required Object? raw,
-    required T fallback,
-  }) {
-    if (raw is! String) {
-      return fallback;
-    }
-    return values.firstWhere(
-      (value) => value.name == raw,
-      orElse: () => fallback,
-    );
-  }
-
-  static DrawColor? _resolveColor(DrawColor? color) => color;
 }

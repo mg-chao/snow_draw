@@ -1,6 +1,6 @@
 import 'package:meta/meta.dart';
 
-import '../edit/edit_operation_registry_interface.dart';
+import '../edit/edit_operations.dart';
 import '../edit/preview/edit_preview_engine.dart';
 import '../models/draw_state.dart';
 import '../models/draw_state_view.dart';
@@ -17,48 +17,39 @@ import 'selection_geometry_resolver.dart';
 @immutable
 class DrawStateViewBuilder {
   static const _sharedPreviewEngine = EditPreviewEngine();
-  static final Expando<_DrawStateViewCacheEntry> _stateViewCache = Expando(
-    'draw_state_view_cache',
-  );
 
   const DrawStateViewBuilder({
     required this.editOperations,
     EditPreviewEngine? previewEngine,
   }) : _previewEngine = previewEngine ?? _sharedPreviewEngine;
-  final EditOperationRegistry editOperations;
+  final DefaultEditOperationRegistry editOperations;
   final EditPreviewEngine _previewEngine;
 
-  DrawStateView build(DrawState state) {
-    final cached = _stateViewCache[state];
-    if (cached != null &&
-        identical(cached.editOperations, editOperations) &&
-        identical(cached.previewEngine, _previewEngine)) {
-      return cached.view;
-    }
-
-    final nextView = _buildUncached(state);
-    _stateViewCache[state] = _DrawStateViewCacheEntry(
-      editOperations: editOperations,
-      previewEngine: _previewEngine,
-      view: nextView,
-    );
-    return nextView;
-  }
+  DrawStateView build(DrawState state) => _buildUncached(state);
 
   DrawStateView _buildUncached(DrawState state) {
     final interaction = state.application.interaction;
-    if (interaction is CreatingState) {
-      return DrawStateView.fromState(state, snapGuides: interaction.snapGuides);
-    }
+    return switch (interaction) {
+      final CreatingState creating => DrawStateView.fromState(
+        state,
+        snapGuides: creating.snapGuides,
+      ),
+      final TextEditingState textEditing => _buildTextEditingPreview(
+        state: state,
+        interaction: textEditing,
+      ),
+      final EditingState editing => _buildEditingPreview(
+        state: state,
+        interaction: editing,
+      ),
+      _ => DrawStateView.fromState(state),
+    };
+  }
 
-    if (interaction is TextEditingState) {
-      return _buildTextEditingPreview(state: state, interaction: interaction);
-    }
-
-    if (interaction is! EditingState) {
-      return DrawStateView.fromState(state);
-    }
-
+  DrawStateView _buildEditingPreview({
+    required DrawState state,
+    required EditingState interaction,
+  }) {
     final preview = _previewEngine.build(
       state: state,
       editOperations: editOperations,
@@ -144,13 +135,17 @@ class DrawStateViewBuilder {
       return EffectiveSelection.none;
     }
 
-    final selectedElements = <ElementState>[
-      for (final id in selection.selectedIds)
-        if (id == previewElement.id)
-          previewElement
-        else
-          ?state.domain.document.getElementById(id),
-    ];
+    final selectedElements = <ElementState>[];
+    for (final id in selection.selectedIds) {
+      if (id == previewElement.id) {
+        selectedElements.add(previewElement);
+        continue;
+      }
+      final selectedElement = state.domain.document.getElementById(id);
+      if (selectedElement != null) {
+        selectedElements.add(selectedElement);
+      }
+    }
 
     if (selectedElements.isEmpty) {
       return EffectiveSelection.none;
@@ -185,17 +180,4 @@ class DrawStateViewBuilder {
       hasSelection: true,
     );
   }
-}
-
-@immutable
-class _DrawStateViewCacheEntry {
-  const _DrawStateViewCacheEntry({
-    required this.editOperations,
-    required this.previewEngine,
-    required this.view,
-  });
-
-  final EditOperationRegistry editOperations;
-  final EditPreviewEngine previewEngine;
-  final DrawStateView view;
 }

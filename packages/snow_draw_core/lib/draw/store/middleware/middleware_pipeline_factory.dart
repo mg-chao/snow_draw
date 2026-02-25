@@ -1,4 +1,3 @@
-import 'error_handling.dart';
 import 'middleware_base.dart';
 import 'middleware_pipeline.dart';
 import 'middlewares/history_middleware.dart';
@@ -19,45 +18,33 @@ class MiddlewarePipelineFactory {
   /// 4. HistoryMiddleware (priority: 400)
   MiddlewarePipeline createDefault({
     List<ActionInterceptor> interceptors = const [],
-    ErrorHandler? errorHandler,
   }) => createCustom(
     middlewares: _defaultMiddlewares(interceptors: interceptors),
-    errorHandler: errorHandler,
   );
 
   /// Create a pipeline by extending the default middleware chain.
   MiddlewarePipeline extendDefault({
     List<Middleware> additionalMiddlewares = const [],
     List<ActionInterceptor> interceptors = const [],
-    ErrorHandler? errorHandler,
   }) => createCustom(
     middlewares: <Middleware>[
       ..._defaultMiddlewares(interceptors: interceptors),
       ...additionalMiddlewares,
     ],
-    errorHandler: errorHandler,
   );
 
   /// Create a minimal pipeline with only essential middlewares.
-  MiddlewarePipeline createMinimal({ErrorHandler? errorHandler}) =>
-      createCustom(
-        middlewares: const <Middleware>[ReductionMiddleware()],
-        errorHandler: errorHandler,
-      );
+  MiddlewarePipeline createMinimal() =>
+      createCustom(middlewares: const <Middleware>[ReductionMiddleware()]);
 
   /// Create a custom pipeline with specific middlewares.
-  MiddlewarePipeline createCustom({
-    required List<Middleware> middlewares,
-    ErrorHandler? errorHandler,
-  }) => MiddlewarePipeline(
-    middlewares: middlewares,
-    errorHandler: errorHandler ?? const ErrorHandler(),
-  ).sortByPriority();
+  MiddlewarePipeline createCustom({required List<Middleware> middlewares}) =>
+      MiddlewarePipeline(middlewares: middlewares).sortByPriority();
 
   List<Middleware> _defaultMiddlewares({
     required List<ActionInterceptor> interceptors,
   }) => <Middleware>[
-    ValidationMiddleware(),
+    const ValidationMiddleware(),
     if (interceptors.isNotEmpty)
       InterceptionMiddleware(interceptors: interceptors),
     const ReductionMiddleware(),

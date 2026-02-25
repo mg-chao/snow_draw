@@ -1,14 +1,14 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  testWidgets('free draw creating state populates dynamic key and advances '
+  testWidgets('free draw creating state populates canvas key and advances '
       'creation revision', (tester) async {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
@@ -25,7 +25,7 @@ void main() {
     );
     await tester.pump();
 
-    final beforeCreate = _dynamicRenderKey(tester);
+    final beforeCreate = _canvasRenderKey(tester);
     expect(beforeCreate.creatingElement, isNull);
 
     await store.dispatch(
@@ -36,7 +36,7 @@ void main() {
     );
     await tester.pump();
 
-    final startedCreate = _dynamicRenderKey(tester);
+    final startedCreate = _canvasRenderKey(tester);
     final startedCreatingElement = startedCreate.creatingElement;
     expect(startedCreatingElement, isNotNull);
     expect(startedCreatingElement!.element.data, isA<FreeDrawData>());
@@ -47,7 +47,7 @@ void main() {
     );
     await tester.pump();
 
-    final movedCreate = _dynamicRenderKey(tester);
+    final movedCreate = _canvasRenderKey(tester);
     final movedCreatingElement = movedCreate.creatingElement;
     expect(movedCreatingElement, isNotNull);
     expect(
@@ -57,14 +57,14 @@ void main() {
   });
 }
 
-DynamicCanvasRenderKey _dynamicRenderKey(WidgetTester tester) {
+SceneCanvasRenderKey _canvasRenderKey(WidgetTester tester) {
   for (final paint in tester.widgetList<CustomPaint>(
     find.byType(CustomPaint),
   )) {
     final painter = paint.painter;
-    if (painter is DynamicCanvasPainter) {
+    if (painter is SceneCanvasPainter) {
       return painter.renderKey;
     }
   }
-  throw StateError('DynamicCanvasPainter not found');
+  throw StateError('SceneCanvasPainter not found');
 }

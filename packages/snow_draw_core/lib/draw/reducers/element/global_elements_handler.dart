@@ -1,11 +1,11 @@
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
+import '../../core/draw_context.dart';
 import '../../models/draw_state.dart';
 
 DrawState handleUpdateGlobalElements(
   DrawState state,
   UpdateGlobalElements action,
-  ElementReducerDeps _,
+  DrawContext _,
 ) {
   final currentDocument = state.domain.document;
   final nextGlobalElements = currentDocument.globalElements.copyWith(

@@ -1,133 +1,87 @@
 import '../../actions/draw_actions.dart';
+import '../../config/draw_config.dart';
 import '../../types/draw_point.dart';
 import '../../types/edit_operation_id.dart';
 import '../../utils/edit_intent_detector.dart';
-import '../edit_operation_registry_interface.dart';
-import 'edit_modifiers.dart';
 import 'edit_operation_params.dart';
 
-typedef EditIntentToOperationPredicate =
-    bool Function(EditIntent intent, EditIntentToOperationContext context);
+typedef EditIntentResolver =
+    EditIntentResolution? Function(EditIntent intent, DrawConfig config);
 
-typedef EditIntentToParamsBuilder =
-    EditOperationParams Function(
-      EditIntent intent,
-      EditIntentToOperationContext context,
-    );
-
-class EditIntentToOperationContext {
-  const EditIntentToOperationContext({
-    required this.position,
-    required this.modifiers,
-    required this.editOperations,
-  });
-  final DrawPoint position;
-  final EditModifiers modifiers;
-  final EditOperationRegistry editOperations;
-
-  bool get maintainAspectRatio => modifiers.maintainAspectRatio;
-  bool get fromCenter => modifiers.fromCenter;
-  bool get discreteAngle => modifiers.discreteAngle;
-}
+typedef EditIntentResolution = ({
+  EditOperationId operationId,
+  EditOperationParams params,
+});
 
 /// Maps input-layer [EditIntent] to a domain-layer [StartEdit] action.
 ///
-/// This is an extension point: new operations can be wired up by registering
-/// new mappings, without modifying controller flow.
+/// Default mapping is implemented with a direct type switch, avoiding runtime
+/// predicates and downcasts from the previous mapping-list approach.
 class EditIntentToOperationMapper {
-  const EditIntentToOperationMapper._(this._mappings);
+  const EditIntentToOperationMapper._(this._resolver);
 
   factory EditIntentToOperationMapper.withDefaults() =>
-      EditIntentToOperationMapper._(_defaultMappings);
+      const EditIntentToOperationMapper._(_resolveDefaultIntent);
 
-  static final _defaultMappings =
-      List<EditIntentToOperationMapping>.unmodifiable([
-        EditIntentToOperationMapping(
-          operationId: EditOperationIds.arrowPoint,
-          predicate: (intent, _) => intent is StartArrowPointIntent,
-          paramsBuilder: (intent, _) {
-            final arrowIntent = intent as StartArrowPointIntent;
-            return ArrowPointOperationParams(
-              elementId: arrowIntent.elementId,
-              pointKind: arrowIntent.pointKind,
-              pointIndex: arrowIntent.pointIndex,
-              isDoubleClick: arrowIntent.isDoubleClick,
-            );
-          },
-        ),
-        EditIntentToOperationMapping(
-          operationId: EditOperationIds.rotate,
-          predicate: (intent, _) => intent is StartRotateIntent,
-          paramsBuilder: (_, _) => const RotateOperationParams(),
-        ),
-        EditIntentToOperationMapping(
-          operationId: EditOperationIds.resize,
-          predicate: (intent, _) => intent is StartResizeIntent,
-          paramsBuilder: (intent, _) {
-            final resizeIntent = intent as StartResizeIntent;
-            return ResizeOperationParams(
-              resizeMode: resizeIntent.mode,
-              selectionPadding: resizeIntent.selectionPadding,
-            );
-          },
-        ),
-        EditIntentToOperationMapping(
-          operationId: EditOperationIds.move,
-          predicate: (intent, _) => intent is StartMoveIntent,
-          paramsBuilder: (_, _) => const MoveOperationParams(),
-        ),
-      ]);
+  /// Creates a mapper from a custom [resolver].
+  factory EditIntentToOperationMapper.custom(EditIntentResolver resolver) =>
+      EditIntentToOperationMapper._(resolver);
 
-  /// Creates a mapper from a mapping list (higher priority first).
-  factory EditIntentToOperationMapper.custom(
-    List<EditIntentToOperationMapping> mappings,
-  ) => EditIntentToOperationMapper._(
-    List<EditIntentToOperationMapping>.unmodifiable(mappings),
-  );
-  final List<EditIntentToOperationMapping> _mappings;
+  final EditIntentResolver _resolver;
 
   /// Returns a [StartEdit] action, or `null` if the intent is not mapped.
-  ///
-  /// This returns `null` when the mapped operation id is not registered in
-  /// [editOperations] to avoid starting unknown operations.
   StartEdit? mapToStartEdit({
     required EditIntent intent,
     required DrawPoint position,
-    required EditModifiers modifiers,
-    required EditOperationRegistry editOperations,
+    required DrawConfig config,
   }) {
-    final context = EditIntentToOperationContext(
-      position: position,
-      modifiers: modifiers,
-      editOperations: editOperations,
-    );
-
-    for (final mapping in _mappings) {
-      if (!mapping.predicate(intent, context)) {
-        continue;
-      }
-      if (editOperations.getOperation(mapping.operationId) == null) {
-        return null;
-      }
-      return StartEdit(
-        operationId: mapping.operationId,
-        position: position,
-        params: mapping.paramsBuilder(intent, context),
-      );
+    final resolved = _resolver(intent, config);
+    if (resolved == null) {
+      return null;
     }
-
-    return null;
+    return StartEdit(
+      operationId: resolved.operationId,
+      position: position,
+      params: resolved.params,
+    );
   }
 }
 
-/// Public mapping entry for configuring [EditIntentToOperationMapper].
-class EditIntentToOperationMapping {
-  const EditIntentToOperationMapping({
-    required this.operationId,
-    required this.predicate,
-    required this.paramsBuilder,
-  });
-  final EditOperationId operationId;
-  final EditIntentToOperationPredicate predicate;
-  final EditIntentToParamsBuilder paramsBuilder;
-}
+EditIntentResolution? _resolveDefaultIntent(
+  EditIntent intent,
+  DrawConfig config,
+) => switch (intent) {
+  StartArrowPointIntent(
+    :final elementId,
+    :final pointKind,
+    :final pointIndex,
+    :final isDoubleClick,
+  ) =>
+    (
+      operationId: EditOperationIds.arrowPoint,
+      params: ArrowPointOperationParams(
+        elementId: elementId,
+        pointKind: pointKind,
+        pointIndex: pointIndex,
+        isDoubleClick: isDoubleClick,
+      ),
+    ),
+  StartRotateIntent() => (
+    operationId: EditOperationIds.rotate,
+    params: RotateOperationParams(
+      rotationSnapAngle: config.element.rotationSnapAngle,
+    ),
+  ),
+  StartResizeIntent(:final mode, :final selectionPadding) => (
+    operationId: EditOperationIds.resize,
+    params: ResizeOperationParams(
+      resizeMode: mode,
+      selectionPadding: selectionPadding,
+    ),
+  ),
+  StartMoveIntent() => (
+    operationId: EditOperationIds.move,
+    params: const MoveOperationParams(),
+  ),
+  _ => null,
+};

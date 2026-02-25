@@ -49,17 +49,6 @@ Object? _freezePayloadValue(
     );
   }
 
-  if (value is List) {
-    return _freezeCollection(
-      source: value,
-      active: active,
-      frozenBySource: frozenBySource,
-      buildFrozen: () => List<Object?>.unmodifiable(
-        value.map((item) => _freezePayloadValue(item, active, frozenBySource)),
-      ),
-    );
-  }
-
   if (value is Set) {
     return _freezeCollection(
       source: value,

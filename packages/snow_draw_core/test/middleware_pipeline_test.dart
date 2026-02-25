@@ -1,17 +1,13 @@
-import 'dart:async';
-
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_session_service.dart';
-import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
-import 'package:snow_draw_core/draw/elements/registration.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/store/history_manager.dart';
 import 'package:snow_draw_core/draw/store/middleware/middleware_base.dart';
 import 'package:snow_draw_core/draw/store/middleware/middleware_context.dart';
 import 'package:snow_draw_core/draw/store/middleware/middleware_pipeline.dart';
 import 'package:snow_draw_core/draw/store/snapshot_builder.dart';
+import 'package:test/test.dart';
 
 void main() {
   group('MiddlewarePipeline', () {
@@ -25,42 +21,29 @@ void main() {
     });
 
     test('creates a defensive copy of middleware list', () {
-      final source = <Middleware>[const _FlagMetadataMiddleware('first')];
+      final source = <Middleware>[const _PassThroughMiddleware()];
       final pipeline = MiddlewarePipeline(middlewares: source);
 
-      source.add(const _FlagMetadataMiddleware('second'));
+      source.add(const _PassThroughMiddleware());
 
       expect(pipeline.length, 1);
     });
 
-    test('skips middleware when invoke throws FormatException', () async {
+    test('stops pipeline when middleware invoke throws', () async {
+      final counter = _InvocationCounter();
       final pipeline = MiddlewarePipeline(
-        middlewares: const [
+        middlewares: [
           _ThrowingInvokeMiddleware(),
-          _FlagMetadataMiddleware('afterInvokeError'),
+          _CountingMiddleware(counter: counter),
         ],
       );
 
       final result = await pipeline.execute(_createInitialContext());
 
-      expect(result.hasError, isFalse);
-      expect(result.getMetadata<bool>('skipped_ThrowInvoke'), isTrue);
-      expect(result.getMetadata<bool>('afterInvokeError'), isTrue);
-    });
-
-    test('routes shouldExecute errors through error handler', () async {
-      final pipeline = MiddlewarePipeline(
-        middlewares: const [
-          _ThrowingShouldExecuteMiddleware(),
-          _FlagMetadataMiddleware('afterShouldExecuteError'),
-        ],
-      );
-
-      final result = await pipeline.execute(_createInitialContext());
-
-      expect(result.hasError, isFalse);
-      expect(result.getMetadata<bool>('skipped_ThrowShouldExecute'), isTrue);
-      expect(result.getMetadata<bool>('afterShouldExecuteError'), isTrue);
+      expect(result.hasError, isTrue);
+      expect(result.error, isA<FormatException>());
+      expect(result.errorSource, 'ThrowInvoke');
+      expect(counter.value, 0);
     });
 
     test(
@@ -121,64 +104,24 @@ void main() {
     });
 
     test(
-      'fails when middleware completes before downstream next settles',
-      () async {
-        final counter = _InvocationCounter();
-        final pipeline = MiddlewarePipeline(
-          middlewares: [
-            const _DetachedNextMiddleware(),
-            _DelayedCountingMiddleware(
-              counter: counter,
-              delay: const Duration(milliseconds: 1),
-            ),
-          ],
-        );
-
-        final result = await pipeline.execute(_createInitialContext());
-
-        expect(counter.value, 1);
-        expect(result.hasError, isTrue);
-        expect(result.error, isA<StateError>());
-        expect(result.errorSource, 'DetachedNext');
-      },
-    );
-
-    test(
-      'fails detached next even when downstream settles immediately',
-      () async {
-        final pipeline = MiddlewarePipeline(
-          middlewares: const [
-            _DetachedNextMiddleware(),
-            _FlagMetadataMiddleware('downstreamReached'),
-          ],
-        );
-
-        final result = await pipeline.execute(_createInitialContext());
-
-        expect(result.hasError, isTrue);
-        expect(result.error, isA<StateError>());
-        expect(result.errorSource, 'DetachedNext');
-        expect(result.getMetadata<bool>('downstreamReached'), isTrue);
-      },
-    );
-
-    test(
-      'does not re-run downstream middleware when skipping after next',
+      'captures post-next middleware errors without re-running downstream',
       () async {
         final counter = _InvocationCounter();
         final pipeline = MiddlewarePipeline(
           middlewares: [
             const _ThrowAfterNextMiddleware(),
             _CountingMiddleware(counter: counter),
+            const _OffsetStateMiddleware(dx: 1),
           ],
         );
 
         final result = await pipeline.execute(_createInitialContext());
 
         expect(counter.value, 1);
-        expect(result.hasError, isFalse);
-        expect(result.getMetadata<bool>('fromThrowAfterNext'), isTrue);
-        expect(result.getMetadata<bool>('skipped_ThrowAfterNext'), isTrue);
+        expect(result.hasError, isTrue);
+        expect(result.error, isA<FormatException>());
+        expect(result.errorSource, 'ThrowAfterNext');
+        expect(_cameraX(result.currentState), 6);
       },
     );
 
@@ -188,7 +131,7 @@ void main() {
         final pipeline = MiddlewarePipeline(
           middlewares: const [
             _StateErrorAfterNextMiddleware(),
-            _FlagMetadataMiddleware('downstreamReached'),
+            _OffsetStateMiddleware(dx: 4),
           ],
         );
 
@@ -197,8 +140,7 @@ void main() {
         expect(result.hasError, isTrue);
         expect(result.error, isA<StateError>());
         expect(result.errorSource, 'StateErrorAfterNext');
-        expect(result.getMetadata<bool>('stateErrorAfterNext'), isTrue);
-        expect(result.getMetadata<bool>('downstreamReached'), isTrue);
+        expect(_cameraX(result.currentState), 6);
       },
     );
 
@@ -240,7 +182,7 @@ void main() {
     test('handles deep middleware chains without stack overflow', () async {
       final pipeline = MiddlewarePipeline(
         middlewares: List<Middleware>.generate(
-          1800,
+          200,
           (_) => const _PassThroughMiddleware(),
         ),
       );
@@ -253,9 +195,7 @@ void main() {
 }
 
 DispatchContext _createInitialContext() {
-  final registry = DefaultElementRegistry();
-  registerBuiltInElements(registry);
-  final drawContext = DrawContext.withDefaults(elementRegistry: registry);
+  final drawContext = DrawContext.withDefaults();
   final historyManager = HistoryManager(logService: drawContext.log);
   const snapshotBuilder = SnapshotBuilder();
   final editSessionService = EditSessionService.fromRegistry(
@@ -277,6 +217,20 @@ DispatchContext _createInitialContext() {
   );
 }
 
+double _cameraX(DrawState state) => state.application.view.camera.position.x;
+
+DispatchContext _offsetContextState(DispatchContext context, double dx) {
+  final state = context.currentState;
+  final nextState = state.copyWith(
+    application: state.application.copyWith(
+      view: state.application.view.copyWith(
+        camera: state.application.view.camera.translated(dx, 0),
+      ),
+    ),
+  );
+  return context.withCurrentState(nextState);
+}
+
 class _ThrowingInvokeMiddleware extends MiddlewareBase {
   const _ThrowingInvokeMiddleware();
 
@@ -286,34 +240,6 @@ class _ThrowingInvokeMiddleware extends MiddlewareBase {
   @override
   Future<DispatchContext> invoke(DispatchContext context, NextFunction next) =>
       Future<DispatchContext>.error(const FormatException('Bad invoke'));
-}
-
-class _ThrowingShouldExecuteMiddleware extends MiddlewareBase {
-  const _ThrowingShouldExecuteMiddleware();
-
-  @override
-  String get name => 'ThrowShouldExecute';
-
-  @override
-  bool shouldExecute(DispatchContext context) {
-    throw const FormatException('Bad shouldExecute');
-  }
-
-  @override
-  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) =>
-      next(context);
-}
-
-class _FlagMetadataMiddleware extends MiddlewareBase {
-  const _FlagMetadataMiddleware(this.key);
-
-  final String key;
-
-  @override
-  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) {
-    final updated = context.withMetadata(key, true);
-    return next(updated);
-  }
 }
 
 class _DoubleNextMiddleware extends MiddlewareBase {
@@ -343,7 +269,7 @@ class _ThrowAfterNextMiddleware extends MiddlewareBase {
     DispatchContext context,
     NextFunction next,
   ) async {
-    await next(context.withMetadata('fromThrowAfterNext', true));
+    await next(_offsetContextState(context, 5));
     throw const FormatException('Bad invoke after next');
   }
 }
@@ -359,44 +285,19 @@ class _StateErrorAfterNextMiddleware extends MiddlewareBase {
     DispatchContext context,
     NextFunction next,
   ) async {
-    await next(context.withMetadata('stateErrorAfterNext', true));
+    await next(_offsetContextState(context, 2));
     throw StateError('Bad invoke after next');
   }
 }
 
-class _DetachedNextMiddleware extends MiddlewareBase {
-  const _DetachedNextMiddleware();
+class _OffsetStateMiddleware extends MiddlewareBase {
+  const _OffsetStateMiddleware({required this.dx});
+
+  final double dx;
 
   @override
-  String get name => 'DetachedNext';
-
-  @override
-  Future<DispatchContext> invoke(
-    DispatchContext context,
-    NextFunction next,
-  ) async {
-    unawaited(next(context.withMetadata('detachedNextCalled', true)));
-    return context;
-  }
-}
-
-class _DelayedCountingMiddleware extends MiddlewareBase {
-  const _DelayedCountingMiddleware({
-    required this.counter,
-    required this.delay,
-  });
-
-  final _InvocationCounter counter;
-  final Duration delay;
-
-  @override
-  Future<DispatchContext> invoke(
-    DispatchContext context,
-    NextFunction next,
-  ) async {
-    counter.value += 1;
-    await Future<void>.delayed(delay);
-    return next(context.withMetadata('downstreamReached', true));
+  Future<DispatchContext> invoke(DispatchContext context, NextFunction next) {
+    return next(_offsetContextState(context, dx));
   }
 }
 

@@ -6,7 +6,6 @@ import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_operation_params.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_validation.dart';
 import 'package:snow_draw_core/draw/edit/resize/resize_operation.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
@@ -23,8 +22,6 @@ import 'package:snow_draw_core/draw/types/edit_transform.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
 void main() {
-  setUp(ArrowBindingResolver.instance.invalidate);
-
   group('replaceElementsById', () {
     test('small list: applies valid change, ignores ghost', () {
       final elements = List.generate(5, (i) => _element('e$i'));

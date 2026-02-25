@@ -1,4 +1,3 @@
-import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -46,7 +45,10 @@ class LineHitTester implements ElementHitTester {
     }
 
     final rect = element.rect;
-    final localPosition = _toLocalPosition(element, position);
+    final localPosition = resolveElementLocalPosition(
+      element: element,
+      position: position,
+    );
     if (!_isInsideRect(rect, localPosition, 0)) {
       return false;
     }
@@ -74,7 +76,10 @@ class LineHitTester implements ElementHitTester {
 
     if (data.points.length == 2) {
       final rect = element.rect;
-      final localPosition = _toLocalPosition(element, position);
+      final localPosition = resolveElementLocalPosition(
+        element: element,
+        position: position,
+      );
       if (_hitTestTwoPointStrokeFast(
         rect: rect,
         data: data,
@@ -92,15 +97,6 @@ class LineHitTester implements ElementHitTester {
     );
   }
 
-  DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
-    if (element.rotation == 0) {
-      return position;
-    }
-    final rect = element.rect;
-    final space = ElementSpace(rotation: element.rotation, origin: rect.center);
-    return space.fromWorld(position);
-  }
-
   bool _isInsideRect(DrawRect rect, DrawPoint position, double padding) =>
       isPointInsideRect(rect, position, padding);
 
@@ -112,37 +108,14 @@ class LineHitTester implements ElementHitTester {
     required LineData data,
     required DrawPoint localPosition,
     required double tolerance,
-  }) {
-    final radius = (data.strokeWidth / 2) + tolerance;
-    if (!radius.isFinite || radius <= 0) {
-      return false;
-    }
-    if (!_isInsideRect(rect, localPosition, radius)) {
-      return false;
-    }
-    if (!rect.width.isFinite ||
-        !rect.height.isFinite ||
-        rect.width < 0 ||
-        rect.height < 0) {
-      return false;
-    }
-
-    final startPoint = data.points.first;
-    final endPoint = data.points.last;
-    final start = DrawPoint(
-      x: rect.minX + (startPoint.x * rect.width),
-      y: rect.minY + (startPoint.y * rect.height),
-    );
-    final end = DrawPoint(
-      x: rect.minX + (endPoint.x * rect.width),
-      y: rect.minY + (endPoint.y * rect.height),
-    );
-    if (!isFiniteDrawPoint(start) || !isFiniteDrawPoint(end)) {
-      return false;
-    }
-    return distanceSquaredToSegment(localPosition, start, end) <=
-        radius * radius;
-  }
+  }) => hitTestNormalizedTwoPointStroke(
+    rect: rect,
+    normalizedStart: data.points.first,
+    normalizedEnd: data.points.last,
+    localPosition: localPosition,
+    strokeWidth: data.strokeWidth,
+    tolerance: tolerance,
+  );
 
   List<DrawPoint> _resolveFillOutline({
     required ElementState element,

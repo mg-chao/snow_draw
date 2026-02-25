@@ -1,5 +1,5 @@
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
+import '../../core/draw_context.dart';
 import '../../events/error_events.dart';
 import '../../models/draw_state.dart';
 import '../core/reducer_utils.dart';
@@ -7,7 +7,7 @@ import '../core/reducer_utils.dart';
 DrawState? selectionReducer(
   DrawState state,
   DrawAction action,
-  SelectionReducerDeps context,
+  DrawContext context,
 ) => switch (action) {
   final SelectElement a => _handleSelectElement(state, a, context),
   ClearSelection _ => applySelectionChange(state, const <String>{}),
@@ -21,7 +21,7 @@ DrawState? selectionReducer(
 DrawState _handleSelectElement(
   DrawState state,
   SelectElement action,
-  SelectionReducerDeps context,
+  DrawContext context,
 ) {
   if (state.domain.document.getElementById(action.elementId) == null) {
     context.log.store.warning('Selection failed: element not found', {

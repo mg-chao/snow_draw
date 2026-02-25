@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -26,27 +26,27 @@ void main() {
       );
       await tester.pump();
 
-      final dynamicBefore = _dynamicRenderKey(tester);
-      final baselineRevision = dynamicBefore.textRenderingCacheRevision;
+      final keyBefore = _canvasRenderKey(tester);
+      final baselineRevision = keyBefore.textRenderingCacheRevision;
 
       invalidateTextRenderingCaches();
       await tester.pump();
 
-      final dynamicAfter = _dynamicRenderKey(tester);
+      final keyAfter = _canvasRenderKey(tester);
       final expectedRevision = baselineRevision + 1;
-      expect(dynamicAfter.textRenderingCacheRevision, expectedRevision);
+      expect(keyAfter.textRenderingCacheRevision, expectedRevision);
     },
   );
 }
 
-DynamicCanvasRenderKey _dynamicRenderKey(WidgetTester tester) {
+SceneCanvasRenderKey _canvasRenderKey(WidgetTester tester) {
   for (final paint in tester.widgetList<CustomPaint>(
     find.byType(CustomPaint),
   )) {
     final painter = paint.painter;
-    if (painter is DynamicCanvasPainter) {
+    if (painter is SceneCanvasPainter) {
       return painter.renderKey;
     }
   }
-  throw StateError('DynamicCanvasPainter not found');
+  throw StateError('SceneCanvasPainter not found');
 }

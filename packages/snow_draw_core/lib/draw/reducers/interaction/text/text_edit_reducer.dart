@@ -1,9 +1,9 @@
 import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
-import '../../../core/dependency_interfaces.dart';
-import '../../../elements/types/arrow/arrow_like_data.dart';
-import '../../../elements/types/serial_number/serial_number_data.dart';
+import '../../../core/draw_context.dart';
+import '../../../edit/apply/edit_apply.dart';
+import '../../../elements/types/serial_number/serial_number_dependencies.dart';
 import '../../../elements/types/text/text_data.dart';
 import '../../../elements/types/text/text_editing_geometry.dart';
 import '../../../models/draw_state.dart';
@@ -13,27 +13,33 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../core/reducer_utils.dart';
 
+typedef _TextEditSession = ({
+  String elementId,
+  TextData draftData,
+  DrawRect rect,
+  bool isNew,
+  double opacity,
+  double rotation,
+});
+
 /// Reducer for text editing interactions.
 @immutable
 class TextEditReducer {
   const TextEditReducer();
 
-  DrawState? reduce(
-    DrawState state,
-    DrawAction action,
-    TextEditReducerDeps context,
-  ) => switch (action) {
-    final StartTextEdit a => _startTextEdit(state, a, context),
-    final UpdateTextEdit a => _updateTextEdit(state, a, context),
-    final FinishTextEdit a => _finishTextEdit(state, a, context),
-    CancelTextEdit _ => _cancelTextEdit(state),
-    _ => null,
-  };
+  DrawState? reduce(DrawState state, DrawAction action, DrawContext context) =>
+      switch (action) {
+        final StartTextEdit a => _startTextEdit(state, a, context),
+        final UpdateTextEdit a => _updateTextEdit(state, a, context),
+        final FinishTextEdit a => _finishTextEdit(state, a, context),
+        CancelTextEdit _ => _cancelTextEdit(state),
+        _ => null,
+      };
 
   DrawState _startTextEdit(
     DrawState state,
     StartTextEdit action,
-    TextEditReducerDeps context,
+    DrawContext context,
   ) {
     if (state.application.interaction is TextEditingState) {
       return state;
@@ -64,36 +70,35 @@ class TextEditReducer {
     );
   }
 
-  ({
-    String elementId,
-    TextData draftData,
-    DrawRect rect,
-    bool isNew,
-    double opacity,
-    double rotation,
-  })?
-  _resolveStartSession(
+  _TextEditSession? _resolveStartSession(
     DrawState state,
     StartTextEdit action,
-    TextEditReducerDeps context,
-  ) {
-    final elementId = action.elementId;
-    if (elementId != null) {
-      final element = state.domain.document.getElementById(elementId);
-      final data = element?.data;
-      if (element == null || data is! TextData) {
-        return null;
-      }
-      return (
-        elementId: element.id,
-        draftData: data,
-        rect: element.rect,
-        isNew: false,
-        opacity: element.opacity,
-        rotation: element.rotation,
-      );
-    }
+    DrawContext context,
+  ) => switch (action.elementId) {
+    final String elementId => _resolveExistingSession(state, elementId),
+    null => _resolveNewSession(action, context),
+  };
 
+  _TextEditSession? _resolveExistingSession(DrawState state, String elementId) {
+    final element = state.domain.document.getElementById(elementId);
+    final data = element?.data;
+    if (element == null || data is! TextData) {
+      return null;
+    }
+    return (
+      elementId: element.id,
+      draftData: data,
+      rect: element.rect,
+      isNew: false,
+      opacity: element.opacity,
+      rotation: element.rotation,
+    );
+  }
+
+  _TextEditSession _resolveNewSession(
+    StartTextEdit action,
+    DrawContext context,
+  ) {
     final defaults = context.config.textStyle;
     final draftData = const TextData().withElementStyle(defaults) as TextData;
     return (
@@ -113,7 +118,7 @@ class TextEditReducer {
   DrawState _updateTextEdit(
     DrawState state,
     UpdateTextEdit action,
-    TextEditReducerDeps context,
+    DrawContext context,
   ) {
     final interaction = state.application.interaction;
     if (interaction is! TextEditingState) {
@@ -149,7 +154,7 @@ class TextEditReducer {
   DrawState _finishTextEdit(
     DrawState state,
     FinishTextEdit action,
-    TextEditReducerDeps context,
+    DrawContext context,
   ) {
     final interaction = state.application.interaction;
     if (interaction is! TextEditingState) {
@@ -157,23 +162,38 @@ class TextEditReducer {
     }
 
     if (action.text.trim().isEmpty) {
-      return interaction.isNew
-          ? _toIdle(state)
-          : _deleteExistingText(state, interaction);
+      return _finishEmptyText(state, interaction);
     }
 
-    final nextData = interaction.draftData.copyWith(text: action.text);
+    return _commitTextDraft(
+      state: state,
+      interaction: interaction,
+      rawText: action.text,
+      context: context,
+    );
+  }
+
+  DrawState _finishEmptyText(DrawState state, TextEditingState interaction) =>
+      interaction.isNew
+      ? _toIdle(state)
+      : _deleteExistingText(state, interaction);
+
+  DrawState _commitTextDraft({
+    required DrawState state,
+    required TextEditingState interaction,
+    required String rawText,
+    required DrawContext context,
+  }) {
+    final nextData = interaction.draftData.copyWith(text: rawText);
     final nextRect = _resolveTextDraftRect(
       currentRect: interaction.rect,
       data: nextData,
       context: context,
     );
 
-    if (interaction.isNew) {
-      return _createTextElement(state, interaction, nextData, nextRect);
-    }
-
-    return _updateTextElement(state, interaction, nextData, nextRect);
+    return interaction.isNew
+        ? _createTextElement(state, interaction, nextData, nextRect)
+        : _updateTextElement(state, interaction, nextData, nextRect);
   }
 
   DrawState _createTextElement(
@@ -198,7 +218,7 @@ class TextEditReducer {
         ),
       ),
     );
-    return _clearSelectionAndIdle(nextState);
+    return _finishTextEditing(nextState);
   }
 
   DrawState _updateTextElement(
@@ -207,27 +227,27 @@ class TextEditReducer {
     TextData data,
     DrawRect rect,
   ) {
-    final orderIndex = state.domain.document.getOrderIndex(
-      interaction.elementId,
-    );
-    if (orderIndex == null) {
-      return _clearSelectionAndIdle(state);
+    final document = state.domain.document;
+    final currentElement = document.getElementById(interaction.elementId);
+    if (currentElement == null) {
+      return _finishTextEditing(state);
     }
-
-    final currentElement = state.domain.document.elements[orderIndex];
     if (currentElement.rect == rect && currentElement.data == data) {
-      return _clearSelectionAndIdle(state);
+      return _finishTextEditing(state);
     }
-
-    final nextElements = [...state.domain.document.elements];
-    nextElements[orderIndex] = currentElement.copyWith(rect: rect, data: data);
+    final nextElements = EditApply.replaceElementsById(
+      elements: document.elements,
+      replacementsById: {
+        interaction.elementId: currentElement.copyWith(rect: rect, data: data),
+      },
+    );
 
     final nextState = state.copyWith(
       domain: state.domain.copyWith(
-        document: state.domain.document.copyWith(elements: nextElements),
+        document: document.copyWith(elements: nextElements),
       ),
     );
-    return _clearSelectionAndIdle(nextState);
+    return _finishTextEditing(nextState);
   }
 
   DrawState _deleteExistingText(DrawState state, TextEditingState interaction) {
@@ -242,13 +262,14 @@ class TextEditReducer {
               document: state.domain.document.copyWith(elements: nextElements),
             ),
           );
-    return _clearSelectionAndIdle(nextState);
+    return _finishTextEditing(nextState);
   }
 
   List<ElementState>? _removeTextElementAndUnbindReferences({
     required List<ElementState> elements,
     required String deletedTextId,
   }) {
+    final deletedIds = <String>{deletedTextId};
     final nextElements = <ElementState>[];
     var changed = false;
 
@@ -258,16 +279,10 @@ class TextEditReducer {
         continue;
       }
 
-      final updatedElement =
-          _resolveSerialUnbindUpdate(
-            element: element,
-            deletedTextId: deletedTextId,
-          ) ??
-          _resolveArrowUnbindUpdate(
-            element: element,
-            deletedTextId: deletedTextId,
-          ) ??
-          element;
+      final updatedElement = clearElementDependenciesForIds(
+        element: element,
+        targetIds: deletedIds,
+      );
 
       if (updatedElement != element) {
         changed = true;
@@ -288,7 +303,7 @@ class TextEditReducer {
   DrawRect _resolveTextDraftRect({
     required DrawRect currentRect,
     required TextData data,
-    required TextEditReducerDeps context,
+    required DrawContext context,
   }) => resolveTextEditingRect(
     origin: DrawPoint(x: currentRect.minX, y: currentRect.minY),
     currentRect: currentRect,
@@ -297,50 +312,9 @@ class TextEditReducer {
     allowShrinkHeight: true,
   );
 
-  DrawState _clearSelectionAndIdle(DrawState state) {
-    final nextState = applySelectionChange(state, const <String>{});
-    return nextState.copyWith(application: nextState.application.toIdle());
-  }
-
   DrawState _toIdle(DrawState state) =>
       state.copyWith(application: state.application.toIdle());
 
-  ElementState? _resolveSerialUnbindUpdate({
-    required ElementState element,
-    required String deletedTextId,
-  }) {
-    final data = element.data;
-    if (data is! SerialNumberData || data.textElementId != deletedTextId) {
-      return null;
-    }
-    return element.copyWith(data: data.copyWith(textElementId: null));
-  }
-
-  ElementState? _resolveArrowUnbindUpdate({
-    required ElementState element,
-    required String deletedTextId,
-  }) {
-    final data = element.data;
-    if (data is! ArrowLikeData) {
-      return null;
-    }
-
-    final startBinding = data.startBinding;
-    final endBinding = data.endBinding;
-    final clearStart =
-        startBinding != null && startBinding.elementId == deletedTextId;
-    final clearEnd =
-        endBinding != null && endBinding.elementId == deletedTextId;
-    if (!clearStart && !clearEnd) {
-      return null;
-    }
-
-    final nextData = data.copyWith(
-      startBinding: clearStart ? null : startBinding,
-      endBinding: clearEnd ? null : endBinding,
-      startIsSpecial: clearStart ? null : data.startIsSpecial,
-      endIsSpecial: clearEnd ? null : data.endIsSpecial,
-    );
-    return element.copyWith(data: nextData);
-  }
+  DrawState _finishTextEditing(DrawState state) =>
+      _toIdle(applySelectionChange(state, const <String>{}));
 }

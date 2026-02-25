@@ -1,5 +1,6 @@
 import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/actions.dart';
+import 'package:snow_draw_core/draw/config/config_manager.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/core/element_registry.dart';
@@ -72,7 +73,7 @@ DefaultDrawStore _createStore({
   registerBuiltInElements(registry);
   final context = DrawContext.withDefaults(
     elementRegistry: registry,
-    config: config,
+    configManager: ConfigManager(config),
   );
   return DefaultDrawStore(context: context, initialState: initialState);
 }

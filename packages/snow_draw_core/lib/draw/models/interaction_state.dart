@@ -10,6 +10,7 @@ import '../types/edit_context.dart';
 import '../types/edit_operation_id.dart';
 import '../types/edit_transform.dart';
 import '../types/snap_guides.dart';
+import '../utils/list_equality.dart';
 import 'edit_session_id.dart';
 import 'element_state.dart';
 
@@ -143,10 +144,6 @@ class EditingState extends InteractionState {
   static double _rotationDeltaFor(EditTransform transform) =>
       switch (transform) {
         RotateTransform(:final appliedAngle) => appliedAngle,
-        CompositeTransform(:final transforms) => transforms.fold(
-          0,
-          (sum, t) => sum + _rotationDeltaFor(t),
-        ),
         _ => 0.0,
       };
 
@@ -205,7 +202,7 @@ class PointCreationMode extends CreationMode {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is PointCreationMode &&
-          _listEquals(other.fixedPoints, fixedPoints) &&
+          pointListEquals(other.fixedPoints, fixedPoints) &&
           other.currentPoint == currentPoint;
 
   @override
@@ -215,21 +212,6 @@ class PointCreationMode extends CreationMode {
   String toString() =>
       'PointCreationMode(fixedPoints: ${fixedPoints.length}, '
       'currentPoint: $currentPoint)';
-
-  static bool _listEquals<T>(List<T> a, List<T> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
 }
 
 // ============================================================================
@@ -238,49 +220,33 @@ class PointCreationMode extends CreationMode {
 
 @immutable
 class CreatingState extends InteractionState {
-  CreatingState({
-    required ElementState element,
+  const CreatingState({
+    required this.element,
     required this.startPosition,
     required this.currentRect,
     this.snapGuides = const [],
     this.creationMode = const RectCreationMode(),
-  }) : elementId = element.id,
-       elementData = element.data,
-       elementRect = element.rect,
-       elementRotation = element.rotation,
-       elementOpacity = element.opacity,
-       elementZIndex = element.zIndex;
+  });
 
-  /// Stable element id used while creating (not yet in the document).
-  final String elementId;
-
-  /// Draft element data (UI-only, not persisted until creation finishes).
-  final ElementData elementData;
-
-  /// Draft element rect captured at creation start.
-  final DrawRect elementRect;
-  final double elementRotation;
-  final double elementOpacity;
-  final int elementZIndex;
+  /// Draft element used while creating (not persisted until finish).
+  final ElementState element;
   final DrawPoint startPosition;
   final DrawRect currentRect;
   final List<SnapGuide> snapGuides;
   final CreationMode creationMode;
 
-  late final _element = ElementState(
-    id: elementId,
-    rect: elementRect,
-    rotation: elementRotation,
-    opacity: elementOpacity,
-    zIndex: elementZIndex,
-    data: elementData,
-  );
+  /// Stable element id used while creating (not yet in the document).
+  String get elementId => element.id;
 
-  /// Backward-compatible access to the draft element.
-  ///
-  /// This is synthesized from creation context fields to avoid storing a
-  /// full ElementState in application state.
-  ElementState get element => _element;
+  /// Draft element data (UI-only, not persisted until creation finishes).
+  ElementData get elementData => element.data;
+
+  /// Draft element rect captured at creation start.
+  DrawRect get elementRect => element.rect;
+
+  double get elementRotation => element.rotation;
+  double get elementOpacity => element.opacity;
+  int get elementZIndex => element.zIndex;
 
   /// Fixed points for point-based creation (arrows).
   List<DrawPoint> get fixedPoints => switch (creationMode) {

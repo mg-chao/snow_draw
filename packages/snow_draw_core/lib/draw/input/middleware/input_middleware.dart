@@ -92,65 +92,6 @@ abstract class InputMiddlewareBase implements InputMiddleware {
 
   @override
   String get name => _name;
-
-  /// Helper: continue to the next middleware.
-  @protected
-  Future<InputEvent?> continueWith(InputEvent event, NextMiddleware next) =>
-      next(event);
-
-  /// Helper: intercept the event (stop processing).
-  @protected
-  Future<InputEvent?> intercept() async => null;
-}
-
-/// Simple middleware: implement transform only.
-abstract class SimpleMiddleware extends InputMiddlewareBase {
-  const SimpleMiddleware({required super.name});
-
-  @override
-  Future<InputEvent?> process(
-    InputEvent event,
-    MiddlewareContext context,
-    NextMiddleware next,
-  ) async {
-    final transformed = await transform(event, context);
-    if (transformed == null) {
-      return null; // Intercept.
-    }
-    return next(transformed);
-  }
-
-  /// Transform the event.
-  ///
-  /// Returning null intercepts the event.
-  Future<InputEvent?> transform(InputEvent event, MiddlewareContext context);
-}
-
-/// Conditional middleware: process based on a condition.
-abstract class ConditionalMiddleware extends InputMiddlewareBase {
-  const ConditionalMiddleware({required super.name});
-
-  @override
-  Future<InputEvent?> process(
-    InputEvent event,
-    MiddlewareContext context,
-    NextMiddleware next,
-  ) async {
-    if (await shouldProcess(event, context)) {
-      return processEvent(event, context, next);
-    }
-    return next(event);
-  }
-
-  /// Decide whether to process this event.
-  Future<bool> shouldProcess(InputEvent event, MiddlewareContext context);
-
-  /// Process the event.
-  Future<InputEvent?> processEvent(
-    InputEvent event,
-    MiddlewareContext context,
-    NextMiddleware next,
-  );
 }
 
 /// Input pipeline.
@@ -170,119 +111,7 @@ class InputPipeline {
     if (middlewares.isEmpty) {
       return Future<InputEvent?>.value(event);
     }
-
-    Future<InputEvent?> executeNext(
-      InputEvent eventToProcess,
-      int middlewareIndex,
-    ) async {
-      if (middlewareIndex >= middlewares.length) {
-        return eventToProcess;
-      }
-
-      final middleware = middlewares[middlewareIndex];
-      var nextCalled = false;
-      var middlewareCompleted = false;
-      var nextObserved = false;
-      var nextSettled = false;
-      InputEvent? nextInputEvent;
-      Future<InputEvent?>? nextFuture;
-
-      Future<InputEvent?> guardedNext(InputEvent nextEvent) {
-        if (middlewareCompleted) {
-          throw StateError(
-            'Input middleware "${middleware.name}" called next() '
-            'after completion',
-          );
-        }
-        if (nextCalled) {
-          throw StateError(
-            'Input middleware "${middleware.name}" called next() '
-            'more than once',
-          );
-        }
-
-        nextCalled = true;
-        nextInputEvent = nextEvent;
-        final downstreamCompleter = Completer<InputEvent?>();
-        unawaited(() async {
-          try {
-            final downstreamEvent = await Future<InputEvent?>.microtask(
-              () => executeNext(nextEvent, middlewareIndex + 1),
-            );
-            downstreamCompleter.complete(downstreamEvent);
-          } on Object catch (error, stackTrace) {
-            downstreamCompleter.completeError(error, stackTrace);
-          }
-        }());
-        final downstreamFuture = downstreamCompleter.future.whenComplete(
-          () => nextSettled = true,
-        );
-        nextFuture = downstreamFuture;
-
-        return _ObservedFuture<InputEvent?>(
-          downstreamFuture,
-          onObserved: () => nextObserved = true,
-        );
-      }
-
-      try {
-        final result = await middleware.process(
-          eventToProcess,
-          context,
-          guardedNext,
-        );
-        middlewareCompleted = true;
-
-        if (!nextCalled || (nextObserved && nextSettled)) {
-          return result;
-        }
-
-        await _awaitDownstream(
-          context: context,
-          middleware: middleware,
-          event: nextInputEvent ?? eventToProcess,
-          downstreamFuture: nextFuture,
-        );
-
-        _logMiddlewareFailure(
-          context: context,
-          middleware: middleware,
-          event: eventToProcess,
-          error: !nextObserved
-              ? StateError(
-                  'Input middleware "${middleware.name}" called next() '
-                  'without awaiting or returning it. '
-                  'Return or await next() to keep input order.',
-                )
-              : StateError(
-                  'Input middleware "${middleware.name}" completed '
-                  'before next() finished. '
-                  'Return or await next() to keep input order.',
-                ),
-          stackTrace: StackTrace.current,
-        );
-        return null;
-      } on Object catch (error, stackTrace) {
-        middlewareCompleted = true;
-        await _awaitDownstream(
-          context: context,
-          middleware: middleware,
-          event: nextInputEvent ?? eventToProcess,
-          downstreamFuture: nextFuture,
-        );
-
-        _logMiddlewareFailure(
-          context: context,
-          middleware: middleware,
-          event: eventToProcess,
-          error: error,
-          stackTrace: stackTrace,
-        );
-        return null;
-      }
-    }
-
-    return executeNext(event, 0);
+    return _executeAtIndex(event: event, context: context, middlewareIndex: 0);
   }
 
   /// Add middleware.
@@ -301,19 +130,44 @@ class InputPipeline {
   /// Create an empty pipeline.
   static final empty = InputPipeline(middlewares: const []);
 
-  Future<void> _awaitDownstream({
-    required MiddlewareContext context,
-    required InputMiddleware middleware,
+  Future<InputEvent?> _executeAtIndex({
     required InputEvent event,
-    required Future<InputEvent?>? downstreamFuture,
+    required MiddlewareContext context,
+    required int middlewareIndex,
   }) async {
-    final future = downstreamFuture;
-    if (future == null) {
-      return;
+    if (middlewareIndex >= middlewares.length) {
+      return event;
+    }
+
+    final middleware = middlewares[middlewareIndex];
+    var nextCalled = false;
+
+    Future<InputEvent?> guardedNext(InputEvent nextEvent) {
+      if (nextCalled) {
+        throw StateError(
+          'Input middleware "${middleware.name}" called next() more than once',
+        );
+      }
+      nextCalled = true;
+      final completer = Completer<InputEvent?>();
+      unawaited(() async {
+        try {
+          completer.complete(
+            await _executeAtIndex(
+              event: nextEvent,
+              context: context,
+              middlewareIndex: middlewareIndex + 1,
+            ),
+          );
+        } on Object catch (error, stackTrace) {
+          completer.completeError(error, stackTrace);
+        }
+      }());
+      return completer.future;
     }
 
     try {
-      await future;
+      return await middleware.process(event, context, guardedNext);
     } on Object catch (error, stackTrace) {
       _logMiddlewareFailure(
         context: context,
@@ -322,6 +176,7 @@ class InputPipeline {
         error: error,
         stackTrace: stackTrace,
       );
+      return null;
     }
   }
 
@@ -338,55 +193,5 @@ class InputPipeline {
       stackTrace,
       {'middleware': middleware.name, 'event': event.runtimeType.toString()},
     );
-  }
-}
-
-class _ObservedFuture<T> implements Future<T> {
-  _ObservedFuture(this._delegate, {required void Function() onObserved})
-    : _onObserved = onObserved;
-
-  final Future<T> _delegate;
-  final void Function() _onObserved;
-  var _didObserve = false;
-
-  void _markObserved() {
-    if (_didObserve) {
-      return;
-    }
-    _didObserve = true;
-    _onObserved();
-  }
-
-  @override
-  Stream<T> asStream() {
-    _markObserved();
-    return _delegate.asStream();
-  }
-
-  @override
-  Future<T> catchError(Function onError, {bool Function(Object error)? test}) {
-    _markObserved();
-    return _delegate.catchError(onError, test: test);
-  }
-
-  @override
-  Future<R> then<R>(
-    FutureOr<R> Function(T value) onValue, {
-    Function? onError,
-  }) {
-    _markObserved();
-    return _delegate.then<R>(onValue, onError: onError);
-  }
-
-  @override
-  Future<T> timeout(Duration timeLimit, {FutureOr<T> Function()? onTimeout}) {
-    _markObserved();
-    return _delegate.timeout(timeLimit, onTimeout: onTimeout);
-  }
-
-  @override
-  Future<T> whenComplete(FutureOr<void> Function() action) {
-    _markObserved();
-    return _delegate.whenComplete(action);
   }
 }

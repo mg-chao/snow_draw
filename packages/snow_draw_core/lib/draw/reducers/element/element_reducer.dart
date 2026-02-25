@@ -1,5 +1,5 @@
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
+import '../../core/draw_context.dart';
 import '../../models/draw_state.dart';
 import 'delete_element_handler.dart';
 import 'global_elements_handler.dart';
@@ -11,7 +11,7 @@ import 'zindex_handler.dart';
 DrawState? elementReducer(
   DrawState state,
   DrawAction action,
-  ElementReducerDeps context,
+  DrawContext context,
 ) => switch (action) {
   final DeleteElements delete => handleDeleteElements(state, delete, context),
   final DuplicateElements duplicate => handleDuplicateElements(

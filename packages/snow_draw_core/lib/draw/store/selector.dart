@@ -19,11 +19,9 @@ abstract class StateSelector<S, T> {
 ///
 /// Uses a function to select a state slice and optional custom equality.
 class SimpleSelector<S, T> extends StateSelector<S, T> {
-  SimpleSelector(T Function(S) selector, {bool Function(T, T)? equals})
-    : _selector = ((state) => selector(state as S)),
-      _equals = equals == null
-          ? null
-          : ((prev, next) => equals(prev as T, next as T));
+  SimpleSelector(T Function(S state) selector, {bool Function(T, T)? equals})
+    : _selector = _wrapSelector(selector),
+      _equals = _wrapEquals(equals);
   final T Function(Object?) _selector;
   final bool Function(Object?, Object?)? _equals;
 
@@ -33,4 +31,15 @@ class SimpleSelector<S, T> extends StateSelector<S, T> {
   @override
   bool equals(T prev, T next) =>
       _equals?.call(prev, next) ?? super.equals(prev, next);
+
+  static T Function(Object?) _wrapSelector<S, T>(
+    T Function(S state) selector,
+  ) =>
+      (state) => selector(state as S);
+
+  static bool Function(Object?, Object?)? _wrapEquals<T>(
+    bool Function(T previous, T next)? equals,
+  ) => equals == null
+      ? null
+      : (previous, next) => equals(previous as T, next as T);
 }

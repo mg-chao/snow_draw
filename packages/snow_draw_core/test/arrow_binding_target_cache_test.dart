@@ -1,267 +1,119 @@
-import 'package:test/test.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_target_cache.dart';
+import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
+import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
-import 'package:snow_draw_core/draw/types/element_style.dart';
-
-const _defaultArrowType = ArrowType.curved;
-const _defaultArrowheadStyle = ArrowheadStyle.none;
-const _defaultShouldLookupBindings = true;
-const _defaultAllowNewBinding = true;
-const _defaultHasBindableTargets = true;
-
-typedef _ResolvedCandidate = ({bool hasValue, ArrowBindingResult? value});
+import 'package:snow_draw_core/draw/types/draw_rect.dart';
+import 'package:test/test.dart';
 
 void main() {
-  group('ArrowBindingTargetCache candidate caching', () {
-    test('returns no candidate before caching', () {
+  group('ArrowBindingTargetCache target lookup caching', () {
+    test('is invalid before any query is cached', () {
       final cache = ArrowBindingTargetCache();
-      final resolved = _resolveCandidate(
-        cache,
-        position: const DrawPoint(x: 10, y: 12),
-        referencePoint: null,
-        positionThreshold: 4,
-        referenceThreshold: 4,
+
+      final valid = cache.isValid(
+        position: const DrawPoint(x: 10, y: 10),
+        threshold: 6,
+        distance: 20,
         elementsVersion: 3,
-        snapDistance: 10,
-        preferredBinding: null,
       );
 
-      expect(resolved.hasValue, isFalse);
-      expect(resolved.value, isNull);
+      expect(valid, isFalse);
+      expect(cache.targets, isEmpty);
     });
 
-    test('reuses cached miss when null value is stored', () {
+    test('reuses cached targets when query stays within threshold', () {
       final cache = ArrowBindingTargetCache();
-      _cacheCandidate(
-        cache,
+      final targets = [_element('target', const DrawRect(maxX: 10, maxY: 10))];
+      cache.update(
         position: const DrawPoint(x: 100, y: 120),
-        referencePoint: const DrawPoint(x: 80, y: 90),
+        distance: 24,
         elementsVersion: 7,
-        snapDistance: 12,
-        preferredBinding: null,
-        value: null,
+        targets: targets,
       );
 
-      final resolved = _resolveCandidate(
-        cache,
+      final nearValid = cache.isValid(
         position: const DrawPoint(x: 102, y: 121),
-        referencePoint: const DrawPoint(x: 79, y: 92),
-        positionThreshold: 6,
-        referenceThreshold: 6,
+        threshold: 4,
+        distance: 24,
         elementsVersion: 7,
-        snapDistance: 12,
-        preferredBinding: null,
       );
-      final resolvedFar = _resolveCandidate(
-        cache,
-        position: const DrawPoint(x: 110, y: 126),
-        referencePoint: const DrawPoint(x: 79, y: 92),
-        positionThreshold: 6,
-        referenceThreshold: 6,
+      final farValid = cache.isValid(
+        position: const DrawPoint(x: 108, y: 126),
+        threshold: 4,
+        distance: 24,
         elementsVersion: 7,
-        snapDistance: 12,
-        preferredBinding: null,
       );
 
-      expect(resolved.hasValue, isTrue);
-      expect(resolved.value, isNull);
-      expect(resolvedFar.hasValue, isFalse);
-      expect(resolvedFar.value, isNull);
+      expect(nearValid, isTrue);
+      expect(farValid, isFalse);
+      expect(cache.targets, same(targets));
     });
 
-    test('invalidates when preferred binding changes', () {
-      final cache = ArrowBindingTargetCache();
-      const initialBinding = ArrowBinding(
-        elementId: 'target-a',
-        anchor: DrawPoint(x: 0.5, y: 0.5),
-      );
-      _cacheCandidate(
-        cache,
-        position: const DrawPoint(x: 40, y: 40),
-        referencePoint: null,
-        elementsVersion: 2,
-        snapDistance: 8,
-        preferredBinding: initialBinding,
-        value: const ArrowBindingResult(
-          binding: initialBinding,
-          snapPoint: DrawPoint(x: 40, y: 40),
-          distance: 0,
-          zIndex: 3,
-        ),
+    test('invalidates when elements version changes', () {
+      final cache = ArrowBindingTargetCache()
+        ..update(
+          position: const DrawPoint(x: 20, y: 20),
+          distance: 10,
+          elementsVersion: 5,
+          targets: [_element('target', const DrawRect(maxX: 10, maxY: 10))],
+        );
+
+      final valid = cache.isValid(
+        position: const DrawPoint(x: 20, y: 20),
+        threshold: 2,
+        distance: 10,
+        elementsVersion: 6,
       );
 
-      final resolved = _resolveCandidate(
-        cache,
-        position: const DrawPoint(x: 40, y: 40),
-        referencePoint: null,
-        positionThreshold: 4,
-        referenceThreshold: 4,
-        elementsVersion: 2,
-        snapDistance: 8,
-        preferredBinding: const ArrowBinding(
-          elementId: 'target-b',
-          anchor: DrawPoint(x: 0.5, y: 0.5),
-        ),
-      );
-
-      expect(resolved.hasValue, isFalse);
-      expect(resolved.value, isNull);
+      expect(valid, isFalse);
     });
 
-    test('invalidates when pointer moves beyond cache threshold', () {
-      final cache = ArrowBindingTargetCache();
-      const binding = ArrowBinding(
-        elementId: 'target',
-        anchor: DrawPoint(x: 0.2, y: 0.2),
-      );
-      const expected = ArrowBindingResult(
-        binding: binding,
-        snapPoint: DrawPoint(x: 10, y: 10),
-        distance: 1,
-        zIndex: 1,
-      );
-      _cacheCandidate(
-        cache,
-        position: const DrawPoint(x: 10, y: 10),
-        referencePoint: null,
+    test('invalidates when lookup distance changes', () {
+      final cache = ArrowBindingTargetCache()
+        ..update(
+          position: const DrawPoint(x: 20, y: 20),
+          distance: 12,
+          elementsVersion: 5,
+          targets: [_element('target', const DrawRect(maxX: 10, maxY: 10))],
+        );
+
+      final valid = cache.isValid(
+        position: const DrawPoint(x: 20, y: 20),
+        threshold: 2,
+        distance: 14,
         elementsVersion: 5,
-        snapDistance: 10,
-        preferredBinding: binding,
-        value: expected,
       );
 
-      final resolvedFar = _resolveCandidate(
-        cache,
+      expect(valid, isFalse);
+    });
+
+    test('reset clears cached query and targets', () {
+      final cache = ArrowBindingTargetCache()
+        ..update(
+          position: const DrawPoint(x: 30, y: 30),
+          distance: 12,
+          elementsVersion: 5,
+          targets: [_element('target', const DrawRect(maxX: 10, maxY: 10))],
+        )
+        ..reset();
+
+      final valid = cache.isValid(
         position: const DrawPoint(x: 30, y: 30),
-        referencePoint: null,
-        positionThreshold: 5,
-        referenceThreshold: 5,
+        threshold: 2,
+        distance: 12,
         elementsVersion: 5,
-        snapDistance: 10,
-        preferredBinding: binding,
       );
-      final resolvedNear = _resolveCandidate(
-        cache,
-        position: const DrawPoint(x: 12, y: 12),
-        referencePoint: null,
-        positionThreshold: 5,
-        referenceThreshold: 5,
-        elementsVersion: 5,
-        snapDistance: 10,
-        preferredBinding: binding,
-      );
-
-      expect(resolvedFar.hasValue, isFalse);
-      expect(resolvedNear.hasValue, isTrue);
-      expect(resolvedNear.value, same(expected));
-    });
-
-    test('cached miss uses a tighter reuse threshold than cached hits', () {
-      final cache = ArrowBindingTargetCache();
-      const binding = ArrowBinding(
-        elementId: 'target',
-        anchor: DrawPoint(x: 0.2, y: 0.2),
-      );
-      const hit = ArrowBindingResult(
-        binding: binding,
-        snapPoint: DrawPoint(x: 10, y: 10),
-        distance: 1,
-        zIndex: 1,
-      );
-
-      _cacheCandidate(
-        cache,
-        position: const DrawPoint(x: 10, y: 10),
-        referencePoint: null,
-        elementsVersion: 5,
-        snapDistance: 10,
-        preferredBinding: binding,
-        value: hit,
-      );
-      final hitResolution = _resolveCandidate(
-        cache,
-        position: const DrawPoint(x: 15, y: 10),
-        referencePoint: null,
-        positionThreshold: 6,
-        referenceThreshold: 6,
-        elementsVersion: 5,
-        snapDistance: 10,
-        preferredBinding: binding,
-      );
-
-      _cacheCandidate(
-        cache,
-        position: const DrawPoint(x: 10, y: 10),
-        referencePoint: null,
-        elementsVersion: 5,
-        snapDistance: 10,
-        preferredBinding: binding,
-        value: null,
-      );
-      final missResolution = _resolveCandidate(
-        cache,
-        position: const DrawPoint(x: 15, y: 10),
-        referencePoint: null,
-        positionThreshold: 6,
-        referenceThreshold: 6,
-        elementsVersion: 5,
-        snapDistance: 10,
-        preferredBinding: binding,
-      );
-
-      expect(hitResolution.hasValue, isTrue);
-      expect(hitResolution.value, same(hit));
-      expect(missResolution.hasValue, isFalse);
-      expect(missResolution.value, isNull);
+      expect(valid, isFalse);
+      expect(cache.targets, isEmpty);
     });
   });
 }
 
-void _cacheCandidate(
-  ArrowBindingTargetCache cache, {
-  required DrawPoint position,
-  required DrawPoint? referencePoint,
-  required int elementsVersion,
-  required double snapDistance,
-  required ArrowBinding? preferredBinding,
-  required ArrowBindingResult? value,
-}) {
-  cache.cacheCandidate(
-    position: position,
-    referencePoint: referencePoint,
-    elementsVersion: elementsVersion,
-    snapDistance: snapDistance,
-    arrowType: _defaultArrowType,
-    arrowheadStyle: _defaultArrowheadStyle,
-    shouldLookupBindings: _defaultShouldLookupBindings,
-    allowNewBinding: _defaultAllowNewBinding,
-    hasBindableTargets: _defaultHasBindableTargets,
-    preferredBinding: preferredBinding,
-    value: value,
-  );
-}
-
-_ResolvedCandidate _resolveCandidate(
-  ArrowBindingTargetCache cache, {
-  required DrawPoint position,
-  required DrawPoint? referencePoint,
-  required double positionThreshold,
-  required double referenceThreshold,
-  required int elementsVersion,
-  required double snapDistance,
-  required ArrowBinding? preferredBinding,
-}) => cache.resolveCandidate(
-  position: position,
-  referencePoint: referencePoint,
-  positionThreshold: positionThreshold,
-  referenceThreshold: referenceThreshold,
-  elementsVersion: elementsVersion,
-  snapDistance: snapDistance,
-  arrowType: _defaultArrowType,
-  arrowheadStyle: _defaultArrowheadStyle,
-  shouldLookupBindings: _defaultShouldLookupBindings,
-  allowNewBinding: _defaultAllowNewBinding,
-  hasBindableTargets: _defaultHasBindableTargets,
-  preferredBinding: preferredBinding,
+ElementState _element(String id, DrawRect rect) => ElementState(
+  id: id,
+  rect: rect,
+  rotation: 0,
+  opacity: 1,
+  zIndex: 0,
+  data: const RectangleData(),
 );

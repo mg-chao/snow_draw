@@ -72,7 +72,6 @@ mixin StandardFinishMixin on EditOperation {
     final elements = EditApply.replaceElementsById(
       elements: document.elements,
       replacementsById: result.updatedElements,
-      resolveIndex: document.getOrderIndex,
     );
     final overlay = context.isMultiSelect
         ? updateOverlay(

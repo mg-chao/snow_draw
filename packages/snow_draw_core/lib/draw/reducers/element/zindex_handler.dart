@@ -1,7 +1,7 @@
 import 'dart:math';
 
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
+import '../../core/draw_context.dart';
 import '../../events/error_events.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -9,7 +9,7 @@ import '../../models/element_state.dart';
 DrawState handleChangeZIndex(
   DrawState state,
   ChangeElementZIndex action,
-  ElementReducerDeps context,
+  DrawContext context,
 ) {
   final elements = state.domain.document.elements;
   final currentIndex = elements.indexWhere((e) => e.id == action.elementId);
@@ -50,7 +50,7 @@ DrawState handleChangeZIndex(
 DrawState handleChangeZIndexBatch(
   DrawState state,
   ChangeElementsZIndex action,
-  ElementReducerDeps context,
+  DrawContext context,
 ) {
   if (action.elementIds.isEmpty) {
     return state;

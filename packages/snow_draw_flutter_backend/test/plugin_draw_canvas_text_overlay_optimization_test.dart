@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/dynamic_canvas_painter.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/plugin_draw_canvas.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
+import 'package:snow_draw_flutter_backend/ui/canvas/scene_canvas_painter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   testWidgets(
-    'text draft updates keep canvas render keys stable when geometry is '
+    'text-only draft updates refresh canvas render keys when geometry is '
     'unchanged',
     (tester) async {
       final registry = DefaultElementRegistry();
@@ -58,18 +58,80 @@ void main() {
       );
       await tester.pump();
 
-      final dynamicBefore = _dynamicRenderKey(tester);
+      final keyBefore = _canvasRenderKey(tester);
 
       await store.dispatch(
         const UpdateTextEdit(text: 'hello world', rect: rect),
       );
       await tester.pump();
 
-      final dynamicAfter = _dynamicRenderKey(tester);
+      final keyAfter = _canvasRenderKey(tester);
 
-      expect(dynamicAfter, same(dynamicBefore));
+      expect(keyAfter, isNot(equals(keyBefore)));
     },
   );
+
+  testWidgets('text draft geometry updates refresh canvas render keys', (
+    tester,
+  ) async {
+    final registry = DefaultElementRegistry();
+    registerBuiltInElements(registry);
+    final context = DrawContext.withDefaults(elementRegistry: registry);
+
+    const textData = TextData(text: 'hello');
+    const initialRect = DrawRect(minX: 32, minY: 24, maxX: 180, maxY: 72);
+    const updatedRect = DrawRect(minX: 32, minY: 24, maxX: 220, maxY: 96);
+    const element = ElementState(
+      id: 'text-1',
+      rect: initialRect,
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: textData,
+    );
+    final initialState = DrawState(
+      domain: DomainState(
+        document: DocumentState(elements: const [element]),
+        selection: const SelectionState(selectedIds: {'text-1'}),
+      ),
+      application: const ApplicationState(
+        view: ViewState(),
+        interaction: TextEditingState(
+          elementId: 'text-1',
+          draftData: textData,
+          rect: initialRect,
+          isNew: false,
+          opacity: 1,
+          rotation: 0,
+        ),
+      ),
+    );
+    final store = DefaultDrawStore(
+      context: context,
+      initialState: initialState,
+    );
+    addTearDown(store.dispose);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: PluginDrawCanvas(size: const Size(320, 240), store: store),
+        ),
+      ),
+    );
+    await tester.pump();
+
+    final keyBefore = _canvasRenderKey(tester);
+
+    await store.dispatch(
+      const UpdateTextEdit(text: 'hello world', rect: updatedRect),
+    );
+    await tester.pump();
+
+    final keyAfter = _canvasRenderKey(tester);
+
+    expect(keyAfter, isNot(equals(keyBefore)));
+  });
 
   testWidgets('plain text editing skips decoration overlay painter', (
     tester,
@@ -313,16 +375,16 @@ bool _hasEditingOverlayPainter(WidgetTester tester) {
   return false;
 }
 
-DynamicCanvasRenderKey _dynamicRenderKey(WidgetTester tester) {
+SceneCanvasRenderKey _canvasRenderKey(WidgetTester tester) {
   for (final paint in tester.widgetList<CustomPaint>(
     find.byType(CustomPaint),
   )) {
     final painter = paint.painter;
-    if (painter is DynamicCanvasPainter) {
+    if (painter is SceneCanvasPainter) {
       return painter.renderKey;
     }
   }
-  throw StateError('DynamicCanvasPainter not found');
+  throw StateError('SceneCanvasPainter not found');
 }
 
 final class _DeterministicTextMetricsService implements TextMetricsService {

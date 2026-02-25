@@ -5,16 +5,27 @@ import '../../models/draw_state.dart';
 import '../../models/edit_session_id.dart';
 import '../../models/interaction_state.dart';
 import '../../services/log/log_service.dart';
+import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
+import '../../types/edit_context.dart';
 import '../../types/edit_operation_id.dart';
 import '../../types/snap_guides.dart';
-import '../edit_operation_registry_interface.dart';
+import '../edit_operations.dart';
 import 'edit_error_handler.dart';
-import 'edit_errors.dart';
 import 'edit_modifiers.dart';
 import 'edit_operation.dart';
 import 'edit_operation_params.dart';
-import 'edit_result_unified.dart';
+import 'edit_result.dart';
+
+typedef _RestoredSession = ({
+  EditOperation operation,
+  EditingState editingState,
+});
+
+typedef _SessionRestoreResult = ({
+  _RestoredSession? session,
+  EditFailureReason? failureReason,
+});
 
 /// Edit action pipeline (route A): keep store-side session handling,
 /// but centralize the orchestration into a small, testable service.
@@ -23,20 +34,24 @@ class EditSessionService {
   EditSessionService({
     required this.editOperations,
     required this.configProvider,
+    this.textMetricsService = defaultTextMetricsService,
     LogService? logService,
   }) : _log = logService?.edit;
 
   factory EditSessionService.fromRegistry(
-    EditOperationRegistry registry, {
+    DefaultEditOperationRegistry registry, {
     required DrawConfig Function() configProvider,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
     LogService? logService,
   }) => EditSessionService(
     editOperations: registry,
     configProvider: configProvider,
+    textMetricsService: textMetricsService,
     logService: logService,
   );
-  final EditOperationRegistry editOperations;
+  final DefaultEditOperationRegistry editOperations;
   final DrawConfig Function() configProvider;
+  final TextMetricsService textMetricsService;
   final ModuleLogger? _log;
 
   // Session API.
@@ -48,7 +63,7 @@ class EditSessionService {
     required EditSessionId sessionId,
   }) {
     if (!state.domain.selection.hasSelection) {
-      return (
+      return EditOutcome(
         state: state,
         failureReason: EditFailureReason.noSelection,
         operationId: operationId,
@@ -57,16 +72,16 @@ class EditSessionService {
 
     final operation = editOperations.getOperation(operationId);
     if (operation == null) {
-      return (
+      return EditOutcome(
         state: state,
         failureReason: EditFailureReason.unknownOperationId,
         operationId: operationId,
       );
     }
 
-    return EditErrorHandlerExtension.runWithErrorHandling(
+    return EditErrorHandler.runWithErrorHandling(
       state: state,
-      config: EditErrorHandlerConfig.keepState,
+      keepStateOnFailure: true,
       fallbackOperationId: operationId,
       operationName: 'startEdit',
       log: _log,
@@ -85,61 +100,72 @@ class EditSessionService {
     required DrawState state,
     required DrawPoint currentPosition,
     EditModifiers modifiers = const EditModifiers(),
-    EditUpdateFailurePolicy failurePolicy = EditUpdateFailurePolicy.toIdle,
-  }) => EditErrorHandlerExtension.runWithErrorHandling(
+  }) => _withRestoredSession(
     state: state,
-    config: _toErrorConfig(failurePolicy),
     operationName: 'updateEdit',
-    log: _log,
-    operation: () {
-      final restored = _restoreOrThrow(state, validateVersions: true);
-      return _performUpdate(
-        state: state,
-        operation: restored.operation,
-        editingState: restored.editingState,
-        currentPosition: currentPosition,
-        modifiers: modifiers,
-      );
-    },
+    validateVersions: true,
+    action: (restored) => _performUpdate(
+      state: state,
+      operation: restored.operation,
+      editingState: restored.editingState,
+      currentPosition: currentPosition,
+      modifiers: modifiers,
+    ),
   );
 
-  EditOutcome finish({required DrawState state}) =>
-      EditErrorHandlerExtension.runWithErrorHandling(
-        state: state,
-        config: EditErrorHandlerConfig.toIdle,
-        operationName: 'finishEdit',
-        log: _log,
-        operation: () {
-          final restored = _restoreOrThrow(state, validateVersions: true);
-          return _performFinish(
-            state: state,
-            operation: restored.operation,
-            editingState: restored.editingState,
-          );
-        },
-      );
+  EditOutcome finish({required DrawState state}) => _withRestoredSession(
+    state: state,
+    operationName: 'finishEdit',
+    validateVersions: true,
+    action: (restored) => _performFinish(
+      state: state,
+      operation: restored.operation,
+      editingState: restored.editingState,
+    ),
+  );
 
-  EditOutcome cancel({required DrawState state}) =>
-      EditErrorHandlerExtension.runWithErrorHandling(
-        state: state,
-        config: EditErrorHandlerConfig.toIdle,
-        operationName: 'cancelEdit',
-        log: _log,
-        operation: () {
-          final restored = _restoreOrThrow(state);
-          return _performCancel(
-            state: state,
-            operation: restored.operation,
-            editingState: restored.editingState,
-          );
-        },
-      );
+  EditOutcome cancel({required DrawState state}) => _withRestoredSession(
+    state: state,
+    operationName: 'cancelEdit',
+    action: (restored) => _performCancel(
+      state: state,
+      operation: restored.operation,
+      editingState: restored.editingState,
+    ),
+  );
 
-  EditErrorHandlerConfig _toErrorConfig(EditUpdateFailurePolicy policy) =>
-      switch (policy) {
-        EditUpdateFailurePolicy.toIdle => EditErrorHandlerConfig.toIdle,
-        EditUpdateFailurePolicy.keepState => EditErrorHandlerConfig.keepState,
-      };
+  EditOutcome _withRestoredSession({
+    required DrawState state,
+    required String operationName,
+    required EditOutcome Function(_RestoredSession restored) action,
+    bool validateVersions = false,
+  }) {
+    final restoration = _restoreSession(
+      state,
+      validateVersions: validateVersions,
+    );
+    final failureReason = restoration.failureReason;
+    if (failureReason != null) {
+      return EditErrorHandler.createFailure(
+        state: state,
+        reason: failureReason,
+      );
+    }
+
+    final restored = restoration.session!;
+    return EditErrorHandler.runWithErrorHandling(
+      state: state,
+      operationName: operationName,
+      log: _log,
+      fallbackOperationId: restored.editingState.operationId,
+      operation: () => action(restored),
+    );
+  }
+
+  EditOutcome _successOutcome({
+    required DrawState state,
+    required EditOperationId operationId,
+  }) => EditOutcome(state: state, operationId: operationId);
 
   EditOutcome _performStart({
     required DrawState state,
@@ -157,12 +183,9 @@ class EditSessionService {
       params: params,
       sessionId: sessionId,
     );
-
-    return (
-      state: state.copyWith(
-        application: state.application.copyWith(interaction: session),
-      ),
-      failureReason: null,
+    final nextApplication = state.application.copyWith(interaction: session);
+    return _successOutcome(
+      state: state.copyWith(application: nextApplication),
       operationId: operationId,
     );
   }
@@ -186,19 +209,18 @@ class EditSessionService {
 
     final transformUnchanged =
         updated.transform == editingState.currentTransform;
-    final guidesUnchanged = _snapGuideListsEqual(
+    final guidesUnchanged = snapGuideListEquals(
       updated.snapGuides,
       editingState.snapGuides,
     );
     if (transformUnchanged && guidesUnchanged) {
-      return (
+      return _successOutcome(
         state: state,
-        failureReason: null,
         operationId: editingState.operationId,
       );
     }
 
-    return (
+    return _successOutcome(
       state: state.copyWith(
         application: state.application.copyWith(
           interaction: editingState.withTransform(
@@ -207,7 +229,6 @@ class EditSessionService {
           ),
         ),
       ),
-      failureReason: null,
       operationId: editingState.operationId,
     );
   }
@@ -218,13 +239,12 @@ class EditSessionService {
     required EditingState editingState,
   }) {
     _log?.info('Edit session finished', {'operationId': operation.id});
-    return (
+    return _successOutcome(
       state: operation.finish(
         state: state,
         context: editingState.context,
         transform: editingState.currentTransform,
       ),
-      failureReason: null,
       operationId: editingState.operationId,
     );
   }
@@ -235,9 +255,8 @@ class EditSessionService {
     required EditingState editingState,
   }) {
     _log?.info('Edit session cancelled', {'operationId': operation.id});
-    return (
+    return _successOutcome(
       state: operation.cancel(state: state),
-      failureReason: null,
       operationId: editingState.operationId,
     );
   }
@@ -254,11 +273,16 @@ class EditSessionService {
       'operationId': operationId,
       'params': params.runtimeType.toString(),
     });
-    final context = operation.createContext(
+    final createdContext = operation.createContext(
       state: state,
       position: position,
       params: params,
     );
+    final context = switch (createdContext) {
+      final ResizeEditContext resizeContext =>
+        resizeContext.withTextMetricsService(textMetricsService),
+      _ => createdContext,
+    };
     final transform = operation.initialTransform(
       state: state,
       context: context,
@@ -272,7 +296,7 @@ class EditSessionService {
     );
   }
 
-  ({EditOperation operation, EditingState editingState}) _restoreOrThrow(
+  _SessionRestoreResult _restoreSession(
     DrawState state, {
     bool validateVersions = false,
   }) {
@@ -281,9 +305,7 @@ class EditSessionService {
       _log?.error('Edit session restore failed', null, null, {
         'reason': 'not_editing',
       });
-      throw const EditSessionRestoreError(
-        failureType: SessionRestoreFailure.notEditing,
-      );
+      return (session: null, failureReason: EditFailureReason.notEditing);
     }
 
     final operation = editOperations.getOperation(interaction.operationId);
@@ -292,62 +314,59 @@ class EditSessionService {
         'operationId': interaction.operationId,
         'reason': 'unknown_operation',
       });
-      throw EditSessionRestoreError(
-        failureType: SessionRestoreFailure.unknownOperation,
-        operationId: interaction.operationId,
+      return (
+        session: null,
+        failureReason: EditFailureReason.unknownOperationId,
       );
     }
 
     if (validateVersions) {
-      _validateVersionOrThrow(editingState: interaction, currentState: state);
+      final versionConflict = _resolveVersionConflict(
+        editingState: interaction,
+        currentState: state,
+      );
+      if (versionConflict case final reason?) {
+        return (session: null, failureReason: reason);
+      }
     }
 
     _log?.trace('Edit session restored', {
       'operationId': interaction.operationId,
       'sessionId': interaction.sessionId,
     });
-    return (operation: operation, editingState: interaction);
+    return (
+      session: (operation: operation, editingState: interaction),
+      failureReason: null,
+    );
   }
 
-  void _validateVersionOrThrow({
+  EditFailureReason? _resolveVersionConflict({
     required EditingState editingState,
     required DrawState currentState,
   }) {
     final context = editingState.context;
-
-    if (context.selectionVersion !=
-        currentState.domain.selection.selectionVersion) {
-      throw EditVersionConflictError(
-        conflictType: 'selection',
-        expectedVersion: context.selectionVersion,
-        actualVersion: currentState.domain.selection.selectionVersion,
-        operationId: editingState.operationId,
-      );
+    final currentSelectionVersion =
+        currentState.domain.selection.selectionVersion;
+    if (context.selectionVersion != currentSelectionVersion) {
+      _log?.warning('Edit session version conflict', {
+        'operationId': editingState.operationId,
+        'type': 'selection',
+        'expected': context.selectionVersion,
+        'actual': currentSelectionVersion,
+      });
+      return EditFailureReason.selectionChanged;
     }
 
-    if (context.elementsVersion !=
-        currentState.domain.document.elementsVersion) {
-      throw EditVersionConflictError(
-        conflictType: 'elements',
-        expectedVersion: context.elementsVersion,
-        actualVersion: currentState.domain.document.elementsVersion,
-        operationId: editingState.operationId,
-      );
+    final currentElementsVersion = currentState.domain.document.elementsVersion;
+    if (context.elementsVersion != currentElementsVersion) {
+      _log?.warning('Edit session version conflict', {
+        'operationId': editingState.operationId,
+        'type': 'elements',
+        'expected': context.elementsVersion,
+        'actual': currentElementsVersion,
+      });
+      return EditFailureReason.elementsChanged;
     }
-  }
-
-  bool _snapGuideListsEqual(List<SnapGuide> a, List<SnapGuide> b) {
-    if (identical(a, b)) {
-      return true;
-    }
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var index = 0; index < a.length; index++) {
-      if (a[index] != b[index]) {
-        return false;
-      }
-    }
-    return true;
+    return null;
   }
 }

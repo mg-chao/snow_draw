@@ -23,8 +23,6 @@ import 'package:snow_draw_core/draw/types/element_style.dart';
 import 'package:snow_draw_core/draw/utils/combined_element_lookup.dart';
 
 void main() {
-  setUp(ArrowBindingResolver.instance.invalidate);
-
   test(
     'moving elbow arrow clears bindings and stops follow-up binding updates',
     () {
@@ -137,7 +135,6 @@ void main() {
         baseElements: movedState.domain.document.elementMap,
         updatedElements: {target.id: movedTarget},
         changedElementIds: {target.id},
-        document: movedState.domain.document,
       );
       expect(bindingUpdates.containsKey('arrow'), isFalse);
     },
@@ -210,7 +207,6 @@ void main() {
       baseElements: movedState.domain.document.elementMap,
       updatedElements: {target.id: movedTarget},
       changedElementIds: {target.id},
-      document: movedState.domain.document,
     );
     expect(bindingUpdates.containsKey('arrow'), isFalse);
   });

@@ -3,6 +3,7 @@ import '../../models/draw_state.dart';
 import '../../types/draw_point.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
+import '../pointer_update_guard.dart';
 
 /// Plugin that manages edit sessions (move/resize/rotate).
 class EditPlugin extends DrawInputPlugin {
@@ -20,8 +21,7 @@ class EditPlugin extends DrawInputPlugin {
         },
       );
   final InputRoutingPolicy _routingPolicy;
-  DrawPoint? _lastUpdatePosition;
-  KeyModifiers? _lastUpdateModifiers;
+  final _updateGuard = PointerUpdateGuard();
 
   @override
   bool canHandle(InputEvent _, DrawState state) => state.application.isEditing;
@@ -89,22 +89,8 @@ class EditPlugin extends DrawInputPlugin {
     return consumed(message: 'Edit canceled');
   }
 
-  bool _shouldDispatchUpdate(DrawPoint position, KeyModifiers modifiers) {
-    final previous = _lastUpdatePosition;
-    if (previous != null &&
-        previous.x == position.x &&
-        previous.y == position.y &&
-        _lastUpdateModifiers == modifiers) {
-      return false;
-    }
+  bool _shouldDispatchUpdate(DrawPoint position, KeyModifiers modifiers) =>
+      _updateGuard.shouldDispatch(position: position, modifiers: modifiers);
 
-    _lastUpdatePosition = position;
-    _lastUpdateModifiers = modifiers;
-    return true;
-  }
-
-  void _clearUpdateSignature() {
-    _lastUpdatePosition = null;
-    _lastUpdateModifiers = null;
-  }
+  void _clearUpdateSignature() => _updateGuard.reset();
 }

@@ -3,16 +3,33 @@ import 'package:snow_draw_core/snow_draw_core.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/render_keys.dart';
 
 void main() {
-  group('DynamicCanvasRenderKey', () {
-    test('delete indicator visibility participates in equality', () {
+  group('SceneCanvasRenderKey', () {
+    test('document elements version participates in equality', () {
       final registry = DefaultElementRegistry();
-      final hidden = _buildDynamicRenderKey(
+      final first = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
+        framePlan: FrameRenderPlan.empty,
+        documentElementsVersion: 7,
       );
-      final visible = _buildDynamicRenderKey(
+      final second = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: true,
+        framePlan: FrameRenderPlan.empty,
+        documentElementsVersion: 8,
+      );
+
+      expect(first, isNot(second));
+      expect(first.hashCode, isNot(second.hashCode));
+    });
+
+    test('frame plan differences participate in equality', () {
+      final registry = DefaultElementRegistry();
+      final hidden = _buildCanvasRenderKey(
+        registry: registry,
+        framePlan: _arrowOverlayFramePlan(deleteIndicatorVisible: false),
+      );
+      final visible = _buildCanvasRenderKey(
+        registry: registry,
+        framePlan: _arrowOverlayFramePlan(deleteIndicatorVisible: true),
       );
 
       expect(hidden, isNot(visible));
@@ -21,14 +38,14 @@ void main() {
 
     test('creating element revision participates in equality', () {
       final registry = DefaultElementRegistry();
-      final first = _buildDynamicRenderKey(
+      final first = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
+        framePlan: FrameRenderPlan.empty,
         creatingElement: _creatingElementSnapshot(revision: 1),
       );
-      final second = _buildDynamicRenderKey(
+      final second = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
+        framePlan: FrameRenderPlan.empty,
         creatingElement: _creatingElementSnapshot(revision: 2),
       );
 
@@ -36,112 +53,79 @@ void main() {
       expect(first.hashCode, isNot(second.hashCode));
     });
 
-    test('optimized dynamic ids participate in equality', () {
+    test('preview map content participates in equality', () {
       final registry = DefaultElementRegistry();
-      final baseline = _buildDynamicRenderKey(
+      final baseline = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
+        framePlan: FrameRenderPlan.empty,
       );
-      final optimized = _buildDynamicRenderKey(
+      final withPreview = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        optimizedDynamicElementIds: {'line-1'},
+        framePlan: FrameRenderPlan.empty,
+        previewElementsById: const {
+          'line-1': ElementState(
+            id: 'line-1',
+            rect: DrawRect(maxX: 20, maxY: 20),
+            rotation: 0,
+            opacity: 1,
+            zIndex: 0,
+            data: LineData(),
+          ),
+        },
       );
 
-      expect(baseline, isNot(optimized));
-      expect(baseline.hashCode, isNot(optimized.hashCode));
+      expect(baseline, isNot(withPreview));
+      expect(baseline.hashCode, isNot(withPreview.hashCode));
     });
 
-    test('optimized occluder hint participates in equality', () {
+    test('captures preview map snapshot to avoid mutable-key regressions', () {
       final registry = DefaultElementRegistry();
-      final baseline = _buildDynamicRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        optimizedDynamicElementIds: {'line-1'},
-      );
-      final withOccluders = _buildDynamicRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        optimizedDynamicElementIds: {'line-1'},
-        optimizedSceneHasPotentialOccluders: true,
-      );
+      final mutablePreview = <String, ElementState>{
+        'line-1': const ElementState(
+          id: 'line-1',
+          rect: DrawRect(maxX: 20, maxY: 20),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 0,
+          data: LineData(),
+        ),
+      };
 
-      expect(baseline, isNot(withOccluders));
-      expect(baseline.hashCode, isNot(withOccluders.hashCode));
-    });
-
-    test('preview revision participates with map-identity fast path', () {
-      final registry = DefaultElementRegistry();
-      final sharedPreviewMap = <String, ElementState>{};
-      final first = _buildDynamicRenderKey(
+      final firstKey = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        previewElementsById: sharedPreviewMap,
-        previewElementsRevision: 1,
+        framePlan: FrameRenderPlan.empty,
+        previewElementsById: mutablePreview,
       );
-      sharedPreviewMap['preview-1'] = const ElementState(
-        id: 'preview-1',
-        rect: DrawRect(maxX: 20, maxY: 20),
+      mutablePreview['line-2'] = const ElementState(
+        id: 'line-2',
+        rect: DrawRect(maxX: 24, maxY: 24),
         rotation: 0,
-        opacity: 0.5,
-        zIndex: 0,
-        data: FreeDrawData(),
+        opacity: 1,
+        zIndex: 1,
+        data: LineData(),
       );
-      final second = _buildDynamicRenderKey(
+      final secondKey = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        previewElementsById: sharedPreviewMap,
-        previewElementsRevision: 2,
+        framePlan: FrameRenderPlan.empty,
+        previewElementsById: mutablePreview,
       );
 
-      expect(first, isNot(second));
-      expect(first.hashCode, isNot(second.hashCode));
+      expect(firstKey.previewElementsById.containsKey('line-2'), isFalse);
+      expect(firstKey, isNot(secondKey));
+      expect(firstKey.hashCode, isNot(secondKey.hashCode));
     });
 
-    test('preview revision requires identical preview map identity', () {
+    test('watermark task differences participate in equality', () {
       final registry = DefaultElementRegistry();
-      final first = _buildDynamicRenderKey(
+      final baseline = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        previewElementsById: <String, ElementState>{},
-        previewElementsRevision: 9,
+        framePlan: _watermarkFramePlan(const WatermarkConfig()),
       );
-      final second = _buildDynamicRenderKey(
+      final changedWatermark = _buildCanvasRenderKey(
         registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        previewElementsById: <String, ElementState>{},
-        previewElementsRevision: 9,
-      );
-
-      expect(first, isNot(second));
-    });
-
-    test('dynamic preview hint does not affect equality', () {
-      final registry = DefaultElementRegistry();
-      final baseline = _buildDynamicRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-      );
-      final hinted = _buildDynamicRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        dynamicPreviewElementIds: {'line-1'},
-      );
-
-      expect(baseline, hinted);
-      expect(baseline.hashCode, hinted.hashCode);
-    });
-
-    test('watermark config participates in equality', () {
-      final registry = DefaultElementRegistry();
-      final baseline = _buildDynamicRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-      );
-      final changedWatermark = _buildDynamicRenderKey(
-        registry: registry,
-        arrowDeleteIndicatorVisible: false,
-        watermarkConfig: const WatermarkConfig(text: 'CONFIDENTIAL'),
+        framePlan: _watermarkFramePlan(
+          const WatermarkConfig(text: 'CONFIDENTIAL'),
+        ),
       );
 
       expect(baseline, isNot(changedWatermark));
@@ -150,48 +134,20 @@ void main() {
   });
 }
 
-DynamicCanvasRenderKey _buildDynamicRenderKey({
+SceneCanvasRenderKey _buildCanvasRenderKey({
   required DefaultElementRegistry registry,
-  required bool arrowDeleteIndicatorVisible,
+  required FrameRenderPlan framePlan,
   CreatingElementSnapshot? creatingElement,
-  Set<String> optimizedDynamicElementIds = const <String>{},
+  int documentElementsVersion = 0,
   Map<String, ElementState> previewElementsById = const {},
-  int? previewElementsRevision,
-  Set<String>? dynamicPreviewElementIds,
-  bool optimizedSceneHasPotentialOccluders = false,
-  WatermarkConfig? watermarkConfig,
-}) => DynamicCanvasRenderKey(
+}) => SceneCanvasRenderKey(
+  documentElementsVersion: documentElementsVersion,
   creatingElement: creatingElement,
-  effectiveSelection: EffectiveSelection.none,
-  boxSelectionBounds: null,
-  selectedIds: const <String>{},
-  hoveredElementId: null,
-  hoveredBindingElementId: null,
-  hoveredArrowHandle: null,
-  activeArrowHandle: null,
-  arrowDeleteIndicatorVisible: arrowDeleteIndicatorVisible,
-  hoverSelectionConfig: const SelectionConfig(),
-  snapGuides: const [],
-  documentVersion: 1,
   textRenderingCacheRevision: 0,
-  camera: CameraState.initial,
   previewElementsById: previewElementsById,
-  previewElementsRevision: previewElementsRevision,
-  dynamicPreviewElementIds: dynamicPreviewElementIds,
-  optimizedDynamicElementIds: optimizedDynamicElementIds,
-  optimizedSceneHasPotentialOccluders: optimizedSceneHasPotentialOccluders,
-  scaleFactor: 1,
-  selectionConfig: const SelectionConfig(),
-  boxSelectionConfig: const BoxSelectionConfig(),
-  snapConfig: const SnapConfig(),
-  canvasConfig: const CanvasConfig(),
-  gridConfig: const GridConfig(),
-  isHighlightMaskVisible: false,
-  highlightMaskConfig: const HighlightMaskConfig(),
-  isWatermarkVisible: false,
-  watermarkConfig: watermarkConfig ?? const WatermarkConfig(),
   elementRegistry: registry,
   performanceMonitoringEnabled: false,
+  framePlan: framePlan,
 );
 
 CreatingElementSnapshot _creatingElementSnapshot({required int revision}) =>
@@ -207,3 +163,30 @@ CreatingElementSnapshot _creatingElementSnapshot({required int revision}) =>
       currentRect: const DrawRect(maxX: 10, maxY: 10),
       creationRevision: revision,
     );
+
+FrameRenderPlan _arrowOverlayFramePlan({
+  required bool deleteIndicatorVisible,
+}) => FrameRenderPlan(
+  tasks: <FrameRenderTask>[
+    ArrowPointOverlayRenderTask(
+      handles: const <ArrowPointHandle>[
+        ArrowPointHandle(
+          elementId: 'arrow-1',
+          kind: ArrowPointKind.turning,
+          index: 0,
+          position: DrawPoint(x: 12, y: 16),
+        ),
+      ],
+      selectionConfig: const SelectionConfig(),
+      deleteIndicatorVisible: deleteIndicatorVisible,
+    ),
+  ],
+  camera: CameraState.initial,
+  scaleFactor: 1,
+);
+
+FrameRenderPlan _watermarkFramePlan(WatermarkConfig config) => FrameRenderPlan(
+  tasks: <FrameRenderTask>[WatermarkRenderTask(config: config)],
+  camera: CameraState.initial,
+  scaleFactor: 1,
+);

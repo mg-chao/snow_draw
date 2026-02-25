@@ -1,8 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
-import '../../edit/core/edit_modifiers.dart';
+import '../../core/draw_context.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
 import '../../models/draw_state.dart';
@@ -21,8 +20,6 @@ import 'text/text_edit_reducer.dart';
 /// Responsibilities:
 /// 1. Dispatch actions to sub-reducers in priority order
 /// 2. Coordinate state transitions across subsystems
-///
-/// Returns explicit transition events from reducers.
 @immutable
 class InteractionStateMachine {
   const InteractionStateMachine();
@@ -31,35 +28,23 @@ class InteractionStateMachine {
   InteractionTransition reduce({
     required DrawState state,
     required DrawAction action,
-    required InteractionReducerDeps context,
+    required DrawContext context,
     required EditSessionService editSessionService,
     required EditSessionIdGenerator sessionIdGenerator,
-    EditUpdateFailurePolicy updateFailurePolicy =
-        EditUpdateFailurePolicy.toIdle,
   }) {
-    final resolvedAction = _resolveEditIntentAction(action, context);
-    if (resolvedAction == null) {
-      return InteractionTransition.unchanged(state);
-    }
-
     // 1) Edit operations.
-    final editReducer = EditStateReducer(
+    final editResult = reduceEditState(
+      state: state,
+      action: action,
       editSessionService: editSessionService,
       sessionIdGenerator: sessionIdGenerator,
-      updateFailurePolicy: updateFailurePolicy,
-    );
-
-    final editResult = editReducer.reduce(
-      state: state,
-      action: resolvedAction,
-      context: context,
     );
     if (editResult != null) {
       return editResult;
     }
 
     // 2) Other interaction and domain reducers.
-    final reduced = reduceState(state, resolvedAction, context);
+    final reduced = reduceState(state, action, context);
     if (reduced != null) {
       return InteractionTransition(nextState: reduced);
     }
@@ -73,7 +58,7 @@ class InteractionStateMachine {
   DrawState? reduceState(
     DrawState state,
     DrawAction action,
-    InteractionReducerDeps context,
+    DrawContext context,
   ) =>
       _pendingReducer.reduce(state, action) ??
       _boxSelectReducer.reduce(state, action) ??
@@ -90,25 +75,3 @@ const _createReducer = CreateElementReducer();
 const _textEditReducer = TextEditReducer();
 
 const interactionStateMachine = InteractionStateMachine();
-
-@immutable
-class HistoryAvailability {
-  const HistoryAvailability({this.canUndo = true, this.canRedo = true});
-  final bool canUndo;
-  final bool canRedo;
-}
-
-DrawAction? _resolveEditIntentAction(
-  DrawAction action,
-  EditIntentResolverDeps context,
-) {
-  if (action is! EditIntentAction) {
-    return action;
-  }
-  return context.editIntentMapper.mapToStartEdit(
-    intent: action.intent,
-    position: action.position,
-    modifiers: action.modifiers,
-    editOperations: context.editOperations,
-  );
-}

@@ -11,11 +11,6 @@ abstract interface class Middleware {
   /// Executes middleware logic for [context].
   Future<DispatchContext> invoke(DispatchContext context, NextFunction next);
 
-  /// Returns whether this middleware should run for [context].
-  ///
-  /// Override to conditionally skip execution.
-  bool shouldExecute(DispatchContext context) => true;
-
   /// Priority used for middleware ordering (higher runs first).
   ///
   /// Override to change ordering in the pipeline.
@@ -28,9 +23,6 @@ abstract interface class Middleware {
 /// Base middleware that provides default optional behavior.
 abstract class MiddlewareBase implements Middleware {
   const MiddlewareBase();
-
-  @override
-  bool shouldExecute(DispatchContext context) => true;
 
   @override
   int get priority => 0;

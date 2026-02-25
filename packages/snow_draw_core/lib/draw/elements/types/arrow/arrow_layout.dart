@@ -17,6 +17,12 @@ final class ArrowRectAndPoints {
   final List<DrawPoint> localPoints;
 }
 
+/// Result of recomputing element geometry from edited arrow points.
+typedef ArrowGeometryUpdate = ({
+  DrawRect rect,
+  List<DrawPoint> normalizedPoints,
+});
+
 /// Computes the new rect and transforms points to preserve world-space
 /// positions.
 ///
@@ -81,6 +87,28 @@ ArrowRectAndPoints computeArrowRectAndPoints({
   );
 
   return ArrowRectAndPoints(rect: newRect, localPoints: newLocalPoints);
+}
+
+/// Recomputes rect + normalized points after arrow local points changed.
+ArrowGeometryUpdate resolveArrowGeometryUpdate({
+  required List<DrawPoint> localPoints,
+  required DrawRect oldRect,
+  required double rotation,
+  required ArrowType arrowType,
+}) {
+  final result = computeArrowRectAndPoints(
+    localPoints: localPoints,
+    oldRect: oldRect,
+    rotation: rotation,
+    arrowType: arrowType,
+  );
+  return (
+    rect: result.rect,
+    normalizedPoints: ArrowGeometry.normalizePoints(
+      worldPoints: result.localPoints,
+      rect: result.rect,
+    ),
+  );
 }
 
 DrawRect _calculatePathBounds({

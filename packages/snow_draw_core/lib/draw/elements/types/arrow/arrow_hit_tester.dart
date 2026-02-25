@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -37,7 +36,10 @@ class ArrowHitTester implements ElementHitTester {
       return false;
     }
 
-    final localPosition = _toLocalPosition(element, position);
+    final localPosition = resolveElementLocalPosition(
+      element: element,
+      position: position,
+    );
     final rect = element.rect;
     final radius = (data.strokeWidth / 2) + tolerance;
     final boundsPadding = radius + _arrowheadExtent(data);
@@ -62,15 +64,6 @@ class ArrowHitTester implements ElementHitTester {
       radius,
       radiusSq,
     );
-  }
-
-  DrawPoint _toLocalPosition(ElementState element, DrawPoint position) {
-    if (element.rotation == 0) {
-      return position;
-    }
-    final rect = element.rect;
-    final space = ElementSpace(rotation: element.rotation, origin: rect.center);
-    return space.fromWorld(position);
   }
 
   bool _hitTestSegments(

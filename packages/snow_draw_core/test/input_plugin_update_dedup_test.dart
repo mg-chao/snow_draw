@@ -85,7 +85,8 @@ void main() {
         );
 
         final batched = dispatched
-            .whereType<UpdateCreatingElementBatch>()
+            .whereType<UpdateCreatingElement>()
+            .where((action) => action.isBatch)
             .toList();
         expect(batched, hasLength(1));
         expect(batched.single.positions, hasLength(3));
@@ -93,7 +94,12 @@ void main() {
           batched.single.positions.map((point) => point.x).toList(),
           equals(const [14.0, 20.0, 26.0]),
         );
-        expect(dispatched.whereType<UpdateCreatingElement>(), isEmpty);
+        expect(
+          dispatched.whereType<UpdateCreatingElement>().where(
+            (action) => !action.isBatch,
+          ),
+          isEmpty,
+        );
 
         await plugin.onUnload();
       },
@@ -127,7 +133,8 @@ void main() {
         );
 
         final batched = dispatched
-            .whereType<UpdateCreatingElementBatch>()
+            .whereType<UpdateCreatingElement>()
+            .where((action) => action.isBatch)
             .toList();
         expect(batched, hasLength(1));
         expect(batched.single.positions.length, lessThanOrEqualTo(96));

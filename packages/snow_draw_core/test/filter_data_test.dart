@@ -4,8 +4,11 @@ import 'package:snow_draw_core/draw/elements/types/filter/filter_data.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
-  test('FilterData.fromJson uses defaults', () {
-    expect(FilterData.fromJson(const {}), const FilterData());
+  test('FilterData.fromJson requires canonical payload fields', () {
+    expect(
+      () => FilterData.fromJson(const {}),
+      throwsA(anyOf(isA<TypeError>(), isA<FormatException>())),
+    );
   });
 
   test('FilterData.withElementStyle applies filter fields', () {
@@ -38,8 +41,14 @@ void main() {
     expect(const FilterData(strength: double.nan).strength, 1);
   });
 
-  test('FilterData.fromJson normalizes out-of-range strengths', () {
-    expect(FilterData.fromJson(const {'strength': -0.5}).strength, 0);
-    expect(FilterData.fromJson(const {'strength': 1.5}).strength, 1);
+  test('FilterData.fromJson still normalizes out-of-range strengths', () {
+    expect(
+      FilterData.fromJson(const {'type': 'mosaic', 'strength': -0.5}).strength,
+      0,
+    );
+    expect(
+      FilterData.fromJson(const {'type': 'mosaic', 'strength': 1.5}).strength,
+      1,
+    );
   });
 }

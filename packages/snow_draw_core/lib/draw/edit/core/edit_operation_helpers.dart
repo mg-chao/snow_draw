@@ -6,17 +6,14 @@ import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/edit_transform.dart';
 import '../../types/element_geometry.dart';
+import '../../utils/selection_calculator.dart';
+import '../../utils/visible_elements.dart';
 import '../preview/edit_preview.dart';
 import 'edit_errors.dart';
 import 'edit_operation_params.dart';
 
-List<ElementState> snapshotSelectedElements(DrawState state) {
-  final document = state.domain.document;
-  return state.domain.selection.selectedIds
-      .map(document.getElementById)
-      .whereType<ElementState>()
-      .toList();
-}
+List<ElementState> snapshotSelectedElements(DrawState state) =>
+    SelectionCalculator.getSelectedElements(state);
 
 DrawRect requireSelectionBounds({
   required SelectionDerivedData selectionData,
@@ -132,11 +129,10 @@ P requireParams<P extends EditOperationParams>(
 List<ElementState> resolveReferenceElements(
   DrawState state,
   Set<String> selectedIds,
-) => state.domain.document.elements
-    .where(
-      (element) => element.opacity > 0 && !selectedIds.contains(element.id),
-    )
-    .toList();
+) => resolveVisibleElements(
+  state.domain.document.elements,
+  excludedIds: selectedIds,
+);
 
 /// Common context-creation data shared by standard operations.
 ///
@@ -149,6 +145,7 @@ class StandardContextData<S> {
     required this.selectedIds,
     required this.selectionVersion,
     required this.elementsVersion,
+    required this.selectedElements,
     required this.elementSnapshots,
   });
 
@@ -156,6 +153,7 @@ class StandardContextData<S> {
   final Set<String> selectedIds;
   final int selectionVersion;
   final int elementsVersion;
+  final List<ElementState> selectedElements;
   final Map<String, S> elementSnapshots;
 }
 
@@ -165,20 +163,22 @@ StandardContextData<S> gatherStandardContextData<S>({
   required String operationName,
   required S Function(ElementState) toSnapshot,
   DrawRect? initialSelectionBounds,
+  SelectionDerivedData? selectionData,
 }) {
+  final resolvedSelectionData =
+      selectionData ?? SelectionDataComputer.compute(state);
+  final selectedElements = snapshotSelectedElements(state);
   final selection = state.domain.selection;
   return StandardContextData<S>(
     startBounds: requireSelectionBounds(
-      selectionData: SelectionDataComputer.compute(state),
+      selectionData: resolvedSelectionData,
       initialSelectionBounds: initialSelectionBounds,
       operationName: operationName,
     ),
     selectedIds: {...selection.selectedIds},
     selectionVersion: selection.selectionVersion,
     elementsVersion: state.domain.document.elementsVersion,
-    elementSnapshots: buildSnapshots(
-      snapshotSelectedElements(state),
-      toSnapshot,
-    ),
+    selectedElements: List<ElementState>.unmodifiable(selectedElements),
+    elementSnapshots: buildSnapshots(selectedElements, toSnapshot),
   );
 }

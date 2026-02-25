@@ -1,12 +1,13 @@
 import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
-import '../elements/core/element_registry_interface.dart';
+import '../elements/core/element_registry.dart';
 import '../elements/core/element_type_id.dart';
 import '../elements/types/arrow/arrow_like_data.dart';
 import '../elements/types/arrow/arrow_points.dart';
 import '../models/draw_state_view.dart';
 import '../types/draw_point.dart';
 import '../types/resize_mode.dart';
+import 'arrow_point_metrics.dart';
 import 'hit_test.dart';
 
 /// Edit intent detector.
@@ -29,7 +30,7 @@ class EditIntentDetector {
     required DrawPoint position,
     required bool isShiftPressed,
     required SelectionConfig config,
-    required ElementRegistry registry,
+    required DefaultElementRegistry registry,
     ElementTypeId<ElementData>? filterTypeId,
   }) {
     final arrowPointIntent = _detectArrowPointIntent(
@@ -158,11 +159,10 @@ class EditIntentDetector {
     }
 
     final hitRadius = config.interaction.handleTolerance;
-    // Apply multiplier for arrow point handles to make them larger
-    final handleSize =
-        config.render.controlPointSize *
-        ConfigDefaults.arrowPointSizeMultiplier;
-    final loopThreshold = hitRadius * 1.5;
+    final handleSize = resolveArrowPointHandleSize(
+      config.render.controlPointSize,
+    );
+    final loopThreshold = resolveArrowPointLoopThreshold(hitRadius);
     final handle = ArrowPointUtils.hitTest(
       element: stateView.effectiveElement(element),
       position: position,
@@ -220,9 +220,9 @@ final class StartMoveIntent extends EditIntent {
 }
 
 final class StartResizeIntent extends EditIntent {
-  const StartResizeIntent({required this.mode, this.selectionPadding});
+  const StartResizeIntent({required this.mode, required this.selectionPadding});
   final ResizeMode mode;
-  final double? selectionPadding;
+  final double selectionPadding;
 
   @override
   String toString() =>

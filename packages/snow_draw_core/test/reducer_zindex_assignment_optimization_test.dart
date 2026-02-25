@@ -192,9 +192,7 @@ void main() {
 
         final before = store.state;
 
-        await store.dispatch(
-          const UpdateCreatingElement(currentPosition: start),
-        );
+        await store.dispatch(UpdateCreatingElement(positions: const [start]));
 
         expect(store.state, same(before));
         expect(store.state.application.interaction, isA<CreatingState>());

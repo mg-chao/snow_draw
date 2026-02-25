@@ -7,7 +7,6 @@ import '../../../elements/core/creation_strategy.dart';
 import '../../../elements/core/element_data.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/interaction_state.dart';
-import '../../../services/grid_snap_service.dart';
 import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -25,7 +24,8 @@ import 'free_draw_data.dart';
 /// avoids the previous O(n) normalize -> copy -> re-render loop on every
 /// pointer event.
 ///
-/// Normalization is now performed once at finish time.
+/// Normalization is performed once at finish time and produces the final
+/// persisted free-draw points used by render/hit-test paths.
 @immutable
 class FreeDrawCreationStrategy extends CreationStrategy {
   const FreeDrawCreationStrategy();
@@ -45,28 +45,20 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required DrawPoint startPosition,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    if (data is! FreeDrawData) {
-      return CreationUpdateResult(
-        data: data,
-        rect: DrawRect(
-          minX: startPosition.x,
-          minY: startPosition.y,
-          maxX: startPosition.x,
-          maxY: startPosition.y,
-        ),
-        creationMode: const RectCreationMode(),
-      );
-    }
+    final freeDrawData = requireCreationDataType<FreeDrawData>(
+      data: data,
+      strategyName: 'FreeDrawCreationStrategy.start',
+    );
 
     final points = <DrawPoint>[startPosition, startPosition];
     final previewPoints = _resolvePreviewPointsIfNeeded(
-      strokeStyle: data.strokeStyle,
+      strokeStyle: freeDrawData.strokeStyle,
       worldPoints: points,
     );
 
     return CreationUpdateResult(
       // Keep element data stable during creation; normalize once in finish().
-      data: data,
+      data: freeDrawData,
       rect: _boundsFromPoints(points),
       creationMode: FreeDrawCreationMode(
         worldPoints: points,
@@ -86,16 +78,12 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required SnappingMode snappingMode,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final elementData = creatingState.elementData;
-    if (elementData is! FreeDrawData) {
-      return CreationUpdateResult(
-        data: elementData,
-        rect: creatingState.currentRect,
-        creationMode: creatingState.creationMode,
-      );
-    }
+    final elementData = requireCreatingElementDataType<FreeDrawData>(
+      creatingState: creatingState,
+      strategyName: 'FreeDrawCreationStrategy.update',
+    );
 
-    final adjustedPosition = _snapPointIfNeeded(
+    final adjustedPosition = snapCreationPoint(
       point: currentPosition,
       config: config,
       snappingMode: snappingMode,
@@ -156,11 +144,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       );
       if (pointMutation.hasChange) {
         if (previewPoints != null && pointMutation.appendedPoint != null) {
-          _appendPreviewPoint(
-            previewPoints,
-            pointMutation.appendedPoint!,
-            moveTo: worldPoints.length == 1,
-          );
+          _appendPreviewPoint(previewPoints, pointMutation.appendedPoint!);
         }
         previewChanged = true;
       }
@@ -227,19 +211,10 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       );
     }
 
-    final elementData = creatingState.elementData;
-    if (elementData is! FreeDrawData) {
-      return super.updateBatch(
-        state: state,
-        config: config,
-        creatingState: creatingState,
-        positions: positions,
-        maintainAspectRatio: maintainAspectRatio,
-        createFromCenter: createFromCenter,
-        snappingMode: snappingMode,
-        textMetricsService: textMetricsService,
-      );
-    }
+    final elementData = requireCreatingElementDataType<FreeDrawData>(
+      creatingState: creatingState,
+      strategyName: 'FreeDrawCreationStrategy.updateBatch',
+    );
 
     final mode = _resolveFreeDrawMode(creatingState.creationMode);
     final worldPoints = _resolveCreationWorldPoints(
@@ -268,7 +243,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     }
 
     for (final rawPosition in positions) {
-      final adjustedPosition = _snapPointIfNeeded(
+      final adjustedPosition = snapCreationPoint(
         point: rawPosition,
         config: config,
         snappingMode: snappingMode,
@@ -283,11 +258,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         continue;
       }
       if (previewPoints != null && pointMutation.appendedPoint != null) {
-        _appendPreviewPoint(
-          previewPoints,
-          pointMutation.appendedPoint!,
-          moveTo: worldPoints.length == 1,
-        );
+        _appendPreviewPoint(previewPoints, pointMutation.appendedPoint!);
       }
       final changedPoint = pointMutation.changedPoint;
       if (changedPoint != null) {
@@ -325,14 +296,10 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required CreatingState creatingState,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final data = creatingState.elementData;
-    if (data is! FreeDrawData) {
-      return CreationFinishResult(
-        data: data,
-        rect: creatingState.currentRect,
-        shouldCommit: false,
-      );
-    }
+    final data = requireCreatingElementDataType<FreeDrawData>(
+      creatingState: creatingState,
+      strategyName: 'FreeDrawCreationStrategy.finish',
+    );
 
     final mode = _resolveFreeDrawMode(creatingState.creationMode);
     final worldPoints = _resolveCreationWorldPoints(
@@ -371,9 +338,11 @@ class FreeDrawCreationStrategy extends CreationStrategy {
       worldPoints: points,
       rect: rect,
     );
+    final baked = _buildBakedNormalizedPoints(worldPoints: points, rect: rect);
+    final finalizedPoints = baked ?? normalized;
 
     return CreationFinishResult(
-      data: data.copyWith(points: normalized),
+      data: data.copyWith(points: finalizedPoints),
       rect: rect,
       shouldCommit: true,
     );
@@ -465,24 +434,16 @@ class FreeDrawCreationMode extends CreationMode {
 FreeDrawCreationMode _resolveFreeDrawMode(CreationMode mode) =>
     mode is FreeDrawCreationMode ? mode : const FreeDrawCreationMode();
 
-DrawPoint _snapPointIfNeeded({
-  required DrawPoint point,
-  required DrawConfig config,
-  required SnappingMode snappingMode,
-}) {
-  if (snappingMode != SnappingMode.grid) {
-    return point;
-  }
-  return gridSnapService.snapPoint(point: point, gridSize: config.grid.size);
-}
-
 List<DrawPoint> _resolveCreationWorldPoints({
   required FreeDrawCreationMode mode,
   required DrawRect rect,
   required List<DrawPoint> normalizedPoints,
 }) =>
     mode.worldPoints ??
-    _resolveWorldPoints(rect: rect, normalizedPoints: normalizedPoints);
+    ArrowGeometry.resolveWorldPoints(
+      rect: rect,
+      normalizedPoints: normalizedPoints,
+    );
 
 List<DrawPoint>? _resolvePreviewPointsIfNeeded({
   required List<DrawPoint> worldPoints,
@@ -492,65 +453,14 @@ List<DrawPoint>? _resolvePreviewPointsIfNeeded({
   if (strokeStyle == StrokeStyle.solid) {
     return null;
   }
-  return existingPoints ?? _buildPreviewPoints(worldPoints);
+  return existingPoints ?? List<DrawPoint>.from(worldPoints);
 }
 
-List<DrawPoint> _resolveWorldPoints({
-  required DrawRect rect,
-  required List<DrawPoint> normalizedPoints,
-}) {
-  return ArrowGeometry.resolveWorldPoints(
-    rect: rect,
-    normalizedPoints: normalizedPoints,
-  );
-}
-
-List<DrawPoint> _buildPreviewPoints(List<DrawPoint> worldPoints) {
-  if (worldPoints.isEmpty) {
-    return <DrawPoint>[];
-  }
-  return List<DrawPoint>.from(worldPoints);
-}
-
-void _appendPreviewPoint(
-  List<DrawPoint> previewPoints,
-  DrawPoint point, {
-  bool moveTo = false,
-}) {
-  if (moveTo) {
+void _appendPreviewPoint(List<DrawPoint> previewPoints, DrawPoint point) =>
     previewPoints.add(point);
-    return;
-  }
-  previewPoints.add(point);
-}
 
-DrawRect _boundsFromPoints(List<DrawPoint> points) {
-  if (points.isEmpty) {
-    return const DrawRect();
-  }
-
-  var minX = points.first.x;
-  var maxX = points.first.x;
-  var minY = points.first.y;
-  var maxY = points.first.y;
-
-  for (final point in points.skip(1)) {
-    if (point.x < minX) {
-      minX = point.x;
-    }
-    if (point.x > maxX) {
-      maxX = point.x;
-    }
-    if (point.y < minY) {
-      minY = point.y;
-    }
-    if (point.y > maxY) {
-      maxY = point.y;
-    }
-  }
-
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-}
+DrawRect _boundsFromPoints(List<DrawPoint> points) =>
+    DrawRect.fromPointCloud(points);
 
 /// Expands [current] to include the last two points of [points].
 DrawRect _expandBounds(DrawRect current, List<DrawPoint> points) {
@@ -558,52 +468,12 @@ DrawRect _expandBounds(DrawRect current, List<DrawPoint> points) {
     return current;
   }
 
-  var minX = current.minX;
-  var maxX = current.maxX;
-  var minY = current.minY;
-  var maxY = current.maxY;
-
   final start = points.length > 2 ? points.length - 2 : 0;
-  for (var i = start; i < points.length; i++) {
-    final point = points[i];
-    if (point.x < minX) {
-      minX = point.x;
-    }
-    if (point.x > maxX) {
-      maxX = point.x;
-    }
-    if (point.y < minY) {
-      minY = point.y;
-    }
-    if (point.y > maxY) {
-      maxY = point.y;
-    }
-  }
-
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  return current.expandToIncludeAll(points.skip(start));
 }
 
-DrawRect _expandBoundsWithPoint(DrawRect current, DrawPoint point) {
-  var minX = current.minX;
-  var maxX = current.maxX;
-  var minY = current.minY;
-  var maxY = current.maxY;
-
-  if (point.x < minX) {
-    minX = point.x;
-  }
-  if (point.x > maxX) {
-    maxX = point.x;
-  }
-  if (point.y < minY) {
-    minY = point.y;
-  }
-  if (point.y > maxY) {
-    maxY = point.y;
-  }
-
-  return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-}
+DrawRect _expandBoundsWithPoint(DrawRect current, DrawPoint point) =>
+    current.expandToInclude(point);
 
 List<DrawPoint> _removeAdjacentDuplicates(List<DrawPoint> points) {
   if (points.length <= 1) {
@@ -653,6 +523,94 @@ double _pathLength(List<DrawPoint> points) {
   }
   return length;
 }
+
+List<DrawPoint>? _buildBakedNormalizedPoints({
+  required List<DrawPoint> worldPoints,
+  required DrawRect rect,
+}) {
+  if (worldPoints.length < 3) {
+    return null;
+  }
+
+  final closed = _sameLocation(worldPoints.first, worldPoints.last);
+  final source = closed && worldPoints.length > 3
+      ? worldPoints.sublist(0, worldPoints.length - 1)
+      : worldPoints;
+  if (source.length < 3) {
+    return null;
+  }
+
+  final smoothed = _smoothStrokePointsForBake(source, closed: closed);
+  if (smoothed.length < 3) {
+    return null;
+  }
+
+  final bakedWorldPoints =
+      closed && !_sameLocation(smoothed.first, smoothed.last)
+      ? <DrawPoint>[...smoothed, smoothed.first]
+      : smoothed;
+  if (bakedWorldPoints.length < 3) {
+    return null;
+  }
+
+  return ArrowGeometry.normalizePoints(
+    worldPoints: bakedWorldPoints,
+    rect: rect,
+  );
+}
+
+List<DrawPoint> _smoothStrokePointsForBake(
+  List<DrawPoint> points, {
+  required bool closed,
+}) {
+  if (points.length < 3) {
+    return points;
+  }
+
+  const iterations = 3;
+  final count = points.length;
+  final lastIndex = count - 1;
+
+  var src = List<DrawPoint>.of(points);
+  var dst = List<DrawPoint>.filled(count, DrawPoint.zero);
+
+  for (var iteration = 0; iteration < iterations; iteration++) {
+    if (closed) {
+      for (var index = 0; index <= lastIndex; index++) {
+        final prev = src[(index - 1 + count) % count];
+        final current = src[index];
+        final next = src[(index + 1) % count];
+        dst[index] = DrawPoint(
+          x: (prev.x + current.x * 2 + next.x) * 0.25,
+          y: (prev.y + current.y * 2 + next.y) * 0.25,
+          pressure: current.pressure,
+          timestamp: current.timestamp,
+        );
+      }
+    } else {
+      dst[0] = src[0];
+      dst[lastIndex] = src[lastIndex];
+      for (var index = 1; index < lastIndex; index++) {
+        final prev = src[index - 1];
+        final current = src[index];
+        final next = src[index + 1];
+        dst[index] = DrawPoint(
+          x: (prev.x + current.x * 2 + next.x) * 0.25,
+          y: (prev.y + current.y * 2 + next.y) * 0.25,
+          pressure: current.pressure,
+          timestamp: current.timestamp,
+        );
+      }
+    }
+    final temp = src;
+    src = dst;
+    dst = temp;
+  }
+
+  return src;
+}
+
+bool _sameLocation(DrawPoint a, DrawPoint b) => a.x == b.x && a.y == b.y;
 
 /// Appends a new point with smoothing and minimum-distance filtering.
 ///

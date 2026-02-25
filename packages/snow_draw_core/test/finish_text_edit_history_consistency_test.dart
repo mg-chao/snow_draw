@@ -185,6 +185,19 @@ void main() {
       },
     );
 
+    test('new empty text finish does not create a history entry', () async {
+      final store = _storeWithNewTextEdit(elementId: 'text-new', draftText: '');
+
+      final before = store.state.domain.document;
+
+      await store.dispatch(
+        const FinishTextEdit(elementId: 'stale-id', text: '   ', isNew: true),
+      );
+
+      expect(store.state.domain.document, same(before));
+      expect(store.canUndo, isFalse);
+    });
+
     test(
       'finishing unchanged text keeps the document snapshot intact',
       () async {

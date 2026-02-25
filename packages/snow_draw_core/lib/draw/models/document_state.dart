@@ -2,7 +2,6 @@ import 'package:meta/meta.dart';
 
 import '../elements/types/arrow/arrow_binding.dart';
 import '../elements/types/arrow/arrow_like_data.dart';
-import '../elements/types/filter/filter_data.dart';
 import '../elements/types/highlight/highlight_data.dart';
 import '../elements/types/serial_number/serial_number_data.dart';
 import '../types/draw_point.dart';
@@ -80,37 +79,6 @@ class DocumentState {
     _buildHighlightElements(),
   );
 
-  /// Suffix cache for blend-sensitive element presence.
-  ///
-  /// Index `i` answers whether any highlight/filter element exists in
-  /// `[i, elements.length)`, regardless of opacity.
-  late final List<bool> _blendSensitiveSuffix = _buildBlendSensitiveSuffix(
-    includeTransparent: true,
-  );
-
-  /// Suffix cache for visible blend-sensitive element presence.
-  ///
-  /// Index `i` answers whether any non-transparent highlight/filter element
-  /// exists in `[i, elements.length)`.
-  late final List<bool> _visibleBlendSensitiveSuffix =
-      _buildBlendSensitiveSuffix(includeTransparent: false);
-
-  /// Suffix cache for filter element presence.
-  ///
-  /// Index `i` answers whether any filter element exists in
-  /// `[i, elements.length)`, regardless of opacity.
-  late final List<bool> _filterSuffix = _buildFilterSuffix(
-    includeTransparent: true,
-  );
-
-  /// Suffix cache for visible filter element presence.
-  ///
-  /// Index `i` answers whether any non-transparent filter element exists in
-  /// `[i, elements.length)`.
-  late final List<bool> _visibleFilterSuffix = _buildFilterSuffix(
-    includeTransparent: false,
-  );
-
   Map<String, ElementState> get elementMap => _elementMap;
 
   ElementState? getElementById(String id) => _elementMap[id];
@@ -119,61 +87,6 @@ class DocumentState {
 
   ElementState _elementForEntry(SpatialIndexEntry entry) =>
       _elementMap[entry.id]!;
-
-  /// Returns whether any blend-sensitive element exists at or above
-  /// [orderIndex].
-  ///
-  /// Blend-sensitive elements are those whose rendering depends on draw order
-  /// with surrounding pixels (currently highlight/filter).
-  ///
-  /// Set [includeTransparent] to `false` to only consider elements with
-  /// positive opacity.
-  bool hasBlendSensitiveElementFromOrderIndex(
-    int orderIndex, {
-    bool includeTransparent = true,
-  }) {
-    final normalizedIndex = _normalizeOrderIndex(orderIndex);
-    final suffix = includeTransparent
-        ? _blendSensitiveSuffix
-        : _visibleBlendSensitiveSuffix;
-    return suffix[normalizedIndex];
-  }
-
-  /// Returns whether any blend-sensitive element exists strictly above
-  /// [orderIndex].
-  ///
-  /// This is equivalent to querying from `orderIndex + 1`.
-  bool hasBlendSensitiveElementAboveOrderIndex(
-    int orderIndex, {
-    bool includeTransparent = true,
-  }) => hasBlendSensitiveElementFromOrderIndex(
-    orderIndex + 1,
-    includeTransparent: includeTransparent,
-  );
-
-  /// Returns whether any filter element exists at or above [orderIndex].
-  ///
-  /// Set [includeTransparent] to `false` to only consider filters with
-  /// positive opacity.
-  bool hasFilterElementFromOrderIndex(
-    int orderIndex, {
-    bool includeTransparent = true,
-  }) {
-    final normalizedIndex = _normalizeOrderIndex(orderIndex);
-    final suffix = includeTransparent ? _filterSuffix : _visibleFilterSuffix;
-    return suffix[normalizedIndex];
-  }
-
-  /// Returns whether any filter element exists strictly above [orderIndex].
-  ///
-  /// This is equivalent to querying from `orderIndex + 1`.
-  bool hasFilterElementAboveOrderIndex(
-    int orderIndex, {
-    bool includeTransparent = true,
-  }) => hasFilterElementFromOrderIndex(
-    orderIndex + 1,
-    includeTransparent: includeTransparent,
-  );
 
   SpatialIndex get spatialIndex => _spatialIndex;
 
@@ -214,54 +127,23 @@ class DocumentState {
       _spatialIndex.size +
       _arrowBindableSpatialIndex.size +
       boundArrowTargetIds.length +
-      highlightElements.length +
-      _blendSensitiveSuffix.length +
-      _visibleBlendSensitiveSuffix.length +
-      _filterSuffix.length +
-      _visibleFilterSuffix.length;
+      highlightElements.length;
 
   /// Returns true when any element in [elementIds] has bound arrow endpoints.
-  bool hasArrowBoundToAny(Iterable<String> elementIds) {
-    if (boundArrowTargetIds.isEmpty) {
-      return false;
-    }
-    for (final elementId in elementIds) {
-      if (boundArrowTargetIds.contains(elementId)) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  List<ElementState> getElementsAtPoint(DrawPoint point, double tolerance) =>
-      queryElementsAtPointTopDown(point, tolerance);
+  bool hasArrowBoundToAny(Iterable<String> elementIds) =>
+      boundArrowTargetIds.isNotEmpty &&
+      elementIds.any(boundArrowTargetIds.contains);
 
   bool hasElementAtPoint(DrawPoint point, double tolerance) => _spatialIndex
       .searchPointEntries(point, tolerance, sortByZ: false)
       .isNotEmpty;
 
-  List<ElementState> getElementsInRect(DrawRect rect) {
-    final entries = _spatialIndex.searchRectEntries(rect);
-    return _collectElements(entries);
-  }
-
   /// Queries elements intersecting [rect], sorted by ascending z-order.
   ///
-  /// Optional order-index bounds allow callers to constrain results to a
-  /// partial z-range without additional filtering/sorting at call sites.
-  List<ElementState> queryElementsInRectOrdered(
-    DrawRect rect, {
-    int? minOrderIndex,
-    int? maxOrderIndex,
-  }) {
+  List<ElementState> queryElementsInRectOrdered(DrawRect rect) {
     final entries = _spatialIndex.searchRectEntries(rect, ascending: true);
     final result = <ElementState>[];
     for (final entry in entries) {
-      final zIndex = entry.zIndex;
-      if ((minOrderIndex != null && zIndex < minOrderIndex) ||
-          (maxOrderIndex != null && zIndex > maxOrderIndex)) {
-        continue;
-      }
       result.add(_elementForEntry(entry));
     }
     return result;
@@ -334,21 +216,11 @@ class DocumentState {
     }
   }
 
-  List<ElementState> _collectElements(Iterable<SpatialIndexEntry> entries) {
-    final result = <ElementState>[];
-    _visitEntries(entries, (element) {
-      result.add(element);
-      return true;
-    });
-    return result;
-  }
-
   Set<String> _buildBoundTextIds() {
     final ids = <String>{};
     for (final element in elements) {
-      final data = element.data;
-      if (data is SerialNumberData && data.textElementId != null) {
-        ids.add(data.textElementId!);
+      if (element.data case SerialNumberData(:final textElementId?)) {
+        ids.add(textElementId);
       }
     }
     return ids;
@@ -361,75 +233,28 @@ class DocumentState {
       if (data is! ArrowLikeData) {
         continue;
       }
-      final startTargetId = data.startBinding?.elementId;
-      if (startTargetId != null) {
-        ids.add(startTargetId);
-      }
-      final endTargetId = data.endBinding?.elementId;
-      if (endTargetId != null) {
-        ids.add(endTargetId);
-      }
+      _addBoundTargetId(ids, data.startBinding?.elementId);
+      _addBoundTargetId(ids, data.endBinding?.elementId);
     }
     return ids;
   }
 
-  List<ElementState> _buildArrowBindableElements() {
-    final bindable = <ElementState>[];
-    for (final element in elements) {
-      if (element.opacity <= 0) {
-        continue;
-      }
-      if (ArrowBindingUtils.isBindableTarget(element)) {
-        bindable.add(element);
-      }
-    }
-    return bindable;
-  }
+  List<ElementState> _buildArrowBindableElements() => [
+    for (final element in elements)
+      if (element.opacity > 0 && ArrowBindingUtils.isBindableTarget(element))
+        element,
+  ];
 
-  List<ElementState> _buildHighlightElements() {
-    final highlights = <ElementState>[];
-    for (final element in elements) {
-      if (element.data is HighlightData) {
-        highlights.add(element);
-      }
-    }
-    return highlights;
-  }
+  List<ElementState> _buildHighlightElements() => [
+    for (final element in elements)
+      if (element.data is HighlightData) element,
+  ];
 
-  List<bool> _buildBlendSensitiveSuffix({required bool includeTransparent}) =>
-      _buildSuffix((element) {
-        final data = element.data;
-        final isBlendSensitive = data is HighlightData || data is FilterData;
-        if (!isBlendSensitive) {
-          return false;
-        }
-        return includeTransparent || element.opacity > 0;
-      });
-
-  List<bool> _buildFilterSuffix({required bool includeTransparent}) =>
-      _buildSuffix(
-        (element) =>
-            element.data is FilterData &&
-            (includeTransparent || element.opacity > 0),
-      );
-
-  List<bool> _buildSuffix(bool Function(ElementState element) predicate) {
-    final suffix = List<bool>.filled(elements.length + 1, false);
-    for (var index = elements.length - 1; index >= 0; index--) {
-      suffix[index] = suffix[index + 1] || predicate(elements[index]);
+  void _addBoundTargetId(Set<String> ids, String? targetId) {
+    if (targetId == null) {
+      return;
     }
-    return List<bool>.unmodifiable(suffix);
-  }
-
-  int _normalizeOrderIndex(int orderIndex) {
-    if (orderIndex <= 0) {
-      return 0;
-    }
-    final maxIndex = elements.length;
-    if (orderIndex >= maxIndex) {
-      return maxIndex;
-    }
-    return orderIndex;
+    ids.add(targetId);
   }
 
   DocumentState copyWith({

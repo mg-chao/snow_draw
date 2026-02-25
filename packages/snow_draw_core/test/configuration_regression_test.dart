@@ -160,10 +160,10 @@ void main() {
 
         final updated = config.copyWith(elementStyle: nextElementStyle);
 
-        expect(updated.serialNumberStyle.color, nextElementStyle.color);
+        expect(updated.serialNumberStyle.color, config.serialNumberStyle.color);
         expect(
           updated.serialNumberStyle.fontSize,
-          ConfigDefaults.defaultSerialNumberFontSize,
+          config.serialNumberStyle.fontSize,
         );
         expect(updated.serialNumberStyle.serialNumber, 41);
       },
@@ -202,15 +202,20 @@ void main() {
       expect(updated.highlightStyle, config.highlightStyle);
     });
 
-    test(
-      'returns the same instance when copyWith has no effective changes',
-      () {
-        final config = DrawConfig();
+    test('returns an equal config when copyWith has no effective changes', () {
+      final config = DrawConfig();
 
-        expect(config.copyWith(), same(config));
-        expect(config.copyWith(selection: config.selection), same(config));
-        expect(config.copyWith(canvas: config.canvas), same(config));
-      },
-    );
+      final copiedDefault = config.copyWith();
+      final copiedSelection = config.copyWith(selection: config.selection);
+      final copiedCanvas = config.copyWith(canvas: config.canvas);
+
+      expect(copiedDefault, equals(config));
+      expect(copiedSelection, equals(config));
+      expect(copiedCanvas, equals(config));
+
+      expect(copiedDefault, isNot(same(config)));
+      expect(copiedSelection, isNot(same(config)));
+      expect(copiedCanvas, isNot(same(config)));
+    });
   });
 }

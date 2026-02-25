@@ -27,12 +27,8 @@ void main() {
         expectedTypeName: 'CreateElement',
       ),
       _ActionTypeSample(
-        action: const UpdateCreatingElement(currentPosition: DrawPoint.zero),
+        action: UpdateCreatingElement(positions: const [DrawPoint.zero]),
         expectedTypeName: 'UpdateCreatingElement',
-      ),
-      _ActionTypeSample(
-        action: UpdateCreatingElementBatch(positions: const [DrawPoint.zero]),
-        expectedTypeName: 'UpdateCreatingElementBatch',
       ),
       _ActionTypeSample(
         action: const AddArrowPoint(position: DrawPoint.zero),
@@ -126,13 +122,6 @@ void main() {
       _ActionTypeSample(
         action: const CancelEdit(),
         expectedTypeName: 'CancelEdit',
-      ),
-      _ActionTypeSample(
-        action: const EditIntentAction(
-          intent: ClearSelectionIntent(),
-          position: DrawPoint.zero,
-        ),
-        expectedTypeName: 'EditIntentAction',
       ),
       _ActionTypeSample(
         action: const SetDragPending(

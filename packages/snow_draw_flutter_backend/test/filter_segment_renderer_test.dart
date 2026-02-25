@@ -3,8 +3,6 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/filter_pipeline/filter_segment.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/filter_pipeline/filter_segment_builder.dart';
 import 'package:snow_draw_flutter_backend/ui/canvas/filter_pipeline/filter_segment_renderer.dart';
 
 void main() {
@@ -376,8 +374,6 @@ void main() {
         data: RectangleData(),
       );
       const cacheContext = FilterRenderCacheContext(
-        domain: FilterRenderCacheDomain.canvas,
-        documentVersion: 42,
         textRenderingCacheRevision: 7,
         scaleKey: 1000,
         localeTag: 'en-US',
@@ -407,7 +403,6 @@ void main() {
             );
           },
           cacheContext: cacheContext,
-          dynamicElementIds: const {'filter'},
         );
       }
 
@@ -417,16 +412,9 @@ void main() {
       final secondFrame = renderer.lastDiagnostics;
 
       expect(firstFrame.batchCacheHits, 0);
-      expect(
-        firstFrame.batchCacheMisses + firstFrame.prefixSceneCacheMisses,
-        greaterThanOrEqualTo(1),
-      );
-      expect(
-        secondFrame.batchCacheHits + secondFrame.prefixSceneCacheHits,
-        greaterThanOrEqualTo(1),
-      );
+      expect(firstFrame.batchCacheMisses, greaterThanOrEqualTo(1));
+      expect(secondFrame.batchCacheHits, greaterThanOrEqualTo(1));
       expect(secondFrame.batchCacheMisses, 0);
-      expect(secondFrame.prefixSceneCacheMisses, 0);
       expect(
         secondFrame.pictureRecorders,
         lessThan(firstFrame.pictureRecorders),
@@ -442,8 +430,6 @@ void main() {
       final recorder = PictureRecorder();
       final canvas = Canvas(recorder);
       const cacheContext = FilterRenderCacheContext(
-        domain: FilterRenderCacheDomain.canvas,
-        documentVersion: 87,
         textRenderingCacheRevision: 5,
         scaleKey: 1000,
         localeTag: 'en-US',
@@ -483,7 +469,6 @@ void main() {
             );
           },
           cacheContext: cacheContext,
-          dynamicElementIds: const {'filter'},
         );
       }
 
@@ -500,340 +485,23 @@ void main() {
     },
   );
 
-  test(
-    'renderer reuses cached static filter prefix across dynamic filter frames',
-    () {
-      final renderer = FilterSegmentRenderer();
-      final recorder = PictureRecorder();
-      final canvas = Canvas(recorder);
-      const cacheContext = FilterRenderCacheContext(
-        domain: FilterRenderCacheDomain.canvas,
-        documentVersion: 410,
-        textRenderingCacheRevision: 9,
-        scaleKey: 1000,
-        localeTag: 'en-US',
-      );
-
-      const baseElement = ElementState(
-        id: 'base',
-        rect: DrawRect(maxX: 180, maxY: 100),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: RectangleData(),
-      );
-      const staticFilter = ElementState(
-        id: 'static-filter',
-        rect: DrawRect(minX: 12, minY: 8, maxX: 164, maxY: 96),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 1,
-        data: FilterData(type: CanvasFilterType.inversion),
-      );
-
-      void paintFrame(DrawRect dynamicRect) {
-        renderer.paint(
-          canvas: canvas,
-          cacheContext: cacheContext,
-          visibleBounds: const Rect.fromLTWH(0, 0, 200, 120),
-          dynamicElementIds: const {'dynamic-filter'},
-          elements: [
-            baseElement,
-            staticFilter,
-            ElementState(
-              id: 'dynamic-filter',
-              rect: dynamicRect,
-              rotation: 0,
-              opacity: 1,
-              zIndex: 2,
-              data: const FilterData(type: CanvasFilterType.inversion),
-            ),
-          ],
-          paintElement: (sceneCanvas, element) {
-            if (element.id != 'base') {
-              return;
-            }
-            sceneCanvas.drawRect(
-              const Rect.fromLTWH(0, 0, 180, 100),
-              Paint()..color = const Color(0xFF103050),
-            );
-          },
-        );
-      }
-
-      paintFrame(const DrawRect(minX: 20, minY: 16, maxX: 120, maxY: 84));
-      final firstFrame = renderer.lastDiagnostics;
-      paintFrame(const DrawRect(minX: 40, minY: 22, maxX: 148, maxY: 94));
-      final secondFrame = renderer.lastDiagnostics;
-
-      expect(firstFrame.prefixSceneCacheHits, 0);
-      expect(firstFrame.prefixSceneCacheMisses, 1);
-      expect(firstFrame.filterPasses, 2);
-      expect(secondFrame.prefixSceneCacheHits, 1);
-      expect(secondFrame.prefixSceneCacheMisses, 0);
-      expect(secondFrame.filterPasses, 1);
-      expect(
-        secondFrame.pictureRecorders,
-        lessThan(firstFrame.pictureRecorders),
-      );
-      recorder.endRecording();
-    },
-  );
-
-  test(
-    'prefix-scene cache invalidates when prefix element identity changes',
-    () {
-      final renderer = FilterSegmentRenderer();
-      final recorder = PictureRecorder();
-      final canvas = Canvas(recorder);
-      const cacheContext = FilterRenderCacheContext(
-        domain: FilterRenderCacheDomain.canvas,
-        documentVersion: 411,
-        textRenderingCacheRevision: 9,
-        scaleKey: 1000,
-        localeTag: 'en-US',
-      );
-
-      const baseA = ElementState(
-        id: 'base',
-        rect: DrawRect(maxX: 180, maxY: 100),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: RectangleData(),
-      );
-      final baseB = baseA.copyWith(opacity: 0.9);
-      const staticFilter = ElementState(
-        id: 'static-filter',
-        rect: DrawRect(minX: 12, minY: 8, maxX: 164, maxY: 96),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 1,
-        data: FilterData(type: CanvasFilterType.inversion),
-      );
-
-      void paintFrame({
-        required ElementState base,
-        required DrawRect dynamicRect,
-      }) {
-        renderer.paint(
-          canvas: canvas,
-          cacheContext: cacheContext,
-          visibleBounds: const Rect.fromLTWH(0, 0, 200, 120),
-          dynamicElementIds: const {'dynamic-filter'},
-          elements: [
-            base,
-            staticFilter,
-            ElementState(
-              id: 'dynamic-filter',
-              rect: dynamicRect,
-              rotation: 0,
-              opacity: 1,
-              zIndex: 2,
-              data: const FilterData(type: CanvasFilterType.inversion),
-            ),
-          ],
-          paintElement: (sceneCanvas, element) {
-            if (element.id != 'base') {
-              return;
-            }
-            sceneCanvas.drawRect(
-              const Rect.fromLTWH(0, 0, 180, 100),
-              Paint()..color = const Color(0xFF103050),
-            );
-          },
-        );
-      }
-
-      paintFrame(
-        base: baseA,
-        dynamicRect: const DrawRect(minX: 20, minY: 16, maxX: 120, maxY: 84),
-      );
-      final firstFrame = renderer.lastDiagnostics;
-      paintFrame(
-        base: baseB,
-        dynamicRect: const DrawRect(minX: 40, minY: 22, maxX: 148, maxY: 94),
-      );
-      final secondFrame = renderer.lastDiagnostics;
-
-      expect(firstFrame.prefixSceneCacheMisses, 1);
-      expect(secondFrame.prefixSceneCacheHits, 0);
-      expect(secondFrame.prefixSceneCacheMisses, 1);
-      recorder.endRecording();
-    },
-  );
-
-  test('prefix-scene cache separates null and empty visible bounds', () {
-    final renderer = FilterSegmentRenderer();
-    final recorder = PictureRecorder();
-    final canvas = Canvas(recorder);
-    const cacheContext = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
-      documentVersion: 902,
-      textRenderingCacheRevision: 4,
-      scaleKey: 1000,
-      localeTag: 'en-US',
-    );
-
-    const baseElement = ElementState(
-      id: 'base',
-      rect: DrawRect(maxX: 160, maxY: 90),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: RectangleData(),
-    );
-    const staticFilter = ElementState(
-      id: 'static-filter',
-      rect: DrawRect(minX: 12, minY: 8, maxX: 150, maxY: 84),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 1,
-      data: FilterData(type: CanvasFilterType.inversion),
-    );
-
-    void paintFrame({required Rect? visibleBounds, required DrawRect rect}) {
-      renderer.paint(
-        canvas: canvas,
-        cacheContext: cacheContext,
-        visibleBounds: visibleBounds,
-        dynamicElementIds: const {'dynamic-filter'},
-        elements: [
-          baseElement,
-          staticFilter,
-          ElementState(
-            id: 'dynamic-filter',
-            rect: rect,
-            rotation: 0,
-            opacity: 1,
-            zIndex: 2,
-            data: const FilterData(type: CanvasFilterType.inversion),
-          ),
-        ],
-        paintElement: (sceneCanvas, element) {
-          if (element.id != 'base') {
-            return;
-          }
-          sceneCanvas.drawRect(
-            const Rect.fromLTWH(0, 0, 160, 90),
-            Paint()..color = const Color(0xFF234567),
-          );
-        },
-      );
-    }
-
-    paintFrame(
-      visibleBounds: Rect.zero,
-      rect: const DrawRect(minX: 22, minY: 20, maxX: 124, maxY: 76),
-    );
-    final firstFrame = renderer.lastDiagnostics;
-    paintFrame(
-      visibleBounds: null,
-      rect: const DrawRect(minX: 28, minY: 24, maxX: 138, maxY: 82),
-    );
-    final secondFrame = renderer.lastDiagnostics;
-
-    expect(firstFrame.prefixSceneCacheMisses, 1);
-    expect(secondFrame.prefixSceneCacheHits, 0);
-    expect(secondFrame.prefixSceneCacheMisses, 1);
-    expect(secondFrame.filterPasses, 2);
-    recorder.endRecording();
-  });
-
-  test('prefix-scene cache separates aggressive CPU fallback hints', () {
-    final renderer = FilterSegmentRenderer();
-    final recorder = PictureRecorder();
-    final canvas = Canvas(recorder);
-    const cacheContext = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
-      documentVersion: 932,
-      textRenderingCacheRevision: 4,
-      scaleKey: 1000,
-      localeTag: 'en-US',
-    );
-
-    const baseElement = ElementState(
-      id: 'base',
-      rect: DrawRect(maxX: 160, maxY: 90),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: RectangleData(),
-    );
-    const staticFilter = ElementState(
-      id: 'static-filter',
-      rect: DrawRect(minX: 12, minY: 8, maxX: 150, maxY: 84),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 1,
-      data: FilterData(type: CanvasFilterType.gaussianBlur, strength: 0.8),
-    );
-
-    void paintFrame({required FilterRenderHints renderHints}) {
-      renderer.paint(
-        canvas: canvas,
-        cacheContext: cacheContext,
-        visibleBounds: const Rect.fromLTWH(0, 0, 180, 110),
-        dynamicElementIds: const {'dynamic-filter'},
-        renderHints: renderHints,
-        elements: [
-          baseElement,
-          staticFilter,
-          const ElementState(
-            id: 'dynamic-filter',
-            rect: DrawRect(minX: 28, minY: 20, maxX: 138, maxY: 82),
-            rotation: 0,
-            opacity: 1,
-            zIndex: 2,
-            data: FilterData(type: CanvasFilterType.inversion),
-          ),
-        ],
-        paintElement: (sceneCanvas, element) {
-          if (element.id != 'base') {
-            return;
-          }
-          sceneCanvas.drawRect(
-            const Rect.fromLTWH(0, 0, 160, 90),
-            Paint()..color = const Color(0xFF234567),
-          );
-        },
-      );
-    }
-
-    paintFrame(renderHints: const FilterRenderHints(interactionPreview: true));
-    final firstFrame = renderer.lastDiagnostics;
-    paintFrame(
-      renderHints: const FilterRenderHints(
-        interactionPreview: true,
-        aggressiveCpuFallback: true,
-      ),
-    );
-    final secondFrame = renderer.lastDiagnostics;
-
-    expect(firstFrame.prefixSceneCacheMisses, 1);
-    expect(secondFrame.prefixSceneCacheHits, 0);
-    expect(secondFrame.prefixSceneCacheMisses, 1);
-    recorder.endRecording();
-  });
-
-  test('batch cache survives document-version changes '
+  test('batch cache survives context recreation '
       'when batch elements are stable', () {
     final renderer = FilterSegmentRenderer();
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
     const cacheContextV1 = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
-      documentVersion: 101,
       textRenderingCacheRevision: 5,
       scaleKey: 1000,
       localeTag: 'en-US',
     );
-    const cacheContextV2 = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
-      documentVersion: 102,
-      textRenderingCacheRevision: 5,
-      scaleKey: 1000,
-      localeTag: 'en-US',
+    final cacheRevision = cacheContextV1.textRenderingCacheRevision;
+    final scaleKey = cacheContextV1.scaleKey;
+    final localeTag = cacheContextV1.localeTag;
+    final cacheContextV2 = FilterRenderCacheContext(
+      textRenderingCacheRevision: cacheRevision,
+      scaleKey: scaleKey,
+      localeTag: localeTag,
     );
     const baseElement = ElementState(
       id: 'base',
@@ -858,7 +526,6 @@ void main() {
         canvas: canvas,
         elements: sceneElements,
         cacheContext: cacheContext,
-        dynamicElementIds: const {'filter'},
         paintElement: (sceneCanvas, element) {
           if (element.id != 'base') {
             return;
@@ -876,16 +543,71 @@ void main() {
     paintFrame(cacheContextV2);
     final secondFrame = renderer.lastDiagnostics;
 
-    expect(
-      firstFrame.batchCacheMisses + firstFrame.prefixSceneCacheMisses,
-      greaterThanOrEqualTo(1),
-    );
-    expect(
-      secondFrame.batchCacheHits + secondFrame.prefixSceneCacheHits,
-      greaterThanOrEqualTo(1),
-    );
+    expect(firstFrame.batchCacheMisses, greaterThanOrEqualTo(1));
+    expect(secondFrame.batchCacheHits, greaterThanOrEqualTo(1));
     expect(secondFrame.batchCacheMisses, 0);
-    expect(secondFrame.prefixSceneCacheMisses, 0);
+    recorder.endRecording();
+  });
+
+  test('batch cache invalidates when serial connector revision changes', () {
+    final renderer = FilterSegmentRenderer();
+    final recorder = PictureRecorder();
+    final canvas = Canvas(recorder);
+    const cacheContextV1 = FilterRenderCacheContext(
+      textRenderingCacheRevision: 5,
+      scaleKey: 1000,
+      localeTag: 'en-US',
+      serialConnectorRevision: 11,
+    );
+    const cacheContextV2 = FilterRenderCacheContext(
+      textRenderingCacheRevision: 5,
+      scaleKey: 1000,
+      localeTag: 'en-US',
+      serialConnectorRevision: 12,
+    );
+    const baseElement = ElementState(
+      id: 'base',
+      rect: DrawRect(maxX: 160, maxY: 90),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: RectangleData(),
+    );
+    const filterElement = ElementState(
+      id: 'filter',
+      rect: DrawRect(maxX: 80, maxY: 80),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: FilterData(type: CanvasFilterType.inversion),
+    );
+    const sceneElements = [baseElement, filterElement];
+
+    void paintFrame(FilterRenderCacheContext cacheContext) {
+      renderer.paint(
+        canvas: canvas,
+        elements: sceneElements,
+        cacheContext: cacheContext,
+        paintElement: (sceneCanvas, element) {
+          if (element.id != 'base') {
+            return;
+          }
+          sceneCanvas.drawRect(
+            const Rect.fromLTWH(0, 0, 160, 90),
+            Paint()..color = const Color(0xFF225588),
+          );
+        },
+      );
+    }
+
+    paintFrame(cacheContextV1);
+    final firstFrame = renderer.lastDiagnostics;
+    paintFrame(cacheContextV2);
+    final secondFrame = renderer.lastDiagnostics;
+
+    expect(firstFrame.batchCacheMisses, greaterThanOrEqualTo(1));
+    expect(secondFrame.batchCacheHits, 0);
+    expect(secondFrame.batchCacheMisses, greaterThanOrEqualTo(1));
     recorder.endRecording();
   });
 
@@ -896,8 +618,6 @@ void main() {
     const batchCount = 128;
     const baseColor = Color(0xFF223344);
     const cacheContext = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
-      documentVersion: 11,
       textRenderingCacheRevision: 3,
       scaleKey: 1000,
       localeTag: 'en-US',
@@ -928,7 +648,6 @@ void main() {
       canvas: canvas,
       elements: elements,
       cacheContext: cacheContext,
-      dynamicElementIds: const {'filter'},
       paintElement: (sceneCanvas, element) {
         if (element.id == 'filter') {
           return;
@@ -1049,8 +768,6 @@ void main() {
     final recorder = PictureRecorder();
     final canvas = Canvas(recorder);
     const cacheContext = FilterRenderCacheContext(
-      domain: FilterRenderCacheDomain.canvas,
-      documentVersion: 3,
       textRenderingCacheRevision: 1,
       scaleKey: 1000,
       localeTag: 'en-US',
@@ -1107,8 +824,6 @@ void main() {
       final recorder = PictureRecorder();
       final canvas = Canvas(recorder);
       const cacheContext = FilterRenderCacheContext(
-        domain: FilterRenderCacheDomain.canvas,
-        documentVersion: 8,
         textRenderingCacheRevision: 2,
         scaleKey: 1000,
         localeTag: 'en-US',
@@ -1198,16 +913,13 @@ void main() {
         data: FilterData(type: CanvasFilterType.inversion),
       );
 
-      Future<Color> renderSample({
-        required Set<String> dynamicElementIds,
-      }) async {
-        final renderer = FilterSegmentRenderer();
+      Future<Color> renderSample(FilterSegmentBuilder segmentBuilder) async {
+        final renderer = FilterSegmentRenderer(segmentBuilder: segmentBuilder);
         final recorder = PictureRecorder();
         final canvas = Canvas(recorder);
         renderer.paint(
           canvas: canvas,
           elements: const [base, firstFilter, secondFilter],
-          dynamicElementIds: dynamicElementIds,
           paintElement: (sceneCanvas, element) {
             if (element.id != 'base') {
               return;
@@ -1229,9 +941,9 @@ void main() {
         return _readPixel(bytes!, imageWidth.toInt(), const Offset(48, 48));
       }
 
-      final mergedOutput = await renderSample(dynamicElementIds: const {});
+      final mergedOutput = await renderSample(const FilterSegmentBuilder());
       final splitOutput = await renderSample(
-        dynamicElementIds: const {'filter-1'},
+        const _NoMergeFilterSegmentBuilder(),
       );
 
       expect(
@@ -1251,132 +963,6 @@ void main() {
       );
     },
   );
-
-  test('interaction preview skips mosaic filter creation '
-      'when shader path is unavailable', () {
-    final kernelFactory = _TestKernelFactory(canUseMosaicShader: false);
-    final renderer = FilterSegmentRenderer(kernelFactory: kernelFactory);
-    const elements = [
-      ElementState(
-        id: 'base',
-        rect: DrawRect(maxX: 128, maxY: 96),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: RectangleData(),
-      ),
-      ElementState(
-        id: 'filter',
-        rect: DrawRect(minX: 16, minY: 16, maxX: 112, maxY: 80),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 1,
-        data: FilterData(strength: 0.8),
-      ),
-    ];
-
-    final recorder = PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    renderer.paint(
-      canvas: canvas,
-      elements: elements,
-      renderHints: const FilterRenderHints(interactionPreview: true),
-      paintElement: (sceneCanvas, element) {
-        if (element.id != 'base') {
-          return;
-        }
-        sceneCanvas.drawRect(
-          const Rect.fromLTWH(0, 0, 128, 96),
-          Paint()..color = const Color(0xFF778899),
-        );
-      },
-    );
-
-    expect(kernelFactory.createMosaicCalls, 0);
-    expect(kernelFactory.resolveMosaicCalls, 0);
-
-    renderer.paint(
-      canvas: canvas,
-      elements: elements,
-      paintElement: (sceneCanvas, element) {
-        if (element.id != 'base') {
-          return;
-        }
-        sceneCanvas.drawRect(
-          const Rect.fromLTWH(0, 0, 128, 96),
-          Paint()..color = const Color(0xFF778899),
-        );
-      },
-    );
-
-    expect(kernelFactory.createMosaicCalls, 1);
-    expect(kernelFactory.resolveMosaicCalls, 1);
-    recorder.endRecording();
-  });
-
-  test('aggressive CPU fallback skips mosaic filter creation '
-      'without explicit interaction preview', () {
-    final kernelFactory = _TestKernelFactory(canUseMosaicShader: false);
-    final renderer = FilterSegmentRenderer(kernelFactory: kernelFactory);
-    const elements = [
-      ElementState(
-        id: 'base',
-        rect: DrawRect(maxX: 128, maxY: 96),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 0,
-        data: RectangleData(),
-      ),
-      ElementState(
-        id: 'filter',
-        rect: DrawRect(minX: 16, minY: 16, maxX: 112, maxY: 80),
-        rotation: 0,
-        opacity: 1,
-        zIndex: 1,
-        data: FilterData(strength: 0.8),
-      ),
-    ];
-
-    final recorder = PictureRecorder();
-    final canvas = Canvas(recorder);
-
-    renderer.paint(
-      canvas: canvas,
-      elements: elements,
-      renderHints: const FilterRenderHints(aggressiveCpuFallback: true),
-      paintElement: (sceneCanvas, element) {
-        if (element.id != 'base') {
-          return;
-        }
-        sceneCanvas.drawRect(
-          const Rect.fromLTWH(0, 0, 128, 96),
-          Paint()..color = const Color(0xFF778899),
-        );
-      },
-    );
-
-    expect(kernelFactory.createMosaicCalls, 0);
-    expect(kernelFactory.resolveMosaicCalls, 0);
-
-    renderer.paint(
-      canvas: canvas,
-      elements: elements,
-      paintElement: (sceneCanvas, element) {
-        if (element.id != 'base') {
-          return;
-        }
-        sceneCanvas.drawRect(
-          const Rect.fromLTWH(0, 0, 128, 96),
-          Paint()..color = const Color(0xFF778899),
-        );
-      },
-    );
-
-    expect(kernelFactory.createMosaicCalls, 1);
-    expect(kernelFactory.resolveMosaicCalls, 1);
-    recorder.endRecording();
-  });
 
   test('mosaic cache normalizes quantized offsets at block boundaries', () {
     final kernelFactory = _TestKernelFactory(
@@ -1439,96 +1025,6 @@ void main() {
     expect(kernelFactory.resolveMosaicCalls, 2);
     expect(kernelFactory.createMosaicCalls, 1);
     recorder.endRecording();
-  });
-
-  test('interaction-preview mosaic fallback remains stable '
-      'when visible bounds cull the layer', () async {
-    final kernelFactory = _TestKernelFactory(
-      canUseMosaicShader: false,
-      resolvedBlockSize: 8,
-    );
-    final renderer = FilterSegmentRenderer(kernelFactory: kernelFactory);
-    const imageWidth = 320.0;
-    const imageHeight = 320.0;
-    const base = ElementState(
-      id: 'base',
-      rect: DrawRect(maxX: imageWidth, maxY: imageHeight),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: RectangleData(),
-    );
-    const filter = ElementState(
-      id: 'mosaic',
-      rect: DrawRect(maxX: imageWidth, maxY: imageHeight),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 1,
-      data: FilterData(strength: 1),
-    );
-
-    Future<Color> renderSampleColor({Rect? visibleBounds}) async {
-      final recorder = PictureRecorder();
-      final canvas = Canvas(recorder);
-      renderer.paint(
-        canvas: canvas,
-        visibleBounds: visibleBounds,
-        renderHints: const FilterRenderHints(interactionPreview: true),
-        elements: const [base, filter],
-        paintElement: (sceneCanvas, element) {
-          if (element.id != 'base') {
-            return;
-          }
-          const tileSize = 8;
-          for (var y = 0; y < imageHeight; y += tileSize) {
-            for (var x = 0; x < imageWidth; x += tileSize) {
-              final isDarkTile = (((x ~/ tileSize) + (y ~/ tileSize)) & 1) == 0;
-              sceneCanvas.drawRect(
-                Rect.fromLTWH(
-                  x.toDouble(),
-                  y.toDouble(),
-                  tileSize.toDouble(),
-                  tileSize.toDouble(),
-                ),
-                Paint()
-                  ..color = isDarkTile
-                      ? const Color(0xFF14213D)
-                      : const Color(0xFFFCA311),
-              );
-            }
-          }
-        },
-      );
-
-      final picture = recorder.endRecording();
-      final image = await picture.toImage(
-        imageWidth.toInt(),
-        imageHeight.toInt(),
-      );
-      final bytes = await image.toByteData();
-      expect(bytes, isNotNull);
-      return _readPixel(bytes!, imageWidth.toInt(), const Offset(124, 172));
-    }
-
-    final fullFrame = await renderSampleColor();
-    final culledFrame = await renderSampleColor(
-      visibleBounds: const Rect.fromLTWH(120, 120, 120, 120),
-    );
-
-    expect(
-      (_channelFromUnit(fullFrame.r) - _channelFromUnit(culledFrame.r)).abs(),
-      lessThanOrEqualTo(2),
-    );
-    expect(
-      (_channelFromUnit(fullFrame.g) - _channelFromUnit(culledFrame.g)).abs(),
-      lessThanOrEqualTo(2),
-    );
-    expect(
-      (_channelFromUnit(fullFrame.b) - _channelFromUnit(culledFrame.b)).abs(),
-      lessThanOrEqualTo(2),
-    );
-    expect(kernelFactory.createMosaicCalls, 0);
-    expect(kernelFactory.resolveMosaicCalls, 0);
   });
 
   test('offscreen filter work is skipped when visible bounds are provided', () {
@@ -1683,6 +1179,23 @@ class _SplitNonFilterSegmentBuilder extends FilterSegmentBuilder {
       );
     }
     return splitSegments;
+  }
+}
+
+class _NoMergeFilterSegmentBuilder extends FilterSegmentBuilder {
+  const _NoMergeFilterSegmentBuilder();
+
+  @override
+  List<RenderSegment> build(List<ElementState> elements) {
+    final segments = <RenderSegment>[];
+    for (final segment in super.build(elements)) {
+      if (segment is! MergedFilterSegment) {
+        segments.add(segment);
+        continue;
+      }
+      segments.addAll(segment.filters);
+    }
+    return segments;
   }
 }
 

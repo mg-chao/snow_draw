@@ -5,14 +5,15 @@ import '../../elements/core/element_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
-import '../../services/grid_snap_service.dart';
 import '../../services/object_snap_service.dart';
 import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/snap_guides.dart';
+import '../../utils/camera_zoom.dart';
+import '../../utils/calculators/create_calculator.dart';
 import '../../utils/snapping_mode.dart';
-import '../../utils/state_calculator.dart';
+import '../../utils/visible_elements.dart';
 import 'creation_strategy.dart';
 
 const _startAnchors = <SnapAxisAnchor>[SnapAxisAnchor.start];
@@ -45,18 +46,17 @@ class RectCreationStrategy extends CreationStrategy {
     required SnappingMode snappingMode,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final snapToGrid = snappingMode == SnappingMode.grid;
-    final gridSize = config.grid.size;
-    final startPosition = snapToGrid
-        ? gridSnapService.snapPoint(
-            point: creatingState.startPosition,
-            gridSize: gridSize,
-          )
-        : creatingState.startPosition;
-    final current = snapToGrid
-        ? gridSnapService.snapPoint(point: currentPosition, gridSize: gridSize)
-        : currentPosition;
-    var rect = StateCalculator.calculateCreateRect(
+    final startPosition = snapCreationPoint(
+      point: creatingState.startPosition,
+      config: config,
+      snappingMode: snappingMode,
+    );
+    final current = snapCreationPoint(
+      point: currentPosition,
+      config: config,
+      snappingMode: snappingMode,
+    );
+    var rect = CreateCalculator.calculateCreateRect(
       startPosition: startPosition,
       currentPosition: current,
       maintainAspectRatio: maintainAspectRatio,
@@ -76,9 +76,10 @@ class RectCreationStrategy extends CreationStrategy {
       );
     }
 
-    final zoom = state.application.view.camera.zoom;
-    final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-    final snapDistance = snapConfig.distance / effectiveZoom;
+    final snapDistance = resolveZoomAdjustedDistance(
+      distance: snapConfig.distance,
+      zoom: state.application.view.camera.zoom,
+    );
     final cachedMode = _resolveCachedSnapReferences(
       state: state,
       creationMode: creatingState.creationMode,
@@ -117,19 +118,10 @@ class RectCreationStrategy extends CreationStrategy {
     required DrawConfig config,
     required CreatingState creatingState,
     TextMetricsService textMetricsService = defaultTextMetricsService,
-  }) {
-    final rect = creatingState.currentRect;
-    final minSize = config.element.minCreateSize;
-    final shouldCommit =
-        rect.width >= minSize &&
-        rect.height >= minSize &&
-        creatingState.element.copyWith(rect: rect).isValidWith(config.element);
-    return CreationFinishResult(
-      data: creatingState.elementData,
-      rect: rect,
-      shouldCommit: shouldCommit,
-    );
-  }
+  }) => finishCreationWithCurrentRect(
+    config: config,
+    creatingState: creatingState,
+  );
 }
 
 @immutable
@@ -168,7 +160,5 @@ _CachedRectCreationMode _resolveCachedSnapReferences({
   );
 }
 
-List<ElementState> _resolveReferenceElements(DrawState state) => [
-  for (final element in state.domain.document.elements)
-    if (element.opacity > 0) element,
-];
+List<ElementState> _resolveReferenceElements(DrawState state) =>
+    resolveVisibleElements(state.domain.document.elements);

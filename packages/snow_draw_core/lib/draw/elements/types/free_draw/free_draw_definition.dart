@@ -2,7 +2,7 @@ import '../../core/element_definition.dart';
 import 'free_draw_creation_strategy.dart';
 import 'free_draw_data.dart';
 import 'free_draw_hit_tester.dart';
-import 'free_draw_scene_encoder.dart';
+import 'free_draw_task_encoder.dart';
 
 const freeDrawDefinition = ElementDefinition<FreeDrawData>(
   typeId: FreeDrawData.typeIdToken,
@@ -11,7 +11,7 @@ const freeDrawDefinition = ElementDefinition<FreeDrawData>(
   createDefaultData: _createDefaultFreeDrawData,
   fromJson: FreeDrawData.fromJson,
   creationStrategy: FreeDrawCreationStrategy(),
-  sceneEncoder: FreeDrawSceneEncoder(),
+  taskEncoder: FreeDrawTaskEncoder(),
 );
 
 FreeDrawData _createDefaultFreeDrawData() => const FreeDrawData();

@@ -1,4 +1,3 @@
-import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/config/draw_config.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_core/draw/edit/core/edit_operation.dart';
@@ -20,27 +19,25 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/edit_context.dart';
 import 'package:snow_draw_core/draw/types/edit_operation_id.dart';
 import 'package:snow_draw_core/draw/types/edit_transform.dart';
+import 'package:test/test.dart';
 
 void main() {
-  test(
-    'reuses cached DrawStateView across builder instances for the same state',
-    () {
-      final operation = _CountingPreviewOperation();
-      final registry = DefaultEditOperationRegistry.custom([operation]);
-      final state = _editingState(operationId: operation.id);
+  test('build always produces a fresh DrawStateView for editing states', () {
+    final operation = _CountingPreviewOperation();
+    final registry = DefaultEditOperationRegistry.custom([operation]);
+    final state = _editingState(operationId: operation.id);
 
-      final builderA = DrawStateViewBuilder(editOperations: registry);
-      final builderB = DrawStateViewBuilder(editOperations: registry);
+    final builderA = DrawStateViewBuilder(editOperations: registry);
+    final builderB = DrawStateViewBuilder(editOperations: registry);
 
-      final viewA = builderA.build(state);
-      final viewB = builderB.build(state);
-      final viewAgain = builderA.build(state);
+    final viewA = builderA.build(state);
+    final viewB = builderB.build(state);
+    final viewAgain = builderA.build(state);
 
-      expect(identical(viewA, viewB), isTrue);
-      expect(identical(viewA, viewAgain), isTrue);
-      expect(operation.buildPreviewCallCount, 1);
-    },
-  );
+    expect(identical(viewA, viewB), isFalse);
+    expect(identical(viewA, viewAgain), isFalse);
+    expect(operation.buildPreviewCallCount, 3);
+  });
 }
 
 DrawState _editingState({required EditOperationId operationId}) {

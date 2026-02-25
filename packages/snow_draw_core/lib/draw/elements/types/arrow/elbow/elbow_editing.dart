@@ -23,6 +23,8 @@ part 'elbow_edit_fixed_segments.dart';
 part 'elbow_edit_perpendicular.dart';
 part 'elbow_edit_pipeline.dart';
 
+const _bindingOverrideUnset = Object();
+
 /// Elbow arrow editing entry points.
 /// Output of elbow edit computation (local points + fixed segment updates).
 @immutable
@@ -42,19 +44,20 @@ final class ElbowEditResult {
 
 /// Computes elbow edit using [CombinedElementLookup] for efficient element
 /// access.
+///
+/// Omit [startBindingOverride] / [endBindingOverride] to keep bindings from
+/// [data]. Pass `null` explicitly to clear a binding.
 ElbowEditResult computeElbowEdit({
   required ElementState element,
   required ArrowData data,
   required CombinedElementLookup lookup,
   List<DrawPoint>? localPointsOverride,
   List<ElbowFixedSegment>? fixedSegmentsOverride,
-  ArrowBinding? startBindingOverride,
-  ArrowBinding? endBindingOverride,
-  bool startBindingOverrideIsSet = false,
-  bool endBindingOverrideIsSet = false,
+  Object? startBindingOverride = _bindingOverrideUnset,
+  Object? endBindingOverride = _bindingOverrideUnset,
   bool finalize = false,
 }) {
-  final result = _ElbowEditPipeline(
+  final result = _runElbowEditPipeline(
     element: element,
     data: data,
     lookup: lookup,
@@ -62,9 +65,7 @@ ElbowEditResult computeElbowEdit({
     fixedSegmentsOverride: fixedSegmentsOverride,
     startBindingOverride: startBindingOverride,
     endBindingOverride: endBindingOverride,
-    startBindingOverrideIsSet: startBindingOverrideIsSet,
-    endBindingOverrideIsSet: endBindingOverrideIsSet,
-  ).run();
+  );
   return finalize
       ? _finalizeElbowEditResult(
           element: element,
@@ -73,11 +74,27 @@ ElbowEditResult computeElbowEdit({
           result: result,
           startBindingOverride: startBindingOverride,
           endBindingOverride: endBindingOverride,
-          startBindingOverrideIsSet: startBindingOverrideIsSet,
-          endBindingOverrideIsSet: endBindingOverrideIsSet,
         )
       : result;
 }
+
+ElbowEditResult _runElbowEditPipeline({
+  required ElementState element,
+  required ArrowData data,
+  required CombinedElementLookup lookup,
+  List<DrawPoint>? localPointsOverride,
+  List<ElbowFixedSegment>? fixedSegmentsOverride,
+  Object? startBindingOverride = _bindingOverrideUnset,
+  Object? endBindingOverride = _bindingOverrideUnset,
+}) => _ElbowEditPipeline(
+  element: element,
+  data: data,
+  lookup: lookup,
+  localPointsOverride: localPointsOverride,
+  fixedSegmentsOverride: fixedSegmentsOverride,
+  startBindingOverride: startBindingOverride,
+  endBindingOverride: endBindingOverride,
+).run();
 
 /// Transforms fixed segments when the owning element is resized/rotated.
 List<ElbowFixedSegment>? transformFixedSegments({

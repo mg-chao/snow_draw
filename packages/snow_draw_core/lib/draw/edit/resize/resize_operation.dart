@@ -18,9 +18,11 @@ import '../../types/edit_transform.dart';
 import '../../types/element_geometry.dart';
 import '../../types/resize_mode.dart';
 import '../../types/snap_guides.dart';
+import '../../utils/camera_zoom.dart';
 import '../../utils/handle_calculator.dart';
 import '../../utils/snapping_mode.dart';
 import '../../utils/transforms/edit_transform_context.dart';
+import '../../utils/transforms/resize_anchor_point.dart';
 import '../apply/edit_apply.dart';
 import '../core/edit_compute_pipeline.dart';
 import '../core/edit_computed_result.dart';
@@ -32,7 +34,6 @@ import '../core/edit_result.dart';
 import '../core/edit_validation.dart';
 import '../core/standard_finish_mixin.dart';
 import 'bounds/bounds_calculation.dart';
-import 'bounds/resize_geometry.dart';
 
 class ResizeOperation extends EditOperation with StandardFinishMixin {
   const ResizeOperation();
@@ -67,38 +68,25 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       operationName: 'ResizeOperation.createContext',
     );
     final selectionData = SelectionDataComputer.compute(state);
-    final startBounds = requireSelectionBounds(
-      selectionData: selectionData,
-      initialSelectionBounds: typedParams.initialSelectionBounds,
+    final data = gatherStandardContextData(
+      state: state,
       operationName: 'ResizeOperation.createContext',
+      toSnapshot: (e) =>
+          ElementResizeSnapshot(rect: e.rect, rotation: e.rotation),
+      initialSelectionBounds: typedParams.initialSelectionBounds,
+      selectionData: selectionData,
     );
-
+    final startBounds = data.startBounds;
     final rotation = selectionData.overlayRotation ?? 0.0;
     final rotationCenter = selectionData.overlayCenter ?? startBounds.center;
-
-    final DrawPoint handleOffset;
-    if (typedParams.handleOffset != null) {
-      handleOffset = typedParams.handleOffset!;
-    } else {
-      final overlaySpace = OverlaySpace(
-        rotation: rotation,
-        origin: rotationCenter,
-      );
-      final localPointerPosition = overlaySpace.fromWorld(position);
-
-      final handlePosition = HandleCalculator.getResizeHandlePosition(
-        bounds: startBounds,
-        mode: typedParams.resizeMode,
-        padding: typedParams.selectionPadding ?? 0.0,
-      );
-
-      handleOffset = DrawPoint(
-        x: handlePosition.x - localPointerPosition.x,
-        y: handlePosition.y - localPointerPosition.y,
-      );
-    }
-
-    final selectedIdsAtStart = {...state.domain.selection.selectedIds};
+    final handleOffset = _resolveHandleOffset(
+      params: typedParams,
+      pointerPosition: position,
+      startBounds: startBounds,
+      rotation: rotation,
+      rotationCenter: rotationCenter,
+    );
+    final selectedIdsAtStart = data.selectedIds;
     final referenceElements = resolveReferenceElements(
       state,
       selectedIdsAtStart,
@@ -110,22 +98,18 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       state: state,
       selectedIds: selectedIdsAtStart,
     );
-    final elementSnapshots = buildSnapshots(
-      snapshotSelectedElements(state),
-      (e) => ElementResizeSnapshot(rect: e.rect, rotation: e.rotation),
-    );
 
     return ResizeEditContext(
       startPosition: position,
       startBounds: startBounds,
       selectedIdsAtStart: selectedIdsAtStart,
-      selectionVersion: state.domain.selection.selectionVersion,
-      elementsVersion: state.domain.document.elementsVersion,
+      selectionVersion: data.selectionVersion,
+      elementsVersion: data.elementsVersion,
       resizeMode: typedParams.resizeMode,
       handleOffset: handleOffset,
       rotation: rotation,
-      selectionPadding: typedParams.selectionPadding ?? 0.0,
-      elementSnapshots: elementSnapshots,
+      selectionPadding: typedParams.selectionPadding,
+      elementSnapshots: data.elementSnapshots,
       referenceElements: List<ElementState>.unmodifiable(referenceElements),
       referenceElementAabbs: referenceElementAabbs,
       forceSerialNumberAspectRatio: forceSerialNumberAspectRatio,
@@ -150,12 +134,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       operationName: 'ResizeOperation.update',
     );
     final startBounds = typedContext.startBounds;
-    if (typedContext.selectedIdsAtStart.isEmpty) {
-      return _incompleteUpdate(currentPosition);
-    }
-
-    if (typedContext.isMultiSelect &&
-        (startBounds.width == 0 || startBounds.height == 0)) {
+    if (_shouldReturnIncompleteTransform(typedContext)) {
       return _incompleteUpdate(currentPosition);
     }
 
@@ -180,66 +159,22 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       ),
     );
 
-    var newBounds = boundsResult.bounds;
-    var snapGuides = const <SnapGuide>[];
-    final gridConfig = config.grid;
-    final snapConfig = config.snap;
-    final anchorsX = _resolveAnchorsX(typedContext.resizeMode);
-    final anchorsY = _resolveAnchorsY(typedContext.resizeMode);
-    final canSnap = !typedContext.hasRotation && !modifiers.fromCenter;
-    final snappingMode = resolveEffectiveSnappingModeForConfig(
+    final newBounds = boundsResult.bounds;
+    final anchors = _resolveAnchors(typedContext.resizeMode);
+    final snappedResult = _resolveSnappedBounds(
+      state: state,
+      context: typedContext,
+      modifiers: modifiers,
       config: config,
-      ctrlPressed: modifiers.snapOverride,
+      maintainAspectRatio: maintainAspectRatio,
+      bounds: newBounds,
+      anchorsX: anchors.x,
+      anchorsY: anchors.y,
     );
-    final shouldGridSnap =
-        canSnap && snappingMode == SnappingMode.grid && !maintainAspectRatio;
-    final shouldObjectSnap =
-        canSnap &&
-        snappingMode == SnappingMode.object &&
-        snapConfig.enablePointSnaps &&
-        typedContext.referenceElements.isNotEmpty;
-
-    if (shouldGridSnap) {
-      newBounds = gridSnapService.snapRect(
-        rect: newBounds,
-        gridSize: gridConfig.size,
-        snapMinX: anchorsX.contains(SnapAxisAnchor.start),
-        snapMaxX: anchorsX.contains(SnapAxisAnchor.end),
-        snapMinY: anchorsY.contains(SnapAxisAnchor.start),
-        snapMaxY: anchorsY.contains(SnapAxisAnchor.end),
-      );
-    } else if (shouldObjectSnap) {
-      final zoom = state.application.view.camera.zoom;
-      final effectiveZoom = zoom == 0 ? 1.0 : zoom;
-      final snapDistance = snapConfig.distance / effectiveZoom;
-      final result = objectSnapService.snapResize(
-        targetRect: newBounds,
-        referenceElements: typedContext.referenceElements,
-        referenceAabbs: typedContext.referenceElementAabbs,
-        snapDistance: snapDistance,
-        targetAnchorsX: anchorsX,
-        targetAnchorsY: anchorsY,
-      );
-      if (result.hasSnap) {
-        final moveMinX = anchorsX.contains(SnapAxisAnchor.start);
-        final moveMaxX = anchorsX.contains(SnapAxisAnchor.end);
-        final moveMinY = anchorsY.contains(SnapAxisAnchor.start);
-        final moveMaxY = anchorsY.contains(SnapAxisAnchor.end);
-        newBounds = DrawRect(
-          minX: newBounds.minX + (moveMinX ? result.dx : 0),
-          minY: newBounds.minY + (moveMinY ? result.dy : 0),
-          maxX: newBounds.maxX + (moveMaxX ? result.dx : 0),
-          maxY: newBounds.maxY + (moveMaxY ? result.dy : 0),
-        );
-      }
-      if (snapConfig.showGuides) {
-        snapGuides = result.guides;
-      }
-    }
 
     final scales = ResizeGeometry.calculateScale(
       original: startBounds,
-      scaled: newBounds,
+      scaled: snappedResult.bounds,
       flipX: boundsResult.flipX,
       flipY: boundsResult.flipY,
     );
@@ -252,7 +187,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
 
     final nextTransform = ResizeTransform.complete(
       currentPosition: currentPosition,
-      newSelectionBounds: newBounds,
+      newSelectionBounds: snappedResult.bounds,
       scaleX: scaleX,
       scaleY: scaleY,
       anchor: anchor,
@@ -260,7 +195,7 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
 
     return EditUpdateResult<EditTransform>(
       transform: nextTransform,
-      snapGuides: snapGuides,
+      snapGuides: snappedResult.guides,
     );
   }
 
@@ -293,15 +228,10 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
       return null;
     }
 
-    final startBounds = typedContext.startBounds;
     final newSelectionBounds = typedTransform.newSelectionBounds!;
     final scaleX = typedTransform.scaleX!;
     final scaleY = typedTransform.scaleY!;
     final anchor = typedTransform.anchor!;
-
-    if (scaleX == 1.0 && scaleY == 1.0 && newSelectionBounds == startBounds) {
-      return null;
-    }
 
     final updatedById = EditApply.applyResizeToElements(
       snapshots: typedContext.elementSnapshots,
@@ -337,25 +267,63 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
     transform: ResizeTransform.incomplete(currentPosition: currentPosition),
   );
 
-  List<SnapAxisAnchor> _resolveAnchorsX(ResizeMode mode) => switch (mode) {
-    ResizeMode.left ||
-    ResizeMode.topLeft ||
-    ResizeMode.bottomLeft => const [SnapAxisAnchor.start],
-    ResizeMode.right ||
-    ResizeMode.topRight ||
-    ResizeMode.bottomRight => const [SnapAxisAnchor.end],
-    ResizeMode.top || ResizeMode.bottom => const [],
+  bool _shouldReturnIncompleteTransform(ResizeEditContext context) =>
+      context.selectedIdsAtStart.isEmpty ||
+      (context.isMultiSelect &&
+          (context.startBounds.width == 0 || context.startBounds.height == 0));
+
+  ({List<SnapAxisAnchor> x, List<SnapAxisAnchor> y}) _resolveAnchors(
+    ResizeMode mode,
+  ) => switch (mode) {
+    ResizeMode.topLeft => (
+      x: const [SnapAxisAnchor.start],
+      y: const [SnapAxisAnchor.start],
+    ),
+    ResizeMode.top => (x: const [], y: const [SnapAxisAnchor.start]),
+    ResizeMode.topRight => (
+      x: const [SnapAxisAnchor.end],
+      y: const [SnapAxisAnchor.start],
+    ),
+    ResizeMode.right => (x: const [SnapAxisAnchor.end], y: const []),
+    ResizeMode.bottomRight => (
+      x: const [SnapAxisAnchor.end],
+      y: const [SnapAxisAnchor.end],
+    ),
+    ResizeMode.bottom => (x: const [], y: const [SnapAxisAnchor.end]),
+    ResizeMode.bottomLeft => (
+      x: const [SnapAxisAnchor.start],
+      y: const [SnapAxisAnchor.end],
+    ),
+    ResizeMode.left => (x: const [SnapAxisAnchor.start], y: const []),
   };
 
-  List<SnapAxisAnchor> _resolveAnchorsY(ResizeMode mode) => switch (mode) {
-    ResizeMode.top ||
-    ResizeMode.topLeft ||
-    ResizeMode.topRight => const [SnapAxisAnchor.start],
-    ResizeMode.bottom ||
-    ResizeMode.bottomLeft ||
-    ResizeMode.bottomRight => const [SnapAxisAnchor.end],
-    ResizeMode.left || ResizeMode.right => const [],
-  };
+  DrawPoint _resolveHandleOffset({
+    required ResizeOperationParams params,
+    required DrawPoint pointerPosition,
+    required DrawRect startBounds,
+    required double rotation,
+    required DrawPoint rotationCenter,
+  }) {
+    final explicitOffset = params.handleOffset;
+    if (explicitOffset != null) {
+      return explicitOffset;
+    }
+
+    final overlaySpace = OverlaySpace(
+      rotation: rotation,
+      origin: rotationCenter,
+    );
+    final localPointerPosition = overlaySpace.fromWorld(pointerPosition);
+    final handlePosition = HandleCalculator.getResizeHandlePosition(
+      bounds: startBounds,
+      mode: params.resizeMode,
+      padding: params.selectionPadding,
+    );
+    return DrawPoint(
+      x: handlePosition.x - localPointerPosition.x,
+      y: handlePosition.y - localPointerPosition.y,
+    );
+  }
 
   bool _shouldLockSerialNumberAspectRatio({
     required DrawState state,
@@ -366,4 +334,81 @@ class ResizeOperation extends EditOperation with StandardFinishMixin {
         final element = state.domain.document.elementMap[id];
         return element != null && element.data is SerialNumberData;
       });
+
+  ({DrawRect bounds, List<SnapGuide> guides}) _resolveSnappedBounds({
+    required DrawState state,
+    required ResizeEditContext context,
+    required EditModifiers modifiers,
+    required DrawConfig config,
+    required bool maintainAspectRatio,
+    required DrawRect bounds,
+    required List<SnapAxisAnchor> anchorsX,
+    required List<SnapAxisAnchor> anchorsY,
+  }) {
+    final canSnap = !context.hasRotation && !modifiers.fromCenter;
+    if (!canSnap) {
+      return _unsnapped(bounds);
+    }
+
+    final snappingMode = resolveEffectiveSnappingModeForConfig(
+      config: config,
+      ctrlPressed: modifiers.snapOverride,
+    );
+    final snapConfig = config.snap;
+    final snapMinX = anchorsX.contains(SnapAxisAnchor.start);
+    final snapMaxX = anchorsX.contains(SnapAxisAnchor.end);
+    final snapMinY = anchorsY.contains(SnapAxisAnchor.start);
+    final snapMaxY = anchorsY.contains(SnapAxisAnchor.end);
+
+    if (snappingMode == SnappingMode.grid && !maintainAspectRatio) {
+      return (
+        bounds: gridSnapService.snapRect(
+          rect: bounds,
+          gridSize: config.grid.size,
+          snapMinX: snapMinX,
+          snapMaxX: snapMaxX,
+          snapMinY: snapMinY,
+          snapMaxY: snapMaxY,
+        ),
+        guides: const <SnapGuide>[],
+      );
+    }
+
+    final shouldObjectSnap =
+        snappingMode == SnappingMode.object &&
+        snapConfig.enablePointSnaps &&
+        context.referenceElements.isNotEmpty;
+    if (!shouldObjectSnap) {
+      return _unsnapped(bounds);
+    }
+
+    final snapDistance = resolveZoomAdjustedDistance(
+      distance: snapConfig.distance,
+      zoom: state.application.view.camera.zoom,
+    );
+    final result = objectSnapService.snapResize(
+      targetRect: bounds,
+      referenceElements: context.referenceElements,
+      referenceAabbs: context.referenceElementAabbs,
+      snapDistance: snapDistance,
+      targetAnchorsX: anchorsX,
+      targetAnchorsY: anchorsY,
+    );
+
+    final snappedBounds = result.hasSnap
+        ? DrawRect(
+            minX: bounds.minX + (snapMinX ? result.dx : 0),
+            minY: bounds.minY + (snapMinY ? result.dy : 0),
+            maxX: bounds.maxX + (snapMaxX ? result.dx : 0),
+            maxY: bounds.maxY + (snapMaxY ? result.dy : 0),
+          )
+        : bounds;
+    return (
+      bounds: snappedBounds,
+      guides: snapConfig.showGuides ? result.guides : const <SnapGuide>[],
+    );
+  }
+
+  ({DrawRect bounds, List<SnapGuide> guides}) _unsnapped(DrawRect bounds) =>
+      (bounds: bounds, guides: const <SnapGuide>[]);
 }

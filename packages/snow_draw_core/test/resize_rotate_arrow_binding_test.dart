@@ -21,8 +21,6 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
 void main() {
-  setUp(ArrowBindingResolver.instance.invalidate);
-
   test('resizing arrow clears bindings and stops follow-up updates', () {
     final target = _rectangleElement(
       id: 'target',
@@ -98,7 +96,6 @@ void main() {
       baseElements: resizedState.domain.document.elementMap,
       updatedElements: {target.id: movedTarget},
       changedElementIds: {target.id},
-      document: resizedState.domain.document,
     );
     expect(bindingUpdates.containsKey('arrow'), isFalse);
   });
@@ -176,7 +173,6 @@ void main() {
       baseElements: rotatedState.domain.document.elementMap,
       updatedElements: {target.id: movedTarget},
       changedElementIds: {target.id},
-      document: rotatedState.domain.document,
     );
     expect(bindingUpdates.containsKey('arrow'), isFalse);
   });

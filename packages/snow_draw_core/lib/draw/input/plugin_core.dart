@@ -13,38 +13,7 @@ typedef ActionDispatcher = Future<void> Function(DrawAction action);
 
 /// State provider for input systems.
 abstract interface class StateProvider {
-  DrawState get currentState;
-}
-
-/// Controller dependencies.
-///
-/// Encapsulates all external dependencies a controller needs for testing or
-/// replacement.
-class ControllerDependencies implements StateProvider {
-  const ControllerDependencies({
-    required ActionDispatcher dispatcher,
-    required StateProvider stateProvider,
-    required DrawContext Function() contextProvider,
-    required SelectionConfig Function() selectionConfigProvider,
-  }) : _dispatcher = dispatcher,
-       _stateProvider = stateProvider,
-       _contextProvider = contextProvider,
-       _selectionConfigProvider = selectionConfigProvider;
-  final ActionDispatcher _dispatcher;
-  final StateProvider _stateProvider;
-  final DrawContext Function() _contextProvider;
-  final SelectionConfig Function() _selectionConfigProvider;
-
-  Future<void> dispatch(DrawAction action) => _dispatcher(action);
-
-  @override
-  DrawState get currentState => _stateProvider.currentState;
-
-  /// Get the DrawContext.
-  DrawContext get context => _contextProvider();
-
-  /// Get selection configuration.
-  SelectionConfig get selectionConfig => _selectionConfigProvider();
+  DrawState get state;
 }
 
 enum EditPointerDownBehavior { ignore, cancelEdit, commitEdit }
@@ -214,21 +183,6 @@ abstract interface class InputPlugin {
   /// - consumed: event consumed, allow other plugins to observe
   Future<PluginResult> handleEvent(InputEvent event);
 
-  /// Pre-event hook (optional).
-  ///
-  /// Called before any plugin handles the event, useful for:
-  /// - Event preprocessing
-  /// - Logging
-  /// - Performance monitoring
-  ///
-  /// Return true to intercept the event and stop processing.
-  Future<bool> onBeforeEvent(InputEvent event) async => false;
-
-  /// Post-event hook (optional).
-  ///
-  /// Called after event processing regardless of result.
-  Future<void> onAfterEvent(InputEvent event, PluginResult? result) async {}
-
   /// Reset plugin state.
   void reset() {}
 }
@@ -287,12 +241,6 @@ abstract class InputPluginBase implements InputPlugin {
   Future<void> onUnload() async {
     _context = null;
   }
-
-  @override
-  Future<bool> onBeforeEvent(InputEvent event) async => false;
-
-  @override
-  Future<void> onAfterEvent(InputEvent event, PluginResult? result) async {}
 
   @override
   void reset() {}

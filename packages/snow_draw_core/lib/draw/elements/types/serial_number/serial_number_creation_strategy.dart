@@ -4,11 +4,11 @@ import '../../../config/draw_config.dart';
 import '../../../elements/core/element_data.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/interaction_state.dart';
-import '../../../services/grid_snap_service.dart';
 import '../../../services/text/text_metrics_service.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../utils/snapping_mode.dart';
+import '../../../utils/string_normalization.dart';
 import '../../core/creation_strategy.dart';
 import 'serial_number_data.dart';
 import 'serial_number_layout.dart';
@@ -23,7 +23,10 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     required DrawPoint startPosition,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final serialData = _resolveSerialData(data);
+    final serialData = requireCreationDataType<SerialNumberData>(
+      data: data,
+      strategyName: 'SerialNumberCreationStrategy.start',
+    );
     final baseDiameter = resolveSerialNumberDiameter(
       data: serialData,
       textMetricsService: textMetricsService,
@@ -55,8 +58,11 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     required SnappingMode snappingMode,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final serialData = _resolveSerialData(creatingState.elementData);
-    final snappedPosition = _snapIfNeeded(
+    final serialData = requireCreatingElementDataType<SerialNumberData>(
+      creatingState: creatingState,
+      strategyName: 'SerialNumberCreationStrategy.update',
+    );
+    final snappedPosition = snapCreationPoint(
       point: currentPosition,
       config: config,
       snappingMode: snappingMode,
@@ -92,38 +98,14 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     required DrawConfig config,
     required CreatingState creatingState,
     TextMetricsService textMetricsService = defaultTextMetricsService,
-  }) {
-    final rect = creatingState.currentRect;
-    final minSize = config.element.minCreateSize;
-    final shouldCommit =
-        rect.width >= minSize &&
-        rect.height >= minSize &&
-        creatingState.element.copyWith(rect: rect).isValidWith(config.element);
-
-    return CreationFinishResult(
-      data: creatingState.elementData,
-      rect: rect,
-      shouldCommit: shouldCommit,
-    );
-  }
+  }) => finishCreationWithCurrentRect(
+    config: config,
+    creatingState: creatingState,
+  );
 }
-
-SerialNumberData _resolveSerialData(ElementData data) =>
-    data is SerialNumberData ? data : const SerialNumberData();
 
 _SerialNumberCreationMode? _resolveCreationMode(CreationMode mode) =>
     mode is _SerialNumberCreationMode ? mode : null;
-
-DrawPoint _snapIfNeeded({
-  required DrawPoint point,
-  required DrawConfig config,
-  required SnappingMode snappingMode,
-}) {
-  if (snappingMode != SnappingMode.grid) {
-    return point;
-  }
-  return gridSnapService.snapPoint(point: point, gridSize: config.grid.size);
-}
 
 double _resolveDiameterWithMin({
   required double baseDiameter,
@@ -158,7 +140,7 @@ class _SerialNumberCreationMode extends CreationMode {
     baseDiameter: baseDiameter,
     number: data.number,
     fontSize: data.fontSize,
-    fontFamily: _normalizeFontFamily(data.fontFamily),
+    fontFamily: normalizeOptionalTrimmedString(data.fontFamily),
   );
 
   final double baseDiameter;
@@ -169,13 +151,5 @@ class _SerialNumberCreationMode extends CreationMode {
   bool matches(SerialNumberData data) =>
       number == data.number &&
       fontSize == data.fontSize &&
-      fontFamily == _normalizeFontFamily(data.fontFamily);
-}
-
-String? _normalizeFontFamily(String? fontFamily) {
-  final trimmed = fontFamily?.trim();
-  if (trimmed == null || trimmed.isEmpty) {
-    return null;
-  }
-  return trimmed;
+      fontFamily == normalizeOptionalTrimmedString(data.fontFamily);
 }

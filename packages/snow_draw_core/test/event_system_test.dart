@@ -330,30 +330,6 @@ void main() {
 
       expect(events, isEmpty);
     });
-
-    test('restoreHistoryJson emits history availability updates', () async {
-      final source = _createStore(initialState: _stateWithOneSelectedElement());
-      addTearDown(source.dispose);
-
-      await source.dispatch(
-        UpdateElementsStyle(elementIds: ['target'], opacity: 0.4),
-      );
-      final snapshotJson = source.exportHistoryJson();
-
-      final target = _createStore();
-      addTearDown(target.dispose);
-
-      final events = <HistoryAvailabilityChangedEvent>[];
-      final subscription = _listenToHistoryAvailability(target, events.add);
-      addTearDown(subscription.cancel);
-
-      target.restoreHistoryJson(snapshotJson);
-      await _flushEventQueue();
-
-      expect(events, hasLength(1));
-      expect(events.single.canUndo, isTrue);
-      expect(events.single.canRedo, isFalse);
-    });
   });
 
   group('DrawStore typed event subscriptions', () {

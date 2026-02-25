@@ -13,8 +13,6 @@ class FilterRenderDiagnostics {
     this.batchCount = 0,
     this.batchCacheHits = 0,
     this.batchCacheMisses = 0,
-    this.prefixSceneCacheHits = 0,
-    this.prefixSceneCacheMisses = 0,
   });
 
   /// Number of picture recorders created by the filter pipeline.
@@ -35,12 +33,6 @@ class FilterRenderDiagnostics {
   /// Number of cacheable element batches that missed cache reuse.
   final int batchCacheMisses;
 
-  /// Number of cached prefix scenes reused by dynamic filter frames.
-  final int prefixSceneCacheHits;
-
-  /// Number of prefix-scene cache lookups that required re-recording.
-  final int prefixSceneCacheMisses;
-
   /// Empty diagnostics snapshot.
   static const zero = FilterRenderDiagnostics();
 
@@ -52,9 +44,7 @@ class FilterRenderDiagnostics {
       other.filterPasses == filterPasses &&
       other.batchCount == batchCount &&
       other.batchCacheHits == batchCacheHits &&
-      other.batchCacheMisses == batchCacheMisses &&
-      other.prefixSceneCacheHits == prefixSceneCacheHits &&
-      other.prefixSceneCacheMisses == prefixSceneCacheMisses;
+      other.batchCacheMisses == batchCacheMisses;
 
   @override
   int get hashCode => Object.hash(
@@ -64,8 +54,6 @@ class FilterRenderDiagnostics {
     batchCount,
     batchCacheHits,
     batchCacheMisses,
-    prefixSceneCacheHits,
-    prefixSceneCacheMisses,
   );
 }
 
@@ -77,8 +65,6 @@ class FilterRenderDiagnosticsCollector {
   var _batchCount = 0;
   var _batchCacheHits = 0;
   var _batchCacheMisses = 0;
-  var _prefixSceneCacheHits = 0;
-  var _prefixSceneCacheMisses = 0;
   FilterRenderDiagnostics _lastFrame = FilterRenderDiagnostics.zero;
 
   /// Latest completed frame snapshot.
@@ -105,12 +91,6 @@ class FilterRenderDiagnosticsCollector {
   /// Records one cache-eligible batch cache miss.
   void markBatchCacheMiss() => _batchCacheMisses += 1;
 
-  /// Records one prefix-scene cache hit.
-  void markPrefixSceneCacheHit() => _prefixSceneCacheHits += 1;
-
-  /// Records one prefix-scene cache miss.
-  void markPrefixSceneCacheMiss() => _prefixSceneCacheMisses += 1;
-
   /// Finalizes the current frame.
   void endFrame() {
     _lastFrame = FilterRenderDiagnostics(
@@ -120,8 +100,6 @@ class FilterRenderDiagnosticsCollector {
       batchCount: _batchCount,
       batchCacheHits: _batchCacheHits,
       batchCacheMisses: _batchCacheMisses,
-      prefixSceneCacheHits: _prefixSceneCacheHits,
-      prefixSceneCacheMisses: _prefixSceneCacheMisses,
     );
   }
 
@@ -132,7 +110,5 @@ class FilterRenderDiagnosticsCollector {
     _batchCount = 0;
     _batchCacheHits = 0;
     _batchCacheMisses = 0;
-    _prefixSceneCacheHits = 0;
-    _prefixSceneCacheMisses = 0;
   }
 }

@@ -2,6 +2,7 @@ export 'context/flutter_draw_context.dart';
 export 'extensions/coordinate_service_offset_extensions.dart';
 export 'extensions/draw_color_extensions.dart';
 export 'render/element_renderer.dart';
+export 'render/tasks/flutter_render_task_executor.dart';
 export 'services/font/flutter_system_font_service.dart';
 export 'services/text/flutter_text_metrics_service.dart';
 export 'services/text/flutter_text_rendering_cache_invalidation.dart';

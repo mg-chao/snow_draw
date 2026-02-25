@@ -1,10 +1,11 @@
 import 'dart:math' as math;
 
+import 'package:meta/meta.dart';
+
 import '../config/draw_config.dart';
 import '../elements/core/element_data.dart';
-import '../elements/core/element_registry_interface.dart';
+import '../elements/core/element_registry.dart';
 import '../elements/core/element_type_id.dart';
-import '../elements/types/arrow/arrow_like_data.dart';
 import '../elements/types/serial_number/serial_number_data.dart';
 import '../elements/types/text/text_data.dart';
 import '../models/draw_state.dart';
@@ -13,13 +14,16 @@ import '../models/element_state.dart';
 import '../services/log/log_service.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
-import '../types/element_style.dart';
 import '../types/resize_mode.dart';
+import 'lru_cache.dart';
+import 'single_selection_profile.dart';
 
 final ModuleLogger _hitTestFallbackLog = LogService.fallback.element;
 const _hitTestCacheSize = 4;
 const _hitTestCacheGridSize = 4.0;
-final _hitTestCache = _HitTestCache();
+final _hitTestCache = LruCache<_HitTestCacheKey, HitTestResult>(
+  maxEntries: _hitTestCacheSize,
+);
 
 /// Hit test target.
 enum HitTestTarget { none, handle, element, selectionPadding }
@@ -124,6 +128,29 @@ enum CursorHint {
 class HitTest {
   const HitTest();
 
+  static const _resizeModeByHandle = <HandleType, ResizeMode>{
+    HandleType.topLeft: ResizeMode.topLeft,
+    HandleType.top: ResizeMode.top,
+    HandleType.topRight: ResizeMode.topRight,
+    HandleType.right: ResizeMode.right,
+    HandleType.bottomRight: ResizeMode.bottomRight,
+    HandleType.bottom: ResizeMode.bottom,
+    HandleType.bottomLeft: ResizeMode.bottomLeft,
+    HandleType.left: ResizeMode.left,
+  };
+
+  static const _cursorHintByHandle = <HandleType, CursorHint>{
+    HandleType.topLeft: CursorHint.resizeUpLeftDownRight,
+    HandleType.bottomRight: CursorHint.resizeUpLeftDownRight,
+    HandleType.topRight: CursorHint.resizeUpRightDownLeft,
+    HandleType.bottomLeft: CursorHint.resizeUpRightDownLeft,
+    HandleType.top: CursorHint.resizeUp,
+    HandleType.bottom: CursorHint.resizeDown,
+    HandleType.left: CursorHint.resizeLeft,
+    HandleType.right: CursorHint.resizeRight,
+    HandleType.rotate: CursorHint.rotate,
+  };
+
   /// Returns true if `position` is inside the current selection overlay
   /// bounds, including the visual padding area (and taking overlay rotation
   /// into account).
@@ -133,17 +160,9 @@ class HitTest {
     required SelectionConfig config,
   }) {
     final selection = stateView.effectiveSelection;
-    final selectedIds = stateView.state.domain.selection.selectedIds;
-    if (selectedIds.length == 1) {
-      final element = stateView.state.domain.document.getElementById(
-        selectedIds.first,
-      );
-      if (element != null && element.data is ArrowLikeData) {
-        final data = element.data as ArrowLikeData;
-        if (data.points.length == 2) {
-          return false;
-        }
-      }
+    final singleSelection = _resolveSingleSelectionProfileForView(stateView);
+    if (singleSelection.isTwoPointArrow) {
+      return false;
     }
     final context = _buildSelectionContext(
       selection: selection,
@@ -168,7 +187,7 @@ class HitTest {
     required DrawStateView stateView,
     required DrawPoint position,
     required SelectionConfig config,
-    required ElementRegistry registry,
+    required DefaultElementRegistry registry,
     double? tolerance,
     ElementTypeId<ElementData>? filterTypeId,
   }) {
@@ -176,7 +195,7 @@ class HitTest {
     final actualTolerance = tolerance ?? config.interaction.handleTolerance;
     final quantizedX = _quantizePosition(position.x);
     final quantizedY = _quantizePosition(position.y);
-    final cachedResult = _hitTestCache.lookup(
+    final cacheKey = _HitTestCacheKey(
       state: state,
       config: config,
       tolerance: actualTolerance,
@@ -185,6 +204,7 @@ class HitTest {
       positionX: quantizedX,
       positionY: quantizedY,
     );
+    final cachedResult = _hitTestCache.get(cacheKey);
     if (cachedResult != null) {
       return cachedResult;
     }
@@ -195,39 +215,20 @@ class HitTest {
     final boundTextIds = filterTypeId == SerialNumberData.typeIdToken
         ? document.boundTextIds
         : null;
-    HitTestResult cache(HitTestResult result) => _storeCache(
-      result: result,
-      state: state,
-      config: config,
-      tolerance: actualTolerance,
-      filterTypeId: filterTypeId,
-      registry: registry,
-      positionX: quantizedX,
-      positionY: quantizedY,
-    );
+    HitTestResult cache(HitTestResult result) {
+      _hitTestCache.put(cacheKey, result);
+      return result;
+    }
 
     // Determine corner handle offset for single arrow selections.
-    ArrowLikeData? singleSelectedArrow;
-    if (selectedIds.length == 1) {
-      final element = state.domain.document.getElementById(selectedIds.first);
-      if (element != null) {
-        final effectiveElement = stateView.effectiveElement(element);
-        final data = effectiveElement.data;
-        if (data is ArrowLikeData) {
-          singleSelectedArrow = data;
-        }
-      }
-    }
-    final cornerHandleOffset = (singleSelectedArrow != null ? 8 : 0).toDouble();
+    final singleSelection = _resolveSingleSelectionProfileForView(stateView);
+    final cornerHandleOffset = singleSelection.cornerHandleOffset;
 
     // Check if this is a single 2-point arrow selection.
     // For 2-point arrows, skip handle hit testing since all operations
     // can be performed through the point editor.
-    final isSingleTwoPointArrow =
-        singleSelectedArrow != null && singleSelectedArrow.points.length == 2;
-    final isSingleElbowArrow =
-        singleSelectedArrow != null &&
-        singleSelectedArrow.arrowType == ArrowType.elbow;
+    final isSingleTwoPointArrow = singleSelection.isTwoPointArrow;
+    final isSingleElbowArrow = singleSelection.isElbowArrow;
 
     _SelectionHitContext? selectionContext;
     var isInSelectionPadding = false;
@@ -249,6 +250,7 @@ class HitTest {
           tolerance: actualTolerance,
           config: config,
           isInSelectionPadding: isInSelectionPadding,
+          prioritizeMoveInSelectionPadding: singleSelection.isText,
           allowRotateHandle: !isSingleElbowArrow,
         );
         if (handleResult != null) {
@@ -320,8 +322,15 @@ class HitTest {
     required double tolerance,
     required SelectionConfig config,
     required bool isInSelectionPadding,
+    bool prioritizeMoveInSelectionPadding = false,
     bool allowRotateHandle = true,
   }) {
+    // For selected text, keep move as the primary action while the pointer is
+    // in the padded move area; only allow resize handles from outside.
+    if (prioritizeMoveInSelectionPadding && isInSelectionPadding) {
+      return null;
+    }
+
     final bounds = context.bounds;
     final paddedBounds = context.paddedBounds;
     final handleBounds = context.handleBounds;
@@ -341,18 +350,62 @@ class HitTest {
         context: context,
         tolerance: tolerance,
       )) {
-        return HitTestResult(
-          handleType: HandleType.rotate,
-          cursorHint: CursorHint.rotate,
-          selectionRotation: rotation,
-          target: HitTestTarget.handle,
+        return _buildHandleHitResult(
+          handle: HandleType.rotate,
+          rotation: rotation,
           isInSelectionPadding: isInSelectionPadding,
         );
       }
     }
 
-    // Check 4 corner handles first (higher priority for precise
-    // resizing). Use handleBounds for corner positions.
+    final cornerHandle = _resolveCornerHandle(
+      handleBounds: handleBounds,
+      position: position,
+      context: context,
+      tolerance: tolerance,
+    );
+    if (cornerHandle != null) {
+      return _buildHandleHitResult(
+        handle: cornerHandle,
+        rotation: rotation,
+        isInSelectionPadding: isInSelectionPadding,
+      );
+    }
+
+    final edgeHandle = _resolveEdgeHandle(
+      paddedBounds: paddedBounds,
+      position: testPosition,
+      tolerance: tolerance,
+    );
+    if (edgeHandle != null) {
+      return _buildHandleHitResult(
+        handle: edgeHandle,
+        rotation: rotation,
+        isInSelectionPadding: isInSelectionPadding,
+      );
+    }
+
+    return null;
+  }
+
+  HitTestResult _buildHandleHitResult({
+    required HandleType handle,
+    required double rotation,
+    required bool isInSelectionPadding,
+  }) => HitTestResult(
+    handleType: handle,
+    cursorHint: _cursorHintForHandle(handle),
+    selectionRotation: rotation,
+    target: HitTestTarget.handle,
+    isInSelectionPadding: isInSelectionPadding,
+  );
+
+  HandleType? _resolveCornerHandle({
+    required DrawRect handleBounds,
+    required DrawPoint position,
+    required _SelectionHitContext context,
+    required double tolerance,
+  }) {
     final minX = handleBounds.minX;
     final minY = handleBounds.minY;
     final maxX = handleBounds.maxX;
@@ -365,15 +418,8 @@ class HitTest {
       context: context,
       tolerance: tolerance,
     )) {
-      return HitTestResult(
-        handleType: HandleType.topLeft,
-        cursorHint: _cursorHintForHandle(HandleType.topLeft),
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
+      return HandleType.topLeft;
     }
-
     if (_isNearRotatedPoint(
       position: position,
       localX: maxX,
@@ -381,15 +427,8 @@ class HitTest {
       context: context,
       tolerance: tolerance,
     )) {
-      return HitTestResult(
-        handleType: HandleType.topRight,
-        cursorHint: _cursorHintForHandle(HandleType.topRight),
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
+      return HandleType.topRight;
     }
-
     if (_isNearRotatedPoint(
       position: position,
       localX: maxX,
@@ -397,15 +436,8 @@ class HitTest {
       context: context,
       tolerance: tolerance,
     )) {
-      return HitTestResult(
-        handleType: HandleType.bottomRight,
-        cursorHint: _cursorHintForHandle(HandleType.bottomRight),
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
+      return HandleType.bottomRight;
     }
-
     if (_isNearRotatedPoint(
       position: position,
       localX: minX,
@@ -413,55 +445,44 @@ class HitTest {
       context: context,
       tolerance: tolerance,
     )) {
-      return HitTestResult(
-        handleType: HandleType.bottomLeft,
-        cursorHint: _cursorHintForHandle(HandleType.bottomLeft),
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
-    }
-
-    // Check 4 edges (excluding corner regions).
-    // Perform edge checks in local space.
-    if (_testTopEdge(paddedBounds, testPosition, tolerance)) {
-      return HitTestResult(
-        handleType: HandleType.top,
-        cursorHint: CursorHint.resizeUp,
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
-    }
-    if (_testRightEdge(paddedBounds, testPosition, tolerance)) {
-      return HitTestResult(
-        handleType: HandleType.right,
-        cursorHint: CursorHint.resizeRight,
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
-    }
-    if (_testBottomEdge(paddedBounds, testPosition, tolerance)) {
-      return HitTestResult(
-        handleType: HandleType.bottom,
-        cursorHint: CursorHint.resizeDown,
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
-    }
-    if (_testLeftEdge(paddedBounds, testPosition, tolerance)) {
-      return HitTestResult(
-        handleType: HandleType.left,
-        cursorHint: CursorHint.resizeLeft,
-        selectionRotation: rotation,
-        target: HitTestTarget.handle,
-        isInSelectionPadding: isInSelectionPadding,
-      );
+      return HandleType.bottomLeft;
     }
 
     return null;
+  }
+
+  HandleType? _resolveEdgeHandle({
+    required DrawRect paddedBounds,
+    required DrawPoint position,
+    required double tolerance,
+  }) {
+    if (_testTopEdge(paddedBounds, position, tolerance)) {
+      return HandleType.top;
+    }
+    if (_testRightEdge(paddedBounds, position, tolerance)) {
+      return HandleType.right;
+    }
+    if (_testBottomEdge(paddedBounds, position, tolerance)) {
+      return HandleType.bottom;
+    }
+    if (_testLeftEdge(paddedBounds, position, tolerance)) {
+      return HandleType.left;
+    }
+    return null;
+  }
+
+  SingleSelectionProfile _resolveSingleSelectionProfileForView(
+    DrawStateView stateView,
+  ) {
+    final state = stateView.state;
+    final document = state.domain.document;
+    return resolveSingleSelectionProfile(
+      selectedIds: state.domain.selection.selectedIds,
+      resolveElementById: (id) {
+        final element = document.getElementById(id);
+        return element == null ? null : stateView.effectiveElement(element);
+      },
+    );
   }
 
   _SelectionHitContext? _buildSelectionContext({
@@ -530,31 +551,6 @@ class HitTest {
         testPosition.y <= paddedBounds.maxY;
   }
 
-  HitTestResult _storeCache({
-    required HitTestResult result,
-    required DrawState state,
-    required SelectionConfig config,
-    required double tolerance,
-    required ElementTypeId<ElementData>? filterTypeId,
-    required ElementRegistry registry,
-    required int positionX,
-    required int positionY,
-  }) {
-    _hitTestCache.store(
-      _HitTestCacheEntry(
-        state: state,
-        config: config,
-        tolerance: tolerance,
-        filterTypeId: filterTypeId,
-        registry: registry,
-        positionX: positionX,
-        positionY: positionY,
-        result: result,
-      ),
-    );
-    return result;
-  }
-
   int _quantizePosition(double value) =>
       (value / _hitTestCacheGridSize).floor();
 
@@ -562,7 +558,7 @@ class HitTest {
   bool _testElement(
     ElementState element,
     DrawPoint position,
-    ElementRegistry registry,
+    DefaultElementRegistry registry,
     double tolerance,
   ) {
     final definition = registry.getDefinition(element.typeId);
@@ -615,88 +611,85 @@ class HitTest {
   }
 
   /// Tests whether the pointer hits the top edge (excluding corner regions).
-  bool _testTopEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    if (!_isNear(position.y, bounds.minY, tolerance)) {
-      return false;
-    }
-    return position.x > bounds.minX + tolerance &&
-        position.x < bounds.maxX - tolerance;
-  }
+  bool _testTopEdge(DrawRect bounds, DrawPoint position, double tolerance) =>
+      _testHorizontalEdge(
+        bounds: bounds,
+        position: position,
+        edgeY: bounds.minY,
+        tolerance: tolerance,
+      );
 
   /// Tests whether the pointer hits the right edge (excluding corner regions).
-  bool _testRightEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    if (!_isNear(position.x, bounds.maxX, tolerance)) {
-      return false;
-    }
-    return position.y > bounds.minY + tolerance &&
-        position.y < bounds.maxY - tolerance;
-  }
+  bool _testRightEdge(DrawRect bounds, DrawPoint position, double tolerance) =>
+      _testVerticalEdge(
+        bounds: bounds,
+        position: position,
+        edgeX: bounds.maxX,
+        tolerance: tolerance,
+      );
 
   /// Tests whether the pointer hits the bottom edge (excluding corner regions).
-  bool _testBottomEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    if (!_isNear(position.y, bounds.maxY, tolerance)) {
-      return false;
-    }
-    return position.x > bounds.minX + tolerance &&
-        position.x < bounds.maxX - tolerance;
-  }
+  bool _testBottomEdge(DrawRect bounds, DrawPoint position, double tolerance) =>
+      _testHorizontalEdge(
+        bounds: bounds,
+        position: position,
+        edgeY: bounds.maxY,
+        tolerance: tolerance,
+      );
 
   /// Tests whether the pointer hits the left edge (excluding corner regions).
-  bool _testLeftEdge(DrawRect bounds, DrawPoint position, double tolerance) {
-    if (!_isNear(position.x, bounds.minX, tolerance)) {
-      return false;
-    }
-    return position.y > bounds.minY + tolerance &&
-        position.y < bounds.maxY - tolerance;
-  }
+  bool _testLeftEdge(DrawRect bounds, DrawPoint position, double tolerance) =>
+      _testVerticalEdge(
+        bounds: bounds,
+        position: position,
+        edgeX: bounds.minX,
+        tolerance: tolerance,
+      );
+
+  bool _testHorizontalEdge({
+    required DrawRect bounds,
+    required DrawPoint position,
+    required double edgeY,
+    required double tolerance,
+  }) =>
+      _isNear(position.y, edgeY, tolerance) &&
+      _isInsideEdgeSpan(
+        value: position.x,
+        min: bounds.minX,
+        max: bounds.maxX,
+        tolerance: tolerance,
+      );
+
+  bool _testVerticalEdge({
+    required DrawRect bounds,
+    required DrawPoint position,
+    required double edgeX,
+    required double tolerance,
+  }) =>
+      _isNear(position.x, edgeX, tolerance) &&
+      _isInsideEdgeSpan(
+        value: position.y,
+        min: bounds.minY,
+        max: bounds.maxY,
+        tolerance: tolerance,
+      );
+
+  bool _isInsideEdgeSpan({
+    required double value,
+    required double min,
+    required double max,
+    required double tolerance,
+  }) => value > min + tolerance && value < max - tolerance;
 
   bool _isNear(double value, double target, double tolerance) =>
       (value - target).abs() <= tolerance;
 
   /// Maps a selection [handle] to a resize mode.
-  ResizeMode? getResizeModeForHandle(HandleType handle) {
-    switch (handle) {
-      case HandleType.topLeft:
-        return ResizeMode.topLeft;
-      case HandleType.top:
-        return ResizeMode.top;
-      case HandleType.topRight:
-        return ResizeMode.topRight;
-      case HandleType.right:
-        return ResizeMode.right;
-      case HandleType.bottomRight:
-        return ResizeMode.bottomRight;
-      case HandleType.bottom:
-        return ResizeMode.bottom;
-      case HandleType.bottomLeft:
-        return ResizeMode.bottomLeft;
-      case HandleType.left:
-        return ResizeMode.left;
-      case HandleType.rotate:
-        return null; // Rotate is not a resize operation.
-    }
-  }
+  ResizeMode? getResizeModeForHandle(HandleType handle) =>
+      _resizeModeByHandle[handle];
 
-  CursorHint _cursorHintForHandle(HandleType handle) {
-    switch (handle) {
-      case HandleType.topLeft:
-      case HandleType.bottomRight:
-        return CursorHint.resizeUpLeftDownRight;
-      case HandleType.topRight:
-      case HandleType.bottomLeft:
-        return CursorHint.resizeUpRightDownLeft;
-      case HandleType.top:
-        return CursorHint.resizeUp;
-      case HandleType.bottom:
-        return CursorHint.resizeDown;
-      case HandleType.left:
-        return CursorHint.resizeLeft;
-      case HandleType.right:
-        return CursorHint.resizeRight;
-      case HandleType.rotate:
-        return CursorHint.rotate;
-    }
-  }
+  CursorHint _cursorHintForHandle(HandleType handle) =>
+      _cursorHintByHandle[handle]!;
 }
 
 class _SelectionHitContext {
@@ -721,8 +714,9 @@ class _SelectionHitContext {
   final DrawPoint testPosition;
 }
 
-class _HitTestCacheEntry {
-  const _HitTestCacheEntry({
+@immutable
+class _HitTestCacheKey {
+  const _HitTestCacheKey({
     required this.state,
     required this.config,
     required this.tolerance,
@@ -730,76 +724,38 @@ class _HitTestCacheEntry {
     required this.registry,
     required this.positionX,
     required this.positionY,
-    required this.result,
   });
 
   final DrawState state;
   final SelectionConfig config;
   final double tolerance;
   final ElementTypeId<ElementData>? filterTypeId;
-  final ElementRegistry registry;
+  final DefaultElementRegistry registry;
   final int positionX;
   final int positionY;
-  final HitTestResult result;
 
-  bool matches({
-    required DrawState state,
-    required SelectionConfig config,
-    required double tolerance,
-    required ElementTypeId<ElementData>? filterTypeId,
-    required ElementRegistry registry,
-    required int positionX,
-    required int positionY,
-  }) =>
-      identical(this.state, state) &&
-      this.positionX == positionX &&
-      this.positionY == positionY &&
-      this.tolerance == tolerance &&
-      this.filterTypeId == filterTypeId &&
-      identical(this.registry, registry) &&
-      this.config == config;
-}
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is _HitTestCacheKey &&
+          identical(other.state, state) &&
+          other.config == config &&
+          other.tolerance == tolerance &&
+          other.filterTypeId == filterTypeId &&
+          identical(other.registry, registry) &&
+          other.positionX == positionX &&
+          other.positionY == positionY;
 
-class _HitTestCache {
-  final _entries = <_HitTestCacheEntry>[];
-
-  HitTestResult? lookup({
-    required DrawState state,
-    required SelectionConfig config,
-    required double tolerance,
-    required ElementTypeId<ElementData>? filterTypeId,
-    required ElementRegistry registry,
-    required int positionX,
-    required int positionY,
-  }) {
-    for (var i = 0; i < _entries.length; i++) {
-      final entry = _entries[i];
-      if (entry.matches(
-        state: state,
-        config: config,
-        tolerance: tolerance,
-        filterTypeId: filterTypeId,
-        registry: registry,
-        positionX: positionX,
-        positionY: positionY,
-      )) {
-        if (i != 0) {
-          _entries
-            ..removeAt(i)
-            ..insert(0, entry);
-        }
-        return entry.result;
-      }
-    }
-    return null;
-  }
-
-  void store(_HitTestCacheEntry entry) {
-    if (_entries.length >= _hitTestCacheSize) {
-      _entries.removeLast();
-    }
-    _entries.insert(0, entry);
-  }
+  @override
+  int get hashCode => Object.hash(
+    identityHashCode(state),
+    config,
+    tolerance,
+    filterTypeId,
+    identityHashCode(registry),
+    positionX,
+    positionY,
+  );
 }
 
 /// Shared hit-test helper instance.

@@ -8,7 +8,6 @@ import 'package:snow_draw_core/draw/edit/core/edit_operation_params.dart';
 import 'package:snow_draw_core/draw/edit/move/move_operation.dart';
 import 'package:snow_draw_core/draw/edit/resize/resize_operation.dart';
 import 'package:snow_draw_core/draw/edit/rotate/rotate_operation.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_points.dart';
@@ -24,8 +23,6 @@ import 'package:snow_draw_core/draw/types/draw_rect.dart';
 import 'package:snow_draw_core/draw/types/resize_mode.dart';
 
 void main() {
-  setUp(ArrowBindingResolver.instance.invalidate);
-
   group('ArrowPointOperation preview/finish consistency', () {
     test('straight arrow: preview matches finish geometry', () {
       final arrow = _arrowElement(

@@ -2,7 +2,6 @@ import 'package:meta/meta.dart';
 
 import 'element_data.dart';
 import 'element_definition.dart';
-import 'element_registry_interface.dart';
 import 'element_type_id.dart';
 
 /// Runtime registry for all element types.
@@ -10,13 +9,18 @@ import 'element_type_id.dart';
 /// This enables open/closed behavior: adding a new element type is done by
 /// registering a new [ElementDefinition], without modifying core render or
 /// hit-test code.
-class DefaultElementRegistry implements MutableElementRegistry {
+class DefaultElementRegistry {
   /// Creates a new registry instance.
   DefaultElementRegistry();
   final Map<String, ElementDefinition<ElementData>> _definitionsByTypeValue =
       {};
 
-  @override
+  void registerAll(Iterable<ElementDefinition<ElementData>> definitions) {
+    for (final definition in definitions) {
+      register(definition);
+    }
+  }
+
   void register<T extends ElementData>(ElementDefinition<T> definition) {
     final typeValue = definition.typeId.value;
     if (_definitionsByTypeValue.containsKey(typeValue)) {
@@ -28,7 +32,6 @@ class DefaultElementRegistry implements MutableElementRegistry {
   ElementDefinition<T>? get<T extends ElementData>(ElementTypeId<T> typeId) =>
       getDefinition(typeId);
 
-  @override
   ElementDefinition<T>? getDefinition<T extends ElementData>(
     ElementTypeId<T> typeId,
   ) {
@@ -36,15 +39,12 @@ class DefaultElementRegistry implements MutableElementRegistry {
     return definition is ElementDefinition<T> ? definition : null;
   }
 
-  @override
   ElementDefinition<ElementData>? getDefinitionByValue(String typeValue) =>
       _definitionsByTypeValue[typeValue];
 
-  @override
   bool supports<T extends ElementData>(ElementTypeId<T> typeId) =>
       getDefinition(typeId) != null;
 
-  @override
   bool supportsTypeValue(String typeValue) =>
       _definitionsByTypeValue.containsKey(typeValue);
 
@@ -56,7 +56,6 @@ class DefaultElementRegistry implements MutableElementRegistry {
     return definition;
   }
 
-  @override
   Iterable<ElementTypeId<ElementData>> get registeredTypeIds =>
       _definitionsByTypeValue.values.map((definition) => definition.typeId);
 

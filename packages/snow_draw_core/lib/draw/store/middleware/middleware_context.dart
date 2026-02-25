@@ -1,12 +1,10 @@
 import 'package:meta/meta.dart';
 
 import '../../actions/draw_actions.dart';
-import '../../core/dependency_interfaces.dart';
-import '../../edit/core/edit_event_factory.dart';
+import '../../core/draw_context.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
 import '../../models/draw_state.dart';
-import '../../reducers/interaction/interaction_state_machine.dart';
 import '../history_manager.dart';
 import '../snapshot_builder.dart';
 
@@ -21,7 +19,7 @@ String _generateTraceId() {
 /// Flat dispatch context for middleware execution.
 @immutable
 class DispatchContext {
-  const DispatchContext({
+  const DispatchContext._({
     required this.action,
     required this.drawContext,
     required this.initialState,
@@ -32,8 +30,6 @@ class DispatchContext {
     required this.sessionIdGenerator,
     required this.isBatching,
     required this.includeSelectionInHistory,
-    required this.events,
-    required this.metadata,
     required this.shouldStop,
     required this.stopReason,
     required this.error,
@@ -45,7 +41,7 @@ class DispatchContext {
   factory DispatchContext.initial({
     required DrawAction action,
     required DrawState state,
-    required InteractionReducerDeps drawContext,
+    required DrawContext drawContext,
     required HistoryManager historyManager,
     required SnapshotBuilder snapshotBuilder,
     required EditSessionService editSessionService,
@@ -53,7 +49,7 @@ class DispatchContext {
     required bool isBatching,
     required bool includeSelectionInHistory,
     String? traceId,
-  }) => DispatchContext(
+  }) => DispatchContext._(
     action: action,
     drawContext: drawContext,
     initialState: state,
@@ -64,8 +60,6 @@ class DispatchContext {
     sessionIdGenerator: sessionIdGenerator,
     isBatching: isBatching,
     includeSelectionInHistory: includeSelectionInHistory,
-    events: const [],
-    metadata: const {},
     shouldStop: false,
     stopReason: null,
     error: null,
@@ -74,7 +68,7 @@ class DispatchContext {
     traceId: traceId ?? _generateTraceId(),
   );
   final DrawAction action;
-  final InteractionReducerDeps drawContext;
+  final DrawContext drawContext;
   final DrawState initialState;
   final DrawState currentState;
   final HistoryManager historyManager;
@@ -83,8 +77,6 @@ class DispatchContext {
   final EditSessionIdGenerator sessionIdGenerator;
   final bool isBatching;
   final bool includeSelectionInHistory;
-  final List<EditSessionEvent> events;
-  final Map<String, dynamic> metadata;
   final bool shouldStop;
   final String? stopReason;
   final Object? error;
@@ -92,83 +84,58 @@ class DispatchContext {
   final String? errorSource;
   final String traceId;
 
-  DispatchContext copyWith({
-    DrawAction? action,
-    InteractionReducerDeps? drawContext,
-    DrawState? initialState,
-    DrawState? currentState,
-    HistoryManager? historyManager,
-    SnapshotBuilder? snapshotBuilder,
-    EditSessionService? editSessionService,
-    EditSessionIdGenerator? sessionIdGenerator,
-    bool? isBatching,
-    bool? includeSelectionInHistory,
-    List<EditSessionEvent>? events,
-    Map<String, dynamic>? metadata,
-    bool? shouldStop,
-    String? stopReason,
-    Object? error,
-    StackTrace? stackTrace,
-    String? errorSource,
-    String? traceId,
-  }) => DispatchContext(
-    action: action ?? this.action,
-    drawContext: drawContext ?? this.drawContext,
-    initialState: initialState ?? this.initialState,
-    currentState: currentState ?? this.currentState,
-    historyManager: historyManager ?? this.historyManager,
-    snapshotBuilder: snapshotBuilder ?? this.snapshotBuilder,
-    editSessionService: editSessionService ?? this.editSessionService,
-    sessionIdGenerator: sessionIdGenerator ?? this.sessionIdGenerator,
-    isBatching: isBatching ?? this.isBatching,
-    includeSelectionInHistory:
-        includeSelectionInHistory ?? this.includeSelectionInHistory,
-    events: events ?? this.events,
-    metadata: metadata ?? this.metadata,
-    shouldStop: shouldStop ?? this.shouldStop,
-    stopReason: stopReason ?? this.stopReason,
-    error: error ?? this.error,
-    stackTrace: stackTrace ?? this.stackTrace,
-    errorSource: errorSource ?? this.errorSource,
-    traceId: traceId ?? this.traceId,
-  );
-
-  HistoryAvailability get historyAvailability => HistoryAvailability(
-    canUndo: historyManager.canUndo,
-    canRedo: historyManager.canRedo,
-  );
-
   bool get hasError => error != null;
+  bool get isTerminal => shouldStop || hasError;
 
   bool get hasStateChanged => currentState != initialState;
 
-  T? getMetadata<T>(String key) => metadata[key] as T?;
-
-  DispatchContext withCurrentState(DrawState newState) =>
-      copyWith(currentState: newState);
-
-  DispatchContext withEvents(List<EditSessionEvent> newEvents) =>
-      newEvents.isEmpty ? this : copyWith(events: [...events, ...newEvents]);
+  DispatchContext withCurrentState(DrawState newState) {
+    if (identical(newState, currentState)) {
+      return this;
+    }
+    return _copy(currentState: newState);
+  }
 
   DispatchContext withStop(String reason) =>
-      copyWith(shouldStop: true, stopReason: reason);
+      _copy(shouldStop: true, stopReason: reason);
 
   DispatchContext withError(
     Object error,
     StackTrace stackTrace, {
     String? source,
-  }) => copyWith(
+  }) => _copy(
+    shouldStop: true,
+    stopReason: 'Error: $error',
     error: error,
     stackTrace: stackTrace,
     errorSource: source ?? errorSource,
-    shouldStop: true,
-    stopReason: 'Error: $error',
   );
 
-  DispatchContext withMetadata(String key, dynamic value) {
-    final updated = Map<String, dynamic>.from(metadata)..[key] = value;
-    return copyWith(metadata: updated);
-  }
+  DispatchContext _copy({
+    DrawState? currentState,
+    bool? shouldStop,
+    String? stopReason,
+    Object? error,
+    StackTrace? stackTrace,
+    String? errorSource,
+  }) => DispatchContext._(
+    action: action,
+    drawContext: drawContext,
+    initialState: initialState,
+    currentState: currentState ?? this.currentState,
+    historyManager: historyManager,
+    snapshotBuilder: snapshotBuilder,
+    editSessionService: editSessionService,
+    sessionIdGenerator: sessionIdGenerator,
+    isBatching: isBatching,
+    includeSelectionInHistory: includeSelectionInHistory,
+    shouldStop: shouldStop ?? this.shouldStop,
+    stopReason: stopReason ?? this.stopReason,
+    error: error ?? this.error,
+    stackTrace: stackTrace ?? this.stackTrace,
+    errorSource: errorSource ?? this.errorSource,
+    traceId: traceId,
+  );
 
   @override
   String toString() =>
@@ -176,7 +143,6 @@ class DispatchContext {
       'action: ${action.runtimeType}, '
       'traceId: $traceId, '
       'hasError: $hasError, '
-      'shouldStop: $shouldStop, '
-      'stateChanged: $hasStateChanged, '
-      'events: ${events.length})';
+      'isTerminal: $isTerminal, '
+      'stateChanged: $hasStateChanged)';
 }

@@ -6,6 +6,7 @@ import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
+import '../shared/element_data_codec.dart';
 
 @immutable
 final class FilterData extends ElementData
@@ -22,13 +23,15 @@ final class FilterData extends ElementData
            : strength;
 
   factory FilterData.fromJson(Map<String, dynamic> json) => FilterData(
-    type: CanvasFilterType.values.firstWhere(
-      (type) => type.name == json['type'],
-      orElse: () => ConfigDefaults.defaultFilterType,
+    type: ElementDataCodec.decodeEnumByName(
+      values: CanvasFilterType.values,
+      raw: json['type'],
+      fieldName: 'type',
     ),
-    strength:
-        (json['strength'] as num?)?.toDouble() ??
-        ConfigDefaults.defaultFilterStrength,
+    strength: ElementDataCodec.decodeDouble(
+      json['strength'],
+      fieldName: 'strength',
+    ),
   );
 
   static const typeIdToken = ElementTypeId<FilterData>('filter');

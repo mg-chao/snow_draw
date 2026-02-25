@@ -12,7 +12,6 @@ import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/edit_operation_id.dart';
 import '../types/element_style.dart';
-import '../utils/edit_intent_detector.dart';
 import 'history_coalescing.dart';
 import 'history_policy.dart';
 
@@ -28,9 +27,6 @@ abstract class DrawAction
   @override
   HistoryPolicy get historyPolicy => HistoryPolicy.none;
 
-  @override
-  bool get requiresPreActionSnapshot => false;
-
   ActionCriticality get criticality => ActionCriticality.important;
 
   /// Whether this action should cancel an active edit session.
@@ -40,13 +36,38 @@ abstract class DrawAction
   String toString() => runtimeType.toString();
 }
 
+/// Base action that always conflicts with active editing.
+abstract class EditingConflictAction extends DrawAction {
+  const EditingConflictAction();
+
+  @override
+  bool get conflictsWithEditing => true;
+}
+
+/// Base action that is always recorded in history.
+abstract class HistoryRecordingAction extends DrawAction {
+  const HistoryRecordingAction();
+
+  @override
+  HistoryPolicy get historyPolicy => HistoryPolicy.record;
+}
+
+/// Base action that both conflicts with editing and records history.
+abstract class EditingConflictHistoryRecordingAction
+    extends EditingConflictAction {
+  const EditingConflictHistoryRecordingAction();
+
+  @override
+  HistoryPolicy get historyPolicy => HistoryPolicy.record;
+}
+
 List<T> _freezeList<T>(List<T> values) => List<T>.unmodifiable(values);
 
 // ============================================================================
 // Selection actions
 // ============================================================================
 
-class SelectElement extends DrawAction {
+class SelectElement extends EditingConflictAction {
   const SelectElement({
     required this.elementId,
     required this.position,
@@ -57,32 +78,23 @@ class SelectElement extends DrawAction {
   final DrawPoint position;
 
   @override
-  bool get conflictsWithEditing => true;
-
-  @override
   String toString() =>
       'SelectElement(id: $elementId, addToSelection: $addToSelection)';
 }
 
-class ClearSelection extends DrawAction {
+class ClearSelection extends EditingConflictAction {
   const ClearSelection();
-
-  @override
-  bool get conflictsWithEditing => true;
 }
 
-class SelectAll extends DrawAction {
+class SelectAll extends EditingConflictAction {
   const SelectAll();
-
-  @override
-  bool get conflictsWithEditing => true;
 }
 
 // ============================================================================
 // Element actions
 // ============================================================================
 
-class CreateElement extends DrawAction {
+class CreateElement extends EditingConflictAction {
   const CreateElement({
     required this.typeId,
     required this.position,
@@ -106,128 +118,70 @@ class CreateElement extends DrawAction {
   final bool snapOverride;
 
   @override
-  bool get conflictsWithEditing => true;
-
-  @override
   String toString() =>
       'CreateElement(typeId: $typeId, position: $position, '
       'snapOverride: $snapOverride)';
 }
 
-class UpdateCreatingElement extends DrawAction {
-  const UpdateCreatingElement({
-    required this.currentPosition,
-    this.maintainAspectRatio = false,
-    this.createFromCenter = false,
-    this.snapOverride = false,
-  });
-  final DrawPoint currentPosition;
-  final bool maintainAspectRatio;
-  final bool createFromCenter;
-  final bool snapOverride;
-
-  @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  String toString() =>
-      'UpdateCreatingElement(position: $currentPosition, '
-      'snapOverride: $snapOverride)';
-}
-
-class UpdateCreatingElementBatch extends DrawAction {
-  UpdateCreatingElementBatch({
+class UpdateCreatingElement extends EditingConflictAction {
+  UpdateCreatingElement({
     required List<DrawPoint> positions,
     this.maintainAspectRatio = false,
     this.createFromCenter = false,
     this.snapOverride = false,
-  }) : positions = _freezeList(positions);
-
-  /// Creates a batch action using an already-frozen positions list.
-  ///
-  /// Callers must ensure [positions] will not be mutated after dispatch.
-  UpdateCreatingElementBatch.frozen({
-    required this.positions,
-    this.maintainAspectRatio = false,
-    this.createFromCenter = false,
-    this.snapOverride = false,
-  });
-
-  /// Ordered pointer positions represented by this batched update.
+  }) : assert(
+         positions.isNotEmpty,
+         'UpdateCreatingElement.positions must not be empty',
+       ),
+       positions = _freezeList(positions);
   final List<DrawPoint> positions;
+  DrawPoint get currentPosition => positions.last;
   final bool maintainAspectRatio;
   final bool createFromCenter;
   final bool snapOverride;
-
-  @override
-  bool get conflictsWithEditing => true;
+  bool get isBatch => positions.length > 1;
 
   @override
   String toString() =>
-      'UpdateCreatingElementBatch(count: ${positions.length}, '
+      'UpdateCreatingElement(count: ${positions.length}, '
       'snapOverride: $snapOverride)';
 }
 
-class AddArrowPoint extends DrawAction implements NonRecordable {
+class AddArrowPoint extends EditingConflictAction {
   const AddArrowPoint({required this.position, this.snapOverride = false});
 
   final DrawPoint position;
   final bool snapOverride;
 
   @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  String get nonRecordableReason =>
-      'AddArrowPoint is an intermediate create state.';
-
-  @override
   String toString() =>
       'AddArrowPoint(position: $position, snapOverride: $snapOverride)';
 }
 
-class FinishCreateElement extends DrawAction {
+class FinishCreateElement extends EditingConflictHistoryRecordingAction {
   const FinishCreateElement();
-
-  @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
-  bool get requiresPreActionSnapshot => true;
 
   @override
   String toString() => 'FinishCreateElement()';
 }
 
-class CancelCreateElement extends DrawAction {
+class CancelCreateElement extends EditingConflictAction {
   const CancelCreateElement();
-
-  @override
-  bool get conflictsWithEditing => true;
 
   @override
   String toString() => 'CancelCreateElement()';
 }
 
-class DeleteElements extends DrawAction {
+class DeleteElements extends EditingConflictHistoryRecordingAction {
   DeleteElements({required List<String> elementIds})
     : elementIds = _freezeList(elementIds);
   final List<String> elementIds;
 
   @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
   String toString() => 'DeleteElements(ids: $elementIds)';
 }
 
-class DuplicateElements extends DrawAction {
+class DuplicateElements extends EditingConflictHistoryRecordingAction {
   DuplicateElements({
     required List<String> elementIds,
     this.offsetX = 10.0,
@@ -238,33 +192,21 @@ class DuplicateElements extends DrawAction {
   final double offsetY;
 
   @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
   String toString() =>
       'DuplicateElements(ids: $elementIds, offset: ($offsetX, $offsetY))';
 }
 
-class ChangeElementZIndex extends DrawAction {
+class ChangeElementZIndex extends EditingConflictHistoryRecordingAction {
   const ChangeElementZIndex({required this.elementId, required this.operation});
   final String elementId;
   final ZIndexOperation operation;
-
-  @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  HistoryPolicy get historyPolicy => HistoryPolicy.record;
 
   @override
   String toString() =>
       'ChangeElementZIndex(id: $elementId, operation: $operation)';
 }
 
-class ChangeElementsZIndex extends DrawAction {
+class ChangeElementsZIndex extends EditingConflictHistoryRecordingAction {
   ChangeElementsZIndex({
     required List<String> elementIds,
     required this.operation,
@@ -273,22 +215,13 @@ class ChangeElementsZIndex extends DrawAction {
   final ZIndexOperation operation;
 
   @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
-  bool get requiresPreActionSnapshot => true;
-
-  @override
   String toString() =>
       'ChangeElementsZIndex(ids: $elementIds, operation: $operation)';
 }
 
 enum ZIndexOperation { bringToFront, sendToBack, bringForward, sendBackward }
 
-class UpdateElementsStyle extends DrawAction {
+class UpdateElementsStyle extends EditingConflictHistoryRecordingAction {
   UpdateElementsStyle({
     required List<String> elementIds,
     this.color,
@@ -338,21 +271,45 @@ class UpdateElementsStyle extends DrawAction {
   @override
   final HistoryCoalescing? historyCoalescing;
 
-  @override
-  bool get conflictsWithEditing => true;
+  /// Style payload applied to style-updatable element data.
+  ///
+  /// Opacity is intentionally excluded because it lives on element state
+  /// rather than element data payloads.
+  ElementStyleUpdate get styleUpdate => ElementStyleUpdate(
+    color: color,
+    fillColor: fillColor,
+    strokeWidth: strokeWidth,
+    strokeStyle: strokeStyle,
+    fillStyle: fillStyle,
+    filterType: filterType,
+    filterStrength: filterStrength,
+    cornerRadius: cornerRadius,
+    arrowType: arrowType,
+    startArrowhead: startArrowhead,
+    endArrowhead: endArrowhead,
+    fontSize: fontSize,
+    fontFamily: fontFamily,
+    textAlign: textAlign,
+    verticalAlign: verticalAlign,
+    textStrokeColor: textStrokeColor,
+    textStrokeWidth: textStrokeWidth,
+    highlightShape: highlightShape,
+    serialNumber: serialNumber,
+  );
 
-  @override
-  HistoryPolicy get historyPolicy => HistoryPolicy.record;
+  /// Whether this action contains any data-payload style updates.
+  bool get hasStyleUpdates => !styleUpdate.isEmpty;
 
-  @override
-  bool get requiresPreActionSnapshot => true;
+  /// Whether this action has any effective updates (style payload or opacity).
+  bool get hasUpdates => hasStyleUpdates || opacity != null;
 
   @override
   String toString() =>
       'UpdateElementsStyle(ids: $elementIds, opacity: $opacity)';
 }
 
-class UpdateGlobalElements extends DrawAction implements Recordable {
+class UpdateGlobalElements extends EditingConflictHistoryRecordingAction
+    implements Recordable {
   const UpdateGlobalElements({
     this.highlightMask,
     this.watermark,
@@ -365,15 +322,6 @@ class UpdateGlobalElements extends DrawAction implements Recordable {
   final HistoryCoalescing? historyCoalescing;
 
   bool get hasUpdates => highlightMask != null || watermark != null;
-
-  @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
-  bool get requiresPreActionSnapshot => true;
 
   @override
   String get historyDescription {
@@ -400,20 +348,13 @@ class UpdateGlobalElements extends DrawAction implements Recordable {
       ')';
 }
 
-class CreateSerialNumberTextElements extends DrawAction implements Recordable {
+class CreateSerialNumberTextElements
+    extends EditingConflictHistoryRecordingAction
+    implements Recordable {
   CreateSerialNumberTextElements({required List<String> elementIds})
     : elementIds = _freezeList(elementIds);
 
   final List<String> elementIds;
-
-  @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
-  bool get requiresPreActionSnapshot => true;
 
   @override
   String get historyDescription => 'Create serial number text';
@@ -425,7 +366,7 @@ class CreateSerialNumberTextElements extends DrawAction implements Recordable {
   String toString() => 'CreateSerialNumberTextElements(ids: $elementIds)';
 }
 
-class StartTextEdit extends DrawAction implements NonRecordable {
+class StartTextEdit extends EditingConflictAction {
   const StartTextEdit({required this.position, this.elementId});
 
   /// Element id to edit. If null, a new text element is created.
@@ -433,26 +374,15 @@ class StartTextEdit extends DrawAction implements NonRecordable {
   final DrawPoint position;
 
   @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  String get nonRecordableReason =>
-      'StartTextEdit starts a text editing session.';
-
-  @override
   String toString() =>
       'StartTextEdit(elementId: $elementId, position: $position)';
 }
 
-class UpdateTextEdit extends DrawAction implements NonRecordable {
+class UpdateTextEdit extends DrawAction {
   const UpdateTextEdit({required this.text, this.rect});
 
   final String text;
   final DrawRect? rect;
-
-  @override
-  String get nonRecordableReason =>
-      'UpdateTextEdit is an intermediate edit state.';
 
   @override
   String toString() =>
@@ -464,16 +394,12 @@ class UpdateTextEdit extends DrawAction implements NonRecordable {
 /// This action is used when system fonts are loaded asynchronously and text
 /// shaping metrics change. It refreshes bounds for auto-resizing text without
 /// recording a history entry.
-class RefreshAutoResizeTextLayoutsAfterFontLoad extends DrawAction
-    implements NonRecordable {
+class RefreshAutoResizeTextLayoutsAfterFontLoad extends DrawAction {
   const RefreshAutoResizeTextLayoutsAfterFontLoad();
-
-  @override
-  String get nonRecordableReason =>
-      'Font-load layout refresh is a derived non-user state update.';
 }
 
-class FinishTextEdit extends DrawAction implements Recordable {
+class FinishTextEdit extends EditingConflictHistoryRecordingAction
+    implements Recordable {
   const FinishTextEdit({
     required this.elementId,
     required this.text,
@@ -483,15 +409,6 @@ class FinishTextEdit extends DrawAction implements Recordable {
   final String elementId;
   final String text;
   final bool isNew;
-
-  @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
-  bool get requiresPreActionSnapshot => true;
 
   bool get _deletesExistingText => text.trim().isEmpty && !isNew;
 
@@ -509,22 +426,15 @@ class FinishTextEdit extends DrawAction implements Recordable {
   String toString() => 'FinishTextEdit(elementId: $elementId, isNew: $isNew)';
 }
 
-class CancelTextEdit extends DrawAction implements NonRecordable {
+class CancelTextEdit extends EditingConflictAction {
   const CancelTextEdit();
-
-  @override
-  bool get conflictsWithEditing => true;
-
-  @override
-  String get nonRecordableReason =>
-      'CancelTextEdit aborts a text editing session.';
 }
 
 // ============================================================================
 // Edit actions
 // ============================================================================
 
-class StartEdit extends DrawAction implements NonRecordable {
+class StartEdit extends DrawAction {
   const StartEdit({
     required this.operationId,
     required this.position,
@@ -535,14 +445,10 @@ class StartEdit extends DrawAction implements NonRecordable {
   final EditOperationParams params;
 
   @override
-  String get nonRecordableReason =>
-      'StartEdit represents an intermediate edit session state.';
-
-  @override
   String toString() => 'StartEdit(id: $operationId, position: $position)';
 }
 
-class UpdateEdit extends DrawAction implements NonRecordable {
+class UpdateEdit extends DrawAction {
   const UpdateEdit({
     required this.currentPosition,
     this.modifiers = const EditModifiers(),
@@ -555,22 +461,12 @@ class UpdateEdit extends DrawAction implements NonRecordable {
   final EditModifiers modifiers;
 
   @override
-  String get nonRecordableReason =>
-      'UpdateEdit represents an intermediate edit session state.';
-
-  @override
   String toString() => 'UpdateEdit(currentPosition: $currentPosition)';
 }
 
-class FinishEdit extends DrawAction implements Recordable {
+class FinishEdit extends HistoryRecordingAction implements Recordable {
   const FinishEdit({this.metadata});
   final HistoryMetadata? metadata;
-
-  @override
-  HistoryPolicy get historyPolicy => HistoryPolicy.record;
-
-  @override
-  bool get requiresPreActionSnapshot => true;
 
   @override
   String get historyDescription => metadata?.description ?? 'Edit operation';
@@ -580,33 +476,15 @@ class FinishEdit extends DrawAction implements Recordable {
       metadata?.recordType ?? HistoryRecordType.edit;
 }
 
-class CancelEdit extends DrawAction implements NonRecordable {
+class CancelEdit extends DrawAction {
   const CancelEdit({this.reason = EditCancelReason.userCancelled});
   final EditCancelReason reason;
-
-  @override
-  String get nonRecordableReason =>
-      'CancelEdit indicates the session was aborted.';
 
   @override
   String toString() => 'CancelEdit(reason: $reason)';
 }
 
-class EditIntentAction extends DrawAction {
-  const EditIntentAction({
-    required this.intent,
-    required this.position,
-    this.modifiers = const EditModifiers(),
-  });
-  final EditIntent intent;
-  final DrawPoint position;
-  final EditModifiers modifiers;
-
-  @override
-  String toString() => 'EditIntentAction(intent: $intent, position: $position)';
-}
-
-class SetDragPending extends DrawAction {
+class SetDragPending extends EditingConflictAction {
   const SetDragPending({
     required this.pointerDownPosition,
     required this.intent,
@@ -615,18 +493,12 @@ class SetDragPending extends DrawAction {
   final PendingIntent intent;
 
   @override
-  bool get conflictsWithEditing => true;
-
-  @override
   String toString() =>
       'SetDragPending(position: $pointerDownPosition, intent: $intent)';
 }
 
-class ClearDragPending extends DrawAction {
+class ClearDragPending extends EditingConflictAction {
   const ClearDragPending();
-
-  @override
-  bool get conflictsWithEditing => true;
 
   @override
   String toString() => 'ClearDragPending()';
@@ -636,40 +508,28 @@ class ClearDragPending extends DrawAction {
 // Box select actions
 // ============================================================================
 
-class StartBoxSelect extends DrawAction {
+class StartBoxSelect extends EditingConflictAction {
   const StartBoxSelect({required this.startPosition});
   final DrawPoint startPosition;
-
-  @override
-  bool get conflictsWithEditing => true;
 
   @override
   String toString() => 'StartBoxSelect(start: $startPosition)';
 }
 
-class UpdateBoxSelect extends DrawAction {
+class UpdateBoxSelect extends EditingConflictAction {
   const UpdateBoxSelect({required this.currentPosition});
   final DrawPoint currentPosition;
-
-  @override
-  bool get conflictsWithEditing => true;
 
   @override
   String toString() => 'UpdateBoxSelect(current: $currentPosition)';
 }
 
-class FinishBoxSelect extends DrawAction {
+class FinishBoxSelect extends EditingConflictAction {
   const FinishBoxSelect();
-
-  @override
-  bool get conflictsWithEditing => true;
 }
 
-class CancelBoxSelect extends DrawAction {
+class CancelBoxSelect extends EditingConflictAction {
   const CancelBoxSelect();
-
-  @override
-  bool get conflictsWithEditing => true;
 }
 
 // ============================================================================

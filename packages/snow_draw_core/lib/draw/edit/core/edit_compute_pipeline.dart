@@ -1,7 +1,4 @@
-import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_binding_resolver.dart';
-import '../../elements/types/arrow/arrow_like_data.dart';
-import '../../models/document_state.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../types/draw_rect.dart';
@@ -37,35 +34,18 @@ class EditComputePipeline {
     }
 
     final document = state.domain.document;
-    final hasArrowLikeUpdate = _hasArrowLikeUpdate(updatedById);
-    if (!_shouldRunArrowBindingPipeline(
-      document: document,
-      updatedById: updatedById,
-      hasArrowLikeUpdate: hasArrowLikeUpdate,
-    )) {
-      return EditComputedResult(
-        updatedElements: Map<String, ElementState>.unmodifiable(updatedById),
-        multiSelectBounds: multiSelectBounds,
-        multiSelectRotation: multiSelectRotation,
-      );
-    }
-
     final merged = Map<String, ElementState>.of(updatedById);
-
-    if (hasArrowLikeUpdate) {
-      merged.addAll(
-        unbindArrowLikeElements(
-          transformedElements: merged,
-          baseElements: document.elementMap,
-        ),
-      );
-    }
+    merged.addAll(
+      unbindArrowLikeElements(
+        transformedElements: merged,
+        baseElements: document.elementMap,
+      ),
+    );
 
     final bindingUpdates = ArrowBindingResolver.instance.resolve(
       baseElements: document.elementMap,
       updatedElements: merged,
       changedElementIds: merged.keys.toSet(),
-      document: document,
     );
     for (final entry in bindingUpdates.entries) {
       if (skipBindingUpdate?.call(entry.key, entry.value) ?? false) {
@@ -79,42 +59,5 @@ class EditComputePipeline {
       multiSelectBounds: multiSelectBounds,
       multiSelectRotation: multiSelectRotation,
     );
-  }
-
-  static bool _shouldRunArrowBindingPipeline({
-    required DocumentState document,
-    required Map<String, ElementState> updatedById,
-    required bool hasArrowLikeUpdate,
-  }) {
-    if (hasArrowLikeUpdate) {
-      return true;
-    }
-
-    if (!_hasBindableTargetUpdate(updatedById)) {
-      return false;
-    }
-
-    return document.hasArrowBoundToAny(updatedById.keys);
-  }
-
-  static bool _hasArrowLikeUpdate(Map<String, ElementState> updatedById) {
-    for (final element in updatedById.values) {
-      if (element.data is ArrowLikeData) {
-        return true;
-      }
-    }
-    return false;
-  }
-
-  static bool _hasBindableTargetUpdate(Map<String, ElementState> updatedById) {
-    for (final element in updatedById.values) {
-      if (element.data is ArrowLikeData) {
-        continue;
-      }
-      if (ArrowBindingUtils.isBindableTarget(element)) {
-        return true;
-      }
-    }
-    return false;
   }
 }

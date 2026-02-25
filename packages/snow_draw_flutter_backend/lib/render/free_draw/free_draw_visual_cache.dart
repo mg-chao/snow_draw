@@ -6,7 +6,7 @@ import 'free_draw_path_utils.dart';
 
 /// Cached visual data for a single free-draw element.
 ///
-/// The dynamic canvas currently needs only the smoothed path to render hover
+/// The scene canvas currently needs only the smoothed path to render hover
 /// outlines, so this entry keeps the cache payload intentionally small.
 class FreeDrawVisualEntry {
   FreeDrawVisualEntry({

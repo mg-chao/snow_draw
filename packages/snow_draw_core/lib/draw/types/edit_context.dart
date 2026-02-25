@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../models/element_state.dart';
+import '../services/text/text_metrics_service.dart';
 import 'draw_point.dart';
 import 'draw_rect.dart';
 import 'element_geometry.dart';
@@ -67,7 +68,6 @@ final class MoveEditContext extends EditContext {
     this.snapBoundsAtStart,
     this.referenceElements = const [],
     this.referenceElementAabbs = const [],
-    this.targetElements = const [],
   });
 
   /// Starting center for each element (lean snapshot).
@@ -86,9 +86,6 @@ final class MoveEditContext extends EditContext {
 
   /// Precomputed axis-aligned bounds for [referenceElements].
   final List<DrawRect> referenceElementAabbs;
-
-  /// Selected elements captured at edit start for precise target snap points.
-  final List<ElementState> targetElements;
 
   /// Bounds used as the snap base for this move session.
   DrawRect get snapBounds => snapBoundsAtStart ?? startBounds;
@@ -117,6 +114,7 @@ final class ResizeEditContext extends EditContext {
     this.referenceElements = const [],
     this.referenceElementAabbs = const [],
     this.forceSerialNumberAspectRatio = false,
+    this.textMetricsService = defaultTextMetricsService,
   });
   final ResizeMode resizeMode;
   final DrawPoint handleOffset;
@@ -135,10 +133,37 @@ final class ResizeEditContext extends EditContext {
   /// Whether resize should always preserve aspect ratio for this session.
   final bool forceSerialNumberAspectRatio;
 
+  /// Text metrics service used by text resize layout calculations.
+  final TextMetricsService textMetricsService;
+
   @override
   bool get hasSnapshots => elementSnapshots.isNotEmpty;
 
   bool get hasRotation => rotation != 0;
+
+  ResizeEditContext withTextMetricsService(
+    TextMetricsService textMetricsService,
+  ) {
+    if (identical(this.textMetricsService, textMetricsService)) {
+      return this;
+    }
+    return ResizeEditContext(
+      startPosition: startPosition,
+      startBounds: startBounds,
+      selectedIdsAtStart: selectedIdsAtStart,
+      selectionVersion: selectionVersion,
+      elementsVersion: elementsVersion,
+      resizeMode: resizeMode,
+      handleOffset: handleOffset,
+      rotation: rotation,
+      selectionPadding: selectionPadding,
+      elementSnapshots: elementSnapshots,
+      referenceElements: referenceElements,
+      referenceElementAabbs: referenceElementAabbs,
+      forceSerialNumberAspectRatio: forceSerialNumberAspectRatio,
+      textMetricsService: textMetricsService,
+    );
+  }
 }
 
 /// Context for rotate operations.

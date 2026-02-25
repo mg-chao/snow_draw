@@ -19,7 +19,4 @@ enum HistoryPolicy {
 mixin HistoryPolicyProvider {
   /// History policy for this action.
   HistoryPolicy get historyPolicy;
-
-  /// Whether this action needs a special pre-action snapshot.
-  bool get requiresPreActionSnapshot => false;
 }

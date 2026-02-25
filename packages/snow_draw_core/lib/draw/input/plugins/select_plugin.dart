@@ -1,5 +1,4 @@
 import '../../actions/draw_actions.dart';
-import '../../edit/core/edit_modifiers.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
@@ -13,8 +12,10 @@ import '../../services/draw_state_view_builder.dart';
 import '../../types/draw_point.dart';
 import '../../types/element_style.dart';
 import '../../utils/edit_intent_detector.dart';
+import '../double_tap_tracker.dart';
 import '../input_event.dart';
 import '../plugin_core.dart';
+import '../policies/drag_threshold_policy.dart';
 
 /// Plugin that handles selection and intent detection.
 class SelectPlugin extends DrawInputPlugin {
@@ -34,16 +35,11 @@ class SelectPlugin extends DrawInputPlugin {
            PointerCancelInputEvent,
          },
        );
-  static const _doubleClickThreshold = Duration(milliseconds: 500);
-  static const double _doubleClickToleranceMultiplier = 2;
+  final _arrowHandleDoubleTapTracker = DoubleTapTracker<ArrowPointHandle>();
   final InputRoutingPolicy _routingPolicy;
   DrawStateViewBuilder? _stateViewBuilder;
   ElementTypeId<ElementData>? currentToolTypeId;
   bool isSelectionToolActive;
-
-  DateTime? _lastArrowHandleClickTime;
-  DrawPoint? _lastArrowHandleClickPosition;
-  ArrowPointHandle? _lastArrowHandleClickHandle;
 
   @override
   Future<void> onLoad(PluginContext context) async {
@@ -56,6 +52,11 @@ class SelectPlugin extends DrawInputPlugin {
   @override
   bool canHandle(InputEvent _, DrawState state) =>
       !_isSelectionBehaviorDisabled && _routingPolicy.allowSelection(state);
+
+  @override
+  void reset() {
+    _arrowHandleDoubleTapTracker.clear();
+  }
 
   @override
   Future<PluginResult> handleEvent(InputEvent event) => switch (event) {
@@ -95,13 +96,11 @@ class SelectPlugin extends DrawInputPlugin {
       return unhandled();
     }
 
-    final editModifiers = modifiers.toEditModifiers();
-
     if (intent is StartArrowPointIntent) {
       final now = DateTime.now();
       final data = _arrowDataForElement(stateView, intent.elementId);
       if (data == null) {
-        _clearArrowHandleClickState();
+        _arrowHandleDoubleTapTracker.clear();
       } else {
         final handle = _resolveArrowHandleForIntent(
           intent: intent,
@@ -112,15 +111,21 @@ class SelectPlugin extends DrawInputPlugin {
           handle: handle,
           data: data,
         );
-        if (canDoubleClick && _isDoubleClick(handle, position, now)) {
-          _clearArrowHandleClickState();
+        if (canDoubleClick &&
+            _arrowHandleDoubleTapTracker.isDoubleTap(
+              target: handle,
+              position: position,
+              now: now,
+              baseTolerance: selectionConfig.interaction.handleTolerance,
+            )) {
+          _arrowHandleDoubleTapTracker.clear();
           final doubleClickIntent = StartArrowPointIntent(
             elementId: intent.elementId,
             pointKind: intent.pointKind,
             pointIndex: intent.pointIndex,
             isDoubleClick: true,
           );
-          await _executeIntent(doubleClickIntent, position, editModifiers);
+          await _executeIntent(doubleClickIntent, position);
           return handled(
             message: handle.isFixed
                 ? 'Arrow segment released'
@@ -128,13 +133,17 @@ class SelectPlugin extends DrawInputPlugin {
           );
         }
         if (canDoubleClick) {
-          _recordArrowHandleClick(handle, position, now);
+          _arrowHandleDoubleTapTracker.recordTap(
+            target: handle,
+            position: position,
+            now: now,
+          );
         } else {
-          _clearArrowHandleClickState();
+          _arrowHandleDoubleTapTracker.clear();
         }
       }
     } else {
-      _clearArrowHandleClickState();
+      _arrowHandleDoubleTapTracker.clear();
     }
 
     if (intent is SelectIntent && intent.deferSelectionForDrag) {
@@ -150,7 +159,7 @@ class SelectPlugin extends DrawInputPlugin {
       return handled(message: 'Pending select');
     }
 
-    await _executeIntent(intent, position, editModifiers);
+    await _executeIntent(intent, position);
     return handled(message: 'Selection handled');
   }
 
@@ -161,38 +170,29 @@ class SelectPlugin extends DrawInputPlugin {
       return unhandled();
     }
 
-    final pendingIntent = interaction.intent;
     final pointerDownPosition = interaction.pointerDownPosition;
-    final thresholdSquared = _dragStartThreshold * _dragStartThreshold;
+    if (!hasReachedDragThreshold(
+      from: pointerDownPosition,
+      to: event.position,
+      threshold: _dragStartThreshold,
+    )) {
+      return handled(message: 'Pending drag');
+    }
 
-    if (pointerDownPosition.distanceSquared(event.position) >=
-        thresholdSquared) {
-      await dispatch(const ClearDragPending());
+    await dispatch(const ClearDragPending());
 
-      if (state.domain.hasSelection) {
-        final (elementId, addToSelection) = switch (pendingIntent) {
-          PendingSelectIntent(:final elementId, :final addToSelection) => (
-            elementId,
-            addToSelection,
-          ),
-          PendingMoveIntent() => (
-            state.domain.selection.selectedIds.first,
-            false,
-          ),
-        };
+    final startMoveIntent = _resolvePendingDragStartIntent(interaction.intent);
+    if (startMoveIntent == null) {
+      return handled(message: 'Pending drag');
+    }
 
-        final didStart = await _dispatchStartEditForIntent(
-          intent: StartMoveIntent(
-            elementId: elementId,
-            addToSelection: addToSelection,
-          ),
-          position: pointerDownPosition,
-          modifiers: event.modifiers.toEditModifiers(),
-        );
-        if (didStart) {
-          await _updateEditFromEvent(event);
-        }
-      }
+    final didStart = await _dispatchMappedStartEdit(
+      intent: startMoveIntent,
+      position: pointerDownPosition,
+      requireSessionStart: true,
+    );
+    if (didStart) {
+      await _updateEditFromEvent(event);
     }
 
     return handled(message: 'Pending drag');
@@ -230,11 +230,7 @@ class SelectPlugin extends DrawInputPlugin {
     return unhandled();
   }
 
-  Future<void> _executeIntent(
-    EditIntent intent,
-    DrawPoint position,
-    EditModifiers modifiers,
-  ) async {
+  Future<void> _executeIntent(EditIntent intent, DrawPoint position) async {
     switch (intent) {
       case SelectIntent():
         await dispatch(
@@ -277,32 +273,36 @@ class SelectPlugin extends DrawInputPlugin {
         await dispatch(const ClearSelection());
         return;
       default:
-        await dispatch(
-          EditIntentAction(
-            intent: intent,
-            position: position,
-            modifiers: modifiers,
-          ),
-        );
+        await _dispatchMappedStartEdit(intent: intent, position: position);
         return;
     }
   }
 
-  Future<bool> _dispatchStartEditForIntent({
+  Future<bool> _dispatchMappedStartEdit({
     required EditIntent intent,
     required DrawPoint position,
-    required EditModifiers modifiers,
+    bool requireSessionStart = false,
   }) async {
+    final startEdit = _mapToStartEdit(intent: intent, position: position);
+    if (startEdit == null) {
+      return false;
+    }
     final wasEditing = state.application.isEditing;
-    await dispatch(
-      EditIntentAction(
-        intent: intent,
-        position: position,
-        modifiers: modifiers,
-      ),
-    );
+    await dispatch(startEdit);
+    if (!requireSessionStart) {
+      return true;
+    }
     return !wasEditing && state.application.isEditing;
   }
+
+  StartEdit? _mapToStartEdit({
+    required EditIntent intent,
+    required DrawPoint position,
+  }) => drawContext.editIntentMapper.mapToStartEdit(
+    intent: intent,
+    position: position,
+    config: drawContext.config,
+  );
 
   Future<void> _updateEditFromEvent(PointerMoveInputEvent event) => dispatch(
     UpdateEdit(
@@ -406,42 +406,22 @@ class SelectPlugin extends DrawInputPlugin {
     return handle.index > 0 && handle.index < pointCount - 1;
   }
 
-  bool _isDoubleClick(
-    ArrowPointHandle handle,
-    DrawPoint position,
-    DateTime now,
-  ) {
-    final lastTime = _lastArrowHandleClickTime;
-    final lastPosition = _lastArrowHandleClickPosition;
-    final lastHandle = _lastArrowHandleClickHandle;
-    if (lastTime == null || lastPosition == null || lastHandle == null) {
-      return false;
-    }
-    if (now.difference(lastTime) > _doubleClickThreshold) {
-      return false;
-    }
-    if (lastHandle != handle) {
-      return false;
-    }
-    final tolerance =
-        selectionConfig.interaction.handleTolerance *
-        _doubleClickToleranceMultiplier;
-    return lastPosition.distanceSquared(position) <= tolerance * tolerance;
-  }
-
-  void _recordArrowHandleClick(
-    ArrowPointHandle handle,
-    DrawPoint position,
-    DateTime now,
-  ) {
-    _lastArrowHandleClickHandle = handle;
-    _lastArrowHandleClickPosition = position;
-    _lastArrowHandleClickTime = now;
-  }
-
-  void _clearArrowHandleClickState() {
-    _lastArrowHandleClickHandle = null;
-    _lastArrowHandleClickPosition = null;
-    _lastArrowHandleClickTime = null;
-  }
+  StartMoveIntent? _resolvePendingDragStartIntent(
+    PendingIntent pendingIntent,
+  ) => switch (pendingIntent) {
+    PendingSelectIntent(:final elementId, :final addToSelection) =>
+      state.domain.hasSelection
+          ? StartMoveIntent(
+              elementId: elementId,
+              addToSelection: addToSelection,
+            )
+          : null,
+    PendingMoveIntent() =>
+      state.domain.selection.selectedIds.isEmpty
+          ? null
+          : StartMoveIntent(
+              elementId: state.domain.selection.selectedIds.first,
+              addToSelection: false,
+            ),
+  };
 }

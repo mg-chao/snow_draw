@@ -29,7 +29,6 @@ class CursorResolver {
           _cursorForResizeMode(resizeMode, rotation),
         RotateEditContext() || ArrowPointEditContext() => grabbingCursor(),
         MoveEditContext() => SystemMouseCursors.move,
-        FreeTransformEditContext() => _cursorForFreeTransform(context),
         _ => SystemMouseCursors.move,
       };
     }
@@ -47,13 +46,6 @@ class CursorResolver {
     }
     return _hintForRotatedHandle(handleType, result.selectionRotation ?? 0.0);
   }
-
-  MouseCursor _cursorForFreeTransform(FreeTransformEditContext context) =>
-      switch (context.currentMode) {
-        FreeTransformMode.move => SystemMouseCursors.move,
-        FreeTransformMode.rotate => grabbingCursor(),
-        FreeTransformMode.resize => SystemMouseCursors.resizeUpLeftDownRight,
-      };
 
   MouseCursor _cursorForResizeMode(ResizeMode mode, double rotation) {
     final handleType = switch (mode) {

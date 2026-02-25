@@ -1,5 +1,6 @@
 import 'package:meta/meta.dart';
 
+import '../utils/list_equality.dart';
 import 'draw_point.dart';
 
 enum SnapGuideKind { point, gap }
@@ -32,22 +33,14 @@ class SnapGuide {
           other.axis == axis &&
           other.start == start &&
           other.end == end &&
-          _listEquals(other.markers, markers) &&
+          pointListEquals(other.markers, markers) &&
           other.label == label;
 
   @override
   int get hashCode =>
       Object.hash(kind, axis, start, end, Object.hashAll(markers), label);
-
-  static bool _listEquals(List<DrawPoint> a, List<DrawPoint> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
 }
+
+/// Element-wise equality for [SnapGuide] lists.
+bool snapGuideListEquals(List<SnapGuide> a, List<SnapGuide> b) =>
+    listEquals(a, b);

@@ -1,6 +1,5 @@
-﻿import 'package:flutter_test/flutter_test.dart';
+import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_core/snow_draw_core.dart';
-import 'package:snow_draw_flutter_backend/ui/canvas/pointer_move_dispatch_policy.dart';
 
 void main() {
   group('PointerMoveDispatchPolicy.shouldCoalesce', () {
@@ -75,8 +74,8 @@ void main() {
     });
 
     test('rectangle creation keeps frame coalescing', () {
-      final interaction = CreatingState(
-        element: const ElementState(
+      const interaction = CreatingState(
+        element: ElementState(
           id: 'rect',
           rect: DrawRect(maxX: 1, maxY: 1),
           rotation: 0,
@@ -84,8 +83,8 @@ void main() {
           zIndex: 0,
           data: RectangleData(),
         ),
-        startPosition: const DrawPoint(x: 10, y: 10),
-        currentRect: const DrawRect(minX: 10, minY: 10, maxX: 50, maxY: 50),
+        startPosition: DrawPoint(x: 10, y: 10),
+        currentRect: DrawRect(minX: 10, minY: 10, maxX: 50, maxY: 50),
       );
 
       expect(
@@ -101,8 +100,8 @@ void main() {
     test(
       'serial-number creation uses frame coalescing in low-latency mode',
       () {
-        final interaction = CreatingState(
-          element: const ElementState(
+        const interaction = CreatingState(
+          element: ElementState(
             id: 'serial',
             rect: DrawRect(maxX: 1, maxY: 1),
             rotation: 0,
@@ -110,8 +109,8 @@ void main() {
             zIndex: 0,
             data: SerialNumberData(),
           ),
-          startPosition: const DrawPoint(x: 10, y: 10),
-          currentRect: const DrawRect(minX: 10, minY: 10, maxX: 50, maxY: 50),
+          startPosition: DrawPoint(x: 10, y: 10),
+          currentRect: DrawRect(minX: 10, minY: 10, maxX: 50, maxY: 50),
         );
 
         expect(
@@ -181,8 +180,8 @@ void main() {
     test(
       'free-draw creation batches samples even when tool already changed',
       () {
-        final interaction = CreatingState(
-          element: const ElementState(
+        const interaction = CreatingState(
+          element: ElementState(
             id: 'fd',
             rect: DrawRect(maxX: 1, maxY: 1),
             rotation: 0,
@@ -190,9 +189,9 @@ void main() {
             zIndex: 0,
             data: FreeDrawData(),
           ),
-          startPosition: const DrawPoint(x: 10, y: 10),
-          currentRect: const DrawRect(minX: 10, minY: 10, maxX: 50, maxY: 50),
-          creationMode: const FreeDrawCreationMode(),
+          startPosition: DrawPoint(x: 10, y: 10),
+          currentRect: DrawRect(minX: 10, minY: 10, maxX: 50, maxY: 50),
+          creationMode: FreeDrawCreationMode(),
         );
 
         expect(

@@ -25,6 +25,3 @@ class EditModifiers {
   /// Overrides default snapping behavior when supported.
   final bool snapOverride;
 }
-
-/// Policy for handling update failures during edit sessions.
-enum EditUpdateFailurePolicy { toIdle, keepState }

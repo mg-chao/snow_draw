@@ -1,34 +1,32 @@
 import 'dart:async';
-import 'dart:collection';
 
 import '../../actions/config_actions.dart';
 import '../../actions/draw_actions.dart';
 import '../../config/config_manager.dart';
-import '../../core/dependency_interfaces.dart';
+import '../../core/draw_context.dart';
 import '../../edit/core/edit_cancel_reason.dart';
-import '../../edit/core/edit_event_factory.dart';
 import '../../edit/core/edit_session_id_generator.dart';
 import '../../edit/core/edit_session_service.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
+import '../../elements/types/serial_number/serial_number_sequence.dart';
 import '../../events/edit_events.dart';
 import '../../events/error_events.dart';
 import '../../events/event_bus.dart';
 import '../../events/state_events.dart';
 import '../../models/draw_state.dart';
-import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
-import '../../reducers/interaction/interaction_state_machine.dart';
 import '../history_manager.dart';
 import '../listener_registry.dart';
 import '../middleware/middleware_context.dart';
 import '../middleware/middleware_pipeline.dart';
 import '../snapshot_builder.dart';
-import '../state_manager.dart';
+import '../state_change_detector.dart';
 
 class ActionProcessorServices {
   const ActionProcessorServices({
     required this.drawContext,
-    required this.stateManager,
+    required this.readState,
+    required this.writeState,
     required this.historyManager,
     required this.configManager,
     required this.listenerRegistry,
@@ -38,11 +36,10 @@ class ActionProcessorServices {
     required this.isBatching,
     required this.includeSelectionInHistory,
     required this.eventBus,
-    required this.publishEditEvents,
-    required this.enableInteractionMutationFastPath,
   });
-  final InteractionReducerDeps drawContext;
-  final StateManager stateManager;
+  final DrawContext drawContext;
+  final DrawState Function() readState;
+  final void Function(DrawState state) writeState;
   final HistoryManager historyManager;
   final ConfigManager configManager;
   final ListenerRegistry listenerRegistry;
@@ -52,8 +49,6 @@ class ActionProcessorServices {
   final bool Function() isBatching;
   final bool includeSelectionInHistory;
   final EventBus eventBus;
-  final void Function(List<EditSessionEvent> events) publishEditEvents;
-  final bool enableInteractionMutationFastPath;
 }
 
 class ActionProcessor {
@@ -62,28 +57,27 @@ class ActionProcessor {
     required MiddlewarePipeline pipeline,
   }) : _services = services,
        _pipeline = pipeline,
-       _enableInteractionMutationFastPath =
-           services.enableInteractionMutationFastPath,
        _lastCanUndo = services.historyManager.canUndo,
        _lastCanRedo = services.historyManager.canRedo;
   final ActionProcessorServices _services;
   final MiddlewarePipeline _pipeline;
-  final _queue = Queue<_DispatchTask>();
   bool _lastCanUndo;
   bool _lastCanRedo;
-  final bool _enableInteractionMutationFastPath;
+  var _dispatchTail = Future<void>.value();
 
-  var _isProcessing = false;
   var _isDisposed = false;
 
-  DrawState get state => _services.stateManager.current;
+  DrawState get state => _services.readState();
 
   bool get isDisposed => _isDisposed;
 
-  Future<void> dispatch(DrawAction action) =>
-      _enqueue(() => _processWithExplicitCancel(action));
+  Future<void> dispatch(DrawAction action) => _enqueue(() async {
+    for (final nextAction in _expandActionsForDispatch(action)) {
+      await _process(nextAction);
+    }
+  });
 
-  void syncHistoryAvailability({bool emitIfChanged = false}) {
+  void syncHistoryAvailability() {
     final canUndo = _services.historyManager.canUndo;
     final canRedo = _services.historyManager.canRedo;
     final changed = canUndo != _lastCanUndo || canRedo != _lastCanRedo;
@@ -91,11 +85,11 @@ class ActionProcessor {
     _lastCanUndo = canUndo;
     _lastCanRedo = canRedo;
 
-    if (!emitIfChanged || !changed) {
+    if (!changed) {
       return;
     }
 
-    _services.eventBus.emitLazy(
+    _emitEvent(
       () => HistoryAvailabilityChangedEvent(canUndo: canUndo, canRedo: canRedo),
     );
   }
@@ -105,13 +99,6 @@ class ActionProcessor {
       return;
     }
     _isDisposed = true;
-
-    for (final task in List<_DispatchTask>.from(_queue)) {
-      task.completeWithError(
-        StateError('Dispatch queue disposed while pending'),
-      );
-    }
-    _queue.clear();
   }
 
   Future<void> _enqueue(Future<void> Function() task) {
@@ -119,34 +106,22 @@ class ActionProcessor {
       return Future.error(StateError('Dispatch queue has been disposed'));
     }
 
-    final queued = _DispatchTask(task);
-    _queue.addLast(queued);
-
-    if (!_isProcessing) {
-      unawaited(_drainQueue());
-    }
-
-    return queued.completer.future;
-  }
-
-  Future<void> _drainQueue() async {
-    _isProcessing = true;
-    try {
-      while (_queue.isNotEmpty) {
-        final next = _queue.removeFirst();
-        await next.run();
+    final scheduled = _dispatchTail.whenComplete(() async {
+      if (_isDisposed) {
+        throw StateError('Dispatch queue disposed while pending');
       }
-    } finally {
-      _isProcessing = false;
-    }
+      await task();
+    });
+    _dispatchTail = scheduled.catchError((Object _, StackTrace _) {});
+    return scheduled;
   }
 
-  Future<void> _processWithExplicitCancel(DrawAction action) async {
+  List<DrawAction> _expandActionsForDispatch(DrawAction action) {
     final cancelReason = _resolveEditCancelReason(action);
-    if (cancelReason != null) {
-      await _process(CancelEdit(reason: cancelReason));
+    if (cancelReason == null) {
+      return [action];
     }
-    await _process(action);
+    return [CancelEdit(reason: cancelReason), action];
   }
 
   Future<void> _process(DrawAction action) async {
@@ -154,102 +129,46 @@ class ActionProcessor {
       return;
     }
 
-    if (_shouldUseInteractionMutationFastPath(action)) {
-      _processInteractionMutationFastPath(action);
+    await _runWithFrozenConfig(() async {
+      await _processThroughPipeline(action);
+    });
+  }
+
+  Future<void> _processThroughPipeline(DrawAction action) async {
+    final initialContext = DispatchContext.initial(
+      action: action,
+      state: _services.readState(),
+      drawContext: _services.drawContext,
+      historyManager: _services.historyManager,
+      snapshotBuilder: _services.snapshotBuilder,
+      editSessionService: _services.editSessionService,
+      sessionIdGenerator: _services.sessionIdGenerator,
+      isBatching: _services.isBatching(),
+      includeSelectionInHistory: _services.includeSelectionInHistory,
+    );
+
+    final finalContext = await _executePipeline(initialContext);
+    if (finalContext.hasError) {
+      final error = finalContext.error ?? StateError('Dispatch failed');
+      final stackTrace = finalContext.stackTrace ?? StackTrace.current;
+      _reportDispatchError(
+        action: action,
+        source: finalContext.errorSource ?? 'unknown',
+        traceId: finalContext.traceId,
+        error: error,
+        stackTrace: stackTrace,
+      );
+      _rethrowIfCritical(action, error, stackTrace);
       return;
     }
 
-    _services.configManager.freeze();
-    try {
-      final initialContext = DispatchContext.initial(
-        action: action,
-        state: _services.stateManager.current,
-        drawContext: _services.drawContext,
-        historyManager: _services.historyManager,
-        snapshotBuilder: _services.snapshotBuilder,
-        editSessionService: _services.editSessionService,
-        sessionIdGenerator: _services.sessionIdGenerator,
-        isBatching: _services.isBatching(),
-        includeSelectionInHistory: _services.includeSelectionInHistory,
-      );
-
-      final finalContext = await _executePipeline(initialContext);
-      if (finalContext.hasError) {
-        final error =
-            finalContext.error ?? StateError('Dispatch error without detail');
-        final stackTrace = finalContext.stackTrace ?? StackTrace.current;
-        _reportError(action, error, stackTrace, finalContext);
-        _rethrowIfCritical(action, error, stackTrace);
-        return;
-      }
-
-      _commit(initialContext: initialContext, finalContext: finalContext);
-    } finally {
-      _services.configManager.unfreeze();
-    }
+    _commit(initialContext: initialContext, finalContext: finalContext);
   }
 
-  bool _shouldUseInteractionMutationFastPath(DrawAction action) {
-    if (!_enableInteractionMutationFastPath) {
-      return false;
-    }
-    return action is UpdateEdit ||
-        action is UpdateCreatingElement ||
-        action is UpdateCreatingElementBatch;
-  }
-
-  void _processInteractionMutationFastPath(DrawAction action) {
+  Future<void> _runWithFrozenConfig(FutureOr<void> Function() action) async {
     _services.configManager.freeze();
     try {
-      final previousState = _services.stateManager.current;
-      final transition = interactionStateMachine.reduce(
-        state: previousState,
-        action: action,
-        context: _services.drawContext,
-        editSessionService: _services.editSessionService,
-        sessionIdGenerator: _services.sessionIdGenerator,
-      );
-      final nextState = transition.nextState;
-      final stateChanged = !identical(previousState, nextState);
-
-      if (stateChanged) {
-        _services.stateManager.update(nextState);
-        if (!_services.isBatching()) {
-          _services.listenerRegistry.notify(previousState, nextState);
-        }
-      }
-
-      final events = transition.events;
-      if (events.isNotEmpty) {
-        _services.publishEditEvents(events);
-      }
-
-      _emitEditSessionEvents(
-        previousState: previousState,
-        nextState: nextState,
-        action: action,
-      );
-      _emitStateChangeEvents(
-        previousState: previousState,
-        nextState: nextState,
-      );
-    } on Object catch (error, stackTrace) {
-      _services.drawContext.log.store
-          .error('Dispatch failed', error, stackTrace, {
-            'action': action.runtimeType.toString(),
-            'criticality': action.criticality.toString(),
-            'source': 'FastInteractionMutationPath',
-          });
-      _services.eventBus.emitLazy(
-        () => ErrorEvent(
-          message:
-              'Dispatch ${action.runtimeType} failed '
-              '(source: FastInteractionMutationPath)',
-          error: error,
-          stackTrace: stackTrace,
-        ),
-      );
-      _rethrowIfCritical(action, error, stackTrace);
+      await action();
     } finally {
       _services.configManager.unfreeze();
     }
@@ -282,24 +201,17 @@ class ActionProcessor {
   }
 
   EditCancelReason? _resolveEditCancelReason(DrawAction action) {
-    final state = _services.stateManager.current;
-    if (!state.application.isEditing) {
+    if (!_services.readState().application.isEditing) {
       return null;
     }
 
     return switch (action) {
+      Undo _ when !_services.historyManager.canUndo => null,
+      Redo _ when !_services.historyManager.canRedo => null,
       CancelEdit _ || UpdateEdit _ || FinishEdit _ => null,
-      StartEdit _ || EditIntentAction _ => EditCancelReason.newEditStarted,
-      Undo _ =>
-        _services.historyManager.canUndo
-            ? EditCancelReason.conflictingAction
-            : null,
-      Redo _ =>
-        _services.historyManager.canRedo
-            ? EditCancelReason.conflictingAction
-            : null,
-      _ =>
-        action.conflictsWithEditing ? EditCancelReason.conflictingAction : null,
+      StartEdit _ => EditCancelReason.newEditStarted,
+      _ when action.conflictsWithEditing => EditCancelReason.conflictingAction,
+      _ => null,
     };
   }
 
@@ -307,37 +219,39 @@ class ActionProcessor {
     required DispatchContext initialContext,
     required DispatchContext finalContext,
   }) {
-    if (finalContext.hasStateChanged) {
-      _services.stateManager.update(finalContext.currentState);
-
-      if (!_services.isBatching()) {
-        _services.listenerRegistry.notify(
-          initialContext.initialState,
-          finalContext.currentState,
-        );
-      }
-    }
-
     _maybeIncrementSerialNumberDefaults(
       previousState: initialContext.initialState,
       nextState: finalContext.currentState,
       action: initialContext.action,
     );
 
-    if (finalContext.events.isNotEmpty) {
-      _services.publishEditEvents(finalContext.events);
-    }
-
-    _emitEditSessionEvents(
+    _applyTransitionEffects(
       previousState: initialContext.initialState,
       nextState: finalContext.currentState,
       action: initialContext.action,
+      hasStateChanged: finalContext.hasStateChanged,
     );
+  }
 
-    _emitStateChangeEvents(
-      previousState: initialContext.initialState,
-      nextState: finalContext.currentState,
+  void _applyTransitionEffects({
+    required DrawState previousState,
+    required DrawState nextState,
+    required DrawAction action,
+    required bool hasStateChanged,
+  }) {
+    if (hasStateChanged) {
+      _services.writeState(nextState);
+      if (!_services.isBatching()) {
+        _services.listenerRegistry.notify(previousState, nextState);
+      }
+    }
+
+    _emitEditSessionEvents(
+      previousState: previousState,
+      nextState: nextState,
+      action: action,
     );
+    _emitStateChangeEvents(previousState: previousState, nextState: nextState);
   }
 
   void _maybeIncrementSerialNumberDefaults({
@@ -359,7 +273,7 @@ class ActionProcessor {
       return;
     }
 
-    final nextSerialFromDocument = _resolveNextSerialFromDocument(nextElements);
+    final nextSerialFromDocument = resolveNextSerialNumber(nextElements);
     if (nextSerialFromDocument == null) {
       return;
     }
@@ -379,50 +293,48 @@ class ActionProcessor {
     );
   }
 
-  int? _resolveNextSerialFromDocument(List<ElementState> elements) {
-    int? maxNumber;
-    for (final element in elements) {
-      final data = element.data;
-      if (data is! SerialNumberData) {
-        continue;
-      }
-      final candidate = data.number;
-      if (maxNumber == null || candidate > maxNumber) {
-        maxNumber = candidate;
-      }
-    }
-    if (maxNumber == null) {
-      return null;
-    }
-    return maxNumber + 1;
-  }
+  void _reportDispatchError({
+    required DrawAction action,
+    required String source,
+    required Object error,
+    required StackTrace stackTrace,
+    String? traceId,
+  }) {
+    _services.drawContext.log.store.error(
+      'Dispatch failed',
+      error,
+      stackTrace,
+      {
+        'action': action.runtimeType.toString(),
+        'criticality': action.criticality.toString(),
+        'source': source,
+        ...?(traceId == null ? null : {'traceId': traceId}),
+      },
+    );
 
-  void _reportError(
-    DrawAction action,
-    Object error,
-    StackTrace stackTrace,
-    DispatchContext context,
-  ) {
-    final source = context.errorSource ?? 'unknown';
-    final traceId = context.traceId;
-
-    _services.drawContext.log.store
-        .error('Dispatch failed', error, stackTrace, {
-          'action': action.runtimeType.toString(),
-          'criticality': action.criticality.toString(),
-          'source': source,
-          'traceId': traceId,
-        });
-
-    _services.eventBus.emitLazy(
+    _emitEvent(
       () => ErrorEvent(
-        message:
-            'Dispatch ${action.runtimeType} failed '
-            '(traceId: $traceId, source: $source)',
+        message: _buildErrorMessage(
+          action: action,
+          source: source,
+          traceId: traceId,
+        ),
         error: error,
         stackTrace: stackTrace,
       ),
     );
+  }
+
+  String _buildErrorMessage({
+    required DrawAction action,
+    required String source,
+    String? traceId,
+  }) {
+    if (traceId == null || traceId.isEmpty) {
+      return 'Dispatch ${action.runtimeType} failed (source: $source)';
+    }
+    return 'Dispatch ${action.runtimeType} failed '
+        '(traceId: $traceId, source: $source)';
   }
 
   void _emitEditSessionEvents({
@@ -433,70 +345,81 @@ class ActionProcessor {
     final prevInteraction = previousState.application.interaction;
     final nextInteraction = nextState.application.interaction;
 
-    if (prevInteraction is! EditingState && nextInteraction is EditingState) {
-      _services.eventBus.emitLazy(
-        () => EditSessionStartedEvent(
-          sessionId: nextInteraction.sessionId,
-          operationId: nextInteraction.operationId,
+    switch ((prevInteraction, nextInteraction)) {
+      case (final EditingState previous, final EditingState next):
+        _emitEditingTransition(previous: previous, next: next);
+      case (final EditingState previous, _):
+        _emitEditingEnded(previous: previous, action: action);
+      case (_, final EditingState next):
+        _emitEvent(
+          () => EditSessionStartedEvent(
+            sessionId: next.sessionId,
+            operationId: next.operationId,
+          ),
+        );
+      default:
+        break;
+    }
+  }
+
+  void _emitEditingTransition({
+    required EditingState previous,
+    required EditingState next,
+  }) {
+    if (previous.sessionId == next.sessionId) {
+      _emitEvent(
+        () => EditSessionUpdatedEvent(
+          sessionId: next.sessionId,
+          operationId: next.operationId,
         ),
       );
       return;
     }
 
-    if (prevInteraction is EditingState && nextInteraction is EditingState) {
-      if (prevInteraction.sessionId == nextInteraction.sessionId) {
-        _services.eventBus.emitLazy(
-          () => EditSessionUpdatedEvent(
-            sessionId: nextInteraction.sessionId,
-            operationId: nextInteraction.operationId,
-          ),
-        );
-        return;
-      }
+    _emitEvent(
+      () => EditSessionCancelledEvent(
+        sessionId: previous.sessionId,
+        operationId: previous.operationId,
+        reason: EditCancelReason.newEditStarted,
+      ),
+    );
+    _emitEvent(
+      () => EditSessionStartedEvent(
+        sessionId: next.sessionId,
+        operationId: next.operationId,
+      ),
+    );
+  }
 
-      _services.eventBus.emitLazy(
-        () => EditSessionCancelledEvent(
-          sessionId: prevInteraction.sessionId,
-          operationId: prevInteraction.operationId,
-          reason: EditCancelReason.newEditStarted,
-        ),
-      );
-      _services.eventBus.emitLazy(
-        () => EditSessionStartedEvent(
-          sessionId: nextInteraction.sessionId,
-          operationId: nextInteraction.operationId,
+  void _emitEditingEnded({
+    required EditingState previous,
+    required DrawAction action,
+  }) {
+    if (action is FinishEdit) {
+      _emitEvent(
+        () => EditSessionFinishedEvent(
+          sessionId: previous.sessionId,
+          operationId: previous.operationId,
         ),
       );
       return;
     }
 
-    if (prevInteraction is EditingState && nextInteraction is! EditingState) {
-      if (action is FinishEdit) {
-        _services.eventBus.emitLazy(
-          () => EditSessionFinishedEvent(
-            sessionId: prevInteraction.sessionId,
-            operationId: prevInteraction.operationId,
-          ),
-        );
-      } else {
-        _services.eventBus.emitLazy(
-          () => EditSessionCancelledEvent(
-            sessionId: prevInteraction.sessionId,
-            operationId: prevInteraction.operationId,
-            reason: _resolveCancelReason(action),
-          ),
-        );
-      }
-    }
+    _emitEvent(
+      () => EditSessionCancelledEvent(
+        sessionId: previous.sessionId,
+        operationId: previous.operationId,
+        reason: _resolveCancelReason(action),
+      ),
+    );
   }
 
   void _emitStateChangeEvents({
     required DrawState previousState,
     required DrawState nextState,
   }) {
-    if (previousState.domain.document.elementsVersion !=
-        nextState.domain.document.elementsVersion) {
-      _services.eventBus.emitLazy(
+    if (hasDocumentStateChanged(previousState, nextState)) {
+      _emitEvent(
         () => DocumentChangedEvent(
           elementsVersion: nextState.domain.document.elementsVersion,
           elementCount: nextState.domain.document.elements.length,
@@ -504,9 +427,8 @@ class ActionProcessor {
       );
     }
 
-    if (previousState.domain.selection.selectionVersion !=
-        nextState.domain.selection.selectionVersion) {
-      _services.eventBus.emitLazy(
+    if (hasSelectionStateChanged(previousState, nextState)) {
+      _emitEvent(
         () => SelectionChangedEvent(
           selectedIds: nextState.domain.selection.selectedIds,
           selectionVersion: nextState.domain.selection.selectionVersion,
@@ -514,22 +436,25 @@ class ActionProcessor {
       );
     }
 
-    if (previousState.application.view != nextState.application.view) {
-      _services.eventBus.emitLazy(
+    if (hasViewStateChanged(previousState, nextState)) {
+      _emitEvent(
         () => ViewChangedEvent(camera: nextState.application.view.camera),
       );
     }
 
-    if (previousState.application.interaction !=
-        nextState.application.interaction) {
-      _services.eventBus.emitLazy(
+    if (hasInteractionStateChanged(previousState, nextState)) {
+      _emitEvent(
         () => InteractionChangedEvent(
           interaction: nextState.application.interaction,
         ),
       );
     }
 
-    syncHistoryAvailability(emitIfChanged: true);
+    syncHistoryAvailability();
+  }
+
+  void _emitEvent<T extends DrawEvent>(T Function() eventFactory) {
+    _services.eventBus.emitLazy<T>(eventFactory);
   }
 
   void _rethrowIfCritical(
@@ -548,34 +473,4 @@ class ActionProcessor {
     StartEdit _ => EditCancelReason.newEditStarted,
     _ => EditCancelReason.userCancelled,
   };
-}
-
-class _DispatchTask {
-  _DispatchTask(Future<void> Function() task)
-    : _task = task,
-      completer = Completer<void>();
-  final Completer<void> completer;
-  final Future<void> Function() _task;
-
-  Future<void> run() async {
-    try {
-      await _task();
-      if (!completer.isCompleted) {
-        completer.complete();
-      }
-    } on Object catch (error, stackTrace) {
-      completeWithError(error, stackTrace);
-    }
-  }
-
-  void completeWithError(Object error, [StackTrace? stackTrace]) {
-    if (completer.isCompleted) {
-      return;
-    }
-    if (stackTrace != null) {
-      completer.completeError(error, stackTrace);
-    } else {
-      completer.completeError(error);
-    }
-  }
 }

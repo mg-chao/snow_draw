@@ -5,6 +5,8 @@ import '../services/selection_data_computer.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/snap_guides.dart';
+import '../utils/list_equality.dart';
+import 'document_state.dart';
 import 'draw_state.dart';
 import 'element_state.dart';
 import 'global_elements_state.dart';
@@ -50,57 +52,19 @@ class EffectiveSelection {
 /// transient elements next, then the in-progress creating element last.
 @immutable
 class HighlightMaskSceneSnapshot {
-  HighlightMaskSceneSnapshot({
-    required List<ElementState> elements,
-    required List<ElementState> staticElements,
-    required List<ElementState> dynamicElements,
-  }) : _elements = List<ElementState>.unmodifiable(elements),
-       _staticElements = List<ElementState>.unmodifiable(staticElements),
-       _dynamicElements = List<ElementState>.unmodifiable(dynamicElements);
+  HighlightMaskSceneSnapshot({required List<ElementState> elements})
+    : _elements = List<ElementState>.unmodifiable(elements);
 
   final List<ElementState> _elements;
-  final List<ElementState> _staticElements;
-  final List<ElementState> _dynamicElements;
 
   /// Highlight elements in the order expected by highlight mask compositing.
   List<ElementState> get elements => _elements;
 
-  /// Stable highlights that do not change on every interaction frame.
-  List<ElementState> get staticElements => _staticElements;
-
-  /// Highlights whose geometry/style can change on the current frame.
-  List<ElementState> get dynamicElements => _dynamicElements;
-
   /// Whether at least one highlight is present in this snapshot.
   bool get hasHighlights => _elements.isNotEmpty;
 
-  /// Whether any highlight is dynamic for the active interaction.
-  bool get hasDynamicHighlights => _dynamicElements.isNotEmpty;
-
   /// Reusable empty snapshot.
-  static final empty = HighlightMaskSceneSnapshot(
-    elements: const [],
-    staticElements: const [],
-    dynamicElements: const [],
-  );
-}
-
-/// Lightweight metadata for highlight-mask routing decisions.
-///
-/// This summary mirrors [HighlightMaskSceneSnapshot] flags in a compact shape
-/// so call sites can consume only the booleans they need.
-@immutable
-class HighlightMaskSceneSummary {
-  const HighlightMaskSceneSummary({
-    required this.hasHighlights,
-    required this.hasDynamicHighlights,
-  });
-
-  /// Whether at least one highlight is present in the effective scene.
-  final bool hasHighlights;
-
-  /// Whether at least one highlight can change this frame.
-  final bool hasDynamicHighlights;
+  static final empty = HighlightMaskSceneSnapshot(elements: const []);
 }
 
 /// A unified "effective state" view for rendering and hit-testing.
@@ -169,15 +133,6 @@ class DrawStateView {
   late final HighlightMaskSceneSnapshot highlightMaskScene =
       _buildHighlightMaskScene();
 
-  /// Lightweight highlight-scene metadata.
-  ///
-  /// This is derived from [highlightMaskScene] so callers can make routing
-  /// decisions without re-checking scene lists.
-  late final highlightMaskSceneSummary = HighlightMaskSceneSummary(
-    hasHighlights: highlightMaskScene.hasHighlights,
-    hasDynamicHighlights: highlightMaskScene.hasDynamicHighlights,
-  );
-
   /// Map of element IDs to their preview states.
   Map<String, ElementState> get previewElementsById => _previewElementsById;
 
@@ -222,67 +177,50 @@ class DrawStateView {
 
   HighlightMaskSceneSnapshot _buildHighlightMaskScene() {
     final document = state.domain.document;
+    final previewElementsById = _previewElementsById;
     final creatingHighlight = _resolveCreatingHighlightElement();
-    final creatingHighlightId = creatingHighlight?.id;
+    if (creatingHighlight == null && previewElementsById.isEmpty) {
+      return _snapshotForHighlights(document.highlightElements);
+    }
+
     final highlights = <ElementState>[];
-    final staticHighlights = <ElementState>[];
-    final dynamicHighlights = <ElementState>[];
-    var includesCreatingHighlight = false;
+    final includedIds = <String>{};
+    final creatingHighlightId = creatingHighlight?.id;
 
-    for (final element in document.highlightElements) {
-      final preview = _previewElementsById[element.id];
-      final isCreatingReplacement =
-          creatingHighlightId != null && element.id == creatingHighlightId;
-      final effective = isCreatingReplacement
-          ? creatingHighlight!
-          : preview ?? element;
-      if (effective.data is! HighlightData) {
-        continue;
-      }
-
-      if (isCreatingReplacement) {
-        includesCreatingHighlight = true;
-      }
-
-      highlights.add(effective);
-      final isDynamic =
-          isCreatingReplacement || (preview != null && preview != element);
-      if (isDynamic) {
-        dynamicHighlights.add(effective);
-      } else {
-        staticHighlights.add(effective);
-      }
+    for (final highlight in document.highlightElements) {
+      final effective = highlight.id == creatingHighlightId
+          ? creatingHighlight
+          : previewElementsById[highlight.id] ?? highlight;
+      _appendIfHighlight(
+        target: highlights,
+        includedIds: includedIds,
+        element: effective,
+      );
     }
 
-    for (final preview in _previewElementsById.values) {
-      if (preview.data is! HighlightData) {
+    for (final preview in previewElementsById.values) {
+      if (_isPreviewCoveredByDocumentHighlight(
+        preview: preview,
+        creatingHighlightId: creatingHighlightId,
+        includedIds: includedIds,
+        document: document,
+      )) {
         continue;
       }
-      if (creatingHighlightId != null && preview.id == creatingHighlightId) {
-        continue;
-      }
-      final persisted = document.getElementById(preview.id);
-      if (persisted?.data is HighlightData) {
-        continue;
-      }
-      highlights.add(preview);
-      dynamicHighlights.add(preview);
+      _appendIfHighlight(
+        target: highlights,
+        includedIds: includedIds,
+        element: preview,
+      );
     }
 
-    if (creatingHighlight != null && !includesCreatingHighlight) {
-      highlights.add(creatingHighlight);
-      dynamicHighlights.add(creatingHighlight);
-    }
-
-    if (highlights.isEmpty) {
-      return HighlightMaskSceneSnapshot.empty;
-    }
-
-    return HighlightMaskSceneSnapshot(
-      elements: highlights,
-      staticElements: staticHighlights,
-      dynamicElements: dynamicHighlights,
+    _appendIfHighlight(
+      target: highlights,
+      includedIds: includedIds,
+      element: creatingHighlight,
     );
+
+    return _snapshotForHighlights(highlights);
   }
 
   ElementState? _resolveCreatingHighlightElement() {
@@ -294,47 +232,50 @@ class DrawStateView {
     return interaction.element.copyWith(rect: interaction.currentRect);
   }
 
+  bool _isPreviewCoveredByDocumentHighlight({
+    required ElementState preview,
+    required String? creatingHighlightId,
+    required Set<String> includedIds,
+    required DocumentState document,
+  }) =>
+      preview.id == creatingHighlightId ||
+      includedIds.contains(preview.id) ||
+      document.getElementById(preview.id)?.data is HighlightData;
+
+  void _appendIfHighlight({
+    required List<ElementState> target,
+    required Set<String> includedIds,
+    required ElementState? element,
+  }) {
+    if (element == null ||
+        element.data is! HighlightData ||
+        !includedIds.add(element.id)) {
+      return;
+    }
+    target.add(element);
+  }
+
+  HighlightMaskSceneSnapshot _snapshotForHighlights(List<ElementState> values) {
+    if (values.isEmpty) {
+      return HighlightMaskSceneSnapshot.empty;
+    }
+    return HighlightMaskSceneSnapshot(elements: values);
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is DrawStateView &&
           other.state == state &&
-          _mapsEqual(other._previewElementsById, _previewElementsById) &&
+          mapEquals(other._previewElementsById, _previewElementsById) &&
           other._effectiveSelection == _effectiveSelection &&
-          _listEquals(other.snapGuides, snapGuides);
+          snapGuideListEquals(other.snapGuides, snapGuides);
 
   @override
   int get hashCode => Object.hash(
     state,
-    Object.hashAll(
-      _previewElementsById.entries.map((e) => Object.hash(e.key, e.value)),
-    ),
+    mapHash(_previewElementsById),
     _effectiveSelection,
-    Object.hashAll(snapGuides),
+    listHash(snapGuides),
   );
-
-  /// Helper to compare maps for equality.
-  static bool _mapsEqual<K, V>(Map<K, V> a, Map<K, V> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    for (final key in a.keys) {
-      if (!b.containsKey(key) || a[key] != b[key]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  static bool _listEquals(List<SnapGuide> a, List<SnapGuide> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    for (var i = 0; i < a.length; i++) {
-      if (a[i] != b[i]) {
-        return false;
-      }
-    }
-    return true;
-  }
 }

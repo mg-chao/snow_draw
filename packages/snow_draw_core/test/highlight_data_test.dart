@@ -5,21 +5,41 @@ import 'package:snow_draw_core/draw/types/draw_color.dart';
 import 'package:snow_draw_core/draw/types/element_style.dart';
 
 void main() {
-  test('HighlightData.fromJson uses defaults', () {
-    final data = HighlightData.fromJson(const {});
-
-    expect(data.shape, ConfigDefaults.defaultHighlightShape);
-    expect(data.color, ConfigDefaults.defaultHighlightColor);
-    expect(data.strokeColor, ConfigDefaults.defaultHighlightStrokeColor);
-    expect(data.strokeWidth, 0);
+  test('HighlightData.fromJson requires canonical payload fields', () {
+    expect(
+      () => HighlightData.fromJson(const {}),
+      throwsA(anyOf(isA<TypeError>(), isA<FormatException>())),
+    );
   });
 
   test('HighlightData.fromJson decodes supported shape names', () {
-    final rectangle = HighlightData.fromJson(const {'shape': 'rectangle'});
-    final ellipse = HighlightData.fromJson(const {'shape': 'ellipse'});
+    final rectangle = HighlightData.fromJson(const {
+      'shape': 'rectangle',
+      'color': 0xFFF5222D,
+      'strokeColor': 0xFF000000,
+      'strokeWidth': 0.0,
+    });
+    final ellipse = HighlightData.fromJson(const {
+      'shape': 'ellipse',
+      'color': 0xFFF5222D,
+      'strokeColor': 0xFF000000,
+      'strokeWidth': 0.0,
+    });
 
     expect(rectangle.shape, HighlightShape.rectangle);
     expect(ellipse.shape, HighlightShape.ellipse);
+  });
+
+  test('HighlightData.fromJson rejects unsupported shape names', () {
+    expect(
+      () => HighlightData.fromJson(const {
+        'shape': 'triangle',
+        'color': 0xFFF5222D,
+        'strokeColor': 0xFF000000,
+        'strokeWidth': 0.0,
+      }),
+      throwsA(isA<FormatException>()),
+    );
   });
 
   test('HighlightData.withElementStyle applies highlight style fields', () {

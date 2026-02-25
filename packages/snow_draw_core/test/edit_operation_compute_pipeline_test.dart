@@ -6,7 +6,6 @@ import 'package:snow_draw_core/draw/edit/move/move_operation.dart';
 import 'package:snow_draw_core/draw/edit/resize/resize_operation.dart';
 import 'package:snow_draw_core/draw/edit/rotate/rotate_operation.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
-import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding_resolver.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
@@ -33,8 +32,6 @@ const _boundStartBinding = ArrowBinding(
 );
 
 void main() {
-  setUp(ArrowBindingResolver.instance.invalidate);
-
   DrawState stateWith(List<ElementState> elements, {Set<String>? selectedIds}) {
     assert(elements.isNotEmpty, 'stateWith requires at least one element.');
     return DrawState(

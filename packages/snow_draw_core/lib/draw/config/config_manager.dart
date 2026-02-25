@@ -17,6 +17,8 @@ class ConfigManager {
   var _freezeDepth = 0;
   var _isDisposed = false;
 
+  DrawConfig get _writableConfig => _pendingConfig ?? _config;
+
   /// Get the current configuration.
   DrawConfig get current => _config;
 
@@ -36,8 +38,7 @@ class ConfigManager {
       return _commit(newConfig);
     }
 
-    final writableConfig = _pendingConfig ?? _config;
-    if (newConfig != writableConfig) {
+    if (newConfig != _writableConfig) {
       _pendingConfig = newConfig;
     }
     return false;
@@ -58,7 +59,7 @@ class ConfigManager {
     }
 
     _freezeDepth -= 1;
-    if (_freezeDepth != 0) {
+    if (_freezeDepth > 0) {
       return;
     }
 
@@ -83,19 +84,15 @@ class ConfigManager {
   ///
   /// Convenience method to update only the selection config.
   /// Returns true if updated, false if unchanged.
-  bool updateSelection(SelectionConfig selection) {
-    final writableConfig = _pendingConfig ?? _config;
-    return update(writableConfig.copyWith(selection: selection));
-  }
+  bool updateSelection(SelectionConfig selection) =>
+      update(_writableConfig.copyWith(selection: selection));
 
   /// Update canvas configuration.
   ///
   /// Convenience method to update only the canvas config.
   /// Returns true if updated, false if unchanged.
-  bool updateCanvas(CanvasConfig canvas) {
-    final writableConfig = _pendingConfig ?? _config;
-    return update(writableConfig.copyWith(canvas: canvas));
-  }
+  bool updateCanvas(CanvasConfig canvas) =>
+      update(_writableConfig.copyWith(canvas: canvas));
 
   /// Release resources.
   Future<void> dispose() {

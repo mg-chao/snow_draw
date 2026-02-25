@@ -1,49 +1,30 @@
 import 'package:test/test.dart';
 import 'package:snow_draw_core/draw/actions/draw_actions.dart';
-import 'package:snow_draw_core/draw/config/draw_config.dart';
-import 'package:snow_draw_core/draw/core/dependency_interfaces.dart';
+import 'package:snow_draw_core/draw/core/draw_context.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_core/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_core/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_core/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_core/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_core/draw/elements/types/text/text_data.dart';
-import 'package:snow_draw_core/draw/events/event_bus.dart';
 import 'package:snow_draw_core/draw/models/document_state.dart';
 import 'package:snow_draw_core/draw/models/domain_state.dart';
 import 'package:snow_draw_core/draw/models/draw_state.dart';
 import 'package:snow_draw_core/draw/models/element_state.dart';
 import 'package:snow_draw_core/draw/reducers/element/delete_element_handler.dart';
-import 'package:snow_draw_core/draw/services/log/log_service.dart';
-import 'package:snow_draw_core/draw/services/text/text_metrics_service.dart';
 import 'package:snow_draw_core/draw/types/draw_point.dart';
 import 'package:snow_draw_core/draw/types/draw_rect.dart';
 
-class _TestDeps implements ElementReducerDeps {
-  var _counter = 0;
-
-  @override
-  LogService get log => LogService.fallback;
-
-  @override
-  EventBus? get eventBus => null;
-
-  @override
-  String Function() get idGenerator =>
-      () => 'dup-${_counter++}';
-
-  @override
-  DrawConfig get config => DrawConfig();
-
-  @override
-  TextMetricsService get textMetricsService => defaultTextMetricsService;
+DrawContext _createDeps() {
+  var counter = 0;
+  return DrawContext.withDefaults(idGenerator: () => 'dup-${counter++}');
 }
 
 void main() {
-  late _TestDeps deps;
+  late DrawContext deps;
 
   setUp(() {
-    deps = _TestDeps();
+    deps = _createDeps();
   });
 
   group('handleDuplicateElements arrow binding remapping', () {
@@ -333,6 +314,65 @@ void main() {
       );
       expect(duplicatedText, isNotNull);
       expect(data.textElementId, duplicatedText!.id);
+    });
+
+    test('serial duplication expands transitive serial-to-text bindings', () {
+      const serialRoot = ElementState(
+        id: 'serial-root',
+        rect: DrawRect(maxX: 30, maxY: 30),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: SerialNumberData(textElementId: 'serial-child'),
+      );
+      const serialChild = ElementState(
+        id: 'serial-child',
+        rect: DrawRect(minX: 40, maxX: 70, maxY: 30),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: SerialNumberData(number: 2, textElementId: 'text-leaf'),
+      );
+      const textLeaf = ElementState(
+        id: 'text-leaf',
+        rect: DrawRect(minY: 40, maxX: 50, maxY: 70),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 2,
+        data: TextData(text: 'leaf'),
+      );
+      final state = _stateWith([serialRoot, serialChild, textLeaf]);
+
+      final result = handleDuplicateElements(
+        state,
+        DuplicateElements(elementIds: ['serial-root']),
+        deps,
+      );
+
+      final duplicatedRoot = _findDuplicated(
+        result,
+        originalId: 'serial-root',
+        state: state,
+      );
+      final duplicatedChild = _findDuplicated(
+        result,
+        originalId: 'serial-child',
+        state: state,
+      );
+      final duplicatedLeaf = _findDuplicated(
+        result,
+        originalId: 'text-leaf',
+        state: state,
+      );
+
+      expect(duplicatedRoot, isNotNull);
+      expect(duplicatedChild, isNotNull);
+      expect(duplicatedLeaf, isNotNull);
+
+      final rootData = duplicatedRoot!.data as SerialNumberData;
+      final childData = duplicatedChild!.data as SerialNumberData;
+      expect(rootData.textElementId, duplicatedChild.id);
+      expect(childData.textElementId, duplicatedLeaf!.id);
     });
 
     test('arrow with no bindings is duplicated unchanged', () {
