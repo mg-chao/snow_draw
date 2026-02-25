@@ -329,31 +329,24 @@ class ObjectSnapService {
     if (targetAnchors.isEmpty) {
       return const <_AxisCandidate>[];
     }
-
-    final candidates = <_AxisCandidate>[];
-    if (enablePointSnaps) {
-      candidates.addAll(
-        _buildPointCandidates(
+    return <_AxisCandidate>[
+      if (enablePointSnaps)
+        ..._buildPointCandidates(
           axis: axis,
           targetRect: targetRect,
           referenceRects: referenceRects,
           targetAnchors: targetAnchors,
           snapDistance: snapDistance,
         ),
-      );
-    }
-    if (enableGapSnaps) {
-      candidates.addAll(
-        _buildGapCandidates(
+      if (enableGapSnaps)
+        ..._buildGapCandidates(
           axis: axis,
           targetRect: targetRect,
           referenceRects: referenceRects,
           targetAnchors: targetAnchors,
           snapDistance: snapDistance,
         ),
-      );
-    }
-    return candidates;
+    ];
   }
 
   static void _appendCandidateGuides({
@@ -520,35 +513,28 @@ class ObjectSnapService {
     for (final bucket in gapBuckets) {
       final gap = bucket.size;
       final gapFrequency = bucket.count;
-      if (beforeNeighbor != null) {
-        final desiredStart = _axisMax(beforeNeighbor, axis) + gap;
-        _maybeAddGapSideCandidate(
-          candidates: candidates,
-          axis: axis,
-          targetRect: targetRect,
-          desiredStart: desiredStart,
-          snapDistance: snapDistance,
-          referenceRect: beforeNeighbor,
-          gapSize: gap,
-          gapFrequency: gapFrequency,
-          gapSide: _GapSide.after,
-        );
-      }
-
-      if (afterNeighbor != null) {
-        final desiredStart = _axisMin(afterNeighbor, axis) - gap - targetSize;
-        _maybeAddGapSideCandidate(
-          candidates: candidates,
-          axis: axis,
-          targetRect: targetRect,
-          desiredStart: desiredStart,
-          snapDistance: snapDistance,
-          referenceRect: afterNeighbor,
-          gapSize: gap,
-          gapFrequency: gapFrequency,
-          gapSide: _GapSide.before,
-        );
-      }
+      _addGapSideCandidateFromNeighbor(
+        candidates: candidates,
+        axis: axis,
+        targetRect: targetRect,
+        targetSize: targetSize,
+        snapDistance: snapDistance,
+        neighbor: beforeNeighbor,
+        gapSize: gap,
+        gapFrequency: gapFrequency,
+        gapSide: _GapSide.after,
+      );
+      _addGapSideCandidateFromNeighbor(
+        candidates: candidates,
+        axis: axis,
+        targetRect: targetRect,
+        targetSize: targetSize,
+        snapDistance: snapDistance,
+        neighbor: afterNeighbor,
+        gapSize: gap,
+        gapFrequency: gapFrequency,
+        gapSide: _GapSide.before,
+      );
     }
 
     return candidates;
@@ -629,53 +615,55 @@ class ObjectSnapService {
   }) {
     final targetMin = _axisMin(targetRect, axis);
     final targetMax = _axisMax(targetRect, axis);
-    DrawRect? best;
-    if (direction == _GapNeighborDirection.before) {
-      var bestMax = double.negativeInfinity;
-      for (final rect in referenceRects) {
-        final rectMax = _axisMax(rect, axis);
-        if (rectMax <= targetMin + _epsilon && rectMax > bestMax) {
-          bestMax = rectMax;
-          best = rect;
-        }
+    DrawRect? closest;
+    var bestDistance = double.infinity;
+
+    for (final rect in referenceRects) {
+      final distance = switch (direction) {
+        _GapNeighborDirection.before => targetMin - _axisMax(rect, axis),
+        _GapNeighborDirection.after => _axisMin(rect, axis) - targetMax,
+      };
+      if (distance < -_epsilon || distance > bestDistance) {
+        continue;
       }
-    } else {
-      var bestMin = double.infinity;
-      for (final rect in referenceRects) {
-        final rectMin = _axisMin(rect, axis);
-        if (rectMin >= targetMax - _epsilon && rectMin < bestMin) {
-          bestMin = rectMin;
-          best = rect;
-        }
-      }
+      bestDistance = distance;
+      closest = rect;
     }
-    return best;
+
+    return closest;
   }
 
-  static void _maybeAddGapSideCandidate({
+  static void _addGapSideCandidateFromNeighbor({
     required List<_AxisCandidate> candidates,
     required SnapAxis axis,
     required DrawRect targetRect,
-    required double desiredStart,
+    required double targetSize,
     required double snapDistance,
-    required DrawRect referenceRect,
+    required DrawRect? neighbor,
     required double gapSize,
     required int gapFrequency,
     required _GapSide gapSide,
   }) {
-    _tryAddGapSideCandidate(
+    if (neighbor == null) {
+      return;
+    }
+    final desiredStart = switch (gapSide) {
+      _GapSide.after => _axisMax(neighbor, axis) + gapSize,
+      _GapSide.before => _axisMin(neighbor, axis) - gapSize - targetSize,
+    };
+    _addGapSideCandidate(
       candidates: candidates,
       axis: axis,
       offset: desiredStart - _axisMin(targetRect, axis),
       snapDistance: snapDistance,
-      referenceRect: referenceRect,
+      referenceRect: neighbor,
       gapSize: gapSize,
       gapFrequency: gapFrequency,
       gapSide: gapSide,
     );
   }
 
-  static void _tryAddGapSideCandidate({
+  static void _addGapSideCandidate({
     required List<_AxisCandidate> candidates,
     required SnapAxis axis,
     required double offset,
@@ -719,7 +707,7 @@ class ObjectSnapService {
     double snapDistance,
   ) {
     _AxisCandidate? best;
-    var bestStrength = -1.0;
+    var bestStrength = 0.0;
     final distanceSlack = _distanceSlack(snapDistance);
     for (final candidate in candidates) {
       final candidateStrength = _candidateStrength(
@@ -728,13 +716,14 @@ class ObjectSnapService {
         snapDistance,
       );
       if (best == null ||
-          _isCandidateBetter(
-            candidate,
-            best,
-            candidateStrength,
-            bestStrength,
-            distanceSlack,
-          )) {
+          _compareCandidates(
+                candidate,
+                best,
+                candidateStrength,
+                bestStrength,
+                distanceSlack,
+              ) >
+              0) {
         best = candidate;
         bestStrength = candidateStrength;
       }
@@ -865,71 +854,99 @@ class ObjectSnapService {
     return value;
   }
 
-  static bool _isCandidateBetter(
-    _AxisCandidate candidate,
-    _AxisCandidate best,
-    double candidateStrength,
-    double bestStrength,
+  static int _compareCandidates(
+    _AxisCandidate left,
+    _AxisCandidate right,
+    double leftStrength,
+    double rightStrength,
     double distanceSlack,
   ) {
-    final strengthDelta = candidateStrength - bestStrength;
+    final strengthDelta = leftStrength - rightStrength;
     if (strengthDelta.abs() > _strengthSlack) {
-      return strengthDelta > 0;
+      return strengthDelta > 0 ? 1 : -1;
     }
 
-    final candidateExact = _isExact(candidate.offset);
-    final bestExact = _isExact(best.offset);
-    if (candidateExact != bestExact) {
-      return candidateExact;
+    final leftExact = _isExact(left.offset);
+    final rightExact = _isExact(right.offset);
+    if (leftExact != rightExact) {
+      return leftExact ? 1 : -1;
     }
 
-    final distanceDelta = candidate.distance - best.distance;
+    final distanceDelta = left.distance - right.distance;
     if (distanceDelta.abs() > distanceSlack) {
-      return distanceDelta < 0;
+      return distanceDelta < 0 ? 1 : -1;
     }
 
-    final candidateKindPriority = _snapKindPriority(candidate.kind);
-    final bestKindPriority = _snapKindPriority(best.kind);
-    if (candidateKindPriority != bestKindPriority) {
-      return candidateKindPriority < bestKindPriority;
+    final leftKindPriority = _snapKindPriority(left.kind);
+    final rightKindPriority = _snapKindPriority(right.kind);
+    if (leftKindPriority != rightKindPriority) {
+      return leftKindPriority < rightKindPriority ? 1 : -1;
     }
 
-    if (candidate.kind == _SnapKind.point && best.kind == _SnapKind.point) {
-      final candidatePointPriority = _pointPriority(candidate);
-      final bestPointPriority = _pointPriority(best);
-      if (candidatePointPriority != bestPointPriority) {
-        return candidatePointPriority < bestPointPriority;
-      }
-
-      final candidatePerp = candidate.perpendicularDistance ?? double.infinity;
-      final bestPerp = best.perpendicularDistance ?? double.infinity;
-      if ((candidatePerp - bestPerp).abs() > _epsilon) {
-        return candidatePerp < bestPerp;
-      }
-    }
-
-    if (candidate.kind != _SnapKind.point && best.kind != _SnapKind.point) {
-      final candidateGapFrequency = candidate.gapFrequency ?? 0;
-      final bestGapFrequency = best.gapFrequency ?? 0;
-      if (candidateGapFrequency != bestGapFrequency) {
-        return candidateGapFrequency > bestGapFrequency;
-      }
-      final candidateGapKind = _gapKindPriority(candidate);
-      final bestGapKind = _gapKindPriority(best);
-      if (candidateGapKind != bestGapKind) {
-        return candidateGapKind < bestGapKind;
-      }
+    final kindSpecificComparison = _compareKindSpecificTieBreakers(left, right);
+    if (kindSpecificComparison != 0) {
+      return kindSpecificComparison;
     }
 
     if (distanceDelta.abs() > _epsilon) {
-      return distanceDelta < 0;
+      return distanceDelta < 0 ? 1 : -1;
     }
 
-    return false;
+    return 0;
   }
 
   static int _snapKindPriority(_SnapKind kind) =>
       kind == _SnapKind.point ? 0 : 1;
+
+  static int _compareKindSpecificTieBreakers(
+    _AxisCandidate left,
+    _AxisCandidate right,
+  ) {
+    if (left.kind == _SnapKind.point && right.kind == _SnapKind.point) {
+      return _comparePointCandidates(left, right);
+    }
+    if (left.kind != _SnapKind.point && right.kind != _SnapKind.point) {
+      return _compareGapCandidates(left, right);
+    }
+    return 0;
+  }
+
+  static int _comparePointCandidates(
+    _AxisCandidate left,
+    _AxisCandidate right,
+  ) {
+    final leftPointPriority = _pointPriority(left);
+    final rightPointPriority = _pointPriority(right);
+    if (leftPointPriority != rightPointPriority) {
+      return leftPointPriority < rightPointPriority ? 1 : -1;
+    }
+
+    final leftPerpendicularDistance =
+        left.perpendicularDistance ?? double.infinity;
+    final rightPerpendicularDistance =
+        right.perpendicularDistance ?? double.infinity;
+    final perpendicularDelta =
+        leftPerpendicularDistance - rightPerpendicularDistance;
+    if (perpendicularDelta.abs() <= _epsilon) {
+      return 0;
+    }
+    return perpendicularDelta < 0 ? 1 : -1;
+  }
+
+  static int _compareGapCandidates(_AxisCandidate left, _AxisCandidate right) {
+    final leftGapFrequency = left.gapFrequency ?? 0;
+    final rightGapFrequency = right.gapFrequency ?? 0;
+    if (leftGapFrequency != rightGapFrequency) {
+      return leftGapFrequency > rightGapFrequency ? 1 : -1;
+    }
+
+    final leftGapKindPriority = _gapKindPriority(left);
+    final rightGapKindPriority = _gapKindPriority(right);
+    if (leftGapKindPriority == rightGapKindPriority) {
+      return 0;
+    }
+    return leftGapKindPriority < rightGapKindPriority ? 1 : -1;
+  }
 
   static int _pointPriority(_AxisCandidate candidate) =>
       _anchorPriority(candidate.targetAnchor!, candidate.referenceAnchor!);

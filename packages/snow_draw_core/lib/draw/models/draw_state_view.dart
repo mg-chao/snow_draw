@@ -186,20 +186,33 @@ class DrawStateView {
     final includedIds = <String>{};
     final creatingHighlightId = creatingHighlight?.id;
 
-    _appendDocumentHighlights(
-      document: document,
-      previewElementsById: previewElementsById,
-      creatingHighlight: creatingHighlight,
-      target: highlights,
-      includedIds: includedIds,
-    );
-    _appendPreviewOnlyHighlights(
-      document: document,
-      previewElementsById: previewElementsById,
-      creatingHighlightId: creatingHighlightId,
-      target: highlights,
-      includedIds: includedIds,
-    );
+    for (final highlight in document.highlightElements) {
+      final effective = highlight.id == creatingHighlightId
+          ? creatingHighlight
+          : previewElementsById[highlight.id] ?? highlight;
+      _appendIfHighlight(
+        target: highlights,
+        includedIds: includedIds,
+        element: effective,
+      );
+    }
+
+    for (final preview in previewElementsById.values) {
+      if (_isPreviewCoveredByDocumentHighlight(
+        preview: preview,
+        creatingHighlightId: creatingHighlightId,
+        includedIds: includedIds,
+        document: document,
+      )) {
+        continue;
+      }
+      _appendIfHighlight(
+        target: highlights,
+        includedIds: includedIds,
+        element: preview,
+      );
+    }
+
     _appendIfHighlight(
       target: highlights,
       includedIds: includedIds,
@@ -218,46 +231,15 @@ class DrawStateView {
     return interaction.element.copyWith(rect: interaction.currentRect);
   }
 
-  void _appendDocumentHighlights({
-    required List<ElementState> target,
-    required Set<String> includedIds,
-    required Map<String, ElementState> previewElementsById,
-    required ElementState? creatingHighlight,
-    required DocumentState document,
-  }) {
-    final creatingHighlightId = creatingHighlight?.id;
-    for (final element in document.highlightElements) {
-      final effective = element.id == creatingHighlightId
-          ? creatingHighlight
-          : previewElementsById[element.id] ?? element;
-      _appendIfHighlight(
-        target: target,
-        includedIds: includedIds,
-        element: effective,
-      );
-    }
-  }
-
-  void _appendPreviewOnlyHighlights({
-    required DocumentState document,
-    required Map<String, ElementState> previewElementsById,
+  bool _isPreviewCoveredByDocumentHighlight({
+    required ElementState preview,
     required String? creatingHighlightId,
-    required List<ElementState> target,
     required Set<String> includedIds,
-  }) {
-    for (final preview in previewElementsById.values) {
-      if (preview.id == creatingHighlightId ||
-          includedIds.contains(preview.id) ||
-          document.getElementById(preview.id)?.data is HighlightData) {
-        continue;
-      }
-      _appendIfHighlight(
-        target: target,
-        includedIds: includedIds,
-        element: preview,
-      );
-    }
-  }
+    required DocumentState document,
+  }) =>
+      preview.id == creatingHighlightId ||
+      includedIds.contains(preview.id) ||
+      document.getElementById(preview.id)?.data is HighlightData;
 
   void _appendIfHighlight({
     required List<ElementState> target,
