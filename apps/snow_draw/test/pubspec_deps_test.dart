@@ -1,5 +1,4 @@
 // Tests that verify pubspec dependency hygiene for the snow_draw app.
-//
 // These tests ensure that removing unused dependencies does not break
 // any imports or functionality.
 import 'package:flutter_localizations/flutter_localizations.dart';
