@@ -30,7 +30,7 @@ import '../../core/reducer_utils.dart';
 /// Reducer for element creation.
 ///
 /// Handles: CreateElement, UpdateCreatingElement,
-/// UpdateCreatingElementBatch, FinishCreateElement, CancelCreateElement.
+/// FinishCreateElement, CancelCreateElement.
 @immutable
 class CreateElementReducer {
   const CreateElementReducer();
@@ -42,11 +42,6 @@ class CreateElementReducer {
       switch (action) {
         final CreateElement a => _startCreateElement(state, a, context),
         final UpdateCreatingElement a => _updateCreatingElement(
-          state,
-          a,
-          context,
-        ),
-        final UpdateCreatingElementBatch a => _updateCreatingElementBatch(
           state,
           a,
           context,
@@ -186,35 +181,24 @@ class CreateElementReducer {
     state: state,
     context: context,
     snapOverride: action.snapOverride,
-    resolver: (interaction, strategy, snappingMode) => strategy.update(
-      state: state,
-      config: context.config,
-      creatingState: interaction,
-      currentPosition: action.currentPosition,
-      maintainAspectRatio: action.maintainAspectRatio,
-      createFromCenter: action.createFromCenter,
-      snappingMode: snappingMode,
-      textMetricsService: context.textMetricsService,
-    ),
-  );
-
-  DrawState _updateCreatingElementBatch(
-    DrawState state,
-    UpdateCreatingElementBatch action,
-    DrawContext context,
-  ) => _runCreationUpdate(
-    state: state,
-    context: context,
-    snapOverride: action.snapOverride,
     resolver: (interaction, strategy, snappingMode) {
-      if (action.positions.isEmpty) {
-        return null;
+      if (action.isBatch) {
+        return strategy.updateBatch(
+          state: state,
+          config: context.config,
+          creatingState: interaction,
+          positions: action.positions,
+          maintainAspectRatio: action.maintainAspectRatio,
+          createFromCenter: action.createFromCenter,
+          snappingMode: snappingMode,
+          textMetricsService: context.textMetricsService,
+        );
       }
-      return strategy.updateBatch(
+      return strategy.update(
         state: state,
         config: context.config,
         creatingState: interaction,
-        positions: action.positions,
+        currentPosition: action.currentPosition,
         maintainAspectRatio: action.maintainAspectRatio,
         createFromCenter: action.createFromCenter,
         snappingMode: snappingMode,

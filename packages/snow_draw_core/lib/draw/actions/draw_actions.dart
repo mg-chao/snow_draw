@@ -124,40 +124,26 @@ class CreateElement extends EditingConflictAction {
 }
 
 class UpdateCreatingElement extends EditingConflictAction {
-  const UpdateCreatingElement({
-    required this.currentPosition,
-    this.maintainAspectRatio = false,
-    this.createFromCenter = false,
-    this.snapOverride = false,
-  });
-  final DrawPoint currentPosition;
-  final bool maintainAspectRatio;
-  final bool createFromCenter;
-  final bool snapOverride;
-
-  @override
-  String toString() =>
-      'UpdateCreatingElement(position: $currentPosition, '
-      'snapOverride: $snapOverride)';
-}
-
-class UpdateCreatingElementBatch extends EditingConflictAction {
-  UpdateCreatingElementBatch({
+  UpdateCreatingElement({
     required List<DrawPoint> positions,
     this.maintainAspectRatio = false,
     this.createFromCenter = false,
     this.snapOverride = false,
-  }) : positions = _freezeList(positions);
-
-  /// Ordered pointer positions represented by this batched update.
+  }) : assert(
+         positions.isNotEmpty,
+         'UpdateCreatingElement.positions must not be empty',
+       ),
+       positions = _freezeList(positions);
   final List<DrawPoint> positions;
+  DrawPoint get currentPosition => positions.last;
   final bool maintainAspectRatio;
   final bool createFromCenter;
   final bool snapOverride;
+  bool get isBatch => positions.length > 1;
 
   @override
   String toString() =>
-      'UpdateCreatingElementBatch(count: ${positions.length}, '
+      'UpdateCreatingElement(count: ${positions.length}, '
       'snapOverride: $snapOverride)';
 }
 

@@ -145,23 +145,18 @@ class CreatePlugin extends DrawInputPlugin {
       return handled(message: 'Create unchanged');
     }
 
-    if (hasBatchedSamples) {
-      final sampledPoints = resamplePointerSamples(
-        sampledPoints: event.sampledPoints,
-        maxSamples: _maxFreeDrawBatchSamples,
-      );
-      await dispatch(
-        UpdateCreatingElementBatch(
-          positions: sampledPoints,
-          createFromCenter: event.modifiers.alt,
-          snapOverride: event.modifiers.control,
-        ),
-      );
-      return handled(message: 'Create updated (batched)');
-    }
-
-    await _dispatchCreatingUpdate(event.position, event.modifiers);
-    return handled(message: 'Create updated');
+    final positions = hasBatchedSamples
+        ? resamplePointerSamples(
+            sampledPoints: event.sampledPoints,
+            maxSamples: _maxFreeDrawBatchSamples,
+          )
+        : <DrawPoint>[event.position];
+    await _dispatchCreatingUpdate(positions, event.modifiers);
+    return handled(
+      message: hasBatchedSamples
+          ? 'Create updated (batched)'
+          : 'Create updated',
+    );
   }
 
   Future<PluginResult> _handlePointerHover(PointerHoverInputEvent event) async {
@@ -171,7 +166,7 @@ class CreatePlugin extends DrawInputPlugin {
     if (!_shouldDispatchCreatingUpdate(event.position, event.modifiers)) {
       return handled(message: 'Create hover unchanged');
     }
-    await _dispatchCreatingUpdate(event.position, event.modifiers);
+    await _dispatchCreatingUpdate(<DrawPoint>[event.position], event.modifiers);
     return handled(message: 'Create hover updated');
   }
 
@@ -226,7 +221,9 @@ class CreatePlugin extends DrawInputPlugin {
         );
 
     if (_isElbowArrowCreating(state)) {
-      await _dispatchCreatingUpdate(event.position, event.modifiers);
+      await _dispatchCreatingUpdate(<DrawPoint>[
+        event.position,
+      ], event.modifiers);
       return _finishCreation(
         message: 'Create finished (elbow)',
         resetPointState: true,
@@ -304,11 +301,11 @@ class CreatePlugin extends DrawInputPlugin {
   );
 
   Future<void> _dispatchCreatingUpdate(
-    DrawPoint position,
+    List<DrawPoint> positions,
     KeyModifiers modifiers,
   ) => dispatch(
     UpdateCreatingElement(
-      currentPosition: position,
+      positions: positions,
       maintainAspectRatio: modifiers.shift,
       createFromCenter: modifiers.alt,
       snapOverride: modifiers.control,

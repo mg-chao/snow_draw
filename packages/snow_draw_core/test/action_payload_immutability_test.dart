@@ -34,22 +34,17 @@ void main() {
       });
     }
 
-    test(
-      'UpdateCreatingElementBatch keeps an immutable snapshot of points',
-      () {
-        final points = <DrawPoint>[const DrawPoint(x: 1, y: 2)];
-        final snapshot = UpdateCreatingElementBatch(
-          positions: points,
-        ).positions;
+    test('UpdateCreatingElement keeps an immutable snapshot of points', () {
+      final points = <DrawPoint>[const DrawPoint(x: 1, y: 2)];
+      final snapshot = UpdateCreatingElement(positions: points).positions;
 
-        points.add(const DrawPoint(x: 3, y: 4));
+      points.add(const DrawPoint(x: 3, y: 4));
 
-        expect(snapshot, hasLength(1));
-        expect(
-          () => snapshot.add(const DrawPoint(x: 5, y: 6)),
-          throwsA(isA<UnsupportedError>()),
-        );
-      },
-    );
+      expect(snapshot, hasLength(1));
+      expect(
+        () => snapshot.add(const DrawPoint(x: 5, y: 6)),
+        throwsA(isA<UnsupportedError>()),
+      );
+    });
   });
 }

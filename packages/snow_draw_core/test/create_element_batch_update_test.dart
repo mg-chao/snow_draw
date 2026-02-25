@@ -19,7 +19,7 @@ IdGenerator _testIdGenerator({String prefix = 'id', int startFrom = 1}) {
 }
 
 void main() {
-  test('UpdateCreatingElementBatch advances free-draw creation '
+  test('UpdateCreatingElement advances free-draw creation '
       'in one reducer pass', () {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
@@ -42,7 +42,7 @@ void main() {
 
     final updated = reducer.reduce(
       started,
-      UpdateCreatingElementBatch(
+      UpdateCreatingElement(
         positions: const [
           DrawPoint(x: 16, y: 20, pressure: 0.2),
           DrawPoint(x: 28, y: 34, pressure: 0.3),
