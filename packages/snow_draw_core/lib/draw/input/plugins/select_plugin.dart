@@ -170,39 +170,29 @@ class SelectPlugin extends DrawInputPlugin {
       return unhandled();
     }
 
-    final pendingIntent = interaction.intent;
     final pointerDownPosition = interaction.pointerDownPosition;
-    if (hasReachedDragThreshold(
+    if (!hasReachedDragThreshold(
       from: pointerDownPosition,
       to: event.position,
       threshold: _dragStartThreshold,
     )) {
-      await dispatch(const ClearDragPending());
+      return handled(message: 'Pending drag');
+    }
 
-      if (state.domain.hasSelection) {
-        final (elementId, addToSelection) = switch (pendingIntent) {
-          PendingSelectIntent(:final elementId, :final addToSelection) => (
-            elementId,
-            addToSelection,
-          ),
-          PendingMoveIntent() => (
-            state.domain.selection.selectedIds.first,
-            false,
-          ),
-        };
+    await dispatch(const ClearDragPending());
 
-        final didStart = await _dispatchMappedStartEdit(
-          intent: StartMoveIntent(
-            elementId: elementId,
-            addToSelection: addToSelection,
-          ),
-          position: pointerDownPosition,
-          requireSessionStart: true,
-        );
-        if (didStart) {
-          await _updateEditFromEvent(event);
-        }
-      }
+    final startMoveIntent = _resolvePendingDragStartIntent(interaction.intent);
+    if (startMoveIntent == null) {
+      return handled(message: 'Pending drag');
+    }
+
+    final didStart = await _dispatchMappedStartEdit(
+      intent: startMoveIntent,
+      position: pointerDownPosition,
+      requireSessionStart: true,
+    );
+    if (didStart) {
+      await _updateEditFromEvent(event);
     }
 
     return handled(message: 'Pending drag');
@@ -415,4 +405,23 @@ class SelectPlugin extends DrawInputPlugin {
     final pointCount = data.points.length;
     return handle.index > 0 && handle.index < pointCount - 1;
   }
+
+  StartMoveIntent? _resolvePendingDragStartIntent(
+    PendingIntent pendingIntent,
+  ) => switch (pendingIntent) {
+    PendingSelectIntent(:final elementId, :final addToSelection) =>
+      state.domain.hasSelection
+          ? StartMoveIntent(
+              elementId: elementId,
+              addToSelection: addToSelection,
+            )
+          : null,
+    PendingMoveIntent() =>
+      state.domain.selection.selectedIds.isEmpty
+          ? null
+          : StartMoveIntent(
+              elementId: state.domain.selection.selectedIds.first,
+              addToSelection: false,
+            ),
+  };
 }

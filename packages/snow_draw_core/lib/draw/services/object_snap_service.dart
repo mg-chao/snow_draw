@@ -453,9 +453,7 @@ class ObjectSnapService {
     required double snapDistance,
   }) {
     final candidates = <_AxisCandidate>[];
-    final allowStart = targetAnchors.contains(SnapAxisAnchor.start);
     final allowCenter = targetAnchors.contains(SnapAxisAnchor.center);
-    final allowEnd = targetAnchors.contains(SnapAxisAnchor.end);
     final filtered = _resolveGapReferenceRects(
       axis: axis,
       targetRect: targetRect,
@@ -528,11 +526,7 @@ class ObjectSnapService {
           candidates: candidates,
           axis: axis,
           targetRect: targetRect,
-          allowStart: allowStart,
-          allowCenter: allowCenter,
-          allowEnd: allowEnd,
           desiredStart: desiredStart,
-          desiredEnd: desiredStart + targetSize,
           snapDistance: snapDistance,
           referenceRect: beforeNeighbor,
           gapSize: gap,
@@ -542,16 +536,12 @@ class ObjectSnapService {
       }
 
       if (afterNeighbor != null) {
-        final desiredEnd = _axisMin(afterNeighbor, axis) - gap;
+        final desiredStart = _axisMin(afterNeighbor, axis) - gap - targetSize;
         _maybeAddGapSideCandidate(
           candidates: candidates,
           axis: axis,
           targetRect: targetRect,
-          allowStart: allowStart,
-          allowCenter: allowCenter,
-          allowEnd: allowEnd,
-          desiredStart: desiredEnd - targetSize,
-          desiredEnd: desiredEnd,
+          desiredStart: desiredStart,
           snapDistance: snapDistance,
           referenceRect: afterNeighbor,
           gapSize: gap,
@@ -666,61 +656,26 @@ class ObjectSnapService {
     required List<_AxisCandidate> candidates,
     required SnapAxis axis,
     required DrawRect targetRect,
-    required bool allowStart,
-    required bool allowCenter,
-    required bool allowEnd,
     required double desiredStart,
-    required double desiredEnd,
     required double snapDistance,
     required DrawRect referenceRect,
     required double gapSize,
     required int gapFrequency,
     required _GapSide gapSide,
   }) {
-    if (allowStart &&
-        _tryAddGapSideCandidate(
-          candidates: candidates,
-          axis: axis,
-          offset: desiredStart - _axisMin(targetRect, axis),
-          snapDistance: snapDistance,
-          referenceRect: referenceRect,
-          gapSize: gapSize,
-          gapFrequency: gapFrequency,
-          gapSide: gapSide,
-        )) {
-      return;
-    }
-
-    if (allowEnd &&
-        _tryAddGapSideCandidate(
-          candidates: candidates,
-          axis: axis,
-          offset: desiredEnd - _axisMax(targetRect, axis),
-          snapDistance: snapDistance,
-          referenceRect: referenceRect,
-          gapSize: gapSize,
-          gapFrequency: gapFrequency,
-          gapSide: gapSide,
-        )) {
-      return;
-    }
-
-    if (allowCenter) {
-      final desiredCenter = (desiredStart + desiredEnd) / 2;
-      _tryAddGapSideCandidate(
-        candidates: candidates,
-        axis: axis,
-        offset: desiredCenter - _axisCenter(targetRect, axis),
-        snapDistance: snapDistance,
-        referenceRect: referenceRect,
-        gapSize: gapSize,
-        gapFrequency: gapFrequency,
-        gapSide: gapSide,
-      );
-    }
+    _tryAddGapSideCandidate(
+      candidates: candidates,
+      axis: axis,
+      offset: desiredStart - _axisMin(targetRect, axis),
+      snapDistance: snapDistance,
+      referenceRect: referenceRect,
+      gapSize: gapSize,
+      gapFrequency: gapFrequency,
+      gapSide: gapSide,
+    );
   }
 
-  static bool _tryAddGapSideCandidate({
+  static void _tryAddGapSideCandidate({
     required List<_AxisCandidate> candidates,
     required SnapAxis axis,
     required double offset,
@@ -731,7 +686,7 @@ class ObjectSnapService {
     required _GapSide gapSide,
   }) {
     if (offset.abs() > snapDistance) {
-      return false;
+      return;
     }
     candidates.add(
       _AxisCandidate.gapSide(
@@ -743,7 +698,6 @@ class ObjectSnapService {
         gapSide: gapSide,
       ),
     );
-    return true;
   }
 
   /// Selects the best snap candidate from a list using weighted scoring.
