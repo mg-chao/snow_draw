@@ -18,7 +18,6 @@ import 'middleware/middleware_pipeline_factory.dart';
 import 'selector.dart';
 import 'snapshot.dart';
 import 'snapshot_builder.dart';
-import 'state_manager.dart';
 
 class DefaultDrawStore implements DrawStore {
   DefaultDrawStore({
@@ -38,7 +37,7 @@ class DefaultDrawStore implements DrawStore {
 
     _historyManager =
         historyManager ?? HistoryManager(logService: this.context.log);
-    _stateManager = StateManager(initialState ?? DrawState());
+    _state = initialState ?? DrawState();
     _configManager = this.context.configManager;
     _listenerRegistry = ListenerRegistry(
       onError: (error, stackTrace) {
@@ -61,7 +60,10 @@ class DefaultDrawStore implements DrawStore {
 
     final services = ActionProcessorServices(
       drawContext: this.context,
-      stateManager: _stateManager,
+      readState: () => _state,
+      writeState: (nextState) {
+        _state = nextState;
+      },
       historyManager: _historyManager,
       configManager: _configManager,
       listenerRegistry: _listenerRegistry,
@@ -78,7 +80,7 @@ class DefaultDrawStore implements DrawStore {
   @override
   late final DrawContext context;
 
-  late final StateManager _stateManager;
+  late DrawState _state;
   late final ConfigManager _configManager;
   late final ListenerRegistry _listenerRegistry;
 
@@ -99,7 +101,7 @@ class DefaultDrawStore implements DrawStore {
   var _editSessionSequence = 0;
 
   @override
-  DrawState get state => _stateManager.current;
+  DrawState get state => _state;
 
   bool get canUndo => _historyManager.canUndo;
   bool get canRedo => _historyManager.canRedo;
@@ -175,10 +177,7 @@ class DefaultDrawStore implements DrawStore {
     final startState = state;
     _isBatching = true;
     _batchStartState = startState;
-    _batchStartSnapshot = _snapshotBuilder.buildSnapshotFromState(
-      state: startState,
-      includeSelection: includeSelectionInHistory,
-    );
+    _batchStartSnapshot = _buildSnapshot(startState);
     context.log.store.debug('Batch snapshot captured', {
       'elements': startState.domain.document.elements.length,
     });
@@ -193,10 +192,7 @@ class DefaultDrawStore implements DrawStore {
     final startState = _batchStartState;
     final startSnapshot = _batchStartSnapshot;
 
-    final endSnapshot = _snapshotBuilder.buildSnapshotFromState(
-      state: state,
-      includeSelection: includeSelectionInHistory,
-    );
+    final endSnapshot = _buildSnapshot(state);
 
     final recorded = endSnapshot != startSnapshot;
     if (recorded) {
@@ -258,4 +254,10 @@ class DefaultDrawStore implements DrawStore {
     });
     return sessionId;
   }
+
+  PersistentSnapshot _buildSnapshot(DrawState sourceState) =>
+      _snapshotBuilder.buildSnapshotFromState(
+        state: sourceState,
+        includeSelection: includeSelectionInHistory,
+      );
 }

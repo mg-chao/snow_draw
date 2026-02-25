@@ -8,7 +8,6 @@ class PluginRegistry {
   PluginRegistry({required PluginContext context}) : _context = context;
   final PluginContext _context;
   final List<InputPlugin> _plugins = [];
-  final Map<String, InputPlugin> _pluginMap = {};
 
   /// Get all plugins.
   List<InputPlugin> get plugins => List<InputPlugin>.unmodifiable(_plugins);
@@ -47,7 +46,7 @@ class PluginRegistry {
 
   /// Unregister a plugin.
   Future<void> unregister(String pluginId) async {
-    final plugin = _pluginMap[pluginId];
+    final plugin = _findPluginById(pluginId);
     if (plugin == null) {
       throw StateError('Plugin with id "$pluginId" is not registered');
     }
@@ -57,10 +56,10 @@ class PluginRegistry {
   }
 
   /// Check whether a plugin is registered.
-  bool isRegistered(String pluginId) => _pluginMap.containsKey(pluginId);
+  bool isRegistered(String pluginId) => _findPluginById(pluginId) != null;
 
   /// Get a plugin.
-  InputPlugin? getPlugin(String pluginId) => _pluginMap[pluginId];
+  InputPlugin? getPlugin(String pluginId) => _findPluginById(pluginId);
 
   /// Dispatch an event to all plugins.
   ///
@@ -119,13 +118,15 @@ class PluginRegistry {
       }
     }
     _plugins.clear();
-    _pluginMap.clear();
   }
 
   void _validateBatchPluginIds(List<InputPlugin> plugins) {
+    final registeredIds = {for (final plugin in _plugins) plugin.id};
     final batchIds = <String>{};
     for (final plugin in plugins) {
-      _assertPluginIdAvailable(plugin.id);
+      if (registeredIds.contains(plugin.id)) {
+        throw StateError('Plugin with id "${plugin.id}" is already registered');
+      }
       if (!batchIds.add(plugin.id)) {
         throw StateError(
           'Duplicate plugin id "${plugin.id}" in batch registration',
@@ -134,10 +135,13 @@ class PluginRegistry {
     }
   }
 
-  void _assertPluginIdAvailable(String pluginId) {
-    if (_pluginMap.containsKey(pluginId)) {
-      throw StateError('Plugin with id "$pluginId" is already registered');
+  InputPlugin? _findPluginById(String pluginId) {
+    for (final plugin in _plugins) {
+      if (plugin.id == pluginId) {
+        return plugin;
+      }
     }
+    return null;
   }
 
   void _insertPlugin(InputPlugin plugin) {
@@ -149,12 +153,10 @@ class PluginRegistry {
     } else {
       _plugins.insert(insertAt, plugin);
     }
-    _pluginMap[plugin.id] = plugin;
   }
 
   void _removePlugin(InputPlugin plugin) {
     _plugins.remove(plugin);
-    _pluginMap.remove(plugin.id);
   }
 
   bool _canHandle({required InputPlugin plugin, required InputEvent event}) {

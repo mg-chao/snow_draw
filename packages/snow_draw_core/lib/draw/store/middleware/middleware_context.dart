@@ -16,19 +16,6 @@ String _generateTraceId() {
   return 'dispatch_${timestamp}_$sequence';
 }
 
-@immutable
-class DispatchFailure {
-  const DispatchFailure({
-    required this.error,
-    required this.stackTrace,
-    required this.source,
-  });
-
-  final Object error;
-  final StackTrace stackTrace;
-  final String? source;
-}
-
 /// Flat dispatch context for middleware execution.
 @immutable
 class DispatchContext {
@@ -45,7 +32,9 @@ class DispatchContext {
     required this.includeSelectionInHistory,
     required this.shouldStop,
     required this.stopReason,
-    required this.failure,
+    required this.error,
+    required this.stackTrace,
+    required this.errorSource,
     required this.traceId,
   });
 
@@ -73,7 +62,9 @@ class DispatchContext {
     includeSelectionInHistory: includeSelectionInHistory,
     shouldStop: false,
     stopReason: null,
-    failure: null,
+    error: null,
+    stackTrace: null,
+    errorSource: null,
     traceId: traceId ?? _generateTraceId(),
   );
   final DrawAction action;
@@ -88,14 +79,12 @@ class DispatchContext {
   final bool includeSelectionInHistory;
   final bool shouldStop;
   final String? stopReason;
-  final DispatchFailure? failure;
+  final Object? error;
+  final StackTrace? stackTrace;
+  final String? errorSource;
   final String traceId;
 
-  Object? get error => failure?.error;
-  StackTrace? get stackTrace => failure?.stackTrace;
-  String? get errorSource => failure?.source;
-
-  bool get hasError => failure != null;
+  bool get hasError => error != null;
   bool get isTerminal => shouldStop || hasError;
 
   bool get hasStateChanged => currentState != initialState;
@@ -117,18 +106,18 @@ class DispatchContext {
   }) => _copy(
     shouldStop: true,
     stopReason: 'Error: $error',
-    failure: DispatchFailure(
-      error: error,
-      stackTrace: stackTrace,
-      source: source ?? errorSource,
-    ),
+    error: error,
+    stackTrace: stackTrace,
+    errorSource: source ?? errorSource,
   );
 
   DispatchContext _copy({
     DrawState? currentState,
     bool? shouldStop,
     String? stopReason,
-    DispatchFailure? failure,
+    Object? error,
+    StackTrace? stackTrace,
+    String? errorSource,
   }) => DispatchContext._(
     action: action,
     drawContext: drawContext,
@@ -142,7 +131,9 @@ class DispatchContext {
     includeSelectionInHistory: includeSelectionInHistory,
     shouldStop: shouldStop ?? this.shouldStop,
     stopReason: stopReason ?? this.stopReason,
-    failure: failure ?? this.failure,
+    error: error ?? this.error,
+    stackTrace: stackTrace ?? this.stackTrace,
+    errorSource: errorSource ?? this.errorSource,
     traceId: traceId,
   );
 

@@ -21,12 +21,12 @@ import '../middleware/middleware_context.dart';
 import '../middleware/middleware_pipeline.dart';
 import '../snapshot_builder.dart';
 import '../state_change_detector.dart';
-import '../state_manager.dart';
 
 class ActionProcessorServices {
   const ActionProcessorServices({
     required this.drawContext,
-    required this.stateManager,
+    required this.readState,
+    required this.writeState,
     required this.historyManager,
     required this.configManager,
     required this.listenerRegistry,
@@ -38,7 +38,8 @@ class ActionProcessorServices {
     required this.eventBus,
   });
   final DrawContext drawContext;
-  final StateManager stateManager;
+  final DrawState Function() readState;
+  final void Function(DrawState state) writeState;
   final HistoryManager historyManager;
   final ConfigManager configManager;
   final ListenerRegistry listenerRegistry;
@@ -66,7 +67,7 @@ class ActionProcessor {
 
   var _isDisposed = false;
 
-  DrawState get state => _services.stateManager.current;
+  DrawState get state => _services.readState();
 
   bool get isDisposed => _isDisposed;
 
@@ -105,17 +106,12 @@ class ActionProcessor {
       return Future.error(StateError('Dispatch queue has been disposed'));
     }
 
-    Future<void> runTask() async {
+    final scheduled = _dispatchTail.whenComplete(() async {
       if (_isDisposed) {
         throw StateError('Dispatch queue disposed while pending');
       }
       await task();
-    }
-
-    final scheduled = _dispatchTail.then<void>(
-      (_) => runTask(),
-      onError: (_, StackTrace stackTrace) => runTask(),
-    );
+    });
     _dispatchTail = scheduled.catchError((Object _, StackTrace _) {});
     return scheduled;
   }
@@ -141,7 +137,7 @@ class ActionProcessor {
   Future<void> _processThroughPipeline(DrawAction action) async {
     final initialContext = DispatchContext.initial(
       action: action,
-      state: _services.stateManager.current,
+      state: _services.readState(),
       drawContext: _services.drawContext,
       historyManager: _services.historyManager,
       snapshotBuilder: _services.snapshotBuilder,
@@ -205,7 +201,7 @@ class ActionProcessor {
   }
 
   EditCancelReason? _resolveEditCancelReason(DrawAction action) {
-    if (!_services.stateManager.current.application.isEditing) {
+    if (!_services.readState().application.isEditing) {
       return null;
     }
 
@@ -244,7 +240,7 @@ class ActionProcessor {
     required bool hasStateChanged,
   }) {
     if (hasStateChanged) {
-      _services.stateManager.update(nextState);
+      _services.writeState(nextState);
       if (!_services.isBatching()) {
         _services.listenerRegistry.notify(previousState, nextState);
       }
