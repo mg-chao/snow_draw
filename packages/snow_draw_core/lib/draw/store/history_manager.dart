@@ -103,8 +103,8 @@ class HistoryManager {
   ];
 
   bool record(
-    HistorySnapshot before,
-    HistorySnapshot after, {
+    PersistentSnapshot before,
+    PersistentSnapshot after, {
     HistoryMetadata? metadata,
     HistoryCoalescing? coalescing,
     DrawState? currentState,
@@ -118,7 +118,6 @@ class HistoryManager {
         metadata: metadata,
         coalescing: coalescing,
         currentState: currentState,
-        includeSelection: before.includeSelection,
         recordedAt: now,
       );
       if (coalesced != null) {
@@ -151,7 +150,7 @@ class HistoryManager {
       'description': metadata?.description,
       'changedElements':
           delta.beforeElements.length + delta.afterElements.length,
-      'orderChanged': delta.orderBefore != null,
+      'orderChanged': delta.orderChanged,
       'selectionChanged': delta.selectionChanged,
     });
 
@@ -160,11 +159,10 @@ class HistoryManager {
   }
 
   bool? _tryCoalesceCurrentRecord({
-    required HistorySnapshot after,
+    required PersistentSnapshot after,
     required HistoryMetadata? metadata,
     required HistoryCoalescing coalescing,
     required DrawState currentState,
-    required bool includeSelection,
     required DateTime recordedAt,
   }) {
     if (!_canCoalesceCurrent(coalescing: coalescing, recordedAt: recordedAt)) {
@@ -183,7 +181,6 @@ class HistoryManager {
     final mergedDelta = _buildCoalescedDelta(
       parentState: parentState,
       afterSnapshot: after,
-      includeSelection: includeSelection,
     );
 
     if (!mergedDelta.hasChanges) {
@@ -212,17 +209,16 @@ class HistoryManager {
 
   HistoryDelta _buildCoalescedDelta({
     required DrawState parentState,
-    required HistorySnapshot afterSnapshot,
-    required bool includeSelection,
+    required PersistentSnapshot afterSnapshot,
   }) {
     final mergedBefore = _snapshotForCoalescedState(
       state: parentState,
-      includeSelection: includeSelection,
+      includeSelection: afterSnapshot.includeSelection,
     );
     return HistoryDelta.fromSnapshots(mergedBefore, afterSnapshot);
   }
 
-  HistorySnapshot _snapshotForCoalescedState({
+  PersistentSnapshot _snapshotForCoalescedState({
     required DrawState state,
     required bool includeSelection,
   }) => PersistentSnapshot.fromState(state, includeSelection: includeSelection);

@@ -29,7 +29,6 @@ void main() {
         final delta = store.exportHistory().entries.last.delta;
         expect(delta.beforeElements, hasLength(4));
         expect(delta.afterElements, hasLength(4));
-        expect(delta.reindexZIndices, isFalse);
 
         expect(_elementOrder(store), ['b', 'c', 'd', 'a']);
         expect(_elementZIndexes(store), [0, 1, 2, 3]);
@@ -60,7 +59,6 @@ void main() {
         final delta = store.exportHistory().entries.last.delta;
         expect(delta.beforeElements, hasLength(4));
         expect(delta.afterElements, hasLength(4));
-        expect(delta.reindexZIndices, isFalse);
 
         expect(_elementOrder(store), ['c', 'd', 'a', 'b']);
         expect(_elementZIndexes(store), [0, 1, 2, 3]);
@@ -86,7 +84,8 @@ void main() {
         expect(_elementZIndexes(store), [0, 2]);
 
         final delta = store.exportHistory().entries.last.delta;
-        expect(delta.reindexZIndices, isFalse);
+        expect(delta.orderBefore, isNotEmpty);
+        expect(delta.orderAfter, isNotEmpty);
 
         await store.dispatch(const Undo());
         expect(_elementOrder(store), ['a', 'b', 'c']);
@@ -114,7 +113,8 @@ void main() {
         final delta = store.exportHistory().entries.last.delta;
         expect(delta.beforeElements, hasLength(3));
         expect(delta.afterElements, hasLength(3));
-        expect(delta.reindexZIndices, isFalse);
+        expect(delta.orderBefore, isNotEmpty);
+        expect(delta.orderAfter, isNotEmpty);
 
         expect(_elementOrder(store), ['a', 'b', 'c']);
         expect(_elementZIndexes(store), [0, 1, 2]);
@@ -145,7 +145,8 @@ void main() {
         final delta = store.exportHistory().entries.last.delta;
         expect(delta.beforeElements, hasLength(3));
         expect(delta.afterElements, hasLength(3));
-        expect(delta.reindexZIndices, isFalse);
+        expect(delta.orderBefore, isNotEmpty);
+        expect(delta.orderAfter, isNotEmpty);
 
         expect(_elementOrder(store), ['a', 'b', 'c']);
         expect(_elementZIndexes(store), [0, 1, 2]);

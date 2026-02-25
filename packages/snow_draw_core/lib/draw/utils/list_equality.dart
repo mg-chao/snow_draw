@@ -31,6 +31,9 @@ bool listEqualsBy<T>(
 bool listEquals<T>(List<T> a, List<T> b) =>
     listEqualsBy(a, b, (left, right) => left == right);
 
+/// Hash for a list using positional `Object.hashAll` semantics.
+int listHash<T>(List<T> values) => Object.hashAll(values);
+
 /// Nullable variant of [listEqualsBy].
 bool nullableListEqualsBy<T>(
   List<T>? a,
@@ -46,6 +49,48 @@ bool nullableListEqualsBy<T>(
 /// Nullable variant of [listEquals].
 bool nullableListEquals<T>(List<T>? a, List<T>? b) =>
     nullableListEqualsBy(a, b, (left, right) => left == right);
+
+/// Hash for a map using deterministic key order.
+///
+/// Keys are sorted by `toString()` to keep hash generation stable across runs.
+int mapHash<K, V>(Map<K, V> map) {
+  if (map.isEmpty) {
+    return 0;
+  }
+  final sortedEntries = map.entries.toList(
+    growable: false,
+  )..sort((left, right) => left.key.toString().compareTo(right.key.toString()));
+  return Object.hashAll(
+    sortedEntries.map((entry) => Object.hash(entry.key, entry.value)),
+  );
+}
+
+/// Element-wise equality for maps using key/value equality.
+bool mapEqualsBy<K, V>(
+  Map<K, V> a,
+  Map<K, V> b,
+  bool Function(V left, V right) valueEquals,
+) {
+  if (identical(a, b)) {
+    return true;
+  }
+  if (a.length != b.length) {
+    return false;
+  }
+  for (final entry in a.entries) {
+    if (!b.containsKey(entry.key)) {
+      return false;
+    }
+    if (!valueEquals(entry.value, b[entry.key] as V)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+/// Element-wise equality for maps using `==` for values.
+bool mapEquals<K, V>(Map<K, V> a, Map<K, V> b) =>
+    mapEqualsBy(a, b, (left, right) => left == right);
 
 /// Element-wise equality for [DrawPoint] lists.
 bool pointListEquals(List<DrawPoint> a, List<DrawPoint> b) => listEquals(a, b);

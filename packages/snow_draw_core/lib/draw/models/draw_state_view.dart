@@ -5,6 +5,7 @@ import '../services/selection_data_computer.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
 import '../types/snap_guides.dart';
+import '../utils/list_equality.dart';
 import 'document_state.dart';
 import 'draw_state.dart';
 import 'element_state.dart';
@@ -266,30 +267,15 @@ class DrawStateView {
       identical(this, other) ||
       other is DrawStateView &&
           other.state == state &&
-          _mapsEqual(other._previewElementsById, _previewElementsById) &&
+          mapEquals(other._previewElementsById, _previewElementsById) &&
           other._effectiveSelection == _effectiveSelection &&
           snapGuideListEquals(other.snapGuides, snapGuides);
 
   @override
   int get hashCode => Object.hash(
     state,
-    Object.hashAll(
-      _previewElementsById.entries.map((e) => Object.hash(e.key, e.value)),
-    ),
+    mapHash(_previewElementsById),
     _effectiveSelection,
-    Object.hashAll(snapGuides),
+    listHash(snapGuides),
   );
-
-  /// Helper to compare maps for equality.
-  static bool _mapsEqual<K, V>(Map<K, V> a, Map<K, V> b) {
-    if (a.length != b.length) {
-      return false;
-    }
-    for (final key in a.keys) {
-      if (!b.containsKey(key) || a[key] != b[key]) {
-        return false;
-      }
-    }
-    return true;
-  }
 }

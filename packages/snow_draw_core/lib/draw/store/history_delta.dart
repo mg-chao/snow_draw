@@ -18,14 +18,14 @@ class HistoryDelta {
     required this.globalElementsAfter,
     required this.orderBefore,
     required this.orderAfter,
+    required this.orderChanged,
     required this.selectionBefore,
     required this.selectionAfter,
-    required this.reindexZIndices,
   });
 
   factory HistoryDelta.fromSnapshots(
-    HistorySnapshot before,
-    HistorySnapshot after,
+    PersistentSnapshot before,
+    PersistentSnapshot after,
   ) {
     final beforeById = before.elementMap;
     final afterById = after.elementMap;
@@ -39,20 +39,12 @@ class HistoryDelta {
       afterElements: afterElements,
     );
 
-    List<String>? orderBefore;
-    List<String>? orderAfter;
-    final beforeOrder = before.order;
-    final afterOrder = after.order;
-    if (beforeOrder != null && afterOrder != null) {
-      final orderChanged = !const ListEquality<String>().equals(
-        beforeOrder,
-        afterOrder,
-      );
-      if (orderChanged) {
-        orderBefore = List<String>.unmodifiable(beforeOrder);
-        orderAfter = List<String>.unmodifiable(afterOrder);
-      }
-    }
+    final orderBefore = List<String>.unmodifiable(before.order);
+    final orderAfter = List<String>.unmodifiable(after.order);
+    final orderChanged = !const ListEquality<String>().equals(
+      orderBefore,
+      orderAfter,
+    );
 
     GlobalElementsState? globalElementsBefore;
     GlobalElementsState? globalElementsAfter;
@@ -77,20 +69,20 @@ class HistoryDelta {
       globalElementsAfter: globalElementsAfter,
       orderBefore: orderBefore,
       orderAfter: orderAfter,
+      orderChanged: orderChanged,
       selectionBefore: selectionBefore,
       selectionAfter: selectionAfter,
-      reindexZIndices: false,
     );
   }
   final Map<String, ElementState> beforeElements;
   final Map<String, ElementState> afterElements;
   final GlobalElementsState? globalElementsBefore;
   final GlobalElementsState? globalElementsAfter;
-  final List<String>? orderBefore;
-  final List<String>? orderAfter;
+  final List<String> orderBefore;
+  final List<String> orderAfter;
+  final bool orderChanged;
   final SelectionState? selectionBefore;
   final SelectionState? selectionAfter;
-  final bool reindexZIndices;
 
   bool get selectionChanged => selectionBefore != selectionAfter;
 
@@ -99,8 +91,7 @@ class HistoryDelta {
       afterElements.isNotEmpty ||
       globalElementsBefore != null ||
       globalElementsAfter != null ||
-      orderBefore != null ||
-      orderAfter != null ||
+      orderChanged ||
       selectionChanged;
 
   DrawState applyBackward(DrawState state) => _apply(state, forward: false);
@@ -125,8 +116,7 @@ class HistoryDelta {
     }
     nextById.addAll(targetElements);
 
-    final order = forward ? orderAfter : orderBefore;
-    final targetOrder = order ?? currentById.keys;
+    final targetOrder = forward ? orderAfter : orderBefore;
 
     final nextElements = <ElementState>[];
     for (final id in targetOrder) {
@@ -136,23 +126,12 @@ class HistoryDelta {
       }
     }
 
-    if (order == null && nextElements.length != nextById.length) {
-      for (final entry in nextById.entries) {
-        if (!currentById.containsKey(entry.key)) {
-          nextElements.add(entry.value);
-        }
-      }
-    }
-
     final selection = forward ? selectionAfter : selectionBefore;
-    final resolvedElements = reindexZIndices
-        ? _reindexElements(nextElements)
-        : nextElements;
 
     return state.copyWith(
       domain: state.domain.copyWith(
         document: state.domain.document.copyWith(
-          elements: resolvedElements,
+          elements: nextElements,
           globalElements:
               (forward ? globalElementsAfter : globalElementsBefore) ??
               state.domain.document.globalElements,
@@ -190,21 +169,6 @@ void _collectChangedElementsByScan({
       afterElements[entry.key] = entry.value;
     }
   }
-}
-
-List<ElementState> _reindexElements(List<ElementState> elements) {
-  var changed = false;
-  final reindexed = <ElementState>[];
-  for (var index = 0; index < elements.length; index++) {
-    final element = elements[index];
-    if (element.zIndex == index) {
-      reindexed.add(element);
-      continue;
-    }
-    changed = true;
-    reindexed.add(element.copyWith(zIndex: index));
-  }
-  return changed ? reindexed : elements;
 }
 
 SelectionState _copySelection(SelectionState selection) => SelectionState(

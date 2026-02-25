@@ -307,7 +307,7 @@ final class ArrowPointOverlayRenderTask extends FrameRenderTask {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is ArrowPointOverlayRenderTask &&
-          _listEquals(other.handles, handles) &&
+          listEquals(other.handles, handles) &&
           other.selectionConfig == selectionConfig &&
           other.activeHandle == activeHandle &&
           other.hoveredHandle == hoveredHandle &&
@@ -315,7 +315,7 @@ final class ArrowPointOverlayRenderTask extends FrameRenderTask {
 
   @override
   int get hashCode => Object.hash(
-    _listHash(handles),
+    listHash(handles),
     selectionConfig,
     activeHandle,
     hoveredHandle,
@@ -338,11 +338,11 @@ final class ArrowBindingHighlightRenderTask extends FrameRenderTask {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is ArrowBindingHighlightRenderTask &&
-          _listEquals(other.elementIds, elementIds) &&
+          listEquals(other.elementIds, elementIds) &&
           other.strokeColor == strokeColor;
 
   @override
-  int get hashCode => Object.hash(_listHash(elementIds), strokeColor);
+  int get hashCode => Object.hash(listHash(elementIds), strokeColor);
 }
 
 /// Hover-outline task.
@@ -382,11 +382,11 @@ final class SnapGuidesRenderTask extends FrameRenderTask {
   bool operator ==(Object other) =>
       identical(this, other) ||
       other is SnapGuidesRenderTask &&
-          _listEquals(other.guides, guides) &&
+          listEquals(other.guides, guides) &&
           other.snapConfig == snapConfig;
 
   @override
-  int get hashCode => Object.hash(_listHash(guides), snapConfig);
+  int get hashCode => Object.hash(listHash(guides), snapConfig);
 }
 
 /// Box-select overlay task.
@@ -411,11 +411,11 @@ final class BoxSelectionRenderTask extends FrameRenderTask {
           other.bounds == bounds &&
           other.config == config &&
           other.selectionConfig == selectionConfig &&
-          _listEquals(other.previewElements, previewElements);
+          listEquals(other.previewElements, previewElements);
 
   @override
   int get hashCode =>
-      Object.hash(bounds, config, selectionConfig, _listHash(previewElements));
+      Object.hash(bounds, config, selectionConfig, listHash(previewElements));
 }
 
 /// Highlight-mask overlay task.
@@ -434,10 +434,10 @@ final class HighlightMaskRenderTask extends FrameRenderTask {
       identical(this, other) ||
       other is HighlightMaskRenderTask &&
           other.config == config &&
-          _listEquals(other.highlights, highlights);
+          listEquals(other.highlights, highlights);
 
   @override
-  int get hashCode => Object.hash(config, _listHash(highlights));
+  int get hashCode => Object.hash(config, listHash(highlights));
 }
 
 /// Watermark overlay task.
@@ -455,7 +455,3 @@ final class WatermarkRenderTask extends FrameRenderTask {
   @override
   int get hashCode => config.hashCode;
 }
-
-bool _listEquals<T>(List<T> a, List<T> b) => listEquals(a, b);
-
-int _listHash<T>(List<T> values) => Object.hashAll(values);
