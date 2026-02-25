@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/property_descriptor.dart';
 import 'package:snow_draw/property_descriptors.dart';
 import 'package:snow_draw/style_toolbar_state.dart';
-import 'package:snow_draw_core/snow_draw_engine.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 void main() {
   group('property descriptors', () {

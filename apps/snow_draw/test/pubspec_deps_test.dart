@@ -9,7 +9,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw/grid_toolbar_adapter.dart';
 import 'package:snow_draw/snap_toolbar_adapter.dart';
 // Internal package dependency:
-import 'package:snow_draw_core/snow_draw_engine.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 void main() {
   group('snow_draw app dependency smoke tests', () {
