@@ -1,0 +1,15 @@
+[package]
+name = "engine_bench"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+publish = false
+
+[dev-dependencies]
+criterion.workspace = true
+engine_core = { path = "../engine_core" }
+engine_proto = { path = "../engine_proto" }
+
+[[bench]]
+name = "dispatch"
+harness = false

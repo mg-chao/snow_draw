@@ -88,4 +88,5 @@ export 'draw/utils/edit_intent_detector.dart';
 export 'draw/utils/hit_test.dart';
 export 'draw/utils/selection_calculator.dart';
 export 'draw/utils/snapping_mode.dart';
+export 'rust_canvas_engine.dart';
 export 'utils/id_generator.dart';

@@ -29,6 +29,9 @@ jobs:
           channel: beta
           cache: true
 
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
       - name: Bootstrap workspace
         run: dart run melos bootstrap
 
@@ -115,8 +118,93 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  build-rust-abi-linux:
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust C ABI (linux)
+        run: cargo build --manifest-path packages/snow_draw_engine/rust/Cargo.toml -p engine_capi --release
+
+      - name: Package Rust C ABI (linux)
+        run: |
+          cd packages/snow_draw_engine/rust/target/release
+          tar -czf $GITHUB_WORKSPACE/snow_draw-engine-rust-linux-x64.tar.gz \
+            libsnow_draw_engine_capi.so \
+            libsnow_draw_engine_capi.a
+
+      - name: Upload Rust ABI artifact (linux)
+        uses: actions/upload-artifact@v4
+        with:
+          name: snow_draw-engine-rust-linux-x64
+          path: snow_draw-engine-rust-linux-x64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  build-rust-abi-macos:
+    needs: quality-gate
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust C ABI (macOS)
+        run: cargo build --manifest-path packages/snow_draw_engine/rust/Cargo.toml -p engine_capi --release
+
+      - name: Package Rust C ABI (macOS)
+        run: |
+          cd packages/snow_draw_engine/rust/target/release
+          tar -czf $GITHUB_WORKSPACE/snow_draw-engine-rust-macos-arm64.tar.gz \
+            libsnow_draw_engine_capi.dylib \
+            libsnow_draw_engine_capi.a
+
+      - name: Upload Rust ABI artifact (macOS)
+        uses: actions/upload-artifact@v4
+        with:
+          name: snow_draw-engine-rust-macos-arm64
+          path: snow_draw-engine-rust-macos-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
+  build-rust-abi-windows:
+    needs: quality-gate
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust C ABI (windows)
+        run: cargo build --manifest-path packages/snow_draw_engine/rust/Cargo.toml -p engine_capi --release
+
+      - name: Package Rust C ABI (windows)
+        run: |
+          cd packages/snow_draw_engine/rust/target/release
+          Compress-Archive -Path snow_draw_engine_capi.dll,snow_draw_engine_capi.lib -DestinationPath $env:GITHUB_WORKSPACE/snow_draw-engine-rust-windows-x64.zip
+
+      - name: Upload Rust ABI artifact (windows)
+        uses: actions/upload-artifact@v4
+        with:
+          name: snow_draw-engine-rust-windows-x64
+          path: snow_draw-engine-rust-windows-x64.zip
+          if-no-files-found: error
+          retention-days: 14
+
   create-release:
-    needs: [quality-gate, build-windows, build-web]
+    needs: [quality-gate, build-windows, build-web, build-rust-abi-linux, build-rust-abi-macos, build-rust-abi-windows]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -136,6 +224,21 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: snow_draw-web
+
+      - name: Download Rust ABI artifact (linux)
+        uses: actions/download-artifact@v4
+        with:
+          name: snow_draw-engine-rust-linux-x64
+
+      - name: Download Rust ABI artifact (macOS)
+        uses: actions/download-artifact@v4
+        with:
+          name: snow_draw-engine-rust-macos-arm64
+
+      - name: Download Rust ABI artifact (windows)
+        uses: actions/download-artifact@v4
+        with:
+          name: snow_draw-engine-rust-windows-x64
 
       - name: Get version
         id: get_version
@@ -204,6 +307,9 @@ jobs:
             |----------|------|-------------|
             | Windows | \`snow_draw-windows-x64.zip\` | Windows x64 executable |
             | Web | \`snow_draw-web.tar.gz\` | Web application bundle |
+            | Rust ABI (Linux) | \`snow_draw-engine-rust-linux-x64.tar.gz\` | C ABI library + static archive |
+            | Rust ABI (macOS) | \`snow_draw-engine-rust-macos-arm64.tar.gz\` | C ABI library + static archive |
+            | Rust ABI (Windows) | \`snow_draw-engine-rust-windows-x64.zip\` | C ABI dynamic library + import library |
 
             ## Installation Instructions
 
@@ -233,6 +339,9 @@ jobs:
           files: |
             snow_draw-windows-x64.zip
             snow_draw-web.tar.gz
+            snow_draw-engine-rust-linux-x64.tar.gz
+            snow_draw-engine-rust-macos-arm64.tar.gz
+            snow_draw-engine-rust-windows-x64.zip
           body: ${{ steps.release_notes.outputs.result }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

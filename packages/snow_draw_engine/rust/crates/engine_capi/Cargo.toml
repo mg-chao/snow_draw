@@ -1,0 +1,13 @@
+[package]
+name = "engine_capi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+engine_core = { path = "../engine_core" }
+engine_proto = { path = "../engine_proto" }
+prost.workspace = true

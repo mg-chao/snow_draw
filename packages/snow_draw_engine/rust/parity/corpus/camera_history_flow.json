@@ -1,0 +1,41 @@
+{
+  "name": "camera_history_flow",
+  "commands": [
+    {
+      "type": "move_camera",
+      "dx": 10.0,
+      "dy": -5.0
+    },
+    {
+      "type": "zoom_camera",
+      "scale": 2.0
+    },
+    {
+      "type": "undo"
+    },
+    {
+      "type": "redo"
+    },
+    {
+      "type": "clear_history"
+    }
+  ],
+  "expected": {
+    "document_version": 0,
+    "selection_version": 0,
+    "selected_ids": [],
+    "elements": [],
+    "history_undo_len": 0,
+    "history_redo_len": 0,
+    "frame_task_kinds": ["background"],
+    "event_kinds": [
+      "state_changed",
+      "state_changed",
+      "history_changed",
+      "state_changed",
+      "history_changed",
+      "state_changed",
+      "history_changed"
+    ]
+  }
+}

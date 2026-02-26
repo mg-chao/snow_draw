@@ -1,0 +1,33 @@
+{
+  "name": "smoke_create_select",
+  "commands": [
+    {
+      "type": "create_element",
+      "element_type": "rectangle",
+      "element_id": "rect-1",
+      "x": 10.0,
+      "y": 20.0
+    },
+    {
+      "type": "select_element",
+      "element_id": "rect-1",
+      "add_to_selection": false
+    }
+  ],
+  "expected": {
+    "document_version": 1,
+    "selection_version": 1,
+    "selected_ids": ["rect-1"],
+    "elements": [
+      {
+        "id": "rect-1",
+        "element_type": "rectangle",
+        "z_index": 0
+      }
+    ],
+    "history_undo_len": 2,
+    "history_redo_len": 0,
+    "frame_task_kinds": ["background", "rectangle", "selection_controls"],
+    "event_kinds": ["state_changed", "state_changed"]
+  }
+}

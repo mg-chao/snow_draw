@@ -181,6 +181,18 @@ melos:
         scope: snow_draw_engine
       exec: dart test
 
+    test:engine-rust:
+      description: Run tests for the Rust engine workspace.
+      run: cargo test --manifest-path packages/snow_draw_engine/rust/Cargo.toml
+
+    bench:engine-rust:
+      description: Run Rust engine benchmarks.
+      run: cargo bench --manifest-path packages/snow_draw_engine/rust/Cargo.toml -p engine_bench
+
+    build:engine-rust-desktop:
+      description: Build Rust desktop ABI artifacts and copy to package native folder.
+      run: bash packages/snow_draw_engine/rust/scripts/build_desktop.sh
+
     test:core:
       description: Legacy alias for test:engine.
       run: dart run melos run test:engine
@@ -199,7 +211,7 @@ melos:
 
     test:
       description: Run tests in all packages.
-      run: dart run melos run test:engine && dart run melos run test:backend && dart run melos run test:app
+      run: dart run melos run test:engine && dart run melos run test:engine-rust && dart run melos run test:backend && dart run melos run test:app
 
     run:windows:
       description: Run the snow_draw app on Windows.

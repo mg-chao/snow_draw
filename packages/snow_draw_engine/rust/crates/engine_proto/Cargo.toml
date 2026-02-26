@@ -1,0 +1,9 @@
+[package]
+name = "engine_proto"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+prost.workspace = true
+thiserror.workspace = true

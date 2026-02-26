@@ -15,7 +15,12 @@ import 'types/text/text_definition.dart';
 /// Call this when constructing a draw context to populate its element
 /// registry.
 void registerBuiltInElements(DefaultElementRegistry registry) {
-  registry.registerAll(_builtInDefinitions);
+  for (final definition in _builtInDefinitions) {
+    if (registry.supportsTypeValue(definition.typeId.value)) {
+      continue;
+    }
+    registry.register(definition);
+  }
 }
 
 /// Resolves [elementRegistry] and registers all built-in definitions.

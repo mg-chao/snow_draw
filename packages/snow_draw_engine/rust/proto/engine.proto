@@ -1,0 +1,225 @@
+syntax = "proto3";
+
+package snowdraw.engine.v1;
+
+enum ElementType {
+  ELEMENT_TYPE_UNKNOWN = 0;
+  ELEMENT_TYPE_RECTANGLE = 1;
+  ELEMENT_TYPE_ARROW = 2;
+  ELEMENT_TYPE_LINE = 3;
+  ELEMENT_TYPE_FREE_DRAW = 4;
+  ELEMENT_TYPE_FILTER = 5;
+  ELEMENT_TYPE_HIGHLIGHT = 6;
+  ELEMENT_TYPE_TEXT = 7;
+  ELEMENT_TYPE_SERIAL_NUMBER = 8;
+}
+
+enum InteractionMode {
+  INTERACTION_MODE_IDLE = 0;
+  INTERACTION_MODE_CREATING = 1;
+  INTERACTION_MODE_EDITING = 2;
+  INTERACTION_MODE_TEXT_EDITING = 3;
+  INTERACTION_MODE_BOX_SELECTING = 4;
+  INTERACTION_MODE_DRAG_PENDING = 5;
+}
+
+enum EngineCommandKind {
+  ENGINE_COMMAND_KIND_UNKNOWN = 0;
+  ENGINE_COMMAND_KIND_SELECT_ELEMENT = 1;
+  ENGINE_COMMAND_KIND_CLEAR_SELECTION = 2;
+  ENGINE_COMMAND_KIND_SELECT_ALL = 3;
+  ENGINE_COMMAND_KIND_CREATE_ELEMENT = 4;
+  ENGINE_COMMAND_KIND_UPDATE_CREATING_ELEMENT = 5;
+  ENGINE_COMMAND_KIND_ADD_ARROW_POINT = 6;
+  ENGINE_COMMAND_KIND_FINISH_CREATE_ELEMENT = 7;
+  ENGINE_COMMAND_KIND_CANCEL_CREATE_ELEMENT = 8;
+  ENGINE_COMMAND_KIND_DELETE_ELEMENTS = 9;
+  ENGINE_COMMAND_KIND_DUPLICATE_ELEMENTS = 10;
+  ENGINE_COMMAND_KIND_CHANGE_ELEMENT_Z_INDEX = 11;
+  ENGINE_COMMAND_KIND_CHANGE_ELEMENTS_Z_INDEX = 12;
+  ENGINE_COMMAND_KIND_UPDATE_ELEMENTS_STYLE = 13;
+  ENGINE_COMMAND_KIND_UPDATE_GLOBAL_ELEMENTS = 14;
+  ENGINE_COMMAND_KIND_CREATE_SERIAL_NUMBER_TEXT_ELEMENTS = 15;
+  ENGINE_COMMAND_KIND_START_TEXT_EDIT = 16;
+  ENGINE_COMMAND_KIND_UPDATE_TEXT_EDIT = 17;
+  ENGINE_COMMAND_KIND_REFRESH_AUTO_RESIZE_TEXT_LAYOUTS_AFTER_FONT_LOAD = 18;
+  ENGINE_COMMAND_KIND_FINISH_TEXT_EDIT = 19;
+  ENGINE_COMMAND_KIND_CANCEL_TEXT_EDIT = 20;
+  ENGINE_COMMAND_KIND_START_EDIT = 21;
+  ENGINE_COMMAND_KIND_UPDATE_EDIT = 22;
+  ENGINE_COMMAND_KIND_FINISH_EDIT = 23;
+  ENGINE_COMMAND_KIND_CANCEL_EDIT = 24;
+  ENGINE_COMMAND_KIND_SET_DRAG_PENDING = 25;
+  ENGINE_COMMAND_KIND_CLEAR_DRAG_PENDING = 26;
+  ENGINE_COMMAND_KIND_START_BOX_SELECT = 27;
+  ENGINE_COMMAND_KIND_UPDATE_BOX_SELECT = 28;
+  ENGINE_COMMAND_KIND_FINISH_BOX_SELECT = 29;
+  ENGINE_COMMAND_KIND_CANCEL_BOX_SELECT = 30;
+  ENGINE_COMMAND_KIND_MOVE_CAMERA = 31;
+  ENGINE_COMMAND_KIND_ZOOM_CAMERA = 32;
+  ENGINE_COMMAND_KIND_UNDO = 33;
+  ENGINE_COMMAND_KIND_REDO = 34;
+  ENGINE_COMMAND_KIND_CLEAR_HISTORY = 35;
+}
+
+enum FrameTaskKind {
+  FRAME_TASK_KIND_UNKNOWN = 0;
+  FRAME_TASK_KIND_RECTANGLE = 1;
+  FRAME_TASK_KIND_LINE = 2;
+  FRAME_TASK_KIND_ARROW = 3;
+  FRAME_TASK_KIND_FREE_DRAW = 4;
+  FRAME_TASK_KIND_TEXT = 5;
+  FRAME_TASK_KIND_SERIAL_NUMBER = 6;
+  FRAME_TASK_KIND_HIGHLIGHT = 7;
+  FRAME_TASK_KIND_FILTER = 8;
+  FRAME_TASK_KIND_BACKGROUND = 9;
+  FRAME_TASK_KIND_GRID = 10;
+  FRAME_TASK_KIND_SELECTION_OUTLINE = 11;
+  FRAME_TASK_KIND_SELECTION_CONTROLS = 12;
+  FRAME_TASK_KIND_ARROW_POINT_OVERLAY = 13;
+  FRAME_TASK_KIND_ARROW_BINDING_HIGHLIGHT = 14;
+  FRAME_TASK_KIND_HOVER_OUTLINE = 15;
+  FRAME_TASK_KIND_SNAP_GUIDES = 16;
+  FRAME_TASK_KIND_BOX_SELECTION = 17;
+  FRAME_TASK_KIND_HIGHLIGHT_MASK = 18;
+  FRAME_TASK_KIND_WATERMARK = 19;
+}
+
+enum EngineEventKind {
+  ENGINE_EVENT_KIND_UNKNOWN = 0;
+  ENGINE_EVENT_KIND_STATE_CHANGED = 1;
+  ENGINE_EVENT_KIND_VALIDATION_FAILED = 2;
+  ENGINE_EVENT_KIND_ERROR = 3;
+  ENGINE_EVENT_KIND_HISTORY_CHANGED = 4;
+  ENGINE_EVENT_KIND_DEBUG = 5;
+}
+
+message DrawPoint {
+  double x = 1;
+  double y = 2;
+  double pressure = 3;
+  uint64 timestamp_us = 4;
+}
+
+message DrawRect {
+  double min_x = 1;
+  double min_y = 2;
+  double max_x = 3;
+  double max_y = 4;
+}
+
+message CameraState {
+  DrawPoint position = 1;
+  double zoom = 2;
+}
+
+message Element {
+  string id = 1;
+  ElementType element_type = 2;
+  DrawRect rect = 3;
+  double rotation = 4;
+  double opacity = 5;
+  int32 z_index = 6;
+  bytes payload = 7;
+}
+
+message EngineConfig {
+  uint32 schema_version = 1;
+  string locale_tag = 2;
+  double scale_factor = 3;
+  uint64 requested_capabilities = 4;
+  uint64 deterministic_seed = 5;
+}
+
+message CreateElementCommand {
+  ElementType element_type = 1;
+  string element_id = 2;
+  DrawPoint position = 3;
+  bytes initial_payload = 4;
+}
+
+message SelectElementCommand {
+  string element_id = 1;
+  bool add_to_selection = 2;
+  DrawPoint position = 3;
+}
+
+message DeleteElementsCommand {
+  repeated string element_ids = 1;
+}
+
+message UpdateElementsStyleCommand {
+  repeated string element_ids = 1;
+  bytes style_payload = 2;
+}
+
+message MoveCameraCommand {
+  double dx = 1;
+  double dy = 2;
+}
+
+message ZoomCameraCommand {
+  double scale = 1;
+  DrawPoint center = 2;
+}
+
+message EngineCommand {
+  EngineCommandKind kind = 1;
+  oneof payload {
+    CreateElementCommand create_element = 10;
+    SelectElementCommand select_element = 11;
+    DeleteElementsCommand delete_elements = 12;
+    UpdateElementsStyleCommand update_elements_style = 13;
+    MoveCameraCommand move_camera = 14;
+    ZoomCameraCommand zoom_camera = 15;
+  }
+}
+
+message EngineSnapshot {
+  uint32 schema_version = 1;
+  uint64 document_version = 2;
+  uint64 selection_version = 3;
+  InteractionMode interaction_mode = 4;
+  CameraState camera = 5;
+  repeated Element elements = 6;
+  repeated string selected_ids = 7;
+  uint64 history_undo_len = 8;
+  uint64 history_redo_len = 9;
+}
+
+message FramePlanRequest {
+  DrawRect viewport = 1;
+  string locale_tag = 2;
+  double scale_factor = 3;
+}
+
+message FrameTask {
+  FrameTaskKind kind = 1;
+  string element_id = 2;
+  ElementType element_type = 3;
+  bytes payload = 4;
+}
+
+message FrameRenderPlan {
+  uint32 schema_version = 1;
+  CameraState camera = 2;
+  double scale_factor = 3;
+  string locale_tag = 4;
+  repeated FrameTask tasks = 5;
+}
+
+message EngineError {
+  uint32 code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+message EngineEvent {
+  EngineEventKind kind = 1;
+  uint64 sequence = 2;
+  oneof payload {
+    EngineError error = 10;
+    bytes blob = 11;
+    string message = 12;
+  }
+}
