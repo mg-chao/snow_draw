@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [lib]
+name = "snow_draw_engine_capi"
 crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
