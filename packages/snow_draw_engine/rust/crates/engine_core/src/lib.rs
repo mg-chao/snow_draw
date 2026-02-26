@@ -131,6 +131,12 @@ enum ResizeMode {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum SnapAxis {
+    X,
+    Y,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ArrowPointKind {
     Turning,
     Addable,
@@ -142,6 +148,8 @@ enum ArrowPointKind {
 struct RuntimeSnapConfig {
     grid_enabled: bool,
     object_enabled: bool,
+    object_point_enabled: bool,
+    object_gap_enabled: bool,
     grid_size: f64,
     object_distance: f64,
 }
@@ -151,6 +159,8 @@ impl Default for RuntimeSnapConfig {
         Self {
             grid_enabled: false,
             object_enabled: false,
+            object_point_enabled: true,
+            object_gap_enabled: true,
             grid_size: 20.0,
             object_distance: 8.0,
         }
@@ -168,6 +178,8 @@ enum RuntimeSnappingMode {
 struct RuntimeSnapConfigPatch {
     grid_enabled: Option<bool>,
     object_enabled: Option<bool>,
+    object_point_enabled: Option<bool>,
+    object_gap_enabled: Option<bool>,
     grid_size: Option<f64>,
     object_distance: Option<f64>,
 }
@@ -201,12 +213,22 @@ struct AnchorSnapMatch {
     reference: f64,
 }
 
+#[derive(Debug, Clone, Copy)]
+struct GapSnapMatch {
+    offset: f64,
+    start: f64,
+    end: f64,
+    size: f64,
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 struct ObjectSnapResult {
     dx: f64,
     dy: f64,
     x_match: Option<AnchorSnapMatch>,
     y_match: Option<AnchorSnapMatch>,
+    x_gap: Option<GapSnapMatch>,
+    y_gap: Option<GapSnapMatch>,
 }
 
 impl Default for Engine {
@@ -794,6 +816,18 @@ impl Engine {
                 changed = true;
             }
         }
+        if let Some(value) = patch.object_point_enabled {
+            if next.object_point_enabled != value {
+                next.object_point_enabled = value;
+                changed = true;
+            }
+        }
+        if let Some(value) = patch.object_gap_enabled {
+            if next.object_gap_enabled != value {
+                next.object_gap_enabled = value;
+                changed = true;
+            }
+        }
         if let Some(value) = patch.grid_size {
             let resolved = sanitize_grid_size(value);
             if (next.grid_size - resolved).abs() > f64::EPSILON {
@@ -892,8 +926,14 @@ impl Engine {
                     pressure: point.pressure,
                     timestamp_us: point.timestamp_us,
                 };
+                let snapped_rect = DrawRect {
+                    min_x: snapped.x,
+                    min_y: snapped.y,
+                    max_x: snapped.x,
+                    max_y: snapped.y,
+                };
                 SnappedPointResult {
-                    guides: point_snap_guides(&point, &snapped),
+                    guides: object_snap_guides_for_rect(&snapped_rect, &snapped_result),
                     point: snapped,
                 }
             }
@@ -909,7 +949,12 @@ impl Engine {
         if max_distance <= 0.0 || !max_distance.is_finite() {
             return ObjectSnapResult::default();
         }
+        if !self.runtime_snap_config.object_point_enabled && !self.runtime_snap_config.object_gap_enabled
+        {
+            return ObjectSnapResult::default();
+        }
 
+        let mut reference_rects = Vec::new();
         let mut reference_anchors_x = Vec::new();
         let mut reference_anchors_y = Vec::new();
         for element in &self.snapshot.elements {
@@ -919,23 +964,54 @@ impl Engine {
             let Some(rect) = element.rect.as_ref() else {
                 continue;
             };
-            reference_anchors_x.extend(rect_axis_anchors_x(rect));
-            reference_anchors_y.extend(rect_axis_anchors_y(rect));
+            reference_rects.push(rect.clone());
+            if self.runtime_snap_config.object_point_enabled {
+                reference_anchors_x.extend(rect_axis_anchors_x(rect));
+                reference_anchors_y.extend(rect_axis_anchors_y(rect));
+            }
         }
-        if reference_anchors_x.is_empty() && reference_anchors_y.is_empty() {
+        if reference_rects.is_empty() {
             return ObjectSnapResult::default();
         }
 
         let target_anchors_x = rect_axis_anchors_x(target_rect);
         let target_anchors_y = rect_axis_anchors_y(target_rect);
-        let x_match = best_anchor_match(&target_anchors_x, &reference_anchors_x, max_distance);
-        let y_match = best_anchor_match(&target_anchors_y, &reference_anchors_y, max_distance);
+        let x_match = if self.runtime_snap_config.object_point_enabled {
+            best_anchor_match(&target_anchors_x, &reference_anchors_x, max_distance)
+        } else {
+            None
+        };
+        let y_match = if self.runtime_snap_config.object_point_enabled {
+            best_anchor_match(&target_anchors_y, &reference_anchors_y, max_distance)
+        } else {
+            None
+        };
+        let x_gap = if self.runtime_snap_config.object_gap_enabled && x_match.is_none() {
+            best_gap_center_match(target_rect, &reference_rects, SnapAxis::X, max_distance)
+        } else {
+            None
+        };
+        let y_gap = if self.runtime_snap_config.object_gap_enabled && y_match.is_none() {
+            best_gap_center_match(target_rect, &reference_rects, SnapAxis::Y, max_distance)
+        } else {
+            None
+        };
+        let dx = x_match
+            .map(|item| item.offset)
+            .or_else(|| x_gap.map(|item| item.offset))
+            .unwrap_or(0.0);
+        let dy = y_match
+            .map(|item| item.offset)
+            .or_else(|| y_gap.map(|item| item.offset))
+            .unwrap_or(0.0);
 
         ObjectSnapResult {
-            dx: x_match.map(|item| item.offset).unwrap_or(0.0),
-            dy: y_match.map(|item| item.offset).unwrap_or(0.0),
+            dx,
+            dy,
             x_match,
             y_match,
+            x_gap,
+            y_gap,
         }
     }
 
@@ -951,6 +1027,9 @@ impl Engine {
         }
         let max_distance = self.runtime_snap_config.object_distance;
         if max_distance <= 0.0 || !max_distance.is_finite() {
+            return (rect, Vec::new());
+        }
+        if !self.runtime_snap_config.object_point_enabled {
             return (rect, Vec::new());
         }
 
@@ -2017,11 +2096,7 @@ impl Engine {
                         max_x: bounds.max_x + dx,
                         max_y: bounds.max_y + dy,
                     };
-                    guides = rect_snap_guides_with_matches(
-                        &snapped_bounds,
-                        snap_result.x_match,
-                        snap_result.y_match,
-                    );
+                    guides = object_snap_guides_for_rect(&snapped_bounds, &snap_result);
                 }
                 RuntimeSnappingMode::None => {}
             }
@@ -3647,6 +3722,33 @@ fn rect_axis_anchors_y(rect: &DrawRect) -> [f64; 3] {
     [rect.min_y, (rect.min_y + rect.max_y) * 0.5, rect.max_y]
 }
 
+fn axis_rect_min(rect: &DrawRect, axis: SnapAxis) -> f64 {
+    match axis {
+        SnapAxis::X => rect.min_x,
+        SnapAxis::Y => rect.min_y,
+    }
+}
+
+fn axis_rect_max(rect: &DrawRect, axis: SnapAxis) -> f64 {
+    match axis {
+        SnapAxis::X => rect.max_x,
+        SnapAxis::Y => rect.max_y,
+    }
+}
+
+fn axis_rect_size(rect: &DrawRect, axis: SnapAxis) -> f64 {
+    (axis_rect_max(rect, axis) - axis_rect_min(rect, axis))
+        .abs()
+        .max(0.0)
+}
+
+fn rects_overlap_perpendicular_axis(a: &DrawRect, b: &DrawRect, axis: SnapAxis) -> bool {
+    match axis {
+        SnapAxis::X => a.max_y >= b.min_y && a.min_y <= b.max_y,
+        SnapAxis::Y => a.max_x >= b.min_x && a.min_x <= b.max_x,
+    }
+}
+
 fn best_anchor_match(
     targets: &[f64],
     references: &[f64],
@@ -3678,6 +3780,125 @@ fn best_anchor_match(
     } else {
         None
     }
+}
+
+fn best_gap_center_match(
+    target_rect: &DrawRect,
+    reference_rects: &[DrawRect],
+    axis: SnapAxis,
+    max_distance: f64,
+) -> Option<GapSnapMatch> {
+    if reference_rects.len() < 2 || max_distance <= 0.0 || !max_distance.is_finite() {
+        return None;
+    }
+
+    let mut overlapping = reference_rects
+        .iter()
+        .filter(|rect| rects_overlap_perpendicular_axis(target_rect, rect, axis))
+        .cloned()
+        .collect::<Vec<_>>();
+    if overlapping.len() < 2 {
+        return None;
+    }
+    overlapping.sort_by(|left, right| {
+        axis_rect_min(left, axis)
+            .total_cmp(&axis_rect_min(right, axis))
+            .then_with(|| axis_rect_max(left, axis).total_cmp(&axis_rect_max(right, axis)))
+    });
+
+    let target_size = axis_rect_size(target_rect, axis);
+    let target_start = axis_rect_min(target_rect, axis);
+    let mut best_match = None;
+    let mut best_abs = max_distance + f64::EPSILON;
+
+    for index in 0..(overlapping.len() - 1) {
+        let before = &overlapping[index];
+        let after = &overlapping[index + 1];
+        let gap_start = axis_rect_max(before, axis);
+        let gap_end = axis_rect_min(after, axis);
+        let gap_size = gap_end - gap_start;
+        if !gap_size.is_finite() || gap_size <= 0.0 {
+            continue;
+        }
+
+        let desired_start = gap_start + (gap_size - target_size) * 0.5;
+        let offset = desired_start - target_start;
+        let abs = offset.abs();
+        if abs > max_distance {
+            continue;
+        }
+        if abs + f64::EPSILON < best_abs {
+            best_abs = abs;
+            best_match = Some(GapSnapMatch {
+                offset,
+                start: gap_start,
+                end: gap_end,
+                size: gap_size,
+            });
+        }
+    }
+
+    if best_abs <= max_distance {
+        best_match
+    } else {
+        None
+    }
+}
+
+fn object_snap_guides_for_rect(rect: &DrawRect, snap: &ObjectSnapResult) -> Vec<JsonValue> {
+    let mut guides = Vec::new();
+    let padding = 24.0;
+    let center = rect_center(rect);
+
+    if let Some(gap) = snap.x_gap {
+        guides.push(horizontal_gap_guide(center.y, gap.start, gap.end, gap.size));
+    } else if let Some(point) = snap.x_match {
+        guides.push(vertical_snap_guide(
+            point.reference,
+            rect.min_y - padding,
+            rect.max_y + padding,
+            Some((point.reference, center.y)),
+        ));
+    }
+
+    if let Some(gap) = snap.y_gap {
+        guides.push(vertical_gap_guide(center.x, gap.start, gap.end, gap.size));
+    } else if let Some(point) = snap.y_match {
+        guides.push(horizontal_snap_guide(
+            point.reference,
+            rect.min_x - padding,
+            rect.max_x + padding,
+            Some((center.x, point.reference)),
+        ));
+    }
+
+    guides
+}
+
+fn horizontal_gap_guide(y: f64, start_x: f64, end_x: f64, gap_size: f64) -> JsonValue {
+    let mut map = JsonMap::new();
+    let start = point_value(start_x.min(end_x), y);
+    let end = point_value(start_x.max(end_x), y);
+    map.insert("kind".to_string(), JsonValue::from("gap"));
+    map.insert("axis".to_string(), JsonValue::from("horizontal"));
+    map.insert("start".to_string(), start.clone());
+    map.insert("end".to_string(), end.clone());
+    map.insert("markers".to_string(), JsonValue::Array(vec![start, end]));
+    map.insert("label".to_string(), JsonValue::from(gap_size));
+    JsonValue::Object(map)
+}
+
+fn vertical_gap_guide(x: f64, start_y: f64, end_y: f64, gap_size: f64) -> JsonValue {
+    let mut map = JsonMap::new();
+    let start = point_value(x, start_y.min(end_y));
+    let end = point_value(x, start_y.max(end_y));
+    map.insert("kind".to_string(), JsonValue::from("gap"));
+    map.insert("axis".to_string(), JsonValue::from("vertical"));
+    map.insert("start".to_string(), start.clone());
+    map.insert("end".to_string(), end.clone());
+    map.insert("markers".to_string(), JsonValue::Array(vec![start, end]));
+    map.insert("label".to_string(), JsonValue::from(gap_size));
+    JsonValue::Object(map)
 }
 
 fn point_snap_guides(original: &DrawPoint, snapped: &DrawPoint) -> Vec<JsonValue> {
@@ -3876,6 +4097,10 @@ fn extract_runtime_snap_config_patch(
         "gridSize",
         "objectSnapEnabled",
         "objectSnapDistance",
+        "objectSnapPointEnabled",
+        "objectSnapGapEnabled",
+        "objectSnapEnablePointSnaps",
+        "objectSnapEnableGapSnaps",
     ] {
         if let Some(value) = map.remove(key) {
             runtime_map.insert(key.to_string(), value);
@@ -3961,6 +4186,14 @@ fn runtime_snap_config_patch_from_map(
             patch.object_distance = Some(distance);
             found = true;
         }
+        if let Some(enabled) = snap.get("enablePointSnaps").and_then(JsonValue::as_bool) {
+            patch.object_point_enabled = Some(enabled);
+            found = true;
+        }
+        if let Some(enabled) = snap.get("enableGapSnaps").and_then(JsonValue::as_bool) {
+            patch.object_gap_enabled = Some(enabled);
+            found = true;
+        }
     }
     if let Some(snap) = map.get("objectSnap").and_then(JsonValue::as_object) {
         if let Some(enabled) = snap.get("enabled").and_then(JsonValue::as_bool) {
@@ -3969,6 +4202,14 @@ fn runtime_snap_config_patch_from_map(
         }
         if let Some(distance) = snap.get("distance").and_then(JsonValue::as_f64) {
             patch.object_distance = Some(distance);
+            found = true;
+        }
+        if let Some(enabled) = snap.get("enablePointSnaps").and_then(JsonValue::as_bool) {
+            patch.object_point_enabled = Some(enabled);
+            found = true;
+        }
+        if let Some(enabled) = snap.get("enableGapSnaps").and_then(JsonValue::as_bool) {
+            patch.object_gap_enabled = Some(enabled);
             found = true;
         }
     }
@@ -3987,6 +4228,28 @@ fn runtime_snap_config_patch_from_map(
     }
     if let Some(distance) = map.get("objectSnapDistance").and_then(JsonValue::as_f64) {
         patch.object_distance = Some(distance);
+        found = true;
+    }
+    if let Some(enabled) = map.get("objectSnapPointEnabled").and_then(JsonValue::as_bool) {
+        patch.object_point_enabled = Some(enabled);
+        found = true;
+    }
+    if let Some(enabled) = map.get("objectSnapGapEnabled").and_then(JsonValue::as_bool) {
+        patch.object_gap_enabled = Some(enabled);
+        found = true;
+    }
+    if let Some(enabled) = map
+        .get("objectSnapEnablePointSnaps")
+        .and_then(JsonValue::as_bool)
+    {
+        patch.object_point_enabled = Some(enabled);
+        found = true;
+    }
+    if let Some(enabled) = map
+        .get("objectSnapEnableGapSnaps")
+        .and_then(JsonValue::as_bool)
+    {
+        patch.object_gap_enabled = Some(enabled);
         found = true;
     }
 
@@ -6886,6 +7149,30 @@ mod tests {
     }
 
     #[test]
+    fn runtime_config_payload_updates_object_snap_mode_toggles() {
+        let mut engine = Engine::default();
+        assert!(engine.runtime_snap_config.object_point_enabled);
+        assert!(engine.runtime_snap_config.object_gap_enabled);
+
+        let changed = engine
+            .apply_runtime_config_payload(br#"{"snap":{"enablePointSnaps":false,"enableGapSnaps":true}}"#);
+        assert!(changed);
+        assert!(!engine.runtime_snap_config.object_point_enabled);
+        assert!(engine.runtime_snap_config.object_gap_enabled);
+
+        let changed_again = engine
+            .apply_runtime_config_payload(br#"{"snap":{"enablePointSnaps":false,"enableGapSnaps":true}}"#);
+        assert!(!changed_again);
+
+        let legacy_changed = engine.apply_runtime_config_payload(
+            br#"{"objectSnapPointEnabled":true,"objectSnapGapEnabled":false}"#,
+        );
+        assert!(legacy_changed);
+        assert!(engine.runtime_snap_config.object_point_enabled);
+        assert!(!engine.runtime_snap_config.object_gap_enabled);
+    }
+
+    #[test]
     fn runtime_config_payload_bootstrap_snapshot_replaces_state() {
         let mut engine = Engine::default();
         engine
@@ -7563,6 +7850,121 @@ mod tests {
             .expect("snapped move object");
         assert_eq!(snapped.min_x, 100.0);
         assert_eq!(snapped.min_y, 100.0);
+    }
+
+    #[test]
+    fn move_edit_applies_gap_snap_when_point_snap_disabled() {
+        let mut engine = Engine::default();
+        engine.snapshot.elements = vec![
+            Element {
+                id: "gap-left".to_string(),
+                element_type: ElementType::Rectangle as i32,
+                rect: Some(DrawRect {
+                    min_x: 0.0,
+                    min_y: 0.0,
+                    max_x: 10.0,
+                    max_y: 10.0,
+                }),
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index: 0,
+                payload: br#"{"typeId":"rectangle"}"#.to_vec(),
+            },
+            Element {
+                id: "gap-right".to_string(),
+                element_type: ElementType::Rectangle as i32,
+                rect: Some(DrawRect {
+                    min_x: 30.0,
+                    min_y: 0.0,
+                    max_x: 40.0,
+                    max_y: 10.0,
+                }),
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index: 1,
+                payload: br#"{"typeId":"rectangle"}"#.to_vec(),
+            },
+            Element {
+                id: "gap-target".to_string(),
+                element_type: ElementType::Rectangle as i32,
+                rect: Some(DrawRect {
+                    min_x: 12.0,
+                    min_y: 0.0,
+                    max_x: 22.0,
+                    max_y: 10.0,
+                }),
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index: 2,
+                payload: br#"{"typeId":"rectangle"}"#.to_vec(),
+            },
+        ];
+        engine.snapshot.selected_ids = vec!["gap-target".to_string()];
+
+        assert!(engine.apply_runtime_config_payload(
+            br#"{"snap":{"enabled":true,"distance":5.0,"enablePointSnaps":false,"enableGapSnaps":true}}"#,
+        ));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "move".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"move"}"#.to_vec(),
+                })),
+            })
+            .expect("start move");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: br#"{"snapOverride":false}"#.to_vec(),
+                })),
+            })
+            .expect("update move");
+
+        let snapped = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "gap-target")
+            .and_then(|entry| entry.rect.clone())
+            .expect("snapped target");
+        assert_eq!(snapped.min_x, 15.0);
+        assert_eq!(snapped.max_x, 25.0);
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        let snap_guides = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::SnapGuides as i32)
+            .expect("snap guides task");
+        let payload =
+            serde_json::from_slice::<serde_json::Value>(&snap_guides.payload).expect("payload");
+        let guides = payload
+            .get("guides")
+            .and_then(serde_json::Value::as_array)
+            .expect("guides");
+        assert!(guides.iter().any(|guide| {
+            guide.get("kind").and_then(serde_json::Value::as_str) == Some("gap")
+                && guide.get("axis").and_then(serde_json::Value::as_str) == Some("horizontal")
+        }));
     }
 
     #[test]

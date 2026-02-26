@@ -1876,6 +1876,8 @@ final class _RustProtoCodec {
             'snap': {
               'enabled': config.snap.enabled,
               'distance': config.snap.distance,
+              'enablePointSnaps': config.snap.enablePointSnaps,
+              'enableGapSnaps': config.snap.enableGapSnaps,
             },
             'styles': {
               'rectangle': _encodeElementStyleConfig(config.rectangleStyle),
