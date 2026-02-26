@@ -88,6 +88,7 @@ struct EditSession {
     start_position: DrawPoint,
     baseline_rects: BTreeMap<String, DrawRect>,
     baseline_rotations: BTreeMap<String, f64>,
+    baseline_payloads: BTreeMap<String, Vec<u8>>,
 }
 
 #[derive(Debug, Clone)]
@@ -95,6 +96,12 @@ enum EditSessionOperation {
     Move,
     Resize { mode: ResizeMode },
     Rotate { pivot: DrawPoint, snap_angle: f64 },
+    ArrowPoint {
+        element_id: String,
+        point_kind: ArrowPointKind,
+        point_index: usize,
+        delete_point_on_finish: bool,
+    },
     Unknown,
 }
 
@@ -108,6 +115,14 @@ enum ResizeMode {
     Bottom,
     Left,
     Right,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ArrowPointKind {
+    Turning,
+    Addable,
+    LoopStart,
+    LoopEnd,
 }
 
 impl Default for Engine {
@@ -745,21 +760,52 @@ impl Engine {
         let Some(element) = self.element_mut(&creating_id) else {
             return;
         };
-        if element.element_type != ElementType::Arrow as i32 {
+        let resolved_type = ElementType::try_from(normalize_element_type(element.element_type))
+            .unwrap_or(ElementType::Unknown);
+        if resolved_type != ElementType::Arrow && resolved_type != ElementType::Line {
             return;
         }
+        let Some(rect) = element.rect.clone() else {
+            return;
+        };
 
         let mut map = decode_json_map(&element.payload)
             .unwrap_or_else(|| default_element_payload_map(element.element_type));
-        let points = map
-            .entry("points".to_string())
-            .or_insert_with(|| JsonValue::Array(Vec::new()));
-        if let JsonValue::Array(entries) = points {
-            entries.push(JsonValue::Object(JsonMap::from_iter([
-                ("x".to_string(), JsonValue::from(position.x)),
-                ("y".to_string(), JsonValue::from(position.y)),
-            ])));
-            element.payload = encode_json_map(&map);
+        let mut world_points = decode_arrow_points_world(&map, &rect);
+        if world_points.len() < 2 {
+            world_points = vec![
+                DrawPoint {
+                    x: rect.min_x,
+                    y: rect.min_y,
+                    pressure: 0.0,
+                    timestamp_us: 0,
+                },
+                DrawPoint {
+                    x: rect.max_x,
+                    y: rect.max_y,
+                    pressure: 0.0,
+                    timestamp_us: 0,
+                },
+            ];
+        }
+        world_points.push(position);
+        let next_rect = arrow_points_bounds(&world_points);
+        map.insert(
+            "points".to_string(),
+            JsonValue::Array(encode_arrow_points_for_rect(&world_points, &next_rect)),
+        );
+        let next_payload = encode_json_map(&map);
+
+        let mut changed = false;
+        if element.payload != next_payload {
+            element.payload = next_payload;
+            changed = true;
+        }
+        if element.rect.as_ref() != Some(&next_rect) {
+            element.rect = Some(next_rect);
+            changed = true;
+        }
+        if changed {
             self.snapshot.document_version += 1;
         }
     }
@@ -1254,7 +1300,7 @@ impl Engine {
             pressure: 0.0,
             timestamp_us: 0,
         });
-        let baseline_rects = self
+        let mut baseline_rects = self
             .snapshot
             .selected_ids
             .iter()
@@ -1267,7 +1313,7 @@ impl Engine {
                     .map(|rect| (id.clone(), rect))
             })
             .collect::<BTreeMap<_, _>>();
-        let baseline_rotations = self
+        let mut baseline_rotations = self
             .snapshot
             .selected_ids
             .iter()
@@ -1279,15 +1325,46 @@ impl Engine {
                     .map(|element| (id.clone(), element.rotation))
             })
             .collect::<BTreeMap<_, _>>();
+        let mut baseline_payloads = self
+            .snapshot
+            .selected_ids
+            .iter()
+            .filter_map(|id| {
+                self.snapshot
+                    .elements
+                    .iter()
+                    .find(|element| element.id == *id)
+                    .map(|element| (id.clone(), element.payload.clone()))
+            })
+            .collect::<BTreeMap<_, _>>();
 
-        let operation =
+        let mut operation =
             resolve_edit_operation(operation_id.as_str(), params.as_ref(), &baseline_rects);
+        if let EditSessionOperation::ArrowPoint { element_id, .. } = &operation {
+            if !baseline_rects.contains_key(element_id) {
+                if let Some(element) = self
+                    .snapshot
+                    .elements
+                    .iter()
+                    .find(|entry| entry.id == *element_id)
+                {
+                    if let Some(rect) = element.rect.clone() {
+                        baseline_rects.insert(element_id.clone(), rect);
+                    }
+                    baseline_rotations.insert(element_id.clone(), element.rotation);
+                    baseline_payloads.insert(element_id.clone(), element.payload.clone());
+                } else {
+                    operation = EditSessionOperation::Unknown;
+                }
+            }
+        }
 
         self.edit_session = Some(EditSession {
             operation,
             start_position: start,
             baseline_rects,
             baseline_rotations,
+            baseline_payloads,
         });
         self.set_interaction_mode(InteractionMode::Editing);
     }
@@ -1301,7 +1378,7 @@ impl Engine {
         };
         let modifiers = parse_edit_modifiers(&payload.modifiers);
 
-        let changed = match session.operation {
+        let changed = match &session.operation {
             EditSessionOperation::Move => self.apply_update_move_edit(
                 session.start_position,
                 current,
@@ -1311,18 +1388,31 @@ impl Engine {
                 session.start_position,
                 current,
                 &session.baseline_rects,
-                mode,
+                *mode,
                 modifiers.maintain_aspect_ratio,
                 modifiers.from_center,
             ),
             EditSessionOperation::Rotate { pivot, snap_angle } => self.apply_update_rotate_edit(
                 session.start_position,
                 current,
-                pivot,
-                snap_angle,
+                pivot.clone(),
+                *snap_angle,
                 modifiers.discrete_angle,
                 &session.baseline_rects,
                 &session.baseline_rotations,
+            ),
+            EditSessionOperation::ArrowPoint {
+                element_id,
+                point_kind,
+                point_index,
+                delete_point_on_finish,
+            } => self.apply_update_arrow_point_edit(
+                current,
+                &session,
+                element_id.as_str(),
+                *point_kind,
+                *point_index,
+                *delete_point_on_finish,
             ),
             EditSessionOperation::Unknown => false,
         };
@@ -1334,7 +1424,30 @@ impl Engine {
     }
 
     fn apply_finish_edit(&mut self) {
-        self.edit_session = None;
+        let Some(session) = self.edit_session.take() else {
+            self.set_interaction_mode(InteractionMode::Idle);
+            return;
+        };
+        let mut changed = false;
+        if let EditSessionOperation::ArrowPoint {
+            element_id,
+            point_kind,
+            point_index,
+            delete_point_on_finish,
+        } = &session.operation
+        {
+            if *delete_point_on_finish {
+                changed = self.apply_finish_arrow_point_edit(
+                    &session,
+                    element_id.as_str(),
+                    *point_kind,
+                    *point_index,
+                );
+            }
+        }
+        if changed {
+            self.snapshot.document_version += 1;
+        }
         self.set_interaction_mode(InteractionMode::Idle);
     }
 
@@ -1354,6 +1467,14 @@ impl Engine {
             if let Some(element) = self.element_mut(&element_id) {
                 if (element.rotation - rotation).abs() > f64::EPSILON {
                     element.rotation = rotation;
+                    changed = true;
+                }
+            }
+        }
+        for (element_id, payload) in session.baseline_payloads {
+            if let Some(element) = self.element_mut(&element_id) {
+                if element.payload != payload {
+                    element.payload = payload;
                     changed = true;
                 }
             }
@@ -1554,6 +1675,133 @@ impl Engine {
                 }
                 changed = true;
             }
+        }
+        changed
+    }
+
+    fn apply_update_arrow_point_edit(
+        &mut self,
+        current: DrawPoint,
+        session: &EditSession,
+        element_id: &str,
+        point_kind: ArrowPointKind,
+        point_index: usize,
+        delete_point_on_finish: bool,
+    ) -> bool {
+        if delete_point_on_finish {
+            return false;
+        }
+
+        let Some(base_rect) = session.baseline_rects.get(element_id) else {
+            return false;
+        };
+        let Some(base_payload) = session.baseline_payloads.get(element_id) else {
+            return false;
+        };
+        let Some(element_index) = self.element_index(element_id) else {
+            return false;
+        };
+
+        let element_type = self.snapshot.elements[element_index].element_type;
+        let resolved_type =
+            ElementType::try_from(normalize_element_type(element_type)).unwrap_or(ElementType::Unknown);
+        if resolved_type != ElementType::Arrow && resolved_type != ElementType::Line {
+            return false;
+        }
+
+        let mut payload_map = decode_json_map(base_payload)
+            .unwrap_or_else(|| default_element_payload_map(element_type));
+        let world_points = decode_arrow_points_world(&payload_map, base_rect);
+        let Some((next_world_points, moved_start_endpoint, moved_end_endpoint)) =
+            resolve_arrow_point_update(world_points, point_kind, point_index, current)
+        else {
+            return false;
+        };
+
+        let next_rect = arrow_points_bounds(&next_world_points);
+        payload_map.insert(
+            "points".to_string(),
+            JsonValue::Array(encode_arrow_points_for_rect(&next_world_points, &next_rect)),
+        );
+        if moved_start_endpoint {
+            payload_map.remove("startBinding");
+        }
+        if moved_end_endpoint {
+            payload_map.remove("endBinding");
+        }
+        let next_payload = encode_json_map(&payload_map);
+
+        let mut changed = false;
+        if self.snapshot.elements[element_index].payload != next_payload {
+            self.snapshot.elements[element_index].payload = next_payload;
+            changed = true;
+        }
+        if self.snapshot.elements[element_index].rect.as_ref() != Some(&next_rect) {
+            self.snapshot.elements[element_index].rect = Some(next_rect);
+            changed = true;
+        }
+        changed
+    }
+
+    fn apply_finish_arrow_point_edit(
+        &mut self,
+        session: &EditSession,
+        element_id: &str,
+        point_kind: ArrowPointKind,
+        point_index: usize,
+    ) -> bool {
+        if point_kind != ArrowPointKind::Turning {
+            return false;
+        }
+
+        let Some(base_rect) = session.baseline_rects.get(element_id) else {
+            return false;
+        };
+        let Some(base_payload) = session.baseline_payloads.get(element_id) else {
+            return false;
+        };
+        let Some(element_index) = self.element_index(element_id) else {
+            return false;
+        };
+
+        let element_type = self.snapshot.elements[element_index].element_type;
+        let resolved_type =
+            ElementType::try_from(normalize_element_type(element_type)).unwrap_or(ElementType::Unknown);
+        if resolved_type != ElementType::Arrow && resolved_type != ElementType::Line {
+            return false;
+        }
+
+        let current_rect = self.snapshot.elements[element_index]
+            .rect
+            .clone()
+            .unwrap_or_else(|| base_rect.clone());
+        let mut payload_map = decode_json_map(&self.snapshot.elements[element_index].payload)
+            .or_else(|| decode_json_map(base_payload))
+            .unwrap_or_else(|| default_element_payload_map(element_type));
+        let mut world_points = decode_arrow_points_world(&payload_map, &current_rect);
+        if world_points.len() < 3 || point_index == 0 || point_index >= world_points.len() - 1 {
+            return false;
+        }
+
+        world_points.remove(point_index);
+        if world_points.len() < 2 {
+            return false;
+        }
+        let next_rect = arrow_points_bounds(&world_points);
+        payload_map.insert(
+            "points".to_string(),
+            JsonValue::Array(encode_arrow_points_for_rect(&world_points, &next_rect)),
+        );
+        let next_payload = encode_json_map(&payload_map);
+
+        let mut changed = false;
+        if self.snapshot.elements[element_index].payload != next_payload {
+            self.snapshot.elements[element_index].payload = next_payload;
+            changed = true;
+        }
+        if self.snapshot.elements[element_index].rect.as_ref() != Some(&next_rect) {
+            self.snapshot.elements[element_index].rect = Some(next_rect);
+            changed = true;
         }
         changed
     }
@@ -2067,38 +2315,31 @@ fn arrow_point_overlay_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>> {
     let element = selected_arrow_like_element(snapshot)?;
     let rect = element.rect.as_ref()?;
     let payload_map = decode_json_map(&element.payload)?;
-    let normalized_points = decode_arrow_points(&payload_map);
-    if normalized_points.len() < 2 {
+    let world_points = decode_arrow_points_world(&payload_map, rect);
+    if world_points.len() < 2 {
         return None;
     }
 
-    let width = rect.max_x - rect.min_x;
-    let height = rect.max_y - rect.min_y;
-    let world_points = normalized_points
-        .iter()
-        .map(|(x, y)| (rect.min_x + x * width, rect.min_y + y * height))
-        .collect::<Vec<_>>();
-
     let mut handles = Vec::new();
-    for (index, (x, y)) in world_points.iter().enumerate() {
+    for (index, point) in world_points.iter().enumerate() {
         handles.push(frame_handle_payload(
             element.id.as_str(),
             "turning",
             index as i32,
-            *x,
-            *y,
+            point.x,
+            point.y,
             false,
         ));
     }
     for index in 0..(world_points.len() - 1) {
-        let (start_x, start_y) = world_points[index];
-        let (end_x, end_y) = world_points[index + 1];
+        let start = &world_points[index];
+        let end = &world_points[index + 1];
         handles.push(frame_handle_payload(
             element.id.as_str(),
             "addable",
             index as i32,
-            (start_x + end_x) / 2.0,
-            (start_y + end_y) / 2.0,
+            (start.x + end.x) / 2.0,
+            (start.y + end.y) / 2.0,
             false,
         ));
     }
@@ -2155,10 +2396,22 @@ fn selected_arrow_like_element(snapshot: &EngineSnapshot) -> Option<&Element> {
     }
 }
 
-fn decode_arrow_points(payload: &JsonMap<String, JsonValue>) -> Vec<(f64, f64)> {
+fn decode_arrow_points_world(payload: &JsonMap<String, JsonValue>, rect: &DrawRect) -> Vec<DrawPoint> {
     let Some(entries) = payload.get("points").and_then(JsonValue::as_array) else {
         return Vec::new();
     };
+
+    let width = rect.max_x - rect.min_x;
+    let height = rect.max_y - rect.min_y;
+    let has_world_space_points = entries.iter().filter_map(JsonValue::as_object).any(|entry| {
+        let Some(x) = entry.get("x").and_then(JsonValue::as_f64) else {
+            return false;
+        };
+        let Some(y) = entry.get("y").and_then(JsonValue::as_f64) else {
+            return false;
+        };
+        !is_normalized_coord(x) || !is_normalized_coord(y)
+    });
 
     entries
         .iter()
@@ -2166,9 +2419,115 @@ fn decode_arrow_points(payload: &JsonMap<String, JsonValue>) -> Vec<(f64, f64)> 
         .filter_map(|entry| {
             let x = entry.get("x").and_then(JsonValue::as_f64)?;
             let y = entry.get("y").and_then(JsonValue::as_f64)?;
-            Some((x, y))
+            let should_treat_as_normalized =
+                !has_world_space_points || (is_normalized_coord(x) && is_normalized_coord(y));
+            let world_x = if should_treat_as_normalized {
+                rect.min_x + x * width
+            } else {
+                x
+            };
+            let world_y = if should_treat_as_normalized {
+                rect.min_y + y * height
+            } else {
+                y
+            };
+            Some(DrawPoint {
+                x: world_x,
+                y: world_y,
+                pressure: 0.0,
+                timestamp_us: 0,
+            })
         })
         .collect()
+}
+
+fn encode_arrow_points_for_rect(points: &[DrawPoint], rect: &DrawRect) -> Vec<JsonValue> {
+    let width = rect.max_x - rect.min_x;
+    let height = rect.max_y - rect.min_y;
+    points
+        .iter()
+        .map(|point| {
+            let normalized_x = if width.abs() <= f64::EPSILON {
+                0.0
+            } else {
+                (point.x - rect.min_x) / width
+            };
+            let normalized_y = if height.abs() <= f64::EPSILON {
+                0.0
+            } else {
+                (point.y - rect.min_y) / height
+            };
+            point_value(normalized_x, normalized_y)
+        })
+        .collect()
+}
+
+fn arrow_points_bounds(points: &[DrawPoint]) -> DrawRect {
+    let mut iter = points.iter();
+    let first = iter.next().cloned().unwrap_or(DrawPoint {
+        x: 0.0,
+        y: 0.0,
+        pressure: 0.0,
+        timestamp_us: 0,
+    });
+    let mut min_x = first.x;
+    let mut min_y = first.y;
+    let mut max_x = first.x;
+    let mut max_y = first.y;
+    for point in iter {
+        min_x = min_x.min(point.x);
+        min_y = min_y.min(point.y);
+        max_x = max_x.max(point.x);
+        max_y = max_y.max(point.y);
+    }
+    DrawRect {
+        min_x,
+        min_y,
+        max_x,
+        max_y,
+    }
+}
+
+fn resolve_arrow_point_update(
+    mut points: Vec<DrawPoint>,
+    point_kind: ArrowPointKind,
+    point_index: usize,
+    target: DrawPoint,
+) -> Option<(Vec<DrawPoint>, bool, bool)> {
+    if points.len() < 2 {
+        return None;
+    }
+    match point_kind {
+        ArrowPointKind::Addable => {
+            if point_index >= points.len() - 1 {
+                return None;
+            }
+            points.insert(point_index + 1, target);
+            Some((points, false, false))
+        }
+        ArrowPointKind::Turning => {
+            if point_index >= points.len() {
+                return None;
+            }
+            let moved_start_endpoint = point_index == 0;
+            let moved_end_endpoint = point_index + 1 == points.len();
+            points[point_index] = target;
+            Some((points, moved_start_endpoint, moved_end_endpoint))
+        }
+        ArrowPointKind::LoopStart => {
+            points[0] = target;
+            Some((points, true, false))
+        }
+        ArrowPointKind::LoopEnd => {
+            let last = points.len() - 1;
+            points[last] = target;
+            Some((points, false, true))
+        }
+    }
+}
+
+fn is_normalized_coord(value: f64) -> bool {
+    value.is_finite() && (-1e-9..=1.0 + 1e-9).contains(&value)
 }
 
 fn frame_handle_payload(
@@ -2346,6 +2705,47 @@ fn resolve_edit_operation(
                 .unwrap_or(0.0);
             EditSessionOperation::Rotate { pivot, snap_angle }
         }
+        "arrow_point" | "arrowPoint" => {
+            let element_id = params
+                .and_then(|map| map.get("elementId"))
+                .and_then(JsonValue::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+            let point_kind = params
+                .and_then(|map| map.get("pointKind"))
+                .and_then(JsonValue::as_str)
+                .and_then(parse_arrow_point_kind)
+                .unwrap_or(ArrowPointKind::Turning);
+            let point_index = params
+                .and_then(|map| map.get("pointIndex"))
+                .and_then(JsonValue::as_u64)
+                .and_then(|index| usize::try_from(index).ok())
+                .or_else(|| {
+                    params
+                        .and_then(|map| map.get("pointIndex"))
+                        .and_then(JsonValue::as_i64)
+                        .and_then(|index| usize::try_from(index).ok())
+                })
+                .unwrap_or(0);
+            let is_double_click = params
+                .and_then(|map| map.get("isDoubleClick"))
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(false);
+            let delete_point_on_finish =
+                is_double_click && point_kind == ArrowPointKind::Turning && point_index > 0;
+
+            if let Some(element_id) = element_id {
+                EditSessionOperation::ArrowPoint {
+                    element_id,
+                    point_kind,
+                    point_index,
+                    delete_point_on_finish,
+                }
+            } else {
+                EditSessionOperation::Unknown
+            }
+        }
         _ => EditSessionOperation::Unknown,
     }
 }
@@ -2360,6 +2760,16 @@ fn parse_resize_mode(value: &str) -> Option<ResizeMode> {
         "bottom" => Some(ResizeMode::Bottom),
         "left" => Some(ResizeMode::Left),
         "right" => Some(ResizeMode::Right),
+        _ => None,
+    }
+}
+
+fn parse_arrow_point_kind(value: &str) -> Option<ArrowPointKind> {
+    match value {
+        "turning" => Some(ArrowPointKind::Turning),
+        "addable" => Some(ArrowPointKind::Addable),
+        "loopStart" | "loop_start" => Some(ArrowPointKind::LoopStart),
+        "loopEnd" | "loop_end" => Some(ArrowPointKind::LoopEnd),
         _ => None,
     }
 }
@@ -4227,6 +4637,333 @@ mod tests {
         };
         assert!((rotated_center.x - center.x).abs() < 1e-9);
         assert!((rotated_center.y - center.y).abs() < 1e-9);
+    }
+
+    #[test]
+    fn add_arrow_point_normalizes_payload_and_updates_rect() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Arrow as i32,
+                    element_id: "add-point-arrow".to_string(),
+                    position: Some(DrawPoint {
+                        x: 20.0,
+                        y: 30.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create arrow");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::AddArrowPoint as i32,
+                payload: Some(CommandPayload::AddArrowPoint(AddArrowPointCommand {
+                    position: Some(DrawPoint {
+                        x: 220.0,
+                        y: 140.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    snap_override: false,
+                })),
+            })
+            .expect("add point");
+
+        let element = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "add-point-arrow")
+            .expect("arrow element");
+        let rect = element.rect.as_ref().expect("arrow rect");
+        assert_eq!(rect.max_x, 220.0);
+        assert_eq!(rect.max_y, 140.0);
+
+        let payload = decode_json_map(&element.payload).expect("arrow payload");
+        let world_points = decode_arrow_points_world(&payload, rect);
+        assert_eq!(world_points.len(), 3);
+        assert!((world_points[2].x - 220.0).abs() < 1e-9);
+        assert!((world_points[2].y - 140.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn arrow_point_edit_turning_updates_endpoint_and_clears_binding() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Arrow as i32,
+                    element_id: "arrow-point-turning".to_string(),
+                    position: Some(DrawPoint {
+                        x: 40.0,
+                        y: 50.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: br#"{"typeId":"arrow","points":[{"x":0.0,"y":0.0},{"x":1.0,"y":1.0},{"x":1.0,"y":0.0}],"startBinding":{"elementId":"start-target"},"endBinding":{"elementId":"end-target"}}"#.to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create arrow");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "arrowPoint".to_string(),
+                    position: Some(DrawPoint {
+                        x: 40.0,
+                        y: 50.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"arrow_point","elementId":"arrow-point-turning","pointKind":"turning","pointIndex":0}"#.to_vec(),
+                })),
+            })
+            .expect("start edit");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 10.0,
+                        y: 8.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: Vec::new(),
+                })),
+            })
+            .expect("update edit");
+
+        let element = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "arrow-point-turning")
+            .expect("arrow element");
+        let rect = element.rect.as_ref().expect("arrow rect");
+        let payload = decode_json_map(&element.payload).expect("arrow payload");
+        assert!(payload.get("startBinding").is_none());
+        assert!(payload.get("endBinding").is_some());
+        let world_points = decode_arrow_points_world(&payload, rect);
+        assert_eq!(world_points.len(), 3);
+        assert!((world_points[0].x - 10.0).abs() < 1e-9);
+        assert!((world_points[0].y - 8.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn arrow_point_edit_addable_inserts_new_point() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Arrow as i32,
+                    element_id: "arrow-point-addable".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: br#"{"typeId":"arrow","points":[{"x":0.0,"y":0.0},{"x":1.0,"y":1.0}]}"#.to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create arrow");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "arrowPoint".to_string(),
+                    position: Some(DrawPoint {
+                        x: 60.0,
+                        y: 60.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"arrow_point","elementId":"arrow-point-addable","pointKind":"addable","pointIndex":0}"#.to_vec(),
+                })),
+            })
+            .expect("start edit");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 80.0,
+                        y: 30.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: Vec::new(),
+                })),
+            })
+            .expect("update edit");
+
+        let element = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "arrow-point-addable")
+            .expect("arrow element");
+        let rect = element.rect.as_ref().expect("arrow rect");
+        let payload = decode_json_map(&element.payload).expect("arrow payload");
+        let world_points = decode_arrow_points_world(&payload, rect);
+        assert_eq!(world_points.len(), 3);
+        assert!((world_points[1].x - 80.0).abs() < 1e-9);
+        assert!((world_points[1].y - 30.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn arrow_point_double_click_delete_applies_on_finish() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Arrow as i32,
+                    element_id: "arrow-point-delete".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: br#"{"typeId":"arrow","points":[{"x":0.0,"y":0.0},{"x":0.5,"y":0.5},{"x":1.0,"y":1.0}]}"#.to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create arrow");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "arrowPoint".to_string(),
+                    position: Some(DrawPoint {
+                        x: 70.0,
+                        y: 70.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"arrow_point","elementId":"arrow-point-delete","pointKind":"turning","pointIndex":1,"isDoubleClick":true}"#.to_vec(),
+                })),
+            })
+            .expect("start edit");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishEdit as i32,
+                payload: None,
+            })
+            .expect("finish edit");
+
+        let element = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "arrow-point-delete")
+            .expect("arrow element");
+        let rect = element.rect.as_ref().expect("arrow rect");
+        let payload = decode_json_map(&element.payload).expect("arrow payload");
+        let world_points = decode_arrow_points_world(&payload, rect);
+        assert_eq!(world_points.len(), 2);
+    }
+
+    #[test]
+    fn cancel_edit_restores_arrow_point_payload_and_rect() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Arrow as i32,
+                    element_id: "arrow-point-cancel".to_string(),
+                    position: Some(DrawPoint {
+                        x: 12.0,
+                        y: 18.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: br#"{"typeId":"arrow","points":[{"x":0.0,"y":0.0},{"x":1.0,"y":1.0},{"x":1.0,"y":0.0}]}"#.to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create arrow");
+
+        let original = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "arrow-point-cancel")
+            .expect("arrow element")
+            .clone();
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "arrowPoint".to_string(),
+                    position: Some(DrawPoint {
+                        x: 12.0,
+                        y: 18.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"arrow_point","elementId":"arrow-point-cancel","pointKind":"turning","pointIndex":0}"#.to_vec(),
+                })),
+            })
+            .expect("start edit");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: -25.0,
+                        y: -30.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: Vec::new(),
+                })),
+            })
+            .expect("update edit");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CancelEdit as i32,
+                payload: None,
+            })
+            .expect("cancel edit");
+
+        let restored = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "arrow-point-cancel")
+            .expect("restored arrow");
+        assert_eq!(restored.rect, original.rect);
+        assert_eq!(restored.payload, original.payload);
     }
 
     #[test]

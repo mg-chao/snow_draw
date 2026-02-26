@@ -19,7 +19,7 @@ Status legend:
 | `select_all` | implemented | Selects all elements in snapshot. |
 | `create_element` | partial | Creation works with deterministic anchor capture; `snap_override` and full host snapping parity remain deferred. |
 | `update_creating_element` | partial | Resizing preview now supports `create_from_center`; `snap_override` is still not applied. |
-| `add_arrow_point` | partial | Appends points only for currently creating arrow element. |
+| `add_arrow_point` | partial | Appends points for currently creating arrow/line elements and re-normalizes payload points against updated rect bounds; `snap_override`/host snapping parity remains deferred. |
 | `finish_create_element` | implemented | Ends create interaction. |
 | `cancel_create_element` | implemented | Removes in-progress created element. |
 | `delete_elements` | implemented | Deletes by IDs and updates selection/document version. |
@@ -34,10 +34,10 @@ Status legend:
 | `refresh_auto_resize_text_layouts_after_font_load` | partial | V2 runtime now emits text-metrics host requests for auto-resize text elements and applies response-driven layout updates; direct v1-only flow remains a no-op refresh. |
 | `finish_text_edit` | implemented | Commits or removes new-empty text as expected. |
 | `cancel_text_edit` | implemented | Cancels text session and removes new draft text. |
-| `start_edit` | partial | `move`/`resize`/`rotate` are implemented; non-core operation types resolve to unknown. |
-| `update_edit` | partial | `move`/`resize`/`rotate` are implemented; `maintainAspectRatio`, `fromCenter`, and `discreteAngle` modifiers are applied, while `snap_override` remains deferred. |
+| `start_edit` | partial | `move`/`resize`/`rotate` are implemented; `arrow_point` sessions are now recognized, while advanced/non-core edit types remain reduced. |
+| `update_edit` | partial | `move`/`resize`/`rotate` are implemented; `arrow_point` turning/addable updates are applied with rect+point normalization and endpoint binding cleanup; `snap_override` and full elbow/curve parity remain deferred. |
 | `finish_edit` | implemented | Closes edit session. |
-| `cancel_edit` | implemented | Reverts to session baseline rect/rotation. |
+| `cancel_edit` | implemented | Reverts to session baseline rect/rotation/payload snapshots. |
 | `set_drag_pending` | implemented | Sets drag-pending interaction state. |
 | `clear_drag_pending` | implemented | Returns interaction state to idle. |
 | `start_box_select` | implemented | Starts box-select interaction. |
@@ -69,7 +69,7 @@ Status legend:
 | `highlight_mask` | implemented | Emitted when global highlight mask is visible. |
 | `watermark` | implemented | Emitted when watermark is visible. |
 | `grid` | implemented | Always emitted near the top of the plan (host decides enabled/visibility). |
-| `arrow_point_overlay` | partial | Emitted for single selected arrow/line elements with deterministic handle payloads; advanced loop/elbow parity remains deferred. |
+| `arrow_point_overlay` | partial | Emitted for single selected arrow/line elements with deterministic handle payloads and mixed normalized/world payload compatibility; advanced loop/elbow parity remains deferred. |
 | `arrow_binding_highlight` | partial | Emitted for selected arrow/line bindings; hover/edit-session driven highlight parity remains deferred. |
 | `hover_outline` | partial | Emitted when `global_elements_payload.hoverOutline` (or `hoveredElementId`) is present with a valid non-selected target; pointer-driven hover parity remains deferred. |
 | `snap_guides` | partial | Emitted when `global_elements_payload.snapGuides` provides guide entries; runtime-computed snapping guide parity remains deferred. |
