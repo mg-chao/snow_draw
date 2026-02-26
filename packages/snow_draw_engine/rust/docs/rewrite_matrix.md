@@ -69,7 +69,7 @@ Status legend:
 | `highlight_mask` | implemented | Emitted when global highlight mask is visible. |
 | `watermark` | implemented | Emitted when watermark is visible. |
 | `grid` | implemented | Always emitted near the top of the plan (host decides enabled/visibility). |
-| `arrow_point_overlay` | partial | Emitted for single selected arrow/line elements with deterministic handle payloads, mixed normalized/world payload compatibility, plus loop/elbow handle semantics (including elbow fixed-segment flags); curved-segment midpoint fidelity remains deferred. |
+| `arrow_point_overlay` | implemented | Emitted for single selected arrow/line elements with deterministic handle payloads, mixed normalized/world payload compatibility, plus loop/elbow handle semantics (including elbow fixed-segment flags) and curved-segment midpoint fidelity. |
 | `arrow_binding_highlight` | partial | Emitted for selected arrow/line bindings plus hover-driven `hoveredBindingElementId` payloads (suppressed when `hoveredArrowHandle` is present); full pointer-driven/edit-session parity remains deferred. |
 | `hover_outline` | partial | Emitted when `global_elements_payload.hoverOutline` (or `hoveredElementId`) is present with a valid non-selected target; pointer-driven hover parity remains deferred. |
 | `snap_guides` | partial | Emitted from `global_elements_payload.snapGuides` and from runtime snapping during create/edit sessions (grid + object-anchor point guides); full Dart gap-guide parity remains deferred. |

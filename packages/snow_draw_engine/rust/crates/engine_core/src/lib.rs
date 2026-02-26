@@ -3091,14 +3091,19 @@ fn arrow_point_overlay_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>> {
     } else {
         let loop_active = is_loop_active(&world_points, ARROW_POINT_LOOP_THRESHOLD);
         for index in 0..(world_points.len() - 1) {
-            let start = &world_points[index];
-            let end = &world_points[index + 1];
+            let midpoint = arrow_segment_midpoint(&world_points, arrow_type.as_ref(), index)
+                .unwrap_or(DrawPoint {
+                    x: (world_points[index].x + world_points[index + 1].x) / 2.0,
+                    y: (world_points[index].y + world_points[index + 1].y) / 2.0,
+                    pressure: 0.0,
+                    timestamp_us: 0,
+                });
             addable_handles.push(frame_handle_payload(
                 element.id.as_str(),
                 "addable",
                 index as i32,
-                (start.x + end.x) / 2.0,
-                (start.y + end.y) / 2.0,
+                midpoint.x,
+                midpoint.y,
                 false,
             ));
         }
@@ -3147,6 +3152,118 @@ fn arrow_point_overlay_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>> {
     payload.insert("handles".to_string(), JsonValue::Array(handles));
     payload.insert("deleteIndicatorVisible".to_string(), JsonValue::from(false));
     serde_json::to_vec(&payload).ok()
+}
+
+fn arrow_segment_midpoint(
+    points: &[DrawPoint],
+    arrow_type: &str,
+    segment_index: usize,
+) -> Option<DrawPoint> {
+    if points.len() < 2 || segment_index >= points.len() - 1 {
+        return None;
+    }
+    if arrow_type.eq_ignore_ascii_case("curved") && points.len() >= 3 {
+        if let Some(point) = calculate_curve_draw_point(points, segment_index, 0.5) {
+            return Some(point);
+        }
+    }
+    let start = &points[segment_index];
+    let end = &points[segment_index + 1];
+    Some(DrawPoint {
+        x: (start.x + end.x) / 2.0,
+        y: (start.y + end.y) / 2.0,
+        pressure: 0.0,
+        timestamp_us: 0,
+    })
+}
+
+#[derive(Clone)]
+struct CubicSegment {
+    start: DrawPoint,
+    control1: DrawPoint,
+    control2: DrawPoint,
+    end: DrawPoint,
+}
+
+fn calculate_curve_draw_point(
+    points: &[DrawPoint],
+    segment_index: usize,
+    t: f64,
+) -> Option<DrawPoint> {
+    if points.len() < 2 || segment_index >= points.len() - 1 {
+        return None;
+    }
+
+    if points.len() < 3 {
+        let p1 = &points[segment_index];
+        let p2 = &points[segment_index + 1];
+        return Some(DrawPoint {
+            x: p1.x + (p2.x - p1.x) * t,
+            y: p1.y + (p2.y - p1.y) * t,
+            pressure: 0.0,
+            timestamp_us: 0,
+        });
+    }
+
+    let segment = build_cubic_segment(points, segment_index);
+    Some(evaluate_cubic(&segment, t))
+}
+
+fn build_cubic_segment(points: &[DrawPoint], index: usize) -> CubicSegment {
+    let p0 = if index == 0 {
+        points[index].clone()
+    } else {
+        points[index - 1].clone()
+    };
+    let p1 = points[index].clone();
+    let p2 = points[index + 1].clone();
+    let p3 = if index + 2 < points.len() {
+        points[index + 2].clone()
+    } else {
+        points[index + 1].clone()
+    };
+
+    let control1 = DrawPoint {
+        x: p1.x + (p2.x - p0.x) / 6.0,
+        y: p1.y + (p2.y - p0.y) / 6.0,
+        pressure: 0.0,
+        timestamp_us: 0,
+    };
+    let control2 = DrawPoint {
+        x: p2.x - (p3.x - p1.x) / 6.0,
+        y: p2.y - (p3.y - p1.y) / 6.0,
+        pressure: 0.0,
+        timestamp_us: 0,
+    };
+
+    CubicSegment {
+        start: p1,
+        control1,
+        control2,
+        end: p2,
+    }
+}
+
+fn evaluate_cubic(segment: &CubicSegment, t: f64) -> DrawPoint {
+    let mt = 1.0 - t;
+    let mt2 = mt * mt;
+    let t2 = t * t;
+    let a = mt2 * mt;
+    let b = 3.0 * mt2 * t;
+    let c = 3.0 * mt * t2;
+    let d = t2 * t;
+    DrawPoint {
+        x: segment.start.x * a
+            + segment.control1.x * b
+            + segment.control2.x * c
+            + segment.end.x * d,
+        y: segment.start.y * a
+            + segment.control1.y * b
+            + segment.control2.y * c
+            + segment.end.y * d,
+        pressure: 0.0,
+        timestamp_us: 0,
+    }
 }
 
 fn parse_elbow_fixed_segment_indices(payload: &JsonMap<String, JsonValue>) -> BTreeSet<usize> {
@@ -5713,6 +5830,71 @@ mod tests {
         assert_eq!(loop_start_count, 1);
         assert_eq!(loop_end_count, 1);
         assert_eq!(turning_indices, vec![1]);
+    }
+
+    #[test]
+    fn frame_plan_arrow_overlay_uses_curved_segment_midpoint_for_addable_handles() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Arrow as i32,
+                    element_id: "arrow-curved".to_string(),
+                    position: Some(DrawPoint {
+                        x: 10.0,
+                        y: 10.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: br#"{"typeId":"arrow","arrowType":"curved","points":[{"x":10.0,"y":10.0},{"x":110.0,"y":10.0},{"x":110.0,"y":110.0}]}"#.to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create curved arrow");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        let overlay = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::ArrowPointOverlay as i32)
+            .expect("arrow overlay task");
+        let overlay_payload =
+            serde_json::from_slice::<serde_json::Value>(&overlay.payload).expect("overlay payload");
+        let handles = overlay_payload
+            .get("handles")
+            .and_then(|value| value.as_array())
+            .expect("overlay handles");
+        let addable = handles
+            .iter()
+            .find(|entry| {
+                entry.get("kind").and_then(|value| value.as_str()) == Some("addable")
+                    && entry.get("index").and_then(|value| value.as_i64()) == Some(0)
+            })
+            .expect("first addable handle");
+        let position = addable
+            .get("position")
+            .and_then(|value| value.as_object())
+            .expect("addable position");
+        let x = position
+            .get("x")
+            .and_then(|value| value.as_f64())
+            .expect("x");
+        let y = position
+            .get("y")
+            .and_then(|value| value.as_f64())
+            .expect("y");
+
+        assert!((x - 60.0).abs() < 1e-9);
+        assert!((y - 3.75).abs() < 1e-9);
+        // Curved midpoint should differ from straight-line midpoint (60, 10).
+        assert!((y - 10.0).abs() > 1e-6);
     }
 
     #[test]
