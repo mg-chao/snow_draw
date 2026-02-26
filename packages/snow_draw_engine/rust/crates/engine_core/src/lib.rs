@@ -137,6 +137,7 @@ struct RuntimeSnapConfig {
     grid_enabled: bool,
     object_enabled: bool,
     grid_size: f64,
+    object_distance: f64,
 }
 
 impl Default for RuntimeSnapConfig {
@@ -145,6 +146,7 @@ impl Default for RuntimeSnapConfig {
             grid_enabled: false,
             object_enabled: false,
             grid_size: 20.0,
+            object_distance: 8.0,
         }
     }
 }
@@ -161,6 +163,7 @@ struct RuntimeSnapConfigPatch {
     grid_enabled: Option<bool>,
     object_enabled: Option<bool>,
     grid_size: Option<f64>,
+    object_distance: Option<f64>,
 }
 
 impl Default for Engine {
@@ -703,6 +706,13 @@ impl Engine {
                 changed = true;
             }
         }
+        if let Some(value) = patch.object_distance {
+            let resolved = sanitize_snap_distance(value);
+            if (next.object_distance - resolved).abs() > f64::EPSILON {
+                next.object_distance = resolved;
+                changed = true;
+            }
+        }
         if changed {
             self.runtime_snap_config = next;
         }
@@ -725,16 +735,134 @@ impl Engine {
         RuntimeSnappingMode::None
     }
 
-    fn maybe_snap_point(&self, point: DrawPoint, mode: RuntimeSnappingMode) -> DrawPoint {
-        let RuntimeSnappingMode::Grid = mode else {
-            return point;
-        };
-        DrawPoint {
-            x: snap_value_to_grid(point.x, self.runtime_snap_config.grid_size),
-            y: snap_value_to_grid(point.y, self.runtime_snap_config.grid_size),
-            pressure: point.pressure,
-            timestamp_us: point.timestamp_us,
+    fn maybe_snap_point(
+        &self,
+        point: DrawPoint,
+        mode: RuntimeSnappingMode,
+        excluded_ids: &BTreeSet<String>,
+    ) -> DrawPoint {
+        match mode {
+            RuntimeSnappingMode::None => point,
+            RuntimeSnappingMode::Grid => DrawPoint {
+                x: snap_value_to_grid(point.x, self.runtime_snap_config.grid_size),
+                y: snap_value_to_grid(point.y, self.runtime_snap_config.grid_size),
+                pressure: point.pressure,
+                timestamp_us: point.timestamp_us,
+            },
+            RuntimeSnappingMode::Object => {
+                let (dx, dy) = self.object_snap_offset_for_rect(
+                    &DrawRect {
+                        min_x: point.x,
+                        min_y: point.y,
+                        max_x: point.x,
+                        max_y: point.y,
+                    },
+                    excluded_ids,
+                );
+                DrawPoint {
+                    x: point.x + dx,
+                    y: point.y + dy,
+                    pressure: point.pressure,
+                    timestamp_us: point.timestamp_us,
+                }
+            }
         }
+    }
+
+    fn object_snap_offset_for_rect(
+        &self,
+        target_rect: &DrawRect,
+        excluded_ids: &BTreeSet<String>,
+    ) -> (f64, f64) {
+        let max_distance = self.runtime_snap_config.object_distance;
+        if max_distance <= 0.0 || !max_distance.is_finite() {
+            return (0.0, 0.0);
+        }
+
+        let mut reference_anchors_x = Vec::new();
+        let mut reference_anchors_y = Vec::new();
+        for element in &self.snapshot.elements {
+            if excluded_ids.contains(&element.id) {
+                continue;
+            }
+            let Some(rect) = element.rect.as_ref() else {
+                continue;
+            };
+            reference_anchors_x.extend(rect_axis_anchors_x(rect));
+            reference_anchors_y.extend(rect_axis_anchors_y(rect));
+        }
+        if reference_anchors_x.is_empty() && reference_anchors_y.is_empty() {
+            return (0.0, 0.0);
+        }
+
+        let target_anchors_x = rect_axis_anchors_x(target_rect);
+        let target_anchors_y = rect_axis_anchors_y(target_rect);
+        let dx = best_anchor_offset(&target_anchors_x, &reference_anchors_x, max_distance);
+        let dy = best_anchor_offset(&target_anchors_y, &reference_anchors_y, max_distance);
+        (dx, dy)
+    }
+
+    fn object_snap_resize_rect(
+        &self,
+        rect: DrawRect,
+        mode: ResizeMode,
+        from_center: bool,
+        excluded_ids: &BTreeSet<String>,
+    ) -> DrawRect {
+        if from_center {
+            return rect;
+        }
+        let max_distance = self.runtime_snap_config.object_distance;
+        if max_distance <= 0.0 || !max_distance.is_finite() {
+            return rect;
+        }
+
+        let mut reference_anchors_x = Vec::new();
+        let mut reference_anchors_y = Vec::new();
+        for element in &self.snapshot.elements {
+            if excluded_ids.contains(&element.id) {
+                continue;
+            }
+            let Some(candidate) = element.rect.as_ref() else {
+                continue;
+            };
+            reference_anchors_x.extend(rect_axis_anchors_x(candidate));
+            reference_anchors_y.extend(rect_axis_anchors_y(candidate));
+        }
+        if reference_anchors_x.is_empty() && reference_anchors_y.is_empty() {
+            return rect;
+        }
+
+        let mut snapped = rect;
+        let (move_left, move_right, move_top, move_bottom) = resize_mode_axes(mode);
+
+        if move_left || move_right {
+            let target_x = match (move_left, move_right) {
+                (true, true) => vec![snapped.min_x, snapped.max_x],
+                (true, false) => vec![snapped.min_x],
+                (false, true) => vec![snapped.max_x],
+                (false, false) => Vec::new(),
+            };
+            if !target_x.is_empty() {
+                let offset = best_anchor_offset(&target_x, &reference_anchors_x, max_distance);
+                apply_resize_horizontal_offset(&mut snapped, offset, move_left, move_right);
+            }
+        }
+
+        if move_top || move_bottom {
+            let target_y = match (move_top, move_bottom) {
+                (true, true) => vec![snapped.min_y, snapped.max_y],
+                (true, false) => vec![snapped.min_y],
+                (false, true) => vec![snapped.max_y],
+                (false, false) => Vec::new(),
+            };
+            if !target_y.is_empty() {
+                let offset = best_anchor_offset(&target_y, &reference_anchors_y, max_distance);
+                apply_resize_vertical_offset(&mut snapped, offset, move_top, move_bottom);
+            }
+        }
+
+        normalize_rect(snapped)
     }
 
     fn apply_select(&mut self, payload: SelectElementCommand) {
@@ -783,7 +911,7 @@ impl Engine {
             pressure: 0.0,
             timestamp_us: 0,
         });
-        let point = self.maybe_snap_point(point, snap_mode);
+        let point = self.maybe_snap_point(point, snap_mode, &BTreeSet::new());
 
         let z_index = self
             .snapshot
@@ -831,7 +959,9 @@ impl Engine {
             return;
         };
         let snap_mode = self.resolve_runtime_snapping_mode(payload.snap_override);
-        let last_position = self.maybe_snap_point(last_position, snap_mode);
+        let mut excluded_ids = BTreeSet::new();
+        excluded_ids.insert(creating_id.clone());
+        let last_position = self.maybe_snap_point(last_position, snap_mode, &excluded_ids);
         let creating_start_position = self.creating_start_position.clone();
         let Some(element) = self.element_mut(&creating_id) else {
             return;
@@ -868,7 +998,9 @@ impl Engine {
             return;
         };
         let snap_mode = self.resolve_runtime_snapping_mode(payload.snap_override);
-        let position = self.maybe_snap_point(position, snap_mode);
+        let mut excluded_ids = BTreeSet::new();
+        excluded_ids.insert(creating_id.clone());
+        let position = self.maybe_snap_point(position, snap_mode, &excluded_ids);
         let Some(element) = self.element_mut(&creating_id) else {
             return;
         };
@@ -1653,19 +1785,35 @@ impl Engine {
         let mut dx = current.x - start.x;
         let mut dy = current.y - start.y;
         let snap_mode = self.resolve_runtime_snapping_mode(snap_override);
-        if matches!(snap_mode, RuntimeSnappingMode::Grid) {
-            if let Some(bounds) = selection_bounds_from_rects(baseline_rects) {
-                let snapped_min_x =
-                    snap_value_to_grid(bounds.min_x + dx, self.runtime_snap_config.grid_size);
-                let snapped_min_y =
-                    snap_value_to_grid(bounds.min_y + dy, self.runtime_snap_config.grid_size);
-                dx = snapped_min_x - bounds.min_x;
-                dy = snapped_min_y - bounds.min_y;
-            } else {
-                let snapped = self.maybe_snap_point(current, snap_mode);
-                dx = snapped.x - start.x;
-                dy = snapped.y - start.y;
+        if let Some(bounds) = selection_bounds_from_rects(baseline_rects) {
+            match snap_mode {
+                RuntimeSnappingMode::Grid => {
+                    let snapped_min_x =
+                        snap_value_to_grid(bounds.min_x + dx, self.runtime_snap_config.grid_size);
+                    let snapped_min_y =
+                        snap_value_to_grid(bounds.min_y + dy, self.runtime_snap_config.grid_size);
+                    dx = snapped_min_x - bounds.min_x;
+                    dy = snapped_min_y - bounds.min_y;
+                }
+                RuntimeSnappingMode::Object => {
+                    let moved_bounds = DrawRect {
+                        min_x: bounds.min_x + dx,
+                        min_y: bounds.min_y + dy,
+                        max_x: bounds.max_x + dx,
+                        max_y: bounds.max_y + dy,
+                    };
+                    let excluded_ids = baseline_rects.keys().cloned().collect::<BTreeSet<_>>();
+                    let (snap_dx, snap_dy) =
+                        self.object_snap_offset_for_rect(&moved_bounds, &excluded_ids);
+                    dx += snap_dx;
+                    dy += snap_dy;
+                }
+                RuntimeSnappingMode::None => {}
             }
+        } else if !matches!(snap_mode, RuntimeSnappingMode::None) {
+            let snapped = self.maybe_snap_point(current, snap_mode, &BTreeSet::new());
+            dx = snapped.x - start.x;
+            dy = snapped.y - start.y;
         }
         let mut changed = false;
         for (element_id, base_rect) in baseline_rects {
@@ -1697,6 +1845,7 @@ impl Engine {
         let snap_mode = self.resolve_runtime_snapping_mode(snap_override);
         let mut changed = false;
         let (move_left, move_right, move_top, move_bottom) = resize_mode_axes(mode);
+        let excluded_ids = baseline_rects.keys().cloned().collect::<BTreeSet<_>>();
 
         for (element_id, base_rect) in baseline_rects {
             let base_width = (base_rect.max_x - base_rect.min_x).abs().max(1.0);
@@ -1808,6 +1957,9 @@ impl Engine {
             if matches!(snap_mode, RuntimeSnappingMode::Grid) {
                 rect = snap_rect_to_grid(&rect, self.runtime_snap_config.grid_size);
             }
+            if matches!(snap_mode, RuntimeSnappingMode::Object) {
+                rect = self.object_snap_resize_rect(rect, mode, from_center, &excluded_ids);
+            }
             if let Some(element) = self.element_mut(element_id) {
                 element.rect = Some(rect);
                 changed = true;
@@ -1872,7 +2024,9 @@ impl Engine {
             return false;
         }
         let snap_mode = self.resolve_runtime_snapping_mode(snap_override);
-        let current = self.maybe_snap_point(current, snap_mode);
+        let mut excluded_ids = BTreeSet::new();
+        excluded_ids.insert(element_id.to_string());
+        let current = self.maybe_snap_point(current, snap_mode, &excluded_ids);
 
         let Some(base_rect) = session.baseline_rects.get(element_id) else {
             return false;
@@ -2955,6 +3109,100 @@ fn sanitize_grid_size(value: f64) -> f64 {
     }
 }
 
+fn sanitize_snap_distance(value: f64) -> f64 {
+    if value.is_finite() && value >= 0.0 {
+        value
+    } else {
+        RuntimeSnapConfig::default().object_distance
+    }
+}
+
+fn rect_axis_anchors_x(rect: &DrawRect) -> [f64; 3] {
+    [rect.min_x, (rect.min_x + rect.max_x) * 0.5, rect.max_x]
+}
+
+fn rect_axis_anchors_y(rect: &DrawRect) -> [f64; 3] {
+    [rect.min_y, (rect.min_y + rect.max_y) * 0.5, rect.max_y]
+}
+
+fn best_anchor_offset(targets: &[f64], references: &[f64], max_distance: f64) -> f64 {
+    if targets.is_empty() || references.is_empty() {
+        return 0.0;
+    }
+    let mut best_offset = 0.0;
+    let mut best_abs = max_distance + f64::EPSILON;
+    for target in targets {
+        for reference in references {
+            let offset = *reference - *target;
+            let abs = offset.abs();
+            if abs > max_distance {
+                continue;
+            }
+            if abs + f64::EPSILON < best_abs {
+                best_abs = abs;
+                best_offset = offset;
+            }
+        }
+    }
+    if best_abs <= max_distance {
+        best_offset
+    } else {
+        0.0
+    }
+}
+
+fn apply_resize_horizontal_offset(
+    rect: &mut DrawRect,
+    offset: f64,
+    move_left: bool,
+    move_right: bool,
+) {
+    if !offset.is_finite() || offset.abs() <= f64::EPSILON {
+        return;
+    }
+    let width = (rect.max_x - rect.min_x).abs().max(1.0);
+    if move_left && !move_right {
+        let max_offset = (width - 1.0).max(0.0);
+        rect.min_x += offset.min(max_offset);
+        return;
+    }
+    if move_right && !move_left {
+        let min_offset = -((width - 1.0).max(0.0));
+        rect.max_x += offset.max(min_offset);
+        return;
+    }
+    if move_left && move_right {
+        rect.min_x += offset;
+        rect.max_x += offset;
+    }
+}
+
+fn apply_resize_vertical_offset(
+    rect: &mut DrawRect,
+    offset: f64,
+    move_top: bool,
+    move_bottom: bool,
+) {
+    if !offset.is_finite() || offset.abs() <= f64::EPSILON {
+        return;
+    }
+    let height = (rect.max_y - rect.min_y).abs().max(1.0);
+    if move_top && !move_bottom {
+        let max_offset = (height - 1.0).max(0.0);
+        rect.min_y += offset.min(max_offset);
+        return;
+    }
+    if move_bottom && !move_top {
+        let min_offset = -((height - 1.0).max(0.0));
+        rect.max_y += offset.max(min_offset);
+        return;
+    }
+    if move_top && move_bottom {
+        rect.min_y += offset;
+        rect.max_y += offset;
+    }
+}
+
 fn snap_value_to_grid(value: f64, grid_size: f64) -> f64 {
     let size = sanitize_grid_size(grid_size);
     (value / size).round() * size
@@ -2984,6 +3232,7 @@ fn extract_runtime_snap_config_patch(
         "gridEnabled",
         "gridSize",
         "objectSnapEnabled",
+        "objectSnapDistance",
     ] {
         if let Some(value) = map.remove(key) {
             runtime_map.insert(key.to_string(), value);
@@ -3023,10 +3272,18 @@ fn runtime_snap_config_patch_from_map(
             patch.object_enabled = Some(enabled);
             found = true;
         }
+        if let Some(distance) = snap.get("distance").and_then(JsonValue::as_f64) {
+            patch.object_distance = Some(distance);
+            found = true;
+        }
     }
     if let Some(snap) = map.get("objectSnap").and_then(JsonValue::as_object) {
         if let Some(enabled) = snap.get("enabled").and_then(JsonValue::as_bool) {
             patch.object_enabled = Some(enabled);
+            found = true;
+        }
+        if let Some(distance) = snap.get("distance").and_then(JsonValue::as_f64) {
+            patch.object_distance = Some(distance);
             found = true;
         }
     }
@@ -3041,6 +3298,10 @@ fn runtime_snap_config_patch_from_map(
     }
     if let Some(enabled) = map.get("objectSnapEnabled").and_then(JsonValue::as_bool) {
         patch.object_enabled = Some(enabled);
+        found = true;
+    }
+    if let Some(distance) = map.get("objectSnapDistance").and_then(JsonValue::as_f64) {
+        patch.object_distance = Some(distance);
         found = true;
     }
 
@@ -5493,13 +5754,14 @@ mod tests {
         let initial_selection_version = engine.snapshot.selection_version;
 
         let changed = engine.apply_runtime_config_payload(
-            br#"{"grid":{"enabled":true,"size":10.0},"snap":{"enabled":false}}"#,
+            br#"{"grid":{"enabled":true,"size":10.0},"snap":{"enabled":false,"distance":6.5}}"#,
         );
 
         assert!(changed);
         assert!(engine.runtime_snap_config.grid_enabled);
         assert!(!engine.runtime_snap_config.object_enabled);
         assert!((engine.runtime_snap_config.grid_size - 10.0).abs() < 1e-9);
+        assert!((engine.runtime_snap_config.object_distance - 6.5).abs() < 1e-9);
         assert_eq!(engine.snapshot.document_version, initial_document_version);
         assert_eq!(engine.snapshot.selection_version, initial_selection_version);
     }
@@ -5709,6 +5971,294 @@ mod tests {
             .expect("unsnapped rect");
         assert_eq!(unsnapped.min_x, 13.0);
         assert_eq!(unsnapped.min_y, 27.0);
+    }
+
+    #[test]
+    fn create_and_update_creating_apply_object_snap_when_enabled() {
+        let mut engine = Engine::default();
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "snap-reference".to_string(),
+                    position: Some(DrawPoint {
+                        x: 50.0,
+                        y: 50.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create reference");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish reference");
+
+        assert!(engine.apply_runtime_config_payload(
+            br#"{"grid":{"enabled":false},"snap":{"enabled":true,"distance":8.0}}"#,
+        ));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "snap-target".to_string(),
+                    position: Some(DrawPoint {
+                        x: 44.0,
+                        y: 47.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create target");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateCreatingElement as i32,
+                payload: Some(CommandPayload::UpdateCreatingElement(
+                    UpdateCreatingElementCommand {
+                        positions: vec![DrawPoint {
+                            x: 109.0,
+                            y: 89.0,
+                            pressure: 0.0,
+                            timestamp_us: 0,
+                        }],
+                        maintain_aspect_ratio: false,
+                        create_from_center: false,
+                        snap_override: false,
+                    },
+                )),
+            })
+            .expect("update target");
+
+        let snapped = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "snap-target")
+            .and_then(|entry| entry.rect.clone())
+            .expect("snapped target rect");
+        assert_eq!(snapped.min_x, 50.0);
+        assert_eq!(snapped.min_y, 50.0);
+        assert_eq!(snapped.max_x, 110.0);
+        assert_eq!(snapped.max_y, 90.0);
+    }
+
+    #[test]
+    fn move_edit_applies_object_snap_when_enabled() {
+        let mut engine = Engine::default();
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "snap-reference".to_string(),
+                    position: Some(DrawPoint {
+                        x: 100.0,
+                        y: 100.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create reference");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish reference");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "snap-move-object".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create move object");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish move object");
+
+        assert!(engine.apply_runtime_config_payload(
+            br#"{"grid":{"enabled":false},"snap":{"enabled":true,"distance":8.0}}"#,
+        ));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "move".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"move"}"#.to_vec(),
+                })),
+            })
+            .expect("start move object");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 96.0,
+                        y: 95.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: br#"{"snapOverride":false}"#.to_vec(),
+                })),
+            })
+            .expect("update move object");
+
+        let snapped = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "snap-move-object")
+            .and_then(|entry| entry.rect.clone())
+            .expect("snapped move object");
+        assert_eq!(snapped.min_x, 100.0);
+        assert_eq!(snapped.min_y, 100.0);
+    }
+
+    #[test]
+    fn resize_edit_applies_object_snap_when_enabled() {
+        let mut engine = Engine::default();
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "snap-reference".to_string(),
+                    position: Some(DrawPoint {
+                        x: 200.0,
+                        y: 40.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create reference");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish reference");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "snap-resize-object".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 40.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create resize object");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish resize object");
+
+        assert!(engine.apply_runtime_config_payload(
+            br#"{"grid":{"enabled":false},"snap":{"enabled":true,"distance":8.0}}"#,
+        ));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "resize".to_string(),
+                    position: Some(DrawPoint {
+                        x: 120.0,
+                        y: 80.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"resize","resizeMode":"right"}"#.to_vec(),
+                })),
+            })
+            .expect("start resize object");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 197.0,
+                        y: 80.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: br#"{"snapOverride":false}"#.to_vec(),
+                })),
+            })
+            .expect("update resize object");
+
+        let snapped = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "snap-resize-object")
+            .and_then(|entry| entry.rect.clone())
+            .expect("snapped resize object");
+        assert_eq!(snapped.min_x, 0.0);
+        assert_eq!(snapped.max_x, 200.0);
     }
 
     #[test]

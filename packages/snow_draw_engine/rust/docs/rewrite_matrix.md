@@ -17,9 +17,9 @@ Status legend:
 | `select_element` | implemented | Deterministic selection/version updates. |
 | `clear_selection` | implemented | Clears selected IDs and bumps selection version. |
 | `select_all` | implemented | Selects all elements in snapshot. |
-| `create_element` | partial | Creation works with deterministic anchor capture; runtime grid snapping now honors `snap_override` when runtime config enables snapping, while full object/host snapping parity remains deferred. |
-| `update_creating_element` | partial | Resizing preview supports `create_from_center`; runtime grid snapping now honors `snap_override`, while full object/host snapping parity remains deferred. |
-| `add_arrow_point` | partial | Appends points for currently creating arrow/line elements and re-normalizes payload points against updated rect bounds; runtime grid snapping now honors `snap_override`, while full object/host snapping parity remains deferred. |
+| `create_element` | partial | Creation works with deterministic anchor capture; runtime grid + object anchor snapping honor `snap_override` when runtime config enables snapping, while full guide/gap parity remains deferred. |
+| `update_creating_element` | partial | Resizing preview supports `create_from_center`; runtime grid + object anchor snapping honor `snap_override`, while full guide/gap parity remains deferred. |
+| `add_arrow_point` | partial | Appends points for currently creating arrow/line elements and re-normalizes payload points against updated rect bounds; runtime grid + object anchor snapping honor `snap_override`, while full guide/gap parity remains deferred. |
 | `finish_create_element` | implemented | Ends create interaction. |
 | `cancel_create_element` | implemented | Removes in-progress created element. |
 | `delete_elements` | implemented | Deletes by IDs and updates selection/document version. |
@@ -35,7 +35,7 @@ Status legend:
 | `finish_text_edit` | implemented | Commits or removes new-empty text as expected. |
 | `cancel_text_edit` | implemented | Cancels text session and removes new draft text. |
 | `start_edit` | partial | `move`/`resize`/`rotate` are implemented; `arrow_point` sessions are now recognized, while advanced/non-core edit types remain reduced. |
-| `update_edit` | partial | `move`/`resize`/`rotate` are implemented; `arrow_point` turning/addable updates are applied with rect+point normalization and endpoint binding cleanup; runtime grid snapping now honors `snap_override`, while full object snapping and elbow/curve parity remain deferred. |
+| `update_edit` | partial | `move`/`resize`/`rotate` are implemented; `arrow_point` turning/addable updates are applied with rect+point normalization and endpoint binding cleanup; runtime grid snapping plus object-anchor snapping for move/resize(non-center)/arrow-point honor `snap_override`, while full resize center-snapping gap parity and elbow/curve parity remain deferred. |
 | `finish_edit` | implemented | Closes edit session. |
 | `cancel_edit` | implemented | Reverts to session baseline rect/rotation/payload snapshots. |
 | `set_drag_pending` | implemented | Sets drag-pending interaction state. |

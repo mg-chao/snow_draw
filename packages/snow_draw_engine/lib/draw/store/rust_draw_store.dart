@@ -1844,7 +1844,10 @@ final class _RustProtoCodec {
         utf8.encode(
           jsonEncode({
             'grid': {'enabled': config.grid.enabled, 'size': config.grid.size},
-            'snap': {'enabled': config.snap.enabled},
+            'snap': {
+              'enabled': config.snap.enabled,
+              'distance': config.snap.distance,
+            },
           }),
         ),
       );
