@@ -5,6 +5,15 @@
 - `sd_engine_abi_version()` currently returns `2`.
 - Capability flags are returned by `sd_engine_capabilities()`.
 
+## Capability Flags
+
+- `SD_CAP_EVENT_STREAM = 1 << 0`
+- `SD_CAP_FRAME_PLAN = 1 << 1`
+- `SD_CAP_DISPATCH_BATCH = 1 << 2`
+- `SD_CAP_V2_INPUT_OUTPUT = 1 << 3`
+- `SD_CAP_INPUT_PIPELINE = 1 << 4`
+- `SD_CAP_TEXT_METRICS_HOST = 1 << 5`
+
 ## Ownership
 
 - Any non-empty `sd_bytes_t` returned by the ABI must be released with

@@ -27,7 +27,7 @@
     "elements": [],
     "history_undo_len": 0,
     "history_redo_len": 0,
-    "frame_task_kinds": ["background"],
+    "frame_task_kinds": ["background", "grid"],
     "event_kinds": [
       "state_changed",
       "state_changed",

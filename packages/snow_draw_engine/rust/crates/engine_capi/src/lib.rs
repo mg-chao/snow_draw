@@ -17,6 +17,8 @@ pub const SD_CAP_EVENT_STREAM: u64 = 1 << 0;
 pub const SD_CAP_FRAME_PLAN: u64 = 1 << 1;
 pub const SD_CAP_DISPATCH_BATCH: u64 = 1 << 2;
 pub const SD_CAP_V2_INPUT_OUTPUT: u64 = 1 << 3;
+pub const SD_CAP_INPUT_PIPELINE: u64 = 1 << 4;
+pub const SD_CAP_TEXT_METRICS_HOST: u64 = 1 << 5;
 
 pub const SD_STATUS_OK: u32 = 0;
 pub const SD_STATUS_NO_EVENT: u32 = 1;
@@ -49,7 +51,12 @@ pub extern "C" fn sd_engine_abi_version() -> u32 {
 
 #[no_mangle]
 pub extern "C" fn sd_engine_capabilities() -> u64 {
-    SD_CAP_EVENT_STREAM | SD_CAP_FRAME_PLAN | SD_CAP_DISPATCH_BATCH | SD_CAP_V2_INPUT_OUTPUT
+    SD_CAP_EVENT_STREAM
+        | SD_CAP_FRAME_PLAN
+        | SD_CAP_DISPATCH_BATCH
+        | SD_CAP_V2_INPUT_OUTPUT
+        | SD_CAP_INPUT_PIPELINE
+        | SD_CAP_TEXT_METRICS_HOST
 }
 
 #[no_mangle]
@@ -564,6 +571,8 @@ mod tests {
         assert_ne!(caps & SD_CAP_FRAME_PLAN, 0);
         assert_ne!(caps & SD_CAP_DISPATCH_BATCH, 0);
         assert_ne!(caps & SD_CAP_V2_INPUT_OUTPUT, 0);
+        assert_ne!(caps & SD_CAP_INPUT_PIPELINE, 0);
+        assert_ne!(caps & SD_CAP_TEXT_METRICS_HOST, 0);
     }
 
     #[test]

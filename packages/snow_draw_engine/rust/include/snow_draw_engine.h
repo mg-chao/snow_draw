@@ -29,6 +29,8 @@ enum {
   SD_CAP_FRAME_PLAN = 1ull << 1,
   SD_CAP_DISPATCH_BATCH = 1ull << 2,
   SD_CAP_V2_INPUT_OUTPUT = 1ull << 3,
+  SD_CAP_INPUT_PIPELINE = 1ull << 4,
+  SD_CAP_TEXT_METRICS_HOST = 1ull << 5,
 };
 
 uint32_t sd_engine_abi_version(void);

@@ -29,6 +29,7 @@
     "history_redo_len": 0,
     "frame_task_kinds": [
       "background",
+      "grid",
       "rectangle",
       "selection_outline",
       "selection_controls"

@@ -23,6 +23,8 @@ use serde_json::{Map as JsonMap, Value as JsonValue};
 use thiserror::Error;
 
 const EVENT_QUEUE_LIMIT: usize = 2048;
+const CAMERA_MIN_ZOOM: f64 = 0.1;
+const CAMERA_MAX_ZOOM: f64 = 30.0;
 
 #[derive(Debug, Error)]
 pub enum EngineCoreError {
@@ -65,6 +67,7 @@ pub struct Engine {
     next_event_sequence: u64,
     next_element_sequence: u64,
     creating_element_id: Option<String>,
+    creating_start_position: Option<DrawPoint>,
     text_edit_session: Option<TextEditSession>,
     box_select_start: Option<DrawPoint>,
     edit_session: Option<EditSession>,
@@ -127,6 +130,7 @@ impl Engine {
             next_event_sequence: 1,
             next_element_sequence,
             creating_element_id: None,
+            creating_start_position: None,
             text_edit_session: None,
             box_select_start: None,
             edit_session: None,
@@ -400,6 +404,12 @@ impl Engine {
             element_type: ElementType::Unknown as i32,
             payload: Vec::new(),
         });
+        tasks.push(FrameTask {
+            kind: FrameTaskKind::Grid as i32,
+            element_id: String::new(),
+            element_type: ElementType::Unknown as i32,
+            payload: Vec::new(),
+        });
 
         if let Some(mask_payload) = highlight_mask_payload(&self.snapshot.global_elements_payload) {
             tasks.push(FrameTask {
@@ -580,6 +590,7 @@ impl Engine {
         self.snapshot.document_version += 1;
         self.set_selected(BTreeSet::from([id]));
         self.creating_element_id = self.snapshot.selected_ids.first().cloned();
+        self.creating_start_position = Some(point);
         self.set_interaction_mode(InteractionMode::Creating);
     }
 
@@ -590,17 +601,18 @@ impl Engine {
         let Some(last_position) = payload.positions.last().cloned() else {
             return;
         };
+        let creating_start_position = self.creating_start_position.clone();
         let Some(element) = self.element_mut(&creating_id) else {
             return;
         };
-        let start = element
-            .rect
-            .as_ref()
-            .map(|rect| DrawPoint {
-                x: rect.min_x,
-                y: rect.min_y,
-                pressure: 0.0,
-                timestamp_us: 0,
+        let start = creating_start_position
+            .or_else(|| {
+                element.rect.as_ref().map(|rect| DrawPoint {
+                    x: rect.min_x,
+                    y: rect.min_y,
+                    pressure: 0.0,
+                    timestamp_us: 0,
+                })
             })
             .unwrap_or(DrawPoint {
                 x: last_position.x,
@@ -608,10 +620,11 @@ impl Engine {
                 pressure: 0.0,
                 timestamp_us: 0,
             });
-        element.rect = Some(rect_from_points(
+        element.rect = Some(create_rect_from_points(
             start,
             last_position,
             payload.maintain_aspect_ratio,
+            payload.create_from_center,
         ));
         self.snapshot.document_version += 1;
     }
@@ -647,6 +660,7 @@ impl Engine {
 
     fn apply_finish_create(&mut self) {
         self.creating_element_id = None;
+        self.creating_start_position = None;
         self.set_interaction_mode(InteractionMode::Idle);
     }
 
@@ -661,6 +675,7 @@ impl Engine {
             }
         }
         self.creating_element_id = None;
+        self.creating_start_position = None;
         self.set_selected(BTreeSet::new());
         self.set_interaction_mode(InteractionMode::Idle);
     }
@@ -1348,7 +1363,23 @@ impl Engine {
             .snapshot
             .camera
             .get_or_insert_with(CameraState::default);
-        camera.zoom *= payload.scale;
+        let current_zoom = resolve_effective_zoom(camera.zoom);
+        let target_zoom = clamp_zoom(current_zoom * payload.scale);
+        if (target_zoom - current_zoom).abs() <= f64::EPSILON {
+            return;
+        }
+
+        let position = camera.position.get_or_insert(DrawPoint {
+            x: 0.0,
+            y: 0.0,
+            pressure: 0.0,
+            timestamp_us: 0,
+        });
+        let center = payload.center.unwrap_or_else(|| position.clone());
+        let zoom_ratio = target_zoom / current_zoom;
+        position.x += (center.x - position.x) * (1.0 - zoom_ratio);
+        position.y += (center.y - position.y) * (1.0 - zoom_ratio);
+        camera.zoom = target_zoom;
     }
 
     fn apply_undo(&mut self) {
@@ -1375,6 +1406,7 @@ impl Engine {
 
     fn reset_ephemeral_state(&mut self) {
         self.creating_element_id = None;
+        self.creating_start_position = None;
         self.text_edit_session = None;
         self.box_select_start = None;
         self.edit_session = None;
@@ -1677,8 +1709,62 @@ fn rect_from_points(start: DrawPoint, current: DrawPoint, keep_square: bool) -> 
     }
 }
 
+fn create_rect_from_points(
+    start: DrawPoint,
+    current: DrawPoint,
+    keep_square: bool,
+    from_center: bool,
+) -> DrawRect {
+    let dx = current.x - start.x;
+    let dy = current.y - start.y;
+
+    if keep_square {
+        let side = dx.abs().max(dy.abs());
+        if from_center {
+            return DrawRect {
+                min_x: start.x - side,
+                min_y: start.y - side,
+                max_x: start.x + side,
+                max_y: start.y + side,
+            };
+        }
+
+        let end_x = start.x + if dx >= 0.0 { side } else { -side };
+        let end_y = start.y + if dy >= 0.0 { side } else { -side };
+        return DrawRect {
+            min_x: start.x.min(end_x),
+            min_y: start.y.min(end_y),
+            max_x: start.x.max(end_x),
+            max_y: start.y.max(end_y),
+        };
+    }
+
+    if from_center {
+        return DrawRect {
+            min_x: start.x - dx.abs(),
+            min_y: start.y - dy.abs(),
+            max_x: start.x + dx.abs(),
+            max_y: start.y + dy.abs(),
+        };
+    }
+
+    rect_from_points(start, current, false)
+}
+
 fn rects_intersect(a: &DrawRect, b: &DrawRect) -> bool {
     !(a.max_x < b.min_x || a.min_x > b.max_x || a.max_y < b.min_y || a.min_y > b.max_y)
+}
+
+fn resolve_effective_zoom(zoom: f64) -> f64 {
+    if zoom.is_finite() && zoom > 0.0 {
+        zoom
+    } else {
+        1.0
+    }
+}
+
+fn clamp_zoom(zoom: f64) -> f64 {
+    zoom.clamp(CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM)
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -2109,10 +2195,81 @@ mod tests {
 
         assert!(!plan.tasks.is_empty());
         assert_eq!(plan.tasks[0].kind, FrameTaskKind::Background as i32);
+        assert_eq!(plan.tasks[1].kind, FrameTaskKind::Grid as i32);
         assert!(plan
             .tasks
             .iter()
             .any(|task| task.kind == FrameTaskKind::Text as i32));
+    }
+
+    #[test]
+    fn update_creating_create_from_center_uses_original_anchor() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(create_command("center-create", ElementType::Rectangle))
+            .expect("create");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateCreatingElement as i32,
+                payload: Some(CommandPayload::UpdateCreatingElement(
+                    UpdateCreatingElementCommand {
+                        positions: vec![DrawPoint {
+                            x: 60.0,
+                            y: 70.0,
+                            pressure: 0.0,
+                            timestamp_us: 0,
+                        }],
+                        maintain_aspect_ratio: false,
+                        create_from_center: true,
+                        snap_override: false,
+                    },
+                )),
+            })
+            .expect("first update");
+
+        let rect = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "center-create")
+            .and_then(|element| element.rect.clone())
+            .expect("updated rect");
+        assert_eq!(rect.min_x, -40.0);
+        assert_eq!(rect.min_y, -30.0);
+        assert_eq!(rect.max_x, 60.0);
+        assert_eq!(rect.max_y, 70.0);
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateCreatingElement as i32,
+                payload: Some(CommandPayload::UpdateCreatingElement(
+                    UpdateCreatingElementCommand {
+                        positions: vec![DrawPoint {
+                            x: 80.0,
+                            y: 90.0,
+                            pressure: 0.0,
+                            timestamp_us: 0,
+                        }],
+                        maintain_aspect_ratio: false,
+                        create_from_center: true,
+                        snap_override: false,
+                    },
+                )),
+            })
+            .expect("second update");
+
+        let rect = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "center-create")
+            .and_then(|element| element.rect.clone())
+            .expect("updated rect");
+        assert_eq!(rect.min_x, -60.0);
+        assert_eq!(rect.min_y, -50.0);
+        assert_eq!(rect.max_x, 80.0);
+        assert_eq!(rect.max_y, 90.0);
     }
 
     #[test]
@@ -2568,6 +2725,65 @@ mod tests {
 
         let event = engine.poll_event().expect("error event");
         assert_eq!(event.kind, EngineEventKind::Error as i32);
+    }
+
+    #[test]
+    fn zoom_camera_applies_center_and_clamps() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::MoveCamera as i32,
+                payload: Some(CommandPayload::MoveCamera(MoveCameraCommand {
+                    dx: 10.0,
+                    dy: 20.0,
+                })),
+            })
+            .expect("move");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::ZoomCamera as i32,
+                payload: Some(CommandPayload::ZoomCamera(ZoomCameraCommand {
+                    scale: 2.0,
+                    center: Some(DrawPoint {
+                        x: 20.0,
+                        y: 20.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                })),
+            })
+            .expect("zoom around center");
+
+        let camera = engine.snapshot.camera.as_ref().expect("camera");
+        let position = camera.position.as_ref().expect("position");
+        assert!((camera.zoom - 2.0).abs() < 1e-9);
+        assert!((position.x - 0.0).abs() < 1e-9);
+        assert!((position.y - 20.0).abs() < 1e-9);
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::ZoomCamera as i32,
+                payload: Some(CommandPayload::ZoomCamera(ZoomCameraCommand {
+                    scale: 1000.0,
+                    center: None,
+                })),
+            })
+            .expect("zoom clamp max");
+        let camera = engine.snapshot.camera.as_ref().expect("camera");
+        assert!((camera.zoom - CAMERA_MAX_ZOOM).abs() < 1e-9);
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::ZoomCamera as i32,
+                payload: Some(CommandPayload::ZoomCamera(ZoomCameraCommand {
+                    scale: 0.001,
+                    center: None,
+                })),
+            })
+            .expect("zoom clamp min");
+        let camera = engine.snapshot.camera.as_ref().expect("camera");
+        assert!((camera.zoom - CAMERA_MIN_ZOOM).abs() < 1e-9);
     }
 
     #[test]

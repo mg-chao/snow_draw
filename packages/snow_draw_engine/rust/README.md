@@ -18,6 +18,7 @@ C consumers should include:
 - `include/snow_draw_engine.h`
 - `docs/abi.md` for status codes and ownership rules
 - `docs/versioning.md` for ABI/schema compatibility guarantees
+- `docs/rewrite_matrix.md` for command/frame-task parity coverage status
 
 ## Desktop Build Scripts
 

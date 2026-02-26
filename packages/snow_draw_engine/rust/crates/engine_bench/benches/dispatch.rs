@@ -18,6 +18,9 @@ fn bench_dispatch_create(c: &mut Criterion) {
                 timestamp_us: 0,
             }),
             initial_payload: Vec::new(),
+            maintain_aspect_ratio: false,
+            create_from_center: false,
+            snap_override: false,
         })),
     };
     let encoded = encode_message(&command);
