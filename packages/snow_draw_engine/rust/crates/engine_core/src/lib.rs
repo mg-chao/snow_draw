@@ -448,6 +448,24 @@ impl Engine {
             });
         }
 
+        if let Some(payload) = snap_guides_payload(&self.snapshot.global_elements_payload) {
+            tasks.push(FrameTask {
+                kind: FrameTaskKind::SnapGuides as i32,
+                element_id: String::new(),
+                element_type: ElementType::Unknown as i32,
+                payload,
+            });
+        }
+
+        if let Some(payload) = hover_outline_payload(&self.snapshot) {
+            tasks.push(FrameTask {
+                kind: FrameTaskKind::HoverOutline as i32,
+                element_id: String::new(),
+                element_type: ElementType::Unknown as i32,
+                payload,
+            });
+        }
+
         if !self.snapshot.selected_ids.is_empty() {
             tasks.push(FrameTask {
                 kind: FrameTaskKind::SelectionOutline as i32,
@@ -1698,6 +1716,78 @@ fn watermark_payload(global_payload: &[u8]) -> Option<Vec<u8>> {
         return None;
     }
     serde_json::to_vec(watermark).ok()
+}
+
+fn hover_outline_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>> {
+    let map = decode_json_map(&snapshot.global_elements_payload)?;
+    let (raw_element_id, use_text_underline_style) =
+        if let Some(hover_outline) = map.get("hoverOutline").and_then(JsonValue::as_object) {
+            (
+                hover_outline.get("elementId").and_then(JsonValue::as_str)?,
+                hover_outline
+                    .get("useTextUnderlineStyle")
+                    .and_then(JsonValue::as_bool)
+                    .unwrap_or(false),
+            )
+        } else {
+            (
+                map.get("hoveredElementId").and_then(JsonValue::as_str)?,
+                false,
+            )
+        };
+
+    let element_id = raw_element_id.trim();
+    if element_id.is_empty() {
+        return None;
+    }
+    if snapshot
+        .selected_ids
+        .iter()
+        .any(|selected_id| selected_id == element_id)
+    {
+        return None;
+    }
+    if !snapshot
+        .elements
+        .iter()
+        .any(|element| element.id.as_str() == element_id)
+    {
+        return None;
+    }
+
+    let mut payload = JsonMap::new();
+    payload.insert("elementId".to_string(), JsonValue::from(element_id));
+    if use_text_underline_style {
+        payload.insert("useTextUnderlineStyle".to_string(), JsonValue::from(true));
+    }
+    serde_json::to_vec(&payload).ok()
+}
+
+fn snap_guides_payload(global_payload: &[u8]) -> Option<Vec<u8>> {
+    let map = decode_json_map(global_payload)?;
+    let guides = if let Some(value) = map.get("snapGuides") {
+        match value {
+            JsonValue::Array(entries) => entries.clone(),
+            JsonValue::Object(payload) => payload
+                .get("guides")
+                .and_then(JsonValue::as_array)
+                .cloned()
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        }
+    } else {
+        map.get("guides")
+            .and_then(JsonValue::as_array)
+            .cloned()
+            .unwrap_or_default()
+    };
+    if guides.is_empty() {
+        return None;
+    }
+
+    let mut payload = JsonMap::new();
+    payload.insert("guides".to_string(), JsonValue::Array(guides));
+    serde_json::to_vec(&payload).ok()
 }
 
 fn box_selection_payload(start: &DrawPoint, current: &DrawPoint) -> Option<Vec<u8>> {
@@ -3124,6 +3214,132 @@ mod tests {
         assert_eq!(
             ids.first().and_then(|value| value.as_str()),
             Some("binding-target")
+        );
+    }
+
+    #[test]
+    fn frame_plan_emits_hover_outline_and_snap_guides_from_global_payload() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Text as i32,
+                    element_id: "hover-target".to_string(),
+                    position: Some(DrawPoint {
+                        x: 20.0,
+                        y: 20.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create text");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::ClearSelection as i32,
+                payload: None,
+            })
+            .expect("clear selection");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateGlobalElements as i32,
+                payload: Some(CommandPayload::UpdateGlobalElements(
+                    UpdateGlobalElementsCommand {
+                        payload: br#"{"hoverOutline":{"elementId":"hover-target","useTextUnderlineStyle":true},"snapGuides":[{"kind":"point","axis":"horizontal","start":{"x":0.0,"y":10.0},"end":{"x":100.0,"y":10.0}}]}"#.to_vec(),
+                    },
+                )),
+            })
+            .expect("update global overlays");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+
+        let hover = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::HoverOutline as i32)
+            .expect("hover outline task");
+        let hover_payload =
+            serde_json::from_slice::<serde_json::Value>(&hover.payload).expect("hover payload");
+        assert_eq!(
+            hover_payload
+                .get("elementId")
+                .and_then(|value| value.as_str()),
+            Some("hover-target")
+        );
+        assert_eq!(
+            hover_payload
+                .get("useTextUnderlineStyle")
+                .and_then(|value| value.as_bool()),
+            Some(true)
+        );
+
+        let guides = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::SnapGuides as i32)
+            .expect("snap guides task");
+        let guides_payload =
+            serde_json::from_slice::<serde_json::Value>(&guides.payload).expect("guides payload");
+        let entries = guides_payload
+            .get("guides")
+            .and_then(|value| value.as_array())
+            .expect("guides list");
+        assert_eq!(entries.len(), 1);
+    }
+
+    #[test]
+    fn frame_plan_skips_hover_outline_for_selected_target() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Text as i32,
+                    element_id: "hover-selected".to_string(),
+                    position: Some(DrawPoint {
+                        x: 12.0,
+                        y: 12.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create text");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateGlobalElements as i32,
+                payload: Some(CommandPayload::UpdateGlobalElements(
+                    UpdateGlobalElementsCommand {
+                        payload: br#"{"hoverOutline":{"elementId":"hover-selected","useTextUnderlineStyle":true}}"#
+                            .to_vec(),
+                    },
+                )),
+            })
+            .expect("update global overlays");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        assert!(
+            !plan
+                .tasks
+                .iter()
+                .any(|task| task.kind == FrameTaskKind::HoverOutline as i32)
         );
     }
 

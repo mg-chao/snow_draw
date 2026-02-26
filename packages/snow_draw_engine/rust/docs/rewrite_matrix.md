@@ -71,8 +71,8 @@ Status legend:
 | `grid` | implemented | Always emitted near the top of the plan (host decides enabled/visibility). |
 | `arrow_point_overlay` | partial | Emitted for single selected arrow/line elements with deterministic handle payloads; advanced loop/elbow parity remains deferred. |
 | `arrow_binding_highlight` | partial | Emitted for selected arrow/line bindings; hover/edit-session driven highlight parity remains deferred. |
-| `hover_outline` | missing | Not yet emitted by Rust frame planner. |
-| `snap_guides` | missing | Not yet emitted by Rust frame planner. |
+| `hover_outline` | partial | Emitted when `global_elements_payload.hoverOutline` (or `hoveredElementId`) is present with a valid non-selected target; pointer-driven hover parity remains deferred. |
+| `snap_guides` | partial | Emitted when `global_elements_payload.snapGuides` provides guide entries; runtime-computed snapping guide parity remains deferred. |
 
 ## V2 Host Request/Response Coverage
 
