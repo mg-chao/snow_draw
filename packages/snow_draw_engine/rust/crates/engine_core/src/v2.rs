@@ -454,10 +454,10 @@ fn convert_element(element: v1::Element) -> v2::Element {
         rotation: element.rotation,
         opacity: element.opacity,
         z_index: element.z_index,
-        payload: Some(convert_element_payload(
-            element.element_type,
-            element.payload,
-        )),
+        // Preserve full element payload semantics in snapshots.
+        // V2 typed payload variants are intentionally narrower than the
+        // canonical Dart element JSON schema.
+        payload: Some(convert_raw_payload(element.payload)),
     }
 }
 
@@ -943,5 +943,48 @@ mod tests {
         let rect = text.rect.as_ref().expect("text rect");
         assert!(((rect.max_x - rect.min_x) - 88.48).abs() < 1e-9);
         assert!(((rect.max_y - rect.min_y) - 24.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn snapshot_conversion_preserves_full_text_json_payload() {
+        let payload_json = serde_json::json!({
+            "typeId": "text",
+            "text": "styled",
+            "color": 0xFF112233_u64,
+            "fontSize": 18.0,
+            "fontFamily": "Fira Code",
+            "horizontalAlign": "center",
+            "verticalAlign": "top",
+            "fillColor": 0xFF445566_u64,
+            "fillStyle": "line",
+            "strokeColor": 0xFF778899_u64,
+            "strokeWidth": 1.5,
+            "cornerRadius": 3.0,
+            "autoResize": false
+        });
+        let raw = serde_json::to_vec(&payload_json).expect("encode payload json");
+        let element = v1::Element {
+            id: "styled-text".to_string(),
+            element_type: ElementType::Text as i32,
+            rect: Some(v1::DrawRect {
+                min_x: 0.0,
+                min_y: 0.0,
+                max_x: 100.0,
+                max_y: 40.0,
+            }),
+            rotation: 0.0,
+            opacity: 1.0,
+            z_index: 0,
+            payload: raw.clone(),
+        };
+
+        let converted = convert_element(element);
+        let payload = converted.payload.expect("payload");
+        match payload.payload {
+            Some(v2::element_payload::Payload::RawJsonPayload(bytes)) => {
+                assert_eq!(bytes, raw);
+            }
+            other => panic!("expected raw json payload, got {other:?}"),
+        }
     }
 }

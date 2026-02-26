@@ -1730,6 +1730,9 @@ final class _RustProtoCodec {
     proto_v2.ElementType elementType,
     proto_v2.ElementPayload_Payload payloadKind,
   ) {
+    if (payloadKind == proto_v2.ElementPayload_Payload.rawJsonPayload) {
+      return;
+    }
     if (!_isProductMode || _allowRawPayloadInRelease) {
       return;
     }
@@ -1737,7 +1740,7 @@ final class _RustProtoCodec {
       return;
     }
     throw StateError(
-      'Unsupported raw V2 payload in release mode for elementType=$elementType, payload=$payloadKind',
+      'Unsupported raw V2 binary payload in release mode for elementType=$elementType, payload=$payloadKind',
     );
   }
 

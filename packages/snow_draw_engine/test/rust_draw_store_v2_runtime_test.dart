@@ -172,6 +172,88 @@ void main() {
   );
 
   test(
+    'RustDrawStore preserves styled text payload fields from raw V2 snapshots',
+    () async {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+      final context = DrawContext.withDefaults(elementRegistry: registry);
+
+      final store = RustDrawStore(
+        context: context,
+        engine: _ScriptedRustCanvasEngine(
+          (_) => proto_v2.EngineSnapshot(
+            schemaVersion: 2,
+            documentVersion: $fixnum.Int64(4),
+            selectionVersion: $fixnum.Int64(1),
+            interactionMode: proto_v2.InteractionMode.INTERACTION_MODE_IDLE,
+            camera: _cameraPayload,
+            elements: [
+              proto_v2.Element(
+                id: 'styled-text',
+                elementType: proto_v2.ElementType.ELEMENT_TYPE_TEXT,
+                rect: proto_v2.DrawRect(
+                  minX: 12,
+                  minY: 18,
+                  maxX: 220,
+                  maxY: 88,
+                ),
+                rotation: 0,
+                opacity: 1,
+                zIndex: 0,
+                payload: proto_v2.ElementPayload(
+                  rawJsonPayload: Uint8List.fromList(
+                    utf8.encode(
+                      jsonEncode({
+                        'typeId': 'text',
+                        'text': 'styled',
+                        'color': 0xFF112233,
+                        'fontSize': 19.0,
+                        'fontFamily': 'Fira Code',
+                        'horizontalAlign': 'center',
+                        'verticalAlign': 'top',
+                        'fillColor': 0xFF445566,
+                        'fillStyle': 'line',
+                        'strokeColor': 0xFF778899,
+                        'strokeWidth': 1.5,
+                        'cornerRadius': 3.0,
+                        'autoResize': false,
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+            selectedIds: const [],
+            historyUndoLen: $fixnum.Int64(0),
+            historyRedoLen: $fixnum.Int64(0),
+          ),
+        ),
+      );
+      addTearDown(store.dispose);
+
+      await store.dispatch(const SelectAll());
+
+      final element = store.state.domain.document.getElementById('styled-text');
+      expect(element, isNotNull);
+      final data = element!.data;
+      expect(data, isA<TextData>());
+      final text = data as TextData;
+      expect(text.text, 'styled');
+      expect(text.color, const DrawColor(0xFF112233));
+      expect(text.fontSize, 19.0);
+      expect(text.fontFamily, 'Fira Code');
+      expect(text.horizontalAlign, TextHorizontalAlign.center);
+      expect(text.verticalAlign, TextVerticalAlign.top);
+      expect(text.fillColor, const DrawColor(0xFF445566));
+      expect(text.fillStyle, FillStyle.line);
+      expect(text.strokeColor, const DrawColor(0xFF778899));
+      expect(text.strokeWidth, 1.5);
+      expect(text.cornerRadius, 3.0);
+      expect(text.autoResize, isFalse);
+    },
+  );
+
+  test(
     'RustDrawStore restores drag pending metadata from action hints',
     () async {
       final registry = DefaultElementRegistry();

@@ -85,3 +85,4 @@ Status legend:
 | `tool_event -> host_request` | implemented | Forwarded as typed host request. |
 | `text_metrics_request` generation | implemented | Runtime emits typed text-metrics host requests for `start_text_edit`, `update_text_edit`, and font-load refresh flows using unbounded width for auto-resize text. |
 | `text_metrics_response` handling | implemented | Successful responses update auto-resize text layout bounds (line-height-aware width padding + stale-request guards) and emit snapshot/state/frame outputs. |
+| `snapshot element payload fidelity` | implemented | V2 snapshots preserve canonical raw JSON element payloads for all known element types, avoiding style/binding truncation from narrower typed payload variants. |
