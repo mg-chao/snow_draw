@@ -713,14 +713,14 @@ impl Engine {
                     payload,
                 });
             }
-            if let Some(payload) = arrow_binding_highlight_payload(&self.snapshot) {
-                tasks.push(FrameTask {
-                    kind: FrameTaskKind::ArrowBindingHighlight as i32,
-                    element_id: String::new(),
-                    element_type: ElementType::Unknown as i32,
-                    payload,
-                });
-            }
+        }
+        if let Some(payload) = arrow_binding_highlight_payload(&self.snapshot) {
+            tasks.push(FrameTask {
+                kind: FrameTaskKind::ArrowBindingHighlight as i32,
+                element_id: String::new(),
+                element_type: ElementType::Unknown as i32,
+                payload,
+            });
         }
 
         if self.snapshot.interaction_mode == InteractionMode::BoxSelecting as i32 {
@@ -2172,43 +2172,45 @@ impl Engine {
                     max_y,
                 })
             };
-            if matches!(snap_mode, RuntimeSnappingMode::Grid) {
-                let unsnapped = rect.clone();
-                let snapped = snap_rect_to_grid(&rect, self.runtime_snap_config.grid_size);
-                let x_coord = if (snapped.min_x - unsnapped.min_x).abs() > f64::EPSILON
-                    || (snapped.max_x - unsnapped.max_x).abs() > f64::EPSILON
-                {
-                    Some(if move_left && !move_right {
-                        snapped.min_x
-                    } else if move_right && !move_left {
-                        snapped.max_x
+            if !from_center {
+                if matches!(snap_mode, RuntimeSnappingMode::Grid) {
+                    let unsnapped = rect.clone();
+                    let snapped = snap_rect_to_grid(&rect, self.runtime_snap_config.grid_size);
+                    let x_coord = if (snapped.min_x - unsnapped.min_x).abs() > f64::EPSILON
+                        || (snapped.max_x - unsnapped.max_x).abs() > f64::EPSILON
+                    {
+                        Some(if move_left && !move_right {
+                            snapped.min_x
+                        } else if move_right && !move_left {
+                            snapped.max_x
+                        } else {
+                            (snapped.min_x + snapped.max_x) * 0.5
+                        })
                     } else {
-                        (snapped.min_x + snapped.max_x) * 0.5
-                    })
-                } else {
-                    None
-                };
-                let y_coord = if (snapped.min_y - unsnapped.min_y).abs() > f64::EPSILON
-                    || (snapped.max_y - unsnapped.max_y).abs() > f64::EPSILON
-                {
-                    Some(if move_top && !move_bottom {
-                        snapped.min_y
-                    } else if move_bottom && !move_top {
-                        snapped.max_y
+                        None
+                    };
+                    let y_coord = if (snapped.min_y - unsnapped.min_y).abs() > f64::EPSILON
+                        || (snapped.max_y - unsnapped.max_y).abs() > f64::EPSILON
+                    {
+                        Some(if move_top && !move_bottom {
+                            snapped.min_y
+                        } else if move_bottom && !move_top {
+                            snapped.max_y
+                        } else {
+                            (snapped.min_y + snapped.max_y) * 0.5
+                        })
                     } else {
-                        (snapped.min_y + snapped.max_y) * 0.5
-                    })
-                } else {
-                    None
-                };
-                guides.extend(rect_snap_guides_for_axes(&snapped, x_coord, y_coord));
-                rect = snapped;
-            }
-            if matches!(snap_mode, RuntimeSnappingMode::Object) {
-                let (snapped, snapped_guides) =
-                    self.object_snap_resize_rect(rect, mode, from_center, &excluded_ids);
-                rect = snapped;
-                guides.extend(snapped_guides);
+                        None
+                    };
+                    guides.extend(rect_snap_guides_for_axes(&snapped, x_coord, y_coord));
+                    rect = snapped;
+                }
+                if matches!(snap_mode, RuntimeSnappingMode::Object) {
+                    let (snapped, snapped_guides) =
+                        self.object_snap_resize_rect(rect, mode, from_center, &excluded_ids);
+                    rect = snapped;
+                    guides.extend(snapped_guides);
+                }
             }
             if let Some(element) = self.element_mut(element_id) {
                 element.rect = Some(rect);
@@ -3185,21 +3187,30 @@ fn is_loop_active(points: &[DrawPoint], threshold: f64) -> bool {
 }
 
 fn arrow_binding_highlight_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>> {
-    let element = selected_arrow_like_element(snapshot)?;
-    let payload_map = decode_json_map(&element.payload)?;
     let mut ids = BTreeSet::new();
-    for key in ["startBinding", "endBinding"] {
-        let Some(binding) = payload_map.get(key).and_then(JsonValue::as_object) else {
-            continue;
-        };
-        let Some(element_id) = binding.get("elementId").and_then(JsonValue::as_str) else {
-            continue;
-        };
-        let trimmed = element_id.trim();
-        if !trimmed.is_empty() {
-            ids.insert(trimmed.to_string());
+    if let Some(global_map) = decode_json_map(&snapshot.global_elements_payload) {
+        if let Some(element_id) = resolve_hover_binding_highlight_id(&global_map) {
+            ids.insert(element_id);
         }
     }
+
+    if let Some(element) = selected_arrow_like_element(snapshot) {
+        if let Some(payload_map) = decode_json_map(&element.payload) {
+            for key in ["startBinding", "endBinding"] {
+                let Some(binding) = payload_map.get(key).and_then(JsonValue::as_object) else {
+                    continue;
+                };
+                let Some(element_id) = binding.get("elementId").and_then(JsonValue::as_str) else {
+                    continue;
+                };
+                let trimmed = element_id.trim();
+                if !trimmed.is_empty() {
+                    ids.insert(trimmed.to_string());
+                }
+            }
+        }
+    }
+
     if ids.is_empty() {
         return None;
     }
@@ -3210,6 +3221,21 @@ fn arrow_binding_highlight_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>>
         JsonValue::Array(ids.into_iter().map(JsonValue::from).collect()),
     );
     serde_json::to_vec(&payload).ok()
+}
+
+fn resolve_hover_binding_highlight_id(map: &JsonMap<String, JsonValue>) -> Option<String> {
+    // Match Dart behavior: hovering an arrow-point handle suppresses binding highlight.
+    if map
+        .get("hoveredArrowHandle")
+        .map_or(false, |value| !value.is_null())
+    {
+        return None;
+    }
+    let hovered = map.get("hoveredBindingElementId")?.as_str()?.trim();
+    if hovered.is_empty() {
+        return None;
+    }
+    Some(hovered.to_string())
 }
 
 fn selected_arrow_like_element(snapshot: &EngineSnapshot) -> Option<&Element> {
@@ -5557,6 +5583,80 @@ mod tests {
     }
 
     #[test]
+    fn frame_plan_emits_arrow_binding_highlight_from_hover_payload_without_selection() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::ClearSelection as i32,
+                payload: None,
+            })
+            .expect("clear selection");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateGlobalElements as i32,
+                payload: Some(CommandPayload::UpdateGlobalElements(
+                    UpdateGlobalElementsCommand {
+                        payload: br#"{"hoveredBindingElementId":"hover-binding-target"}"#.to_vec(),
+                    },
+                )),
+            })
+            .expect("update global payload");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        let binding = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::ArrowBindingHighlight as i32)
+            .expect("binding highlight task");
+        let payload =
+            serde_json::from_slice::<serde_json::Value>(&binding.payload).expect("binding payload");
+        let ids = payload
+            .get("elementIds")
+            .and_then(|value| value.as_array())
+            .expect("binding ids");
+        assert_eq!(ids.len(), 1);
+        assert_eq!(
+            ids.first().and_then(|value| value.as_str()),
+            Some("hover-binding-target")
+        );
+    }
+
+    #[test]
+    fn frame_plan_suppresses_hover_binding_highlight_when_handle_is_hovered() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::ClearSelection as i32,
+                payload: None,
+            })
+            .expect("clear selection");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateGlobalElements as i32,
+                payload: Some(CommandPayload::UpdateGlobalElements(
+                    UpdateGlobalElementsCommand {
+                        payload: br#"{"hoveredBindingElementId":"hover-binding-target","hoveredArrowHandle":{"kind":"turning","index":0}}"#.to_vec(),
+                    },
+                )),
+            })
+            .expect("update global payload");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        assert!(!plan
+            .tasks
+            .iter()
+            .any(|task| task.kind == FrameTaskKind::ArrowBindingHighlight as i32));
+    }
+
+    #[test]
     fn frame_plan_arrow_overlay_emits_loop_handles_for_closed_paths() {
         let mut engine = Engine::default();
         engine
@@ -7382,6 +7482,198 @@ mod tests {
             .expect("snapped resize object");
         assert_eq!(snapped.min_x, 0.0);
         assert_eq!(snapped.max_x, 200.0);
+    }
+
+    #[test]
+    fn resize_edit_from_center_skips_grid_snapping() {
+        let mut engine = Engine::default();
+        assert!(engine.apply_runtime_config_payload(
+            br#"{"grid":{"enabled":true,"size":10.0},"snap":{"enabled":true,"distance":8.0}}"#,
+        ));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "center-grid-target".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create target");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish target");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "resize".to_string(),
+                    position: Some(DrawPoint {
+                        x: 100.0,
+                        y: 50.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"resize","resizeMode":"right"}"#.to_vec(),
+                })),
+            })
+            .expect("start resize");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 103.0,
+                        y: 50.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: br#"{"fromCenter":true,"snapOverride":false}"#.to_vec(),
+                })),
+            })
+            .expect("update resize");
+
+        let unsnapped = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "center-grid-target")
+            .and_then(|entry| entry.rect.clone())
+            .expect("center-grid rect");
+        assert_eq!(unsnapped.min_x, -3.0);
+        assert_eq!(unsnapped.max_x, 123.0);
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        assert!(!plan
+            .tasks
+            .iter()
+            .any(|task| task.kind == FrameTaskKind::SnapGuides as i32));
+    }
+
+    #[test]
+    fn resize_edit_from_center_skips_object_snapping() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "center-object-reference".to_string(),
+                    position: Some(DrawPoint {
+                        x: 200.0,
+                        y: 40.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create reference");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish reference");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "center-object-target".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 40.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create target");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish target");
+
+        assert!(engine.apply_runtime_config_payload(
+            br#"{"grid":{"enabled":false},"snap":{"enabled":true,"distance":8.0}}"#,
+        ));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "resize".to_string(),
+                    position: Some(DrawPoint {
+                        x: 100.0,
+                        y: 80.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"resize","resizeMode":"right"}"#.to_vec(),
+                })),
+            })
+            .expect("start resize");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 197.0,
+                        y: 80.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: br#"{"fromCenter":true,"snapOverride":false}"#.to_vec(),
+                })),
+            })
+            .expect("update resize");
+
+        let unsnapped = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "center-object-target")
+            .and_then(|entry| entry.rect.clone())
+            .expect("center-object rect");
+        assert_eq!(unsnapped.min_x, -97.0);
+        assert_eq!(unsnapped.max_x, 217.0);
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        assert!(!plan
+            .tasks
+            .iter()
+            .any(|task| task.kind == FrameTaskKind::SnapGuides as i32));
     }
 
     #[test]

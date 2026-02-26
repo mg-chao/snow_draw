@@ -35,7 +35,7 @@ Status legend:
 | `finish_text_edit` | implemented | Commits or removes new-empty text as expected. |
 | `cancel_text_edit` | implemented | Cancels text session and removes new draft text. |
 | `start_edit` | partial | `move`/`resize`/`rotate` are implemented; `arrow_point` sessions are now recognized, while advanced/non-core edit types remain reduced. |
-| `update_edit` | partial | `move`/`resize`/`rotate` are implemented; `arrow_point` turning/addable updates are applied with rect+point normalization and endpoint binding cleanup; runtime grid snapping plus object-anchor snapping for move/resize(non-center)/arrow-point honor `snap_override`, while full resize center-snapping gap parity and elbow/curve parity remain deferred. |
+| `update_edit` | partial | `move`/`resize`/`rotate` are implemented; `arrow_point` turning/addable updates are applied with rect+point normalization and endpoint binding cleanup; runtime grid + object-anchor snapping for move/resize/arrow-point follow Dart parity (including center-resize snap suppression) and honor `snap_override`, while advanced elbow/curve edit parity remains deferred. |
 | `finish_edit` | implemented | Closes edit session. |
 | `cancel_edit` | implemented | Reverts to session baseline rect/rotation/payload snapshots. |
 | `set_drag_pending` | implemented | Sets drag-pending interaction state. |
@@ -70,7 +70,7 @@ Status legend:
 | `watermark` | implemented | Emitted when watermark is visible. |
 | `grid` | implemented | Always emitted near the top of the plan (host decides enabled/visibility). |
 | `arrow_point_overlay` | partial | Emitted for single selected arrow/line elements with deterministic handle payloads, mixed normalized/world payload compatibility, plus loop/elbow handle semantics (including elbow fixed-segment flags); curved-segment midpoint fidelity remains deferred. |
-| `arrow_binding_highlight` | partial | Emitted for selected arrow/line bindings; hover/edit-session driven highlight parity remains deferred. |
+| `arrow_binding_highlight` | partial | Emitted for selected arrow/line bindings plus hover-driven `hoveredBindingElementId` payloads (suppressed when `hoveredArrowHandle` is present); full pointer-driven/edit-session parity remains deferred. |
 | `hover_outline` | partial | Emitted when `global_elements_payload.hoverOutline` (or `hoveredElementId`) is present with a valid non-selected target; pointer-driven hover parity remains deferred. |
 | `snap_guides` | partial | Emitted from `global_elements_payload.snapGuides` and from runtime snapping during create/edit sessions (grid + object-anchor point guides); full Dart gap-guide parity remains deferred. |
 
