@@ -395,6 +395,69 @@ impl Engine {
         self.snapshot.clone()
     }
 
+    pub(crate) fn apply_text_metrics_layout(
+        &mut self,
+        element_id: &str,
+        expected_text: &str,
+        measured_width: f64,
+        measured_height: f64,
+    ) -> bool {
+        let Some(element) = self.element_mut(element_id) else {
+            return false;
+        };
+        if normalize_element_type(element.element_type) != ElementType::Text as i32 {
+            return false;
+        }
+
+        let payload_map = decode_json_map(&element.payload)
+            .unwrap_or_else(|| default_element_payload_map(ElementType::Text as i32));
+        let auto_resize = payload_map
+            .get("autoResize")
+            .and_then(JsonValue::as_bool)
+            .unwrap_or(true);
+        if !auto_resize {
+            return false;
+        }
+
+        let current_text = payload_map
+            .get("text")
+            .and_then(JsonValue::as_str)
+            .unwrap_or_default();
+        if current_text != expected_text {
+            return false;
+        }
+
+        let Some(current_rect) = element.rect.as_ref() else {
+            return false;
+        };
+
+        let width = if measured_width.is_finite() && measured_width > 0.0 {
+            measured_width
+        } else {
+            (current_rect.max_x - current_rect.min_x).abs().max(1.0)
+        };
+        let height = if measured_height.is_finite() && measured_height > 0.0 {
+            measured_height
+        } else {
+            fallback_text_metrics_height(&payload_map)
+        };
+
+        let next_rect = DrawRect {
+            min_x: current_rect.min_x,
+            min_y: current_rect.min_y,
+            max_x: current_rect.min_x + width.max(1.0),
+            max_y: current_rect.min_y + height.max(1.0),
+        };
+        if rects_close(current_rect, &next_rect) {
+            return false;
+        }
+
+        element.rect = Some(next_rect);
+        self.snapshot.document_version += 1;
+        self.emit_state_changed();
+        true
+    }
+
     pub fn get_snapshot_bytes(&self) -> Vec<u8> {
         encode_message(&self.snapshot)
     }
@@ -1664,6 +1727,23 @@ fn encode_json_map(map: &JsonMap<String, JsonValue>) -> Vec<u8> {
     serde_json::to_vec(map).unwrap_or_default()
 }
 
+fn fallback_text_metrics_height(payload_map: &JsonMap<String, JsonValue>) -> f64 {
+    let font_size = payload_map
+        .get("fontSize")
+        .and_then(JsonValue::as_f64)
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .unwrap_or(21.0);
+    (font_size * 1.2).max(1.0)
+}
+
+fn rects_close(a: &DrawRect, b: &DrawRect) -> bool {
+    const EPSILON: f64 = 1e-6;
+    (a.min_x - b.min_x).abs() <= EPSILON
+        && (a.min_y - b.min_y).abs() <= EPSILON
+        && (a.max_x - b.max_x).abs() <= EPSILON
+        && (a.max_y - b.max_y).abs() <= EPSILON
+}
+
 fn normalize_style_field_key(element_type: i32, key: &str) -> &str {
     match key {
         "textAlign" => "horizontalAlign",
@@ -2910,6 +2990,51 @@ mod tests {
     }
 
     #[test]
+    fn apply_text_metrics_layout_updates_auto_resize_text_rect() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Text as i32,
+                    element_id: "text-metrics".to_string(),
+                    position: Some(DrawPoint {
+                        x: 10.0,
+                        y: 20.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload:
+                        br#"{"typeId":"text","text":"hello","fontSize":20.0,"autoResize":true}"#
+                            .to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create text");
+        let baseline_version = engine.snapshot.document_version;
+        while engine.poll_event().is_some() {}
+
+        assert!(engine.apply_text_metrics_layout("text-metrics", "hello", 88.0, 24.0));
+        assert!(!engine.apply_text_metrics_layout("text-metrics", "stale", 120.0, 40.0));
+
+        let element = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "text-metrics")
+            .expect("text element");
+        let rect = element.rect.as_ref().expect("text rect");
+        assert!(((rect.max_x - rect.min_x) - 88.0).abs() < 1e-9);
+        assert!(((rect.max_y - rect.min_y) - 24.0).abs() < 1e-9);
+        assert!(engine.snapshot.document_version > baseline_version);
+
+        let event = engine.poll_event().expect("state changed event");
+        assert_eq!(event.kind, EngineEventKind::StateChanged as i32);
+    }
+
+    #[test]
     fn box_select_selects_intersecting_elements() {
         let mut engine = Engine::default();
         engine
@@ -3335,12 +3460,10 @@ mod tests {
             locale_tag: String::new(),
             scale_factor: 1.0,
         });
-        assert!(
-            !plan
-                .tasks
-                .iter()
-                .any(|task| task.kind == FrameTaskKind::HoverOutline as i32)
-        );
+        assert!(!plan
+            .tasks
+            .iter()
+            .any(|task| task.kind == FrameTaskKind::HoverOutline as i32));
     }
 
     #[test]

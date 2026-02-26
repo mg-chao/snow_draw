@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, VecDeque};
 
 use engine_proto as v1;
 use engine_proto::engine_event::Payload as V1EventPayload;
@@ -26,8 +26,23 @@ pub struct EngineV2 {
     engine: Engine,
     outputs: VecDeque<v2::EngineOutput>,
     next_sequence: u64,
+    next_host_request_id: u64,
     locale_tag: String,
     scale_factor: f64,
+    pending_text_metrics: BTreeMap<u64, PendingTextMetricsRequest>,
+}
+
+#[derive(Debug, Clone)]
+struct PendingTextMetricsRequest {
+    element_id: String,
+    expected_text: String,
+}
+
+#[derive(Debug, Clone)]
+struct TextMetricsTarget {
+    element_id: String,
+    expected_text: String,
+    request: v2::TextMetricsRequest,
 }
 
 impl EngineV2 {
@@ -59,8 +74,10 @@ impl EngineV2 {
             engine: Engine::new(config),
             outputs: VecDeque::new(),
             next_sequence: 1,
+            next_host_request_id: 1,
             locale_tag,
             scale_factor,
+            pending_text_metrics: BTreeMap::new(),
         };
 
         engine.push_output(V2OutputPayload::InitAck(v2::EngineInitAck {
@@ -92,7 +109,12 @@ impl EngineV2 {
                     return Ok(());
                 }
 
-                if let Err(error) = self.engine.dispatch_bytes(&event.command_bytes) {
+                let command = v1::decode_message::<v1::EngineCommand>(&event.command_bytes)
+                    .map_err(|error| EngineCoreError::Decode(error.to_string()))?;
+                let command_kind = v1::EngineCommandKind::try_from(command.kind)
+                    .unwrap_or(v1::EngineCommandKind::Unknown);
+
+                if let Err(error) = self.engine.dispatch(command) {
                     self.push_output(V2OutputPayload::Event(v2::EngineEvent {
                         kind: v2::EngineEventKind::Error as i32,
                         sequence: 0,
@@ -109,22 +131,8 @@ impl EngineV2 {
                     self.push_output(V2OutputPayload::Event(convert_event(event)));
                 }
 
-                let snapshot = self.engine.get_snapshot();
-                self.push_output(V2OutputPayload::Snapshot(convert_snapshot(
-                    snapshot.clone(),
-                )));
-                self.push_output(V2OutputPayload::StateDelta(v2::EngineStateDelta {
-                    document_version: snapshot.document_version,
-                    selection_version: snapshot.selection_version,
-                    changed_element_ids: canonical_changed_element_ids(&snapshot),
-                }));
-
-                let plan = self.engine.build_frame_plan(v1::FramePlanRequest {
-                    viewport: None,
-                    locale_tag: self.locale_tag.clone(),
-                    scale_factor: self.scale_factor,
-                });
-                self.push_output(V2OutputPayload::FramePlan(convert_frame_plan(plan)));
+                let snapshot = self.emit_snapshot_state_and_frame();
+                self.maybe_emit_text_metrics_requests(command_kind, &snapshot);
             }
             V2InputPayload::ConfigEvent(event) => {
                 if !event.locale_tag.trim().is_empty() {
@@ -160,22 +168,7 @@ impl EngineV2 {
                 }));
             }
             V2InputPayload::TextMetricsResponse(response) => {
-                if response.ok {
-                    self.push_debug(format!(
-                        "engine_v2 text metrics response accepted (request_id={})",
-                        response.request_id
-                    ));
-                } else {
-                    let details = response
-                        .error
-                        .as_ref()
-                        .map(|error| error.message.clone())
-                        .unwrap_or_else(|| "unknown text metrics host error".to_string());
-                    self.push_debug(format!(
-                        "engine_v2 text metrics response rejected (request_id={}, reason={details})",
-                        response.request_id
-                    ));
-                }
+                self.handle_text_metrics_response(response);
             }
         }
 
@@ -188,6 +181,104 @@ impl EngineV2 {
 
     pub fn poll_output_bytes(&mut self) -> Option<Vec<u8>> {
         self.poll_output().map(|output| v2::encode_message(&output))
+    }
+
+    fn emit_snapshot_state_and_frame(&mut self) -> v1::EngineSnapshot {
+        let snapshot = self.engine.get_snapshot();
+        self.push_output(V2OutputPayload::Snapshot(convert_snapshot(
+            snapshot.clone(),
+        )));
+        self.push_output(V2OutputPayload::StateDelta(v2::EngineStateDelta {
+            document_version: snapshot.document_version,
+            selection_version: snapshot.selection_version,
+            changed_element_ids: canonical_changed_element_ids(&snapshot),
+        }));
+
+        let plan = self.engine.build_frame_plan(v1::FramePlanRequest {
+            viewport: None,
+            locale_tag: self.locale_tag.clone(),
+            scale_factor: self.scale_factor,
+        });
+        self.push_output(V2OutputPayload::FramePlan(convert_frame_plan(plan)));
+        snapshot
+    }
+
+    fn next_text_metrics_request_id(&mut self) -> u64 {
+        let request_id = self.next_host_request_id;
+        self.next_host_request_id = self.next_host_request_id.saturating_add(1);
+        request_id
+    }
+
+    fn maybe_emit_text_metrics_requests(
+        &mut self,
+        command_kind: v1::EngineCommandKind,
+        snapshot: &v1::EngineSnapshot,
+    ) {
+        let targets =
+            collect_text_metrics_targets(snapshot, command_kind, self.locale_tag.as_str());
+        for target in targets {
+            self.pending_text_metrics
+                .retain(|_, pending| pending.element_id != target.element_id);
+
+            let request_id = self.next_text_metrics_request_id();
+            self.pending_text_metrics.insert(
+                request_id,
+                PendingTextMetricsRequest {
+                    element_id: target.element_id.clone(),
+                    expected_text: target.expected_text.clone(),
+                },
+            );
+
+            self.push_output(V2OutputPayload::HostRequest(v2::HostRequest {
+                request_id,
+                payload: Some(v2::host_request::Payload::TextMetricsRequest(
+                    target.request,
+                )),
+            }));
+        }
+    }
+
+    fn handle_text_metrics_response(&mut self, response: v2::TextMetricsResponse) {
+        let Some(pending) = self.pending_text_metrics.remove(&response.request_id) else {
+            self.push_debug(format!(
+                "engine_v2 text metrics response ignored (unknown request_id={})",
+                response.request_id
+            ));
+            return;
+        };
+
+        if !response.ok {
+            let details = response
+                .error
+                .as_ref()
+                .map(|error| error.message.clone())
+                .unwrap_or_else(|| "unknown text metrics host error".to_string());
+            self.push_debug(format!(
+                "engine_v2 text metrics response rejected (request_id={}, reason={details})",
+                response.request_id
+            ));
+            return;
+        }
+
+        let Some(metrics) = response.metrics else {
+            self.push_debug(format!(
+                "engine_v2 text metrics response missing metrics (request_id={})",
+                response.request_id
+            ));
+            return;
+        };
+
+        if self.engine.apply_text_metrics_layout(
+            pending.element_id.as_str(),
+            pending.expected_text.as_str(),
+            metrics.width,
+            metrics.height,
+        ) {
+            while let Some(event) = self.engine.poll_event() {
+                self.push_output(V2OutputPayload::Event(convert_event(event)));
+            }
+            let _ = self.emit_snapshot_state_and_frame();
+        }
     }
 
     fn push_debug(&mut self, message: impl Into<String>) {
@@ -216,6 +307,78 @@ fn canonical_changed_element_ids(snapshot: &v1::EngineSnapshot) -> Vec<String> {
     changed.sort();
     changed.dedup();
     changed
+}
+
+fn collect_text_metrics_targets(
+    snapshot: &v1::EngineSnapshot,
+    command_kind: v1::EngineCommandKind,
+    locale_tag: &str,
+) -> Vec<TextMetricsTarget> {
+    match command_kind {
+        v1::EngineCommandKind::StartTextEdit | v1::EngineCommandKind::UpdateTextEdit => {
+            let Some(selected_id) = snapshot.selected_ids.first() else {
+                return Vec::new();
+            };
+            snapshot
+                .elements
+                .iter()
+                .find(|element| element.id == *selected_id)
+                .and_then(|element| build_text_metrics_target(element, locale_tag, false))
+                .into_iter()
+                .collect()
+        }
+        v1::EngineCommandKind::RefreshAutoResizeTextLayoutsAfterFontLoad => snapshot
+            .elements
+            .iter()
+            .filter_map(|element| build_text_metrics_target(element, locale_tag, false))
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn build_text_metrics_target(
+    element: &v1::Element,
+    locale_tag: &str,
+    is_resizing: bool,
+) -> Option<TextMetricsTarget> {
+    if V1ElementType::try_from(element.element_type).unwrap_or(V1ElementType::Unknown)
+        != V1ElementType::Text
+    {
+        return None;
+    }
+
+    let payload = decode_json_object(&element.payload)?;
+    let auto_resize = payload
+        .get("autoResize")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(true);
+    if !auto_resize {
+        return None;
+    }
+
+    let text = json_string(&payload, "text", "");
+    let font_size = json_f64(&payload, "fontSize", 21.0);
+    let font_family = json_string(&payload, "fontFamily", "");
+    let max_width = element
+        .rect
+        .as_ref()
+        .map(|rect| (rect.max_x - rect.min_x).abs())
+        .filter(|width| width.is_finite() && *width > 0.0)
+        .unwrap_or(4096.0);
+
+    Some(TextMetricsTarget {
+        element_id: element.id.clone(),
+        expected_text: text.clone(),
+        request: v2::TextMetricsRequest {
+            text,
+            font_size,
+            font_family,
+            max_width,
+            min_width: 0.0,
+            locale_tag: locale_tag.to_string(),
+            is_resizing,
+        },
+    })
 }
 
 fn convert_event(event: v1::EngineEvent) -> v2::EngineEvent {
@@ -464,6 +627,7 @@ mod tests {
     use engine_proto::engine_command::Payload as V1CommandPayload;
     use engine_proto::{
         CreateElementCommand, DrawPoint, ElementType, EngineCommand, EngineCommandKind,
+        StartTextEditCommand, UpdateTextEditCommand,
     };
 
     use super::*;
@@ -551,5 +715,169 @@ mod tests {
             }
             _ => panic!("expected host request output"),
         }
+    }
+
+    #[test]
+    fn update_text_edit_emits_text_metrics_host_request() {
+        let mut engine = EngineV2::from_init_request(v2::default_init_request());
+        let _ = engine.poll_output();
+
+        let start = EngineCommand {
+            kind: EngineCommandKind::StartTextEdit as i32,
+            payload: Some(V1CommandPayload::StartTextEdit(StartTextEditCommand {
+                element_id: String::new(),
+                position: Some(DrawPoint {
+                    x: 10.0,
+                    y: 20.0,
+                    pressure: 0.0,
+                    timestamp_us: 0,
+                }),
+            })),
+        };
+        engine
+            .process_input(v2::EngineInput {
+                sequence: 1,
+                payload: Some(V2InputPayload::CommandEvent(v2::CommandEvent {
+                    command_bytes: v1::encode_message(&start),
+                })),
+            })
+            .expect("start text edit");
+        while engine.poll_output().is_some() {}
+
+        let update = EngineCommand {
+            kind: EngineCommandKind::UpdateTextEdit as i32,
+            payload: Some(V1CommandPayload::UpdateTextEdit(UpdateTextEditCommand {
+                text: "metrics".to_string(),
+                rect: None,
+            })),
+        };
+        engine
+            .process_input(v2::EngineInput {
+                sequence: 2,
+                payload: Some(V2InputPayload::CommandEvent(v2::CommandEvent {
+                    command_bytes: v1::encode_message(&update),
+                })),
+            })
+            .expect("update text edit");
+
+        let mut found_request: Option<(u64, v2::TextMetricsRequest)> = None;
+        while let Some(output) = engine.poll_output() {
+            let Some(V2OutputPayload::HostRequest(request)) = output.payload else {
+                continue;
+            };
+            if let Some(v2::host_request::Payload::TextMetricsRequest(payload)) = request.payload {
+                found_request = Some((request.request_id, payload));
+            }
+        }
+
+        let (request_id, request) = found_request.expect("text metrics host request");
+        assert!(request_id > 0);
+        assert_eq!(request.text, "metrics");
+        assert!((request.font_size - 21.0).abs() < 1e-9);
+        assert!((request.max_width - 160.0).abs() < 1e-9);
+    }
+
+    #[test]
+    fn text_metrics_response_updates_snapshot_layout() {
+        let mut engine = EngineV2::from_init_request(v2::default_init_request());
+        let _ = engine.poll_output();
+
+        let start = EngineCommand {
+            kind: EngineCommandKind::StartTextEdit as i32,
+            payload: Some(V1CommandPayload::StartTextEdit(StartTextEditCommand {
+                element_id: String::new(),
+                position: Some(DrawPoint {
+                    x: 24.0,
+                    y: 36.0,
+                    pressure: 0.0,
+                    timestamp_us: 0,
+                }),
+            })),
+        };
+        engine
+            .process_input(v2::EngineInput {
+                sequence: 10,
+                payload: Some(V2InputPayload::CommandEvent(v2::CommandEvent {
+                    command_bytes: v1::encode_message(&start),
+                })),
+            })
+            .expect("start text edit");
+
+        let mut edited_id = String::new();
+        while let Some(output) = engine.poll_output() {
+            if let Some(V2OutputPayload::Snapshot(snapshot)) = output.payload {
+                edited_id = snapshot.selected_ids.first().cloned().unwrap_or_default();
+            }
+        }
+        assert!(!edited_id.is_empty());
+
+        let update = EngineCommand {
+            kind: EngineCommandKind::UpdateTextEdit as i32,
+            payload: Some(V1CommandPayload::UpdateTextEdit(UpdateTextEditCommand {
+                text: "hello-v2".to_string(),
+                rect: None,
+            })),
+        };
+        engine
+            .process_input(v2::EngineInput {
+                sequence: 11,
+                payload: Some(V2InputPayload::CommandEvent(v2::CommandEvent {
+                    command_bytes: v1::encode_message(&update),
+                })),
+            })
+            .expect("update text edit");
+
+        let mut request_id = None;
+        while let Some(output) = engine.poll_output() {
+            let Some(V2OutputPayload::HostRequest(request)) = output.payload else {
+                continue;
+            };
+            if matches!(
+                request.payload,
+                Some(v2::host_request::Payload::TextMetricsRequest(_))
+            ) {
+                request_id = Some(request.request_id);
+            }
+        }
+        let request_id = request_id.expect("request id");
+
+        engine
+            .process_input(v2::EngineInput {
+                sequence: 12,
+                payload: Some(V2InputPayload::TextMetricsResponse(
+                    v2::TextMetricsResponse {
+                        request_id,
+                        ok: true,
+                        metrics: Some(v2::TextMetricsResult {
+                            width: 88.0,
+                            height: 24.0,
+                            line_height: 24.0,
+                            lines: vec![v2::TextMetricsLine {
+                                width: 88.0,
+                                height: 24.0,
+                            }],
+                        }),
+                        error: None,
+                    },
+                )),
+            })
+            .expect("text metrics response");
+
+        let mut snapshot_after_response = None;
+        while let Some(output) = engine.poll_output() {
+            if let Some(V2OutputPayload::Snapshot(snapshot)) = output.payload {
+                snapshot_after_response = Some(snapshot);
+            }
+        }
+
+        let snapshot = snapshot_after_response.expect("snapshot after response");
+        let text = snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == edited_id)
+            .expect("text element in snapshot");
+        let rect = text.rect.as_ref().expect("text rect");
+        assert!(((rect.max_x - rect.min_x) - 88.0).abs() < 1e-9);
+        assert!(((rect.max_y - rect.min_y) - 24.0).abs() < 1e-9);
     }
 }

@@ -31,7 +31,7 @@ Status legend:
 | `create_serial_number_text_elements` | partial | Creates companion text elements with simplified layout defaults. |
 | `start_text_edit` | implemented | Opens/creates text edit session. |
 | `update_text_edit` | implemented | Updates text payload and optional rect. |
-| `refresh_auto_resize_text_layouts_after_font_load` | partial | Currently treated as no-op state refresh. |
+| `refresh_auto_resize_text_layouts_after_font_load` | partial | V2 runtime now emits text-metrics host requests for auto-resize text elements and applies response-driven layout updates; direct v1-only flow remains a no-op refresh. |
 | `finish_text_edit` | implemented | Commits or removes new-empty text as expected. |
 | `cancel_text_edit` | implemented | Cancels text session and removes new draft text. |
 | `start_edit` | partial | `move`/`resize`/`rotate` are implemented; non-core operation types resolve to unknown. |
@@ -82,5 +82,5 @@ Status legend:
 | `pointer_event -> host_request` | implemented | Forwarded as typed host request. |
 | `keyboard_event -> host_request` | implemented | Forwarded as typed host request. |
 | `tool_event -> host_request` | implemented | Forwarded as typed host request. |
-| `text_metrics_request` generation | missing | Rust runtime currently consumes responses but does not originate requests yet. |
-| `text_metrics_response` handling | partial | Response is acknowledged and logged; no downstream metrics-driven layout mutation yet. |
+| `text_metrics_request` generation | implemented | Runtime emits typed text-metrics host requests for `start_text_edit`, `update_text_edit`, and font-load refresh flows. |
+| `text_metrics_response` handling | implemented | Successful responses update auto-resize text layout bounds (with stale-request guards) and emit snapshot/state/frame outputs. |
