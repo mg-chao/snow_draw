@@ -23,6 +23,44 @@ void main() {
   });
 
   test(
+    'RustDrawStore encodes includeSelectionInHistory in runtime config payload',
+    () {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+      final context = DrawContext.withDefaults(elementRegistry: registry);
+
+      final defaultEngine = _ConfigCaptureRustCanvasEngine();
+      final defaultStore = RustDrawStore(
+        context: context,
+        engine: defaultEngine,
+      );
+      addTearDown(defaultStore.dispose);
+      final defaultRuntimeConfig = defaultEngine.latestRuntimeConfig();
+      expect(defaultRuntimeConfig['history'], isA<Map<String, Object?>>());
+      expect(
+        (defaultRuntimeConfig['history']
+            as Map<String, Object?>)['includeSelection'],
+        isFalse,
+      );
+
+      final enabledEngine = _ConfigCaptureRustCanvasEngine();
+      final enabledStore = RustDrawStore(
+        context: context,
+        engine: enabledEngine,
+        includeSelectionInHistory: true,
+      );
+      addTearDown(enabledStore.dispose);
+      final enabledRuntimeConfig = enabledEngine.latestRuntimeConfig();
+      expect(enabledRuntimeConfig['history'], isA<Map<String, Object?>>());
+      expect(
+        (enabledRuntimeConfig['history']
+            as Map<String, Object?>)['includeSelection'],
+        isTrue,
+      );
+    },
+  );
+
+  test(
     'RustDrawStore hydrates non-empty initialState through V2 config bootstrap',
     () {
       final registry = DefaultElementRegistry();
@@ -403,6 +441,87 @@ proto_v2.Element _textElementPayload({
     text: proto_v2.TextPayload(text: text, fontSize: 21.0, fontFamily: ''),
   ),
 );
+
+final class _ConfigCaptureRustCanvasEngine implements RustCanvasEngine {
+  _ConfigCaptureRustCanvasEngine() {
+    _outputs.add(
+      Uint8List.fromList(
+        proto_v2.EngineOutput(
+          sequence: $fixnum.Int64(0),
+          initAck: proto_v2.EngineInitAck(
+            abiVersion: 2,
+            schemaVersion: 2,
+            grantedCapabilitiesMask: $fixnum.Int64(0x1F),
+            message: 'ok',
+          ),
+        ).writeToBuffer(),
+      ),
+    );
+  }
+
+  final _outputs = <Uint8List>[];
+  final _runtimeConfigPayloads = <Uint8List>[];
+
+  Map<String, Object?> latestRuntimeConfig() {
+    expect(_runtimeConfigPayloads, isNotEmpty);
+    final decoded = jsonDecode(utf8.decode(_runtimeConfigPayloads.last));
+    expect(decoded, isA<Map>());
+    return (decoded as Map).cast<String, Object?>();
+  }
+
+  @override
+  int get abiVersion => 2;
+
+  @override
+  int get capabilities => 0;
+
+  @override
+  void processInputV2(Uint8List inputBytes) {
+    final input = proto_v2.EngineInput.fromBuffer(inputBytes);
+    if (input.whichPayload() != proto_v2.EngineInput_Payload.configEvent) {
+      return;
+    }
+    _runtimeConfigPayloads.add(
+      Uint8List.fromList(input.configEvent.configPayload),
+    );
+  }
+
+  @override
+  Uint8List? pollOutputV2() {
+    if (_outputs.isEmpty) {
+      return null;
+    }
+    return _outputs.removeAt(0);
+  }
+
+  @override
+  void dispose() {}
+
+  @override
+  void dispatch(Uint8List commandBytes) {
+    throw UnimplementedError();
+  }
+
+  @override
+  void dispatchBatch(List<Uint8List> commandBatch) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Uint8List getSnapshotBytes() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Uint8List buildFramePlanBytes(Uint8List requestBytes) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Uint8List? pollEventBytes() {
+    throw UnimplementedError();
+  }
+}
 
 final class _ScriptedRustCanvasEngine implements RustCanvasEngine {
   _ScriptedRustCanvasEngine(this._snapshotForCommand) {

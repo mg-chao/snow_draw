@@ -75,6 +75,7 @@ impl EngineCoreError {
 pub struct Engine {
     config: EngineConfig,
     runtime_snap_config: RuntimeSnapConfig,
+    runtime_history_config: RuntimeHistoryConfig,
     runtime_style_defaults: RuntimeStyleDefaults,
     runtime_snap_guides: Vec<JsonValue>,
     snapshot: EngineSnapshot,
@@ -193,6 +194,24 @@ struct RuntimeSnapConfigPatch {
     object_distance: Option<f64>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct RuntimeHistoryConfig {
+    include_selection: bool,
+}
+
+impl Default for RuntimeHistoryConfig {
+    fn default() -> Self {
+        Self {
+            include_selection: true,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct RuntimeHistoryConfigPatch {
+    include_selection: Option<bool>,
+}
+
 #[derive(Debug, Clone, PartialEq, Default)]
 struct RuntimeStyleDefaults {
     by_element_type: BTreeMap<i32, JsonMap<String, JsonValue>>,
@@ -287,6 +306,7 @@ impl Engine {
         Self {
             config,
             runtime_snap_config: RuntimeSnapConfig::default(),
+            runtime_history_config: RuntimeHistoryConfig::default(),
             runtime_style_defaults: RuntimeStyleDefaults::default(),
             runtime_snap_guides: Vec::new(),
             snapshot,
@@ -326,17 +346,23 @@ impl Engine {
         match kind {
             EngineCommandKind::SelectElement => {
                 let payload = extract_select_payload(kind, command.payload)?;
-                self.record_history();
+                if self.runtime_history_config.include_selection {
+                    self.record_history();
+                }
                 self.apply_select(payload);
                 self.emit_state_changed();
             }
             EngineCommandKind::ClearSelection => {
-                self.record_history();
+                if self.runtime_history_config.include_selection {
+                    self.record_history();
+                }
                 self.apply_clear_selection();
                 self.emit_state_changed();
             }
             EngineCommandKind::SelectAll => {
-                self.record_history();
+                if self.runtime_history_config.include_selection {
+                    self.record_history();
+                }
                 self.apply_select_all();
                 self.emit_state_changed();
             }
@@ -566,6 +592,9 @@ impl Engine {
         let mut changed = false;
         if let Some(snapshot) = extract_bootstrap_snapshot_from_map(&mut map) {
             changed |= self.apply_bootstrap_snapshot(snapshot);
+        }
+        if let Some(patch) = extract_runtime_history_config_patch(&map) {
+            changed |= self.apply_runtime_history_config_patch(patch);
         }
         if let Some(patch) = extract_runtime_snap_config_patch(&mut map) {
             changed |= self.apply_runtime_snap_config_patch(patch);
@@ -842,6 +871,21 @@ impl Engine {
         self.sync_history_lengths();
     }
 
+    fn apply_runtime_history_config_patch(&mut self, patch: RuntimeHistoryConfigPatch) -> bool {
+        let mut next = self.runtime_history_config;
+        let mut changed = false;
+        if let Some(value) = patch.include_selection {
+            if next.include_selection != value {
+                next.include_selection = value;
+                changed = true;
+            }
+        }
+        if changed {
+            self.runtime_history_config = next;
+        }
+        changed
+    }
+
     fn apply_runtime_snap_config_patch(&mut self, patch: RuntimeSnapConfigPatch) -> bool {
         let mut next = self.runtime_snap_config;
         let mut changed = false;
@@ -990,7 +1034,8 @@ impl Engine {
         if max_distance <= 0.0 || !max_distance.is_finite() {
             return ObjectSnapResult::default();
         }
-        if !self.runtime_snap_config.object_point_enabled && !self.runtime_snap_config.object_gap_enabled
+        if !self.runtime_snap_config.object_point_enabled
+            && !self.runtime_snap_config.object_gap_enabled
         {
             return ObjectSnapResult::default();
         }
@@ -3850,8 +3895,12 @@ fn best_gap_match(
 
     let target_start = axis_rect_min(target_rect, axis);
     let target_size = axis_rect_size(target_rect, axis);
-    let before_neighbor =
-        closest_gap_neighbor(target_rect, &overlapping, axis, GapNeighborDirection::Before);
+    let before_neighbor = closest_gap_neighbor(
+        target_rect,
+        &overlapping,
+        axis,
+        GapNeighborDirection::Before,
+    );
     let after_neighbor =
         closest_gap_neighbor(target_rect, &overlapping, axis, GapNeighborDirection::After);
 
@@ -4032,7 +4081,10 @@ fn maybe_push_gap_candidate(
     candidates.push(candidate);
 }
 
-fn select_best_gap_candidate(candidates: &[GapCandidate], max_distance: f64) -> Option<GapCandidate> {
+fn select_best_gap_candidate(
+    candidates: &[GapCandidate],
+    max_distance: f64,
+) -> Option<GapCandidate> {
     let mut best = None;
     for candidate in candidates {
         if best
@@ -4045,11 +4097,7 @@ fn select_best_gap_candidate(candidates: &[GapCandidate], max_distance: f64) -> 
     best
 }
 
-fn is_better_gap_candidate(
-    left: &GapCandidate,
-    right: &GapCandidate,
-    max_distance: f64,
-) -> bool {
+fn is_better_gap_candidate(left: &GapCandidate, right: &GapCandidate, max_distance: f64) -> bool {
     let left_strength = gap_candidate_strength(left, max_distance);
     let right_strength = gap_candidate_strength(right, max_distance);
     let strength_delta = left_strength - right_strength;
@@ -4352,6 +4400,52 @@ fn snap_rect_to_grid(rect: &DrawRect, grid_size: f64) -> DrawRect {
     })
 }
 
+fn extract_runtime_history_config_patch(
+    map: &JsonMap<String, JsonValue>,
+) -> Option<RuntimeHistoryConfigPatch> {
+    if let Some(runtime) = map.get(RUNTIME_CONFIG_KEY).and_then(JsonValue::as_object) {
+        if let Some(patch) = runtime_history_config_patch_from_map(runtime) {
+            return Some(patch);
+        }
+    }
+    if let Some(runtime) = map.get("runtime").and_then(JsonValue::as_object) {
+        if let Some(patch) = runtime_history_config_patch_from_map(runtime) {
+            return Some(patch);
+        }
+    }
+    runtime_history_config_patch_from_map(map)
+}
+
+fn runtime_history_config_patch_from_map(
+    map: &JsonMap<String, JsonValue>,
+) -> Option<RuntimeHistoryConfigPatch> {
+    let mut patch = RuntimeHistoryConfigPatch::default();
+    let mut found = false;
+
+    if let Some(history) = map.get("history").and_then(JsonValue::as_object) {
+        if let Some(include_selection) =
+            history.get("includeSelection").and_then(JsonValue::as_bool)
+        {
+            patch.include_selection = Some(include_selection);
+            found = true;
+        }
+    }
+
+    if let Some(include_selection) = map
+        .get("includeSelectionInHistory")
+        .and_then(JsonValue::as_bool)
+    {
+        patch.include_selection = Some(include_selection);
+        found = true;
+    }
+
+    if found {
+        Some(patch)
+    } else {
+        None
+    }
+}
+
 fn extract_runtime_snap_config_patch(
     map: &mut JsonMap<String, JsonValue>,
 ) -> Option<RuntimeSnapConfigPatch> {
@@ -4501,7 +4595,10 @@ fn runtime_snap_config_patch_from_map(
         patch.object_distance = Some(distance);
         found = true;
     }
-    if let Some(enabled) = map.get("objectSnapPointEnabled").and_then(JsonValue::as_bool) {
+    if let Some(enabled) = map
+        .get("objectSnapPointEnabled")
+        .and_then(JsonValue::as_bool)
+    {
         patch.object_point_enabled = Some(enabled);
         found = true;
     }
@@ -7425,14 +7522,16 @@ mod tests {
         assert!(engine.runtime_snap_config.object_point_enabled);
         assert!(engine.runtime_snap_config.object_gap_enabled);
 
-        let changed = engine
-            .apply_runtime_config_payload(br#"{"snap":{"enablePointSnaps":false,"enableGapSnaps":true}}"#);
+        let changed = engine.apply_runtime_config_payload(
+            br#"{"snap":{"enablePointSnaps":false,"enableGapSnaps":true}}"#,
+        );
         assert!(changed);
         assert!(!engine.runtime_snap_config.object_point_enabled);
         assert!(engine.runtime_snap_config.object_gap_enabled);
 
-        let changed_again = engine
-            .apply_runtime_config_payload(br#"{"snap":{"enablePointSnaps":false,"enableGapSnaps":true}}"#);
+        let changed_again = engine.apply_runtime_config_payload(
+            br#"{"snap":{"enablePointSnaps":false,"enableGapSnaps":true}}"#,
+        );
         assert!(!changed_again);
 
         let legacy_changed = engine.apply_runtime_config_payload(
@@ -7441,6 +7540,84 @@ mod tests {
         assert!(legacy_changed);
         assert!(engine.runtime_snap_config.object_point_enabled);
         assert!(!engine.runtime_snap_config.object_gap_enabled);
+    }
+
+    #[test]
+    fn runtime_config_payload_updates_history_selection_toggle() {
+        let mut engine = Engine::default();
+        assert!(engine.runtime_history_config.include_selection);
+
+        let changed =
+            engine.apply_runtime_config_payload(br#"{"history":{"includeSelection":false}}"#);
+        assert!(changed);
+        assert!(!engine.runtime_history_config.include_selection);
+
+        let changed_again =
+            engine.apply_runtime_config_payload(br#"{"history":{"includeSelection":false}}"#);
+        assert!(!changed_again);
+
+        let runtime_config_changed = engine.apply_runtime_config_payload(
+            br#"{"__runtimeConfig":{"history":{"includeSelection":true}}}"#,
+        );
+        assert!(runtime_config_changed);
+        assert!(engine.runtime_history_config.include_selection);
+
+        let legacy_changed =
+            engine.apply_runtime_config_payload(br#"{"includeSelectionInHistory":false}"#);
+        assert!(legacy_changed);
+        assert!(!engine.runtime_history_config.include_selection);
+    }
+
+    #[test]
+    fn selection_commands_respect_runtime_history_selection_toggle() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(create_command(
+                "history-selection-target",
+                ElementType::Rectangle,
+            ))
+            .expect("create");
+        assert_eq!(engine.snapshot.history_undo_len, 1);
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::ClearHistory as i32,
+                payload: None,
+            })
+            .expect("clear history");
+        assert_eq!(engine.snapshot.history_undo_len, 0);
+
+        assert!(engine.apply_runtime_config_payload(br#"{"history":{"includeSelection":false}}"#,));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::ClearSelection as i32,
+                payload: None,
+            })
+            .expect("clear selection");
+        assert_eq!(engine.snapshot.history_undo_len, 0);
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::SelectElement as i32,
+                payload: Some(CommandPayload::SelectElement(SelectElementCommand {
+                    element_id: "history-selection-target".to_string(),
+                    add_to_selection: false,
+                    position: None,
+                })),
+            })
+            .expect("select element");
+        assert_eq!(engine.snapshot.history_undo_len, 0);
+
+        assert!(engine.apply_runtime_config_payload(br#"{"history":{"includeSelection":true}}"#,));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::ClearSelection as i32,
+                payload: None,
+            })
+            .expect("clear selection with history");
+        assert_eq!(engine.snapshot.history_undo_len, 1);
     }
 
     #[test]

@@ -29,6 +29,7 @@ DrawStore createDrawStore({
   return RustDrawStore(
     context: context,
     initialState: initialState,
+    includeSelectionInHistory: includeSelectionInHistory,
     eventBus: eventBus,
     engine: engine,
     engineConfigBytes: engineConfigBytes,

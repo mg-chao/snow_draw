@@ -62,11 +62,13 @@ class RustDrawStore implements DrawStore {
   RustDrawStore({
     required DrawContext context,
     DrawState? initialState,
+    bool includeSelectionInHistory = false,
     EventBus? eventBus,
     RustCanvasEngine? engine,
     Uint8List? engineConfigBytes,
   }) : _ownsEventBus = eventBus == null && context.eventBus == null,
        _eventBus = eventBus ?? context.eventBus ?? EventBus(),
+       _includeSelectionInHistory = includeSelectionInHistory,
        _engine = engine ?? _createV2Engine(engineConfigBytes) {
     this.context = context.eventBus == _eventBus
         ? context
@@ -105,6 +107,7 @@ class RustDrawStore implements DrawStore {
   late final ListenerRegistry _listenerRegistry;
   final EventBus _eventBus;
   final bool _ownsEventBus;
+  final bool _includeSelectionInHistory;
   final RustCanvasEngine _engine;
   var _nextInputSequence = 1;
 
@@ -303,7 +306,10 @@ class RustDrawStore implements DrawStore {
 
   void _pushRuntimeConfigEvent() {
     final input = _RustProtoCodec.encodeInputConfigEvent(
-      _RustProtoCodec.encodeRuntimeConfigPayload(_configManager.current),
+      _RustProtoCodec.encodeRuntimeConfigPayload(
+        _configManager.current,
+        includeSelectionInHistory: _includeSelectionInHistory,
+      ),
       sequence: _nextSequence(),
     );
     _engine.processInputV2(input);
@@ -1868,32 +1874,33 @@ final class _RustProtoCodec {
     'textStrokeWidth': style.textStrokeWidth,
   };
 
-  static Uint8List encodeRuntimeConfigPayload(DrawConfig config) =>
-      Uint8List.fromList(
-        utf8.encode(
-          jsonEncode({
-            'grid': {'enabled': config.grid.enabled, 'size': config.grid.size},
-            'snap': {
-              'enabled': config.snap.enabled,
-              'distance': config.snap.distance,
-              'enablePointSnaps': config.snap.enablePointSnaps,
-              'enableGapSnaps': config.snap.enableGapSnaps,
-            },
-            'styles': {
-              'rectangle': _encodeElementStyleConfig(config.rectangleStyle),
-              'arrow': _encodeElementStyleConfig(config.arrowStyle),
-              'line': _encodeElementStyleConfig(config.lineStyle),
-              'freeDraw': _encodeElementStyleConfig(config.freeDrawStyle),
-              'text': _encodeElementStyleConfig(config.textStyle),
-              'serialNumber': _encodeElementStyleConfig(
-                config.serialNumberStyle,
-              ),
-              'filter': _encodeElementStyleConfig(config.filterStyle),
-              'highlight': _encodeElementStyleConfig(config.highlightStyle),
-            },
-          }),
-        ),
-      );
+  static Uint8List encodeRuntimeConfigPayload(
+    DrawConfig config, {
+    required bool includeSelectionInHistory,
+  }) => Uint8List.fromList(
+    utf8.encode(
+      jsonEncode({
+        'grid': {'enabled': config.grid.enabled, 'size': config.grid.size},
+        'snap': {
+          'enabled': config.snap.enabled,
+          'distance': config.snap.distance,
+          'enablePointSnaps': config.snap.enablePointSnaps,
+          'enableGapSnaps': config.snap.enableGapSnaps,
+        },
+        'history': {'includeSelection': includeSelectionInHistory},
+        'styles': {
+          'rectangle': _encodeElementStyleConfig(config.rectangleStyle),
+          'arrow': _encodeElementStyleConfig(config.arrowStyle),
+          'line': _encodeElementStyleConfig(config.lineStyle),
+          'freeDraw': _encodeElementStyleConfig(config.freeDrawStyle),
+          'text': _encodeElementStyleConfig(config.textStyle),
+          'serialNumber': _encodeElementStyleConfig(config.serialNumberStyle),
+          'filter': _encodeElementStyleConfig(config.filterStyle),
+          'highlight': _encodeElementStyleConfig(config.highlightStyle),
+        },
+      }),
+    ),
+  );
 
   static Uint8List encodeBootstrapSnapshotConfig(DrawState state) {
     final elements = [...state.domain.document.elements]
