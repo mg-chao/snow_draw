@@ -4,6 +4,7 @@
 melos_snow_draw_workspace.iml
 build
 .worktrees/
+rust-canvas-engine/target
 
 # Agents
 .claude
