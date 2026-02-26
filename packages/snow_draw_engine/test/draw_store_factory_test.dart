@@ -8,35 +8,6 @@ void main() {
     return DrawContext.withDefaults(elementRegistry: registry);
   }
 
-  test('auto backend falls back to legacy store when Rust init fails', () {
-    final context = createContext();
-    final nonEmptyState = DrawState(
-      domain: DomainState(
-        document: DocumentState(
-          elements: const [
-            ElementState(
-              id: 'e1',
-              rect: DrawRect(maxX: 10, maxY: 10),
-              rotation: 0,
-              opacity: 1,
-              zIndex: 0,
-              data: RectangleData(),
-            ),
-          ],
-        ),
-      ),
-    );
-
-    final store = createDrawStore(
-      context: context,
-      initialState: nonEmptyState,
-      backend: DrawStoreBackend.auto,
-    );
-
-    expect(store, isA<DefaultDrawStore>());
-    (store as DefaultDrawStore).dispose();
-  });
-
   test('rust backend propagates initialization error', () {
     final context = createContext();
     final nonEmptyState = DrawState(
@@ -70,15 +41,5 @@ void main() {
         ),
       ),
     );
-  });
-
-  test('legacy backend always creates DefaultDrawStore', () {
-    final context = createContext();
-    final store = createDrawStore(
-      context: context,
-      backend: DrawStoreBackend.legacyDart,
-    );
-    expect(store, isA<DefaultDrawStore>());
-    (store as DefaultDrawStore).dispose();
   });
 }

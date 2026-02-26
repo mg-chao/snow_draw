@@ -30,6 +30,12 @@ class RustCanvasEngine {
   int get capabilities =>
       throw UnsupportedError('RustCanvasEngine is unavailable.');
 
+  static RustCanvasEngine createV2({Uint8List? initBytes}) {
+    throw UnsupportedError(
+      'RustCanvasEngine is unavailable on this platform (dart:ffi missing).',
+    );
+  }
+
   void dispatch(Uint8List commandBytes) {
     throw UnsupportedError('RustCanvasEngine is unavailable.');
   }
@@ -47,6 +53,14 @@ class RustCanvasEngine {
   }
 
   Uint8List? pollEventBytes() {
+    throw UnsupportedError('RustCanvasEngine is unavailable.');
+  }
+
+  void processInputV2(Uint8List inputBytes) {
+    throw UnsupportedError('RustCanvasEngine is unavailable.');
+  }
+
+  Uint8List? pollOutputV2() {
     throw UnsupportedError('RustCanvasEngine is unavailable.');
   }
 

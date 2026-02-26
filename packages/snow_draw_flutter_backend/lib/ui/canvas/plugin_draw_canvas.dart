@@ -146,7 +146,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     DrawStateChange.view,
     DrawStateChange.interaction,
   };
-  static const _frameRenderPlanBuilder = FrameRenderPlanBuilder();
+  static const _legacyFrameRenderPlanBuilder = FrameRenderPlanBuilder();
 
   VoidCallback? _stateUnsubscribe;
   StreamSubscription<DrawConfig>? _configSubscription;
@@ -2187,7 +2187,56 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final canvasConfig = widget.store.config.canvas;
     final gridConfig = widget.store.config.grid;
     final elementRegistry = widget.store.context.elementRegistry;
-    final framePlan = _frameRenderPlanBuilder.build(
+    final framePlan = _resolveFramePlan(
+      stateView: stateView,
+      scaleFactor: scaleFactor,
+      activeArrowHandle: activeArrowHandle,
+      arrowDeleteIndicatorVisible: arrowDeleteIndicatorVisible,
+      selectionConfig: selectionConfig,
+      hoverSelectionConfig: hoverSelectionConfig,
+      boxSelectionConfig: boxSelectionConfig,
+      snapConfig: snapConfig,
+      canvasConfig: canvasConfig,
+      gridConfig: gridConfig,
+      highlightMaskConfig: highlightMaskConfig,
+      watermarkConfig: watermarkConfig,
+      boxSelectionBounds: boxSelectionBounds,
+      previewElementsById: previewElementsById,
+    );
+
+    return SceneCanvasRenderKey(
+      documentElementsVersion: stateView.state.domain.document.elementsVersion,
+      creatingElement: creatingElement,
+      textRenderingCacheRevision: textRenderingCacheRevision,
+      previewElementsById: previewElementsById,
+      elementRegistry: elementRegistry,
+      textMetricsService: widget.store.context.textMetricsService,
+      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
+      locale: locale,
+      framePlan: framePlan,
+    );
+  }
+
+  FrameRenderPlan _resolveFramePlan({
+    required DrawStateView stateView,
+    required double scaleFactor,
+    required ArrowPointHandle? activeArrowHandle,
+    required bool arrowDeleteIndicatorVisible,
+    required SelectionConfig selectionConfig,
+    required SelectionConfig hoverSelectionConfig,
+    required BoxSelectionConfig boxSelectionConfig,
+    required SnapConfig snapConfig,
+    required CanvasConfig canvasConfig,
+    required GridConfig gridConfig,
+    required HighlightMaskConfig highlightMaskConfig,
+    required WatermarkConfig watermarkConfig,
+    required DrawRect? boxSelectionBounds,
+    required Map<String, ElementState> previewElementsById,
+  }) {
+    if (widget.store case final RustDrawStore rustStore) {
+      return rustStore.latestFramePlan;
+    }
+    return _legacyFrameRenderPlanBuilder.build(
       view: stateView,
       scaleFactor: scaleFactor,
       transientState: FrameRenderTransientState(
@@ -2207,18 +2256,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         boxSelectionBounds: boxSelectionBounds,
         previewElementsById: previewElementsById,
       ),
-    );
-
-    return SceneCanvasRenderKey(
-      documentElementsVersion: stateView.state.domain.document.elementsVersion,
-      creatingElement: creatingElement,
-      textRenderingCacheRevision: textRenderingCacheRevision,
-      previewElementsById: previewElementsById,
-      elementRegistry: elementRegistry,
-      textMetricsService: widget.store.context.textMetricsService,
-      performanceMonitoringEnabled: widget.enablePerformanceMonitoring,
-      locale: locale,
-      framePlan: framePlan,
     );
   }
 

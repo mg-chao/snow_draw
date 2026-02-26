@@ -43,8 +43,9 @@ DrawContext createAppContext() {
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({required this.context, super.key});
+  const MyApp({required this.context, this.storeOverride, super.key});
   final DrawContext context;
+  final DrawStore? storeOverride;
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -53,11 +54,15 @@ class MyApp extends StatefulWidget {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties.add(DiagnosticsProperty<DrawContext>('context', context));
+    properties.add(
+      DiagnosticsProperty<DrawStore?>('storeOverride', storeOverride),
+    );
   }
 }
 
 class _MyAppState extends State<MyApp> {
   late final DrawStore store;
+  late final bool _ownsStore;
   late final ToolController toolController;
   late final StyleToolbarAdapter styleToolbarAdapter;
   late final SnapToolbarAdapter snapToolbarAdapter;
@@ -67,26 +72,21 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    final backend = _resolveStoreBackend();
-    store = createDrawStore(
-      context: widget.context,
-      includeSelectionInHistory: true,
-      backend: backend,
-    );
+    final injectedStore = widget.storeOverride;
+    _ownsStore = injectedStore == null;
+    store =
+        injectedStore ??
+        createDrawStore(
+          context: widget.context,
+          includeSelectionInHistory: true,
+          backend: DrawStoreBackend.rust,
+        );
     toolController = ToolController();
     styleToolbarAdapter = StyleToolbarAdapter(store: store);
     snapToolbarAdapter = SnapToolbarAdapter(store: store);
     gridToolbarAdapter = GridToolbarAdapter(store: store);
     _ctrlPressedNotifier = ValueNotifier<bool>(false);
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
-  }
-
-  DrawStoreBackend _resolveStoreBackend() {
-    final bindingName = WidgetsBinding.instance.runtimeType.toString();
-    if (bindingName.contains('TestWidgetsFlutterBinding')) {
-      return DrawStoreBackend.legacyDart;
-    }
-    return DrawStoreBackend.rust;
   }
 
   @override
@@ -97,10 +97,14 @@ class _MyAppState extends State<MyApp> {
     styleToolbarAdapter.dispose();
     snapToolbarAdapter.dispose();
     gridToolbarAdapter.dispose();
-    if (store case final DefaultDrawStore defaultStore) {
-      defaultStore.dispose();
-    } else if (store case final RustDrawStore rustStore) {
-      rustStore.dispose();
+    if (_ownsStore) {
+      if (store case final RustDrawStore rustStore) {
+        rustStore.dispose();
+      } else {
+        throw StateError(
+          'Production runtime must use RustDrawStore. Found: ${store.runtimeType}',
+        );
+      }
     }
     super.dispose();
   }

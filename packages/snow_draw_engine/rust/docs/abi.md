@@ -2,7 +2,7 @@
 
 ## Versioning
 
-- `sd_engine_abi_version()` currently returns `1`.
+- `sd_engine_abi_version()` currently returns `2`.
 - Capability flags are returned by `sd_engine_capabilities()`.
 
 ## Ownership
@@ -23,12 +23,15 @@
 ## Functions
 
 - `sd_engine_create`
+- `sd_engine_v2_create`
 - `sd_engine_destroy`
 - `sd_engine_dispatch`
 - `sd_engine_dispatch_batch`
 - `sd_engine_get_snapshot`
 - `sd_engine_build_frame_plan`
 - `sd_engine_poll_event`
+- `sd_engine_v2_process_input`
+- `sd_engine_v2_poll_output`
 - `sd_bytes_free`
 - `sd_engine_abi_version`
 - `sd_engine_capabilities`

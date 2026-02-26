@@ -11,10 +11,12 @@ This package now includes a Rust engine workspace in
 `packages/snow_draw_engine/rust` and a Dart FFI bridge API:
 
 - `RustCanvasEngine.create(...)`
+- `RustCanvasEngine.createV2(...)`
 - `dispatch(...)` / `dispatchBatch(...)`
 - `getSnapshotBytes()`
 - `buildFramePlanBytes(...)`
 - `pollEventBytes()`
+- `processInputV2(...)` / `pollOutputV2()`
 - `dispose()`
 
 The current migration mode is strangler-style: existing Dart engine APIs remain
@@ -47,4 +49,6 @@ Purity and dependency constraints are validated by workspace guard scripts.
 
 - C header: `packages/snow_draw_engine/include/snow_draw_engine.h`
 - protobuf contract file: `packages/snow_draw_engine/rust/proto/engine.proto`
+- protobuf contract file (V2): `packages/snow_draw_engine/rust/proto/engine_v2.proto`
+- generated Dart proto bindings: `packages/snow_draw_engine/lib/src/proto/*.pb.dart`
 - Rust workspace: `packages/snow_draw_engine/rust`

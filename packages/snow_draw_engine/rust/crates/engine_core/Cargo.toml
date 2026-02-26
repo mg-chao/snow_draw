@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 engine_proto = { path = "../engine_proto" }
+engine_proto_v2 = { path = "../engine_proto_v2" }
 serde_json.workspace = true
 thiserror.workspace = true
 

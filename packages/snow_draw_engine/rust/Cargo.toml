@@ -1,6 +1,7 @@
 [workspace]
 members = [
   "crates/engine_proto",
+  "crates/engine_proto_v2",
   "crates/engine_core",
   "crates/engine_capi",
   "crates/engine_wasm",

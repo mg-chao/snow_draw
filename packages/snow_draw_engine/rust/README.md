@@ -5,6 +5,7 @@ This workspace contains the Rust rewrite foundation for `snow_draw_engine`.
 ## Crates
 
 - `engine_proto`: protobuf message contracts shared by all Rust targets.
+- `engine_proto_v2`: generated protobuf contracts for the V2 protocol boundary.
 - `engine_core`: headless deterministic canvas engine core (state, commands, frame plans, events).
 - `engine_capi`: stable C ABI (`cdylib` + `staticlib`) for host integration.
 - `engine_wasm`: wasm adapter for future web embedding.
@@ -35,6 +36,15 @@ cargo build -p engine_capi --release
 
 - Corpus cases: `rust/parity/corpus/*.json`
 - Harness test: `cargo test -p engine_core --test parity_corpus`
+- V2 corpus: `rust/parity_v2/corpus/*.json`
+- V2 harness test: `cargo test -p engine_core --test parity_v2_corpus`
+
+## Proto Codegen
+
+- Generate Dart bindings:
+  `bash packages/snow_draw_engine/rust/scripts/generate_proto_dart.sh`
+- Verify drift in CI/local:
+  `bash packages/snow_draw_engine/rust/scripts/check_proto_codegen_drift.sh`
 
 The generated dynamic library target names are platform dependent:
 

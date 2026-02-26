@@ -68,6 +68,44 @@ class RustCanvasEngine {
     }
   }
 
+  static RustCanvasEngine createV2({
+    Uint8List? initBytes,
+    ffi.DynamicLibrary? dynamicLibrary,
+  }) {
+    final library = dynamicLibrary ?? _RustBindings.openDefaultLibrary();
+    final bindings = _RustBindings(library);
+
+    final initNative = _NativeBytes.fromDart(initBytes ?? Uint8List(0));
+    final initBytesPtr = calloc<_SdBytes>();
+    final statusPtr = calloc<ffi.Uint32>();
+    final errorPtr = calloc<_SdBytes>();
+
+    try {
+      _setSdBytes(initBytesPtr, initNative.pointer, initNative.length);
+      final handle = bindings.engineV2Create(
+        initBytesPtr.ref,
+        statusPtr,
+        errorPtr,
+      );
+
+      final status = statusPtr.value;
+      final errorBytes = bindings.takeOwnedBytes(errorPtr.ref);
+      _throwIfNotOk(
+        status: status,
+        errorBytes: errorBytes,
+        operation: 'sd_engine_v2_create',
+        nullHandle: handle == ffi.nullptr,
+      );
+
+      return RustCanvasEngine._(bindings, handle);
+    } finally {
+      initNative.dispose();
+      calloc.free(initBytesPtr);
+      calloc.free(statusPtr);
+      calloc.free(errorPtr);
+    }
+  }
+
   int get abiVersion {
     _checkNotDisposed();
     return _bindings.engineAbiVersion();
@@ -219,6 +257,56 @@ class RustCanvasEngine {
     }
   }
 
+  void processInputV2(Uint8List inputBytes) {
+    _checkNotDisposed();
+
+    final inputNative = _NativeBytes.fromDart(inputBytes);
+    final inputBytesPtr = calloc<_SdBytes>();
+    final errorPtr = calloc<_SdBytes>();
+    try {
+      _setSdBytes(inputBytesPtr, inputNative.pointer, inputNative.length);
+      final status = _bindings.engineV2ProcessInput(
+        _handle,
+        inputBytesPtr.ref,
+        errorPtr,
+      );
+      final errorBytes = _bindings.takeOwnedBytes(errorPtr.ref);
+      _throwIfNotOk(
+        status: status,
+        errorBytes: errorBytes,
+        operation: 'sd_engine_v2_process_input',
+      );
+    } finally {
+      inputNative.dispose();
+      calloc.free(inputBytesPtr);
+      calloc.free(errorPtr);
+    }
+  }
+
+  Uint8List? pollOutputV2() {
+    _checkNotDisposed();
+
+    final outputPtr = calloc<_SdBytes>();
+    final errorPtr = calloc<_SdBytes>();
+
+    try {
+      final status = _bindings.engineV2PollOutput(_handle, outputPtr, errorPtr);
+      final errorBytes = _bindings.takeOwnedBytes(errorPtr.ref);
+      if (status == _sdStatusNoEvent) {
+        return null;
+      }
+      _throwIfNotOk(
+        status: status,
+        errorBytes: errorBytes,
+        operation: 'sd_engine_v2_poll_output',
+      );
+      return _bindings.takeOwnedBytes(outputPtr.ref);
+    } finally {
+      calloc.free(outputPtr);
+      calloc.free(errorPtr);
+    }
+  }
+
   void dispose() {
     if (_disposed) {
       return;
@@ -290,6 +378,10 @@ final class _RustBindings {
           .lookupFunction<_EngineCreateNative, _EngineCreateDart>(
             'sd_engine_create',
           ),
+      engineV2Create = library
+          .lookupFunction<_EngineCreateNative, _EngineCreateDart>(
+            'sd_engine_v2_create',
+          ),
       engineDestroy = library
           .lookupFunction<_EngineDestroyNative, _EngineDestroyDart>(
             'sd_engine_destroy',
@@ -315,6 +407,15 @@ final class _RustBindings {
           .lookupFunction<_EnginePollEventNative, _EnginePollEventDart>(
             'sd_engine_poll_event',
           ),
+      engineV2ProcessInput = library
+          .lookupFunction<
+            _EngineV2ProcessInputNative,
+            _EngineV2ProcessInputDart
+          >('sd_engine_v2_process_input'),
+      engineV2PollOutput = library
+          .lookupFunction<_EngineV2PollOutputNative, _EngineV2PollOutputDart>(
+            'sd_engine_v2_poll_output',
+          ),
       bytesFree = library.lookupFunction<_BytesFreeNative, _BytesFreeDart>(
         'sd_bytes_free',
       );
@@ -322,12 +423,15 @@ final class _RustBindings {
   final _EngineAbiVersionDart engineAbiVersion;
   final _EngineCapabilitiesDart engineCapabilities;
   final _EngineCreateDart engineCreate;
+  final _EngineCreateDart engineV2Create;
   final _EngineDestroyDart engineDestroy;
   final _EngineDispatchDart engineDispatch;
   final _EngineDispatchBatchDart engineDispatchBatch;
   final _EngineGetSnapshotDart engineGetSnapshot;
   final _EngineBuildFramePlanDart engineBuildFramePlan;
   final _EnginePollEventDart enginePollEvent;
+  final _EngineV2ProcessInputDart engineV2ProcessInput;
+  final _EngineV2PollOutputDart engineV2PollOutput;
   final _BytesFreeDart bytesFree;
 
   Uint8List takeOwnedBytes(_SdBytes bytes) {
@@ -489,6 +593,32 @@ typedef _EnginePollEventDart =
     int Function(
       ffi.Pointer<_SdEngine> engine,
       ffi.Pointer<_SdBytes> outEvent,
+      ffi.Pointer<_SdBytes> outError,
+    );
+
+typedef _EngineV2ProcessInputNative =
+    ffi.Uint32 Function(
+      ffi.Pointer<_SdEngine> engine,
+      _SdBytes inputBytes,
+      ffi.Pointer<_SdBytes> outError,
+    );
+typedef _EngineV2ProcessInputDart =
+    int Function(
+      ffi.Pointer<_SdEngine> engine,
+      _SdBytes inputBytes,
+      ffi.Pointer<_SdBytes> outError,
+    );
+
+typedef _EngineV2PollOutputNative =
+    ffi.Uint32 Function(
+      ffi.Pointer<_SdEngine> engine,
+      ffi.Pointer<_SdBytes> outOutput,
+      ffi.Pointer<_SdBytes> outError,
+    );
+typedef _EngineV2PollOutputDart =
+    int Function(
+      ffi.Pointer<_SdEngine> engine,
+      ffi.Pointer<_SdBytes> outOutput,
       ffi.Pointer<_SdBytes> outError,
     );
 

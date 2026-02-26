@@ -2,6 +2,10 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:fixnum/fixnum.dart' as $fixnum;
+
+import '../../src/proto/engine.pb.dart' as proto;
+import '../../src/proto/engine_v2.pb.dart' as proto_v2;
 import '../../rust_canvas_engine.dart';
 import '../actions/config_actions.dart';
 import '../actions/draw_actions.dart';
@@ -9,9 +13,9 @@ import '../config/config_manager.dart';
 import '../config/draw_config.dart';
 import '../core/callbacks.dart';
 import '../core/draw_context.dart';
-import '../edit/core/edit_modifiers.dart';
 import '../edit/core/edit_operation_params.dart';
 import '../elements/core/element_data.dart';
+import '../elements/types/text/text_data.dart';
 import '../events/error_events.dart';
 import '../events/event_bus.dart';
 import '../events/state_events.dart';
@@ -25,9 +29,13 @@ import '../models/global_elements_state.dart';
 import '../models/interaction_state.dart';
 import '../models/selection_state.dart';
 import '../models/view_state.dart';
+import '../render/tasks/frame_render_plan.dart';
+import '../render/tasks/render_tasks.dart';
+import '../services/text/text_metrics_service.dart';
 import '../types/draw_color.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
+import '../utils/selection_calculator.dart';
 import 'draw_store_interface.dart';
 import 'listener_registry.dart';
 import 'selector.dart';
@@ -37,6 +45,13 @@ import 'state_change_detector.dart';
 ///
 /// This store drives state transitions through the Rust engine C ABI.
 class RustDrawStore implements DrawStore {
+  static const _requiredCapabilitiesMask =
+      _RustProtoCodec.capabilityEventStream |
+      _RustProtoCodec.capabilityFramePlan |
+      _RustProtoCodec.capabilityDispatchBatch |
+      _RustProtoCodec.capabilityInputPipeline |
+      _RustProtoCodec.capabilityTextMetricsHost;
+
   RustDrawStore({
     required DrawContext context,
     DrawState? initialState,
@@ -45,8 +60,7 @@ class RustDrawStore implements DrawStore {
     Uint8List? engineConfigBytes,
   }) : _ownsEventBus = eventBus == null && context.eventBus == null,
        _eventBus = eventBus ?? context.eventBus ?? EventBus(),
-       _engine =
-           engine ?? RustCanvasEngine.create(configBytes: engineConfigBytes) {
+       _engine = engine ?? _createV2Engine(engineConfigBytes) {
     this.context = context.eventBus == _eventBus
         ? context
         : context.copyWith(eventBus: _eventBus);
@@ -67,10 +81,15 @@ class RustDrawStore implements DrawStore {
       );
     }
 
-    _state = _decodeSnapshot(_engine.getSnapshotBytes());
+    _state = DrawState.initial();
     _canUndo = false;
     _canRedo = false;
-    _syncHistoryFlagsFromSnapshot();
+    _drainNativeOutputs(applySnapshot: true);
+    if (!_didValidateInitAck) {
+      throw StateError(
+        'RustDrawStore initialization failed: missing EngineInitAck from V2 runtime.',
+      );
+    }
   }
 
   @override
@@ -82,10 +101,13 @@ class RustDrawStore implements DrawStore {
   final EventBus _eventBus;
   final bool _ownsEventBus;
   final RustCanvasEngine _engine;
+  var _nextInputSequence = 1;
 
   var _isDisposed = false;
   var _canUndo = false;
   var _canRedo = false;
+  var _didValidateInitAck = false;
+  var _latestFramePlan = FrameRenderPlan.empty;
 
   @override
   bool get canUndo => _canUndo;
@@ -95,6 +117,8 @@ class RustDrawStore implements DrawStore {
 
   @override
   DrawState get state => _state;
+
+  FrameRenderPlan get latestFramePlan => _latestFramePlan;
 
   @override
   DrawConfig get config => _configManager.current;
@@ -192,9 +216,12 @@ class RustDrawStore implements DrawStore {
       );
     }
 
-    _engine.dispatch(command);
-    _drainNativeEvents();
-    _refreshSnapshotAndNotify();
+    final input = _RustProtoCodec.encodeInputCommand(
+      command,
+      sequence: _nextSequence(),
+    );
+    _engine.processInputV2(input);
+    _drainNativeOutputs(applySnapshot: true);
   }
 
   @override
@@ -234,9 +261,23 @@ class RustDrawStore implements DrawStore {
       state.domain.document.elementsVersion == 0 &&
       state.domain.selection.selectionVersion == 0;
 
-  void _refreshSnapshotAndNotify() {
+  static RustCanvasEngine _createV2Engine(Uint8List? engineConfigBytes) {
+    if (engineConfigBytes != null && engineConfigBytes.isNotEmpty) {
+      throw UnsupportedError(
+        'RustDrawStore V2 does not accept legacy engineConfigBytes payloads.',
+      );
+    }
+    return RustCanvasEngine.createV2(
+      initBytes: _RustProtoCodec.encodeInitRequest(
+        requestedCapabilitiesMask: _requiredCapabilitiesMask,
+      ),
+    );
+  }
+
+  int _nextSequence() => _nextInputSequence++;
+
+  void _refreshSnapshotAndNotify(DrawState next) {
     final previous = _state;
-    final next = _decodeSnapshot(_engine.getSnapshotBytes());
     _state = next;
 
     _syncHistoryFlagsFromSnapshot();
@@ -288,84 +329,182 @@ class RustDrawStore implements DrawStore {
     }
   }
 
-  void _drainNativeEvents() {
+  void _drainNativeOutputs({required bool applySnapshot}) {
+    _DecodedSnapshot? lastSnapshot;
+
     while (true) {
-      final bytes = _engine.pollEventBytes();
+      final bytes = _engine.pollOutputV2();
       if (bytes == null) {
         break;
       }
-      final event = _RustProtoCodec.decodeEvent(bytes);
-      if (event == null) {
+      final output = _RustProtoCodec.decodeOutput(bytes);
+      if (output == null) {
         continue;
       }
-      if (event.kind == _RustProtoCodec.engineEventError) {
-        _eventBus.emit(
-          ErrorEvent(
-            message: event.message ?? 'Rust engine error',
-            error: event.message ?? 'rust_engine_error',
-          ),
-        );
+      switch (output.whichPayload()) {
+        case proto_v2.EngineOutput_Payload.snapshot:
+          lastSnapshot = _RustProtoCodec.decodeSnapshotV2(output.snapshot);
+          break;
+        case proto_v2.EngineOutput_Payload.event:
+          _handleEngineEvent(output.event);
+          break;
+        case proto_v2.EngineOutput_Payload.initAck:
+          _validateInitAck(output.initAck);
+          break;
+        case proto_v2.EngineOutput_Payload.stateDelta:
+          // State is reconstructed from snapshots. Keep deltas for protocol
+          // parity and future incremental application.
+          break;
+        case proto_v2.EngineOutput_Payload.framePlan:
+          final stateForPlan = lastSnapshot?.toDrawState(context) ?? _state;
+          _latestFramePlan = _RustProtoCodec.decodeFramePlanV2(
+            output.framePlan,
+            state: stateForPlan,
+            config: _configManager.current,
+          );
+          break;
+        case proto_v2.EngineOutput_Payload.hostRequest:
+          _handleHostRequest(output.hostRequest);
+          break;
+        case proto_v2.EngineOutput_Payload.notSet:
+          break;
       }
+    }
+
+    if (applySnapshot && lastSnapshot != null) {
+      _refreshSnapshotAndNotify(lastSnapshot.toDrawState(context));
     }
   }
 
-  DrawState _decodeSnapshot(Uint8List bytes) =>
-      _RustProtoCodec.decodeSnapshot(bytes).toDrawState(context);
+  void _validateInitAck(proto_v2.EngineInitAck ack) {
+    if (_didValidateInitAck) {
+      return;
+    }
+
+    final granted = ack.grantedCapabilitiesMask.toInt();
+    final hasRequiredCapabilities =
+        (granted & _requiredCapabilitiesMask) == _requiredCapabilitiesMask;
+    final isAbiValid = ack.abiVersion == _RustProtoCodec.runtimeAbiVersion;
+    final isSchemaValid =
+        ack.schemaVersion == _RustProtoCodec.runtimeSchemaVersion;
+
+    if (!isAbiValid || !isSchemaValid || !hasRequiredCapabilities) {
+      throw StateError(
+        'RustDrawStore init-ack validation failed: '
+        'abi=${ack.abiVersion}, schema=${ack.schemaVersion}, '
+        'grantedCapabilities=0x${granted.toRadixString(16)}',
+      );
+    }
+    _didValidateInitAck = true;
+  }
+
+  void _handleHostRequest(proto_v2.HostRequest request) {
+    switch (request.whichPayload()) {
+      case proto_v2.HostRequest_Payload.textMetricsRequest:
+        _respondToTextMetricsRequest(request);
+        break;
+      case proto_v2.HostRequest_Payload.pointerHostRequest:
+      case proto_v2.HostRequest_Payload.keyboardHostRequest:
+      case proto_v2.HostRequest_Payload.toolHostRequest:
+      case proto_v2.HostRequest_Payload.notSet:
+        // Reserved for non-text host services in later parity passes.
+        break;
+    }
+  }
+
+  void _respondToTextMetricsRequest(proto_v2.HostRequest request) {
+    final payload = request.textMetricsRequest;
+    try {
+      final metrics = context.textMetricsService.measure(
+        TextLayoutRequest(
+          data: TextData(
+            text: payload.text,
+            fontSize: payload.fontSize > 0 ? payload.fontSize : 21,
+            fontFamily: payload.fontFamily.trim().isEmpty
+                ? null
+                : payload.fontFamily.trim(),
+          ),
+          maxWidth: payload.maxWidth > 0 ? payload.maxWidth : 4096,
+          minWidth: payload.minWidth > 0 ? payload.minWidth : null,
+          localeTag: payload.localeTag.trim().isEmpty
+              ? null
+              : payload.localeTag,
+          isResizing: payload.isResizing,
+        ),
+      );
+
+      final response = proto_v2.TextMetricsResponse(
+        requestId: request.requestId,
+        ok: true,
+        metrics: proto_v2.TextMetricsResult(
+          width: metrics.width,
+          height: metrics.height,
+          lineHeight: metrics.lineHeight,
+          lines: metrics.lines
+              .map(
+                (line) => proto_v2.TextMetricsLine(
+                  width: line.width,
+                  height: line.height,
+                ),
+              )
+              .toList(),
+        ),
+      );
+      _engine.processInputV2(
+        _RustProtoCodec.encodeInputTextMetricsResponse(
+          response,
+          sequence: _nextSequence(),
+        ),
+      );
+    } on Object catch (error) {
+      final response = proto_v2.TextMetricsResponse(
+        requestId: request.requestId,
+        ok: false,
+        error: proto_v2.EngineError(
+          code: 5001,
+          message: 'Text metrics host service failed',
+          details: error.toString(),
+        ),
+      );
+      _engine.processInputV2(
+        _RustProtoCodec.encodeInputTextMetricsResponse(
+          response,
+          sequence: _nextSequence(),
+        ),
+      );
+    }
+  }
+
+  void _handleEngineEvent(proto_v2.EngineEvent event) {
+    if (event.kind != proto_v2.EngineEventKind.ENGINE_EVENT_KIND_ERROR) {
+      return;
+    }
+
+    final message = switch (event.whichPayload()) {
+      proto_v2.EngineEvent_Payload.error => event.error.message,
+      proto_v2.EngineEvent_Payload.message => event.message,
+      proto_v2.EngineEvent_Payload.blob => 'Rust engine error',
+      proto_v2.EngineEvent_Payload.notSet => 'Rust engine error',
+    };
+
+    _eventBus.emit(ErrorEvent(message: message, error: message));
+  }
 }
 
 final class _RustProtoCodec {
   const _RustProtoCodec._();
 
-  static const int _wireVarint = 0;
-  static const int _wireFixed64 = 1;
-  static const int _wireLengthDelimited = 2;
-
-  static const int commandKindSelectElement = 1;
-  static const int commandKindClearSelection = 2;
-  static const int commandKindSelectAll = 3;
-  static const int commandKindCreateElement = 4;
-  static const int commandKindUpdateCreatingElement = 5;
-  static const int commandKindAddArrowPoint = 6;
-  static const int commandKindFinishCreateElement = 7;
-  static const int commandKindCancelCreateElement = 8;
-  static const int commandKindDeleteElements = 9;
-  static const int commandKindDuplicateElements = 10;
-  static const int commandKindChangeElementZIndex = 11;
-  static const int commandKindChangeElementsZIndex = 12;
-  static const int commandKindUpdateElementsStyle = 13;
-  static const int commandKindUpdateGlobalElements = 14;
-  static const int commandKindCreateSerialText = 15;
-  static const int commandKindStartTextEdit = 16;
-  static const int commandKindUpdateTextEdit = 17;
-  static const int commandKindRefreshTextLayouts = 18;
-  static const int commandKindFinishTextEdit = 19;
-  static const int commandKindCancelTextEdit = 20;
-  static const int commandKindStartEdit = 21;
-  static const int commandKindUpdateEdit = 22;
-  static const int commandKindFinishEdit = 23;
-  static const int commandKindCancelEdit = 24;
-  static const int commandKindSetDragPending = 25;
-  static const int commandKindClearDragPending = 26;
-  static const int commandKindStartBoxSelect = 27;
-  static const int commandKindUpdateBoxSelect = 28;
-  static const int commandKindFinishBoxSelect = 29;
-  static const int commandKindCancelBoxSelect = 30;
-  static const int commandKindMoveCamera = 31;
-  static const int commandKindZoomCamera = 32;
-  static const int commandKindUndo = 33;
-  static const int commandKindRedo = 34;
-  static const int commandKindClearHistory = 35;
-
-  static const int _elementRectangle = 1;
-  static const int _elementArrow = 2;
-  static const int _elementLine = 3;
-  static const int _elementFreeDraw = 4;
-  static const int _elementFilter = 5;
-  static const int _elementHighlight = 6;
-  static const int _elementText = 7;
-  static const int _elementSerialNumber = 8;
-
-  static const int engineEventError = 3;
+  static const runtimeAbiVersion = 2;
+  static const runtimeSchemaVersion = 2;
+  static const capabilityEventStream = 1 << 0;
+  static const capabilityFramePlan = 1 << 1;
+  static const capabilityDispatchBatch = 1 << 2;
+  static const capabilityInputPipeline = 1 << 3;
+  static const capabilityTextMetricsHost = 1 << 4;
+  static const _isProductMode = bool.fromEnvironment('dart.vm.product');
+  static const _allowRawPayloadInRelease = bool.fromEnvironment(
+    'snow_draw_engine.allow_raw_payload_v2',
+  );
 
   static int lastDecodedHistoryUndo = 0;
   static int lastDecodedHistoryRedo = 0;
@@ -374,19 +513,22 @@ final class _RustProtoCodec {
     DrawAction action, {
     required DrawContext context,
   }) {
-    return switch (action) {
+    final command = switch (action) {
       SelectElement(:final elementId, :final addToSelection, :final position) =>
-        _encodeCommand(
-          kind: commandKindSelectElement,
-          payloadTag: 11,
-          payload: _encodeSelectElement(
+        proto.EngineCommand(
+          kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_SELECT_ELEMENT,
+          selectElement: proto.SelectElementCommand(
             elementId: elementId,
             addToSelection: addToSelection,
-            position: position,
+            position: _encodePoint(position),
           ),
         ),
-      ClearSelection() => _encodeCommand(kind: commandKindClearSelection),
-      SelectAll() => _encodeCommand(kind: commandKindSelectAll),
+      ClearSelection() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_CLEAR_SELECTION,
+      ),
+      SelectAll() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_SELECT_ALL,
+      ),
       CreateElement(
         :final typeId,
         :final position,
@@ -395,14 +537,13 @@ final class _RustProtoCodec {
         :final createFromCenter,
         :final snapOverride,
       ) =>
-        _encodeCommand(
-          kind: commandKindCreateElement,
-          payloadTag: 10,
-          payload: _encodeCreateElement(
+        proto.EngineCommand(
+          kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_CREATE_ELEMENT,
+          createElement: proto.CreateElementCommand(
             elementType: _elementTypeFromTypeValue(typeId.value),
             elementId: context.idGenerator(),
-            position: position,
-            payload: initialData == null
+            position: _encodePoint(position),
+            initialPayload: initialData == null
                 ? Uint8List(0)
                 : Uint8List.fromList(
                     utf8.encode(jsonEncode(initialData.toJson())),
@@ -418,362 +559,522 @@ final class _RustProtoCodec {
         :final createFromCenter,
         :final snapOverride,
       ) =>
-        _encodeCommand(
-          kind: commandKindUpdateCreatingElement,
-          payloadTag: 16,
-          payload: _encodeUpdateCreatingElement(
-            positions: positions,
+        proto.EngineCommand(
+          kind: proto
+              .EngineCommandKind
+              .ENGINE_COMMAND_KIND_UPDATE_CREATING_ELEMENT,
+          updateCreatingElement: proto.UpdateCreatingElementCommand(
+            positions: positions.map(_encodePoint).toList(),
             maintainAspectRatio: maintainAspectRatio,
             createFromCenter: createFromCenter,
             snapOverride: snapOverride,
           ),
         ),
-      AddArrowPoint(:final position, :final snapOverride) => _encodeCommand(
-        kind: commandKindAddArrowPoint,
-        payloadTag: 17,
-        payload: _encodeAddArrowPoint(
-          position: position,
-          snapOverride: snapOverride,
+      AddArrowPoint(:final position, :final snapOverride) =>
+        proto.EngineCommand(
+          kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_ADD_ARROW_POINT,
+          addArrowPoint: proto.AddArrowPointCommand(
+            position: _encodePoint(position),
+            snapOverride: snapOverride,
+          ),
         ),
+      FinishCreateElement() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_FINISH_CREATE_ELEMENT,
       ),
-      FinishCreateElement() => _encodeCommand(
-        kind: commandKindFinishCreateElement,
+      CancelCreateElement() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_CANCEL_CREATE_ELEMENT,
       ),
-      CancelCreateElement() => _encodeCommand(
-        kind: commandKindCancelCreateElement,
-      ),
-      DeleteElements(:final elementIds) => _encodeCommand(
-        kind: commandKindDeleteElements,
-        payloadTag: 12,
-        payload: _encodeDeleteElements(elementIds),
+      DeleteElements(:final elementIds) => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_DELETE_ELEMENTS,
+        deleteElements: proto.DeleteElementsCommand(elementIds: elementIds),
       ),
       DuplicateElements(:final elementIds, :final offsetX, :final offsetY) =>
-        _encodeCommand(
-          kind: commandKindDuplicateElements,
-          payloadTag: 18,
-          payload: _encodeDuplicateElements(
+        proto.EngineCommand(
+          kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_DUPLICATE_ELEMENTS,
+          duplicateElements: proto.DuplicateElementsCommand(
             elementIds: elementIds,
             offsetX: offsetX,
             offsetY: offsetY,
           ),
         ),
-      ChangeElementZIndex(:final elementId, :final operation) => _encodeCommand(
-        kind: commandKindChangeElementZIndex,
-        payloadTag: 19,
-        payload: _encodeChangeElementZIndex(
-          elementId: elementId,
-          operation: operation,
-        ),
-      ),
-      ChangeElementsZIndex(:final elementIds, :final operation) =>
-        _encodeCommand(
-          kind: commandKindChangeElementsZIndex,
-          payloadTag: 20,
-          payload: _encodeChangeElementsZIndex(
-            elementIds: elementIds,
-            operation: operation,
+      ChangeElementZIndex(:final elementId, :final operation) =>
+        proto.EngineCommand(
+          kind: proto
+              .EngineCommandKind
+              .ENGINE_COMMAND_KIND_CHANGE_ELEMENT_Z_INDEX,
+          changeElementZIndex: proto.ChangeElementZIndexCommand(
+            elementId: elementId,
+            operation: _zIndexOperationValue(operation),
           ),
         ),
-      UpdateElementsStyle() => _encodeCommand(
-        kind: commandKindUpdateElementsStyle,
-        payloadTag: 13,
-        payload: _encodeUpdateElementsStyle(action),
+      ChangeElementsZIndex(:final elementIds, :final operation) =>
+        proto.EngineCommand(
+          kind: proto
+              .EngineCommandKind
+              .ENGINE_COMMAND_KIND_CHANGE_ELEMENTS_Z_INDEX,
+          changeElementsZIndex: proto.ChangeElementsZIndexCommand(
+            elementIds: elementIds,
+            operation: _zIndexOperationValue(operation),
+          ),
+        ),
+      UpdateElementsStyle() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_UPDATE_ELEMENTS_STYLE,
+        updateElementsStyle: proto.UpdateElementsStyleCommand(
+          elementIds: action.elementIds,
+          stylePayload: _encodeUpdateElementsStyle(action),
+        ),
       ),
       UpdateGlobalElements(:final highlightMask, :final watermark) =>
-        _encodeCommand(
-          kind: commandKindUpdateGlobalElements,
-          payloadTag: 21,
-          payload: _encodeUpdateGlobalElements(
-            highlightMask: highlightMask,
-            watermark: watermark,
+        proto.EngineCommand(
+          kind: proto
+              .EngineCommandKind
+              .ENGINE_COMMAND_KIND_UPDATE_GLOBAL_ELEMENTS,
+          updateGlobalElements: proto.UpdateGlobalElementsCommand(
+            payload: _encodeUpdateGlobalElements(
+              highlightMask: highlightMask,
+              watermark: watermark,
+            ),
           ),
         ),
-      CreateSerialNumberTextElements(:final elementIds) => _encodeCommand(
-        kind: commandKindCreateSerialText,
-        payloadTag: 22,
-        payload: _encodeCreateSerialText(elementIds),
+      CreateSerialNumberTextElements(:final elementIds) => proto.EngineCommand(
+        kind: proto
+            .EngineCommandKind
+            .ENGINE_COMMAND_KIND_CREATE_SERIAL_NUMBER_TEXT_ELEMENTS,
+        createSerialNumberTextElements:
+            proto.CreateSerialNumberTextElementsCommand(elementIds: elementIds),
       ),
-      StartTextEdit(:final elementId, :final position) => _encodeCommand(
-        kind: commandKindStartTextEdit,
-        payloadTag: 23,
-        payload: _encodeStartTextEdit(elementId: elementId, position: position),
+      StartTextEdit(:final elementId, :final position) => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_START_TEXT_EDIT,
+        startTextEdit: proto.StartTextEditCommand(
+          elementId: elementId ?? '',
+          position: _encodePoint(position),
+        ),
       ),
-      UpdateTextEdit(:final text, :final rect) => _encodeCommand(
-        kind: commandKindUpdateTextEdit,
-        payloadTag: 24,
-        payload: _encodeUpdateTextEdit(text: text, rect: rect),
+      UpdateTextEdit(:final text, :final rect) => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_UPDATE_TEXT_EDIT,
+        updateTextEdit: proto.UpdateTextEditCommand(
+          text: text,
+          rect: rect == null ? null : _encodeRect(rect),
+        ),
       ),
-      RefreshAutoResizeTextLayoutsAfterFontLoad() => _encodeCommand(
-        kind: commandKindRefreshTextLayouts,
+      RefreshAutoResizeTextLayoutsAfterFontLoad() => proto.EngineCommand(
+        kind: proto
+            .EngineCommandKind
+            .ENGINE_COMMAND_KIND_REFRESH_AUTO_RESIZE_TEXT_LAYOUTS_AFTER_FONT_LOAD,
       ),
       FinishTextEdit(:final elementId, :final text, :final isNew) =>
-        _encodeCommand(
-          kind: commandKindFinishTextEdit,
-          payloadTag: 25,
-          payload: _encodeFinishTextEdit(
+        proto.EngineCommand(
+          kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_FINISH_TEXT_EDIT,
+          finishTextEdit: proto.FinishTextEditCommand(
             elementId: elementId,
             text: text,
             isNew: isNew,
           ),
         ),
-      CancelTextEdit() => _encodeCommand(kind: commandKindCancelTextEdit),
+      CancelTextEdit() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_CANCEL_TEXT_EDIT,
+      ),
       StartEdit(:final operationId, :final position, :final params) =>
-        _encodeCommand(
-          kind: commandKindStartEdit,
-          payloadTag: 26,
-          payload: _encodeStartEdit(
+        proto.EngineCommand(
+          kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_START_EDIT,
+          startEdit: proto.StartEditCommand(
             operationId: operationId,
-            position: position,
-            params: params,
+            position: _encodePoint(position),
+            params: Uint8List.fromList(
+              utf8.encode(jsonEncode(_editParamsToJson(params))),
+            ),
           ),
         ),
-      UpdateEdit(:final currentPosition, :final modifiers) => _encodeCommand(
-        kind: commandKindUpdateEdit,
-        payloadTag: 27,
-        payload: _encodeUpdateEdit(
-          currentPosition: currentPosition,
-          modifiers: modifiers,
+      UpdateEdit(:final currentPosition, :final modifiers) =>
+        proto.EngineCommand(
+          kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_UPDATE_EDIT,
+          updateEdit: proto.UpdateEditCommand(
+            currentPosition: _encodePoint(currentPosition),
+            modifiers: Uint8List.fromList(
+              utf8.encode(
+                jsonEncode({
+                  'maintainAspectRatio': modifiers.maintainAspectRatio,
+                  'fromCenter': modifiers.fromCenter,
+                  'discreteAngle': modifiers.discreteAngle,
+                  'snapOverride': modifiers.snapOverride,
+                }),
+              ),
+            ),
+          ),
         ),
+      FinishEdit() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_FINISH_EDIT,
       ),
-      FinishEdit() => _encodeCommand(kind: commandKindFinishEdit),
-      CancelEdit() => _encodeCommand(kind: commandKindCancelEdit),
+      CancelEdit() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_CANCEL_EDIT,
+      ),
       SetDragPending(:final pointerDownPosition, :final intent) =>
-        _encodeCommand(
-          kind: commandKindSetDragPending,
-          payloadTag: 28,
-          payload: _encodeSetDragPending(
-            pointerDownPosition: pointerDownPosition,
-            intent: intent,
+        proto.EngineCommand(
+          kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_SET_DRAG_PENDING,
+          setDragPending: proto.SetDragPendingCommand(
+            pointerDownPosition: _encodePoint(pointerDownPosition),
+            intent: intent.toString(),
           ),
         ),
-      ClearDragPending() => _encodeCommand(kind: commandKindClearDragPending),
-      StartBoxSelect(:final startPosition) => _encodeCommand(
-        kind: commandKindStartBoxSelect,
-        payloadTag: 29,
-        payload: _encodeStartBoxSelect(startPosition),
+      ClearDragPending() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_CLEAR_DRAG_PENDING,
       ),
-      UpdateBoxSelect(:final currentPosition) => _encodeCommand(
-        kind: commandKindUpdateBoxSelect,
-        payloadTag: 30,
-        payload: _encodeUpdateBoxSelect(currentPosition),
+      StartBoxSelect(:final startPosition) => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_START_BOX_SELECT,
+        startBoxSelect: proto.StartBoxSelectCommand(
+          startPosition: _encodePoint(startPosition),
+        ),
       ),
-      FinishBoxSelect() => _encodeCommand(kind: commandKindFinishBoxSelect),
-      CancelBoxSelect() => _encodeCommand(kind: commandKindCancelBoxSelect),
-      MoveCamera(:final dx, :final dy) => _encodeCommand(
-        kind: commandKindMoveCamera,
-        payloadTag: 14,
-        payload: _encodeMoveCamera(dx: dx, dy: dy),
+      UpdateBoxSelect(:final currentPosition) => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_UPDATE_BOX_SELECT,
+        updateBoxSelect: proto.UpdateBoxSelectCommand(
+          currentPosition: _encodePoint(currentPosition),
+        ),
       ),
-      ZoomCamera(:final scale, :final center) => _encodeCommand(
-        kind: commandKindZoomCamera,
-        payloadTag: 15,
-        payload: _encodeZoomCamera(scale: scale, center: center),
+      FinishBoxSelect() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_FINISH_BOX_SELECT,
       ),
-      Undo() => _encodeCommand(kind: commandKindUndo),
-      Redo() => _encodeCommand(kind: commandKindRedo),
-      ClearHistory() => _encodeCommand(kind: commandKindClearHistory),
+      CancelBoxSelect() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_CANCEL_BOX_SELECT,
+      ),
+      MoveCamera(:final dx, :final dy) => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_MOVE_CAMERA,
+        moveCamera: proto.MoveCameraCommand(dx: dx, dy: dy),
+      ),
+      ZoomCamera(:final scale, :final center) => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_ZOOM_CAMERA,
+        zoomCamera: proto.ZoomCameraCommand(
+          scale: scale,
+          center: center == null ? null : _encodePoint(center),
+        ),
+      ),
+      Undo() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_UNDO,
+      ),
+      Redo() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_REDO,
+      ),
+      ClearHistory() => proto.EngineCommand(
+        kind: proto.EngineCommandKind.ENGINE_COMMAND_KIND_CLEAR_HISTORY,
+      ),
       _ => null,
     };
+
+    return command?.writeToBuffer();
   }
 
-  static _DecodedSnapshot decodeSnapshot(Uint8List bytes) {
-    final reader = _ProtoReader(bytes);
-    final snapshot = _DecodedSnapshot();
+  static Uint8List encodeInitRequest({
+    int requestedAbiVersion = runtimeAbiVersion,
+    int schemaVersion = runtimeSchemaVersion,
+    String localeTag = 'en-US',
+    double scaleFactor = 1.0,
+    int requestedCapabilitiesMask =
+        capabilityEventStream |
+        capabilityFramePlan |
+        capabilityInputPipeline |
+        capabilityTextMetricsHost,
+    int deterministicSeed = 0,
+  }) => Uint8List.fromList(
+    proto_v2.EngineInitRequest(
+      requestedAbiVersion: requestedAbiVersion,
+      schemaVersion: schemaVersion,
+      localeTag: localeTag,
+      scaleFactor: scaleFactor,
+      requestedCapabilitiesMask: $fixnum.Int64(requestedCapabilitiesMask),
+      deterministicSeed: $fixnum.Int64(deterministicSeed),
+    ).writeToBuffer(),
+  );
 
-    while (!reader.isDone) {
-      final tag = reader.readTag();
-      if (tag == 0) {
-        break;
-      }
-      final fieldNumber = tag >> 3;
-      final wireType = tag & 0x07;
-      switch (fieldNumber) {
-        case 2:
-          snapshot.documentVersion = reader.readVarint();
-        case 3:
-          snapshot.selectionVersion = reader.readVarint();
-        case 4:
-          snapshot.interactionMode = reader.readVarint();
-        case 5:
-          final cameraReader = _ProtoReader(reader.readBytes());
-          snapshot.camera = _decodeCamera(cameraReader);
-        case 6:
-          final elementReader = _ProtoReader(reader.readBytes());
-          snapshot.elements.add(_decodeElement(elementReader));
-        case 7:
-          snapshot.selectedIds.add(reader.readString());
-        case 8:
-          snapshot.historyUndoLen = reader.readVarint();
-        case 9:
-          snapshot.historyRedoLen = reader.readVarint();
-        case 10:
-          snapshot.globalPayload = reader.readBytes();
-        default:
-          reader.skipField(wireType);
-      }
+  static Uint8List encodeInputCommand(
+    Uint8List commandBytes, {
+    required int sequence,
+  }) => Uint8List.fromList(
+    proto_v2.EngineInput(
+      sequence: $fixnum.Int64(sequence),
+      commandEvent: proto_v2.CommandEvent(commandBytes: commandBytes),
+    ).writeToBuffer(),
+  );
+
+  static Uint8List encodeInputTextMetricsResponse(
+    proto_v2.TextMetricsResponse response, {
+    required int sequence,
+  }) => Uint8List.fromList(
+    proto_v2.EngineInput(
+      sequence: $fixnum.Int64(sequence),
+      textMetricsResponse: response,
+    ).writeToBuffer(),
+  );
+
+  static proto_v2.EngineOutput? decodeOutput(Uint8List bytes) {
+    try {
+      return proto_v2.EngineOutput.fromBuffer(bytes);
+    } on Object {
+      return null;
     }
+  }
+
+  static _DecodedSnapshot decodeSnapshotV2(proto_v2.EngineSnapshot message) {
+    final snapshot = _DecodedSnapshot()
+      ..documentVersion = message.documentVersion.toInt()
+      ..selectionVersion = message.selectionVersion.toInt()
+      ..interactionMode = message.interactionMode.value;
+
+    if (message.hasCamera()) {
+      snapshot.camera = _decodeCameraV2(message.camera);
+    }
+
+    snapshot.elements.addAll(message.elements.map(_decodeElementV2));
+    snapshot.selectedIds.addAll(message.selectedIds);
+    snapshot.historyUndoLen = message.historyUndoLen.toInt();
+    snapshot.historyRedoLen = message.historyRedoLen.toInt();
+    snapshot.globalPayload = Uint8List.fromList(message.globalElementsPayload);
 
     lastDecodedHistoryUndo = snapshot.historyUndoLen;
     lastDecodedHistoryRedo = snapshot.historyRedoLen;
     return snapshot;
   }
 
-  static _DecodedEvent? decodeEvent(Uint8List bytes) {
-    final reader = _ProtoReader(bytes);
-    final event = _DecodedEvent();
+  static FrameRenderPlan decodeFramePlanV2(
+    proto_v2.FrameRenderPlan message, {
+    required DrawState state,
+    required DrawConfig config,
+  }) {
+    final tasks = <FrameRenderTask>[];
+    final selectedElements = SelectionCalculator.getSelectedElements(state);
+    final selectionBounds =
+        SelectionCalculator.computeSelectionBoundsForElements(selectedElements);
 
-    while (!reader.isDone) {
-      final tag = reader.readTag();
-      if (tag == 0) {
-        break;
-      }
-      final fieldNumber = tag >> 3;
-      final wireType = tag & 0x07;
-      switch (fieldNumber) {
-        case 1:
-          event.kind = reader.readVarint();
-        case 12:
-          event.message = reader.readString();
-        case 10:
-          final errorReader = _ProtoReader(reader.readBytes());
-          while (!errorReader.isDone) {
-            final errorTag = errorReader.readTag();
-            if (errorTag == 0) {
-              break;
-            }
-            final errorField = errorTag >> 3;
-            final errorWire = errorTag & 0x07;
-            switch (errorField) {
-              case 2:
-                event.message = errorReader.readString();
-              default:
-                errorReader.skipField(errorWire);
-            }
+    for (final task in message.tasks) {
+      switch (task.kind) {
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_BACKGROUND:
+          tasks.add(BackgroundRenderTask(color: config.canvas.backgroundColor));
+          break;
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_GRID:
+          final grid = config.grid;
+          tasks.add(
+            GridRenderTask(
+              enabled: grid.enabled,
+              size: grid.size,
+              lineWidth: grid.lineWidth,
+              lineColor: grid.lineColor,
+              lineOpacity: grid.lineOpacity,
+              majorLineEvery: grid.majorLineEvery,
+              majorLineOpacity: grid.majorLineOpacity,
+              minScreenSpacing: grid.minScreenSpacing,
+              minRenderSpacing: grid.minRenderSpacing,
+            ),
+          );
+          break;
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_SELECTION_OUTLINE:
+          if (selectionBounds != null) {
+            tasks.add(
+              SelectionOutlineRenderTask(
+                bounds: selectionBounds,
+                config: config.selection,
+              ),
+            );
           }
-        default:
-          reader.skipField(wireType);
+          break;
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_SELECTION_CONTROLS:
+          if (selectionBounds != null) {
+            tasks.add(
+              SelectionControlsRenderTask(
+                bounds: selectionBounds,
+                config: config.selection,
+                cornerHandleOffset: config.selection.rotateHandleOffset,
+              ),
+            );
+          }
+          break;
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_BOX_SELECTION:
+          final interaction = state.application.interaction;
+          if (interaction is BoxSelectingState) {
+            tasks.add(
+              BoxSelectionRenderTask(
+                bounds: interaction.bounds,
+                config: config.boxSelection,
+                selectionConfig: config.selection,
+                previewElements: selectedElements,
+              ),
+            );
+          }
+          break;
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_HIGHLIGHT_MASK:
+          tasks.add(
+            HighlightMaskRenderTask(
+              config: state.domain.document.globalElements.highlightMask,
+              highlights: state.domain.document.elements
+                  .where((element) => element.data.typeId.value == 'highlight')
+                  .toList(growable: false),
+            ),
+          );
+          break;
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_WATERMARK:
+          tasks.add(
+            WatermarkRenderTask(
+              config: state.domain.document.globalElements.watermark,
+            ),
+          );
+          break;
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_UNKNOWN:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_RECTANGLE:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_LINE:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_ARROW:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_FREE_DRAW:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_TEXT:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_SERIAL_NUMBER:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_HIGHLIGHT:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_FILTER:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_ARROW_POINT_OVERLAY:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_ARROW_BINDING_HIGHLIGHT:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_HOVER_OUTLINE:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_SNAP_GUIDES:
+          break;
       }
     }
 
-    return event.kind == 0 ? null : event;
+    return FrameRenderPlan(
+      tasks: List<FrameRenderTask>.unmodifiable(tasks),
+      camera: message.hasCamera()
+          ? _decodeCameraV2(message.camera)
+          : state.application.view.camera,
+      scaleFactor: _resolveScaleFactor(message.scaleFactor),
+      localeTag: message.localeTag.trim().isEmpty ? null : message.localeTag,
+    );
   }
 
-  static Uint8List _encodeCommand({
-    required int kind,
-    int? payloadTag,
-    Uint8List? payload,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeEnum(1, kind);
-    if (payloadTag != null && payload != null) {
-      writer.writeMessage(payloadTag, payload);
+  static double _resolveScaleFactor(double value) =>
+      value.isFinite && value > 0 ? value : 1.0;
+
+  static proto.DrawPoint _encodePoint(DrawPoint point) => proto.DrawPoint(
+    x: point.x,
+    y: point.y,
+    pressure: point.pressure,
+    timestampUs: $fixnum.Int64(point.timestamp),
+  );
+
+  static proto.DrawRect _encodeRect(DrawRect rect) => proto.DrawRect(
+    minX: rect.minX,
+    minY: rect.minY,
+    maxX: rect.maxX,
+    maxY: rect.maxY,
+  );
+
+  static CameraState _decodeCameraV2(proto_v2.CameraState camera) =>
+      CameraState(
+        position: camera.hasPosition()
+            ? _decodePointV2(camera.position)
+            : DrawPoint.zero,
+        zoom: camera.zoom,
+      );
+
+  static _DecodedElement _decodeElementV2(proto_v2.Element element) =>
+      _DecodedElement()
+        ..id = element.id
+        ..elementType = element.elementType.value
+        ..rect = element.hasRect()
+            ? _decodeRectV2(element.rect)
+            : const DrawRect()
+        ..rotation = element.rotation
+        ..opacity = element.opacity
+        ..zIndex = element.zIndex
+        ..payload = element.hasPayload()
+            ? _decodeElementPayloadV2(element.elementType, element.payload)
+            : Uint8List(0);
+
+  static DrawPoint _decodePointV2(proto_v2.DrawPoint point) => DrawPoint(
+    x: point.x,
+    y: point.y,
+    pressure: point.pressure,
+    timestamp: point.timestampUs.toInt(),
+  );
+
+  static DrawRect _decodeRectV2(proto_v2.DrawRect rect) => DrawRect(
+    minX: rect.minX,
+    minY: rect.minY,
+    maxX: rect.maxX,
+    maxY: rect.maxY,
+  );
+
+  static Uint8List _decodeElementPayloadV2(
+    proto_v2.ElementType elementType,
+    proto_v2.ElementPayload payload,
+  ) {
+    switch (payload.whichPayload()) {
+      case proto_v2.ElementPayload_Payload.rawJsonPayload:
+        _guardRawPayload(elementType, payload.whichPayload());
+        return Uint8List.fromList(payload.rawJsonPayload);
+      case proto_v2.ElementPayload_Payload.rawBinaryPayload:
+        _guardRawPayload(elementType, payload.whichPayload());
+        return Uint8List.fromList(payload.rawBinaryPayload);
+      case proto_v2.ElementPayload_Payload.rectangle:
+        return _jsonBytes({
+          'color': payload.rectangle.colorArgb32.toInt(),
+          'fillColor': payload.rectangle.fillColorArgb32.toInt(),
+          'strokeWidth': payload.rectangle.strokeWidth,
+        });
+      case proto_v2.ElementPayload_Payload.arrow:
+        return _jsonBytes({
+          'points': payload.arrow.points.map(_pointToJsonV2).toList(),
+          'arrowType': payload.arrow.arrowType,
+        });
+      case proto_v2.ElementPayload_Payload.line:
+        return _jsonBytes({
+          'points': payload.line.points.map(_pointToJsonV2).toList(),
+          'strokeStyle': payload.line.lineType,
+        });
+      case proto_v2.ElementPayload_Payload.freeDraw:
+        return _jsonBytes({
+          'points': payload.freeDraw.points.map(_pointToJsonV2).toList(),
+        });
+      case proto_v2.ElementPayload_Payload.filter:
+        return _jsonBytes({
+          'type': payload.filter.filterType,
+          'strength': payload.filter.strength,
+        });
+      case proto_v2.ElementPayload_Payload.highlight:
+        return _jsonBytes({
+          'shape': payload.highlight.shape,
+          'color': payload.highlight.colorArgb32.toInt(),
+        });
+      case proto_v2.ElementPayload_Payload.text:
+        return _jsonBytes({
+          'text': payload.text.text,
+          'fontSize': payload.text.fontSize,
+          'fontFamily': payload.text.fontFamily,
+        });
+      case proto_v2.ElementPayload_Payload.serialNumber:
+        return _jsonBytes({
+          'number': payload.serialNumber.number,
+          'textElementId': payload.serialNumber.textElementId,
+        });
+      case proto_v2.ElementPayload_Payload.notSet:
+        return Uint8List(0);
     }
-    return writer.takeBytes();
   }
 
-  static Uint8List _encodeSelectElement({
-    required String elementId,
-    required bool addToSelection,
-    required DrawPoint position,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeString(1, elementId);
-    writer.writeBool(2, addToSelection);
-    writer.writeMessage(3, _encodePoint(position));
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeCreateElement({
-    required int elementType,
-    required String elementId,
-    required DrawPoint position,
-    required Uint8List payload,
-    required bool maintainAspectRatio,
-    required bool createFromCenter,
-    required bool snapOverride,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeEnum(1, elementType);
-    writer.writeString(2, elementId);
-    writer.writeMessage(3, _encodePoint(position));
-    if (payload.isNotEmpty) {
-      writer.writeBytes(4, payload);
+  static void _guardRawPayload(
+    proto_v2.ElementType elementType,
+    proto_v2.ElementPayload_Payload payloadKind,
+  ) {
+    if (!_isProductMode || _allowRawPayloadInRelease) {
+      return;
     }
-    writer.writeBool(5, maintainAspectRatio);
-    writer.writeBool(6, createFromCenter);
-    writer.writeBool(7, snapOverride);
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeUpdateCreatingElement({
-    required List<DrawPoint> positions,
-    required bool maintainAspectRatio,
-    required bool createFromCenter,
-    required bool snapOverride,
-  }) {
-    final writer = _ProtoWriter();
-    for (final point in positions) {
-      writer.writeMessage(1, _encodePoint(point));
+    if (elementType == proto_v2.ElementType.ELEMENT_TYPE_UNKNOWN) {
+      return;
     }
-    writer.writeBool(2, maintainAspectRatio);
-    writer.writeBool(3, createFromCenter);
-    writer.writeBool(4, snapOverride);
-    return writer.takeBytes();
+    throw StateError(
+      'Unsupported raw V2 payload in release mode for elementType=$elementType, payload=$payloadKind',
+    );
   }
 
-  static Uint8List _encodeAddArrowPoint({
-    required DrawPoint position,
-    required bool snapOverride,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeMessage(1, _encodePoint(position));
-    writer.writeBool(2, snapOverride);
-    return writer.takeBytes();
-  }
+  static Map<String, Object?> _pointToJsonV2(proto_v2.DrawPoint point) => {
+    'x': point.x,
+    'y': point.y,
+  };
 
-  static Uint8List _encodeDeleteElements(List<String> elementIds) {
-    final writer = _ProtoWriter();
-    for (final elementId in elementIds) {
-      writer.writeString(1, elementId);
-    }
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeDuplicateElements({
-    required List<String> elementIds,
-    required double offsetX,
-    required double offsetY,
-  }) {
-    final writer = _ProtoWriter();
-    for (final elementId in elementIds) {
-      writer.writeString(1, elementId);
-    }
-    writer.writeDouble(2, offsetX);
-    writer.writeDouble(3, offsetY);
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeChangeElementZIndex({
-    required String elementId,
-    required ZIndexOperation operation,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeString(1, elementId);
-    writer.writeEnum(2, _zIndexOperationValue(operation));
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeChangeElementsZIndex({
-    required List<String> elementIds,
-    required ZIndexOperation operation,
-  }) {
-    final writer = _ProtoWriter();
-    for (final elementId in elementIds) {
-      writer.writeString(1, elementId);
-    }
-    writer.writeEnum(2, _zIndexOperationValue(operation));
-    return writer.takeBytes();
-  }
+  static Uint8List _jsonBytes(Map<String, Object?> value) =>
+      Uint8List.fromList(utf8.encode(jsonEncode(value)));
 
   static Uint8List _encodeUpdateElementsStyle(UpdateElementsStyle action) {
     final style = <String, dynamic>{};
@@ -837,13 +1138,7 @@ final class _RustProtoCodec {
     if (action.serialNumber != null) {
       style['serialNumber'] = action.serialNumber;
     }
-
-    final writer = _ProtoWriter();
-    for (final elementId in action.elementIds) {
-      writer.writeString(1, elementId);
-    }
-    writer.writeBytes(2, Uint8List.fromList(utf8.encode(jsonEncode(style))));
-    return writer.takeBytes();
+    return Uint8List.fromList(utf8.encode(jsonEncode(style)));
   }
 
   static Uint8List _encodeUpdateGlobalElements({
@@ -868,182 +1163,51 @@ final class _RustProtoCodec {
         'opacity': watermark.opacity,
       };
     }
-
-    final writer = _ProtoWriter();
-    writer.writeBytes(1, Uint8List.fromList(utf8.encode(jsonEncode(payload))));
-    return writer.takeBytes();
+    return Uint8List.fromList(utf8.encode(jsonEncode(payload)));
   }
 
-  static Uint8List _encodeCreateSerialText(List<String> elementIds) {
-    final writer = _ProtoWriter();
-    for (final elementId in elementIds) {
-      writer.writeString(1, elementId);
-    }
-    return writer.takeBytes();
+  static proto.ElementType _elementTypeFromTypeValue(String typeValue) =>
+      switch (typeValue) {
+        'rectangle' => proto.ElementType.ELEMENT_TYPE_RECTANGLE,
+        'arrow' => proto.ElementType.ELEMENT_TYPE_ARROW,
+        'line' => proto.ElementType.ELEMENT_TYPE_LINE,
+        'free_draw' => proto.ElementType.ELEMENT_TYPE_FREE_DRAW,
+        'filter' => proto.ElementType.ELEMENT_TYPE_FILTER,
+        'highlight' => proto.ElementType.ELEMENT_TYPE_HIGHLIGHT,
+        'text' => proto.ElementType.ELEMENT_TYPE_TEXT,
+        'serial_number' => proto.ElementType.ELEMENT_TYPE_SERIAL_NUMBER,
+        _ => proto.ElementType.ELEMENT_TYPE_RECTANGLE,
+      };
+
+  static String _typeValueFromElementType(int elementType) {
+    final resolved =
+        proto.ElementType.valueOf(elementType) ??
+        proto.ElementType.ELEMENT_TYPE_RECTANGLE;
+    return switch (resolved) {
+      proto.ElementType.ELEMENT_TYPE_RECTANGLE => 'rectangle',
+      proto.ElementType.ELEMENT_TYPE_ARROW => 'arrow',
+      proto.ElementType.ELEMENT_TYPE_LINE => 'line',
+      proto.ElementType.ELEMENT_TYPE_FREE_DRAW => 'free_draw',
+      proto.ElementType.ELEMENT_TYPE_FILTER => 'filter',
+      proto.ElementType.ELEMENT_TYPE_HIGHLIGHT => 'highlight',
+      proto.ElementType.ELEMENT_TYPE_TEXT => 'text',
+      proto.ElementType.ELEMENT_TYPE_SERIAL_NUMBER => 'serial_number',
+      _ => 'rectangle',
+    };
   }
 
-  static Uint8List _encodeStartTextEdit({
-    required String? elementId,
-    required DrawPoint position,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeString(1, elementId ?? '');
-    writer.writeMessage(2, _encodePoint(position));
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeUpdateTextEdit({
-    required String text,
-    required DrawRect? rect,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeString(1, text);
-    if (rect != null) {
-      writer.writeMessage(2, _encodeRect(rect));
-    }
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeFinishTextEdit({
-    required String elementId,
-    required String text,
-    required bool isNew,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeString(1, elementId);
-    writer.writeString(2, text);
-    writer.writeBool(3, isNew);
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeStartEdit({
-    required String operationId,
-    required DrawPoint position,
-    required Object params,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeString(1, operationId);
-    writer.writeMessage(2, _encodePoint(position));
-    writer.writeBytes(
-      3,
-      Uint8List.fromList(utf8.encode(jsonEncode(_editParamsToJson(params)))),
-    );
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeUpdateEdit({
-    required DrawPoint currentPosition,
-    required EditModifiers modifiers,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeMessage(1, _encodePoint(currentPosition));
-    writer.writeBytes(
-      2,
-      Uint8List.fromList(
-        utf8.encode(
-          jsonEncode({
-            'maintainAspectRatio': modifiers.maintainAspectRatio,
-            'fromCenter': modifiers.fromCenter,
-            'discreteAngle': modifiers.discreteAngle,
-            'snapOverride': modifiers.snapOverride,
-          }),
-        ),
-      ),
-    );
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeSetDragPending({
-    required DrawPoint pointerDownPosition,
-    required PendingIntent intent,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeMessage(1, _encodePoint(pointerDownPosition));
-    writer.writeString(2, intent.toString());
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeStartBoxSelect(DrawPoint startPosition) {
-    final writer = _ProtoWriter();
-    writer.writeMessage(1, _encodePoint(startPosition));
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeUpdateBoxSelect(DrawPoint currentPosition) {
-    final writer = _ProtoWriter();
-    writer.writeMessage(1, _encodePoint(currentPosition));
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeMoveCamera({required double dx, required double dy}) {
-    final writer = _ProtoWriter();
-    writer.writeDouble(1, dx);
-    writer.writeDouble(2, dy);
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeZoomCamera({
-    required double scale,
-    required DrawPoint? center,
-  }) {
-    final writer = _ProtoWriter();
-    writer.writeDouble(1, scale);
-    if (center != null) {
-      writer.writeMessage(2, _encodePoint(center));
-    }
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodePoint(DrawPoint point) {
-    final writer = _ProtoWriter();
-    writer.writeDouble(1, point.x);
-    writer.writeDouble(2, point.y);
-    writer.writeDouble(3, point.pressure);
-    writer.writeUInt64(4, point.timestamp);
-    return writer.takeBytes();
-  }
-
-  static Uint8List _encodeRect(DrawRect rect) {
-    final writer = _ProtoWriter();
-    writer.writeDouble(1, rect.minX);
-    writer.writeDouble(2, rect.minY);
-    writer.writeDouble(3, rect.maxX);
-    writer.writeDouble(4, rect.maxY);
-    return writer.takeBytes();
-  }
-
-  static int _elementTypeFromTypeValue(String typeValue) => switch (typeValue) {
-    'rectangle' => _elementRectangle,
-    'arrow' => _elementArrow,
-    'line' => _elementLine,
-    'free_draw' => _elementFreeDraw,
-    'filter' => _elementFilter,
-    'highlight' => _elementHighlight,
-    'text' => _elementText,
-    'serial_number' => _elementSerialNumber,
-    _ => _elementRectangle,
+  static proto.ZIndexOperation _zIndexOperationValue(
+    ZIndexOperation operation,
+  ) => switch (operation) {
+    ZIndexOperation.bringToFront =>
+      proto.ZIndexOperation.Z_INDEX_OPERATION_BRING_TO_FRONT,
+    ZIndexOperation.sendToBack =>
+      proto.ZIndexOperation.Z_INDEX_OPERATION_SEND_TO_BACK,
+    ZIndexOperation.bringForward =>
+      proto.ZIndexOperation.Z_INDEX_OPERATION_BRING_FORWARD,
+    ZIndexOperation.sendBackward =>
+      proto.ZIndexOperation.Z_INDEX_OPERATION_SEND_BACKWARD,
   };
-
-  static String _typeValueFromElementType(int elementType) =>
-      switch (elementType) {
-        _elementRectangle => 'rectangle',
-        _elementArrow => 'arrow',
-        _elementLine => 'line',
-        _elementFreeDraw => 'free_draw',
-        _elementFilter => 'filter',
-        _elementHighlight => 'highlight',
-        _elementText => 'text',
-        _elementSerialNumber => 'serial_number',
-        _ => 'rectangle',
-      };
-
-  static int _zIndexOperationValue(ZIndexOperation operation) =>
-      switch (operation) {
-        ZIndexOperation.bringToFront => 0,
-        ZIndexOperation.sendToBack => 1,
-        ZIndexOperation.bringForward => 2,
-        ZIndexOperation.sendBackward => 3,
-      };
 
   static Map<String, dynamic> _editParamsToJson(Object params) =>
       switch (params) {
@@ -1085,123 +1249,6 @@ final class _RustProtoCodec {
           },
         _ => const {'type': 'unknown'},
       };
-
-  static CameraState _decodeCamera(_ProtoReader reader) {
-    var position = DrawPoint.zero;
-    var zoom = 1.0;
-
-    while (!reader.isDone) {
-      final tag = reader.readTag();
-      if (tag == 0) {
-        break;
-      }
-      final fieldNumber = tag >> 3;
-      final wireType = tag & 0x07;
-      switch (fieldNumber) {
-        case 1:
-          position = _decodePoint(_ProtoReader(reader.readBytes()));
-        case 2:
-          zoom = reader.readDouble();
-        default:
-          reader.skipField(wireType);
-      }
-    }
-
-    return CameraState(position: position, zoom: zoom);
-  }
-
-  static _DecodedElement _decodeElement(_ProtoReader reader) {
-    final element = _DecodedElement();
-
-    while (!reader.isDone) {
-      final tag = reader.readTag();
-      if (tag == 0) {
-        break;
-      }
-      final fieldNumber = tag >> 3;
-      final wireType = tag & 0x07;
-      switch (fieldNumber) {
-        case 1:
-          element.id = reader.readString();
-        case 2:
-          element.elementType = reader.readVarint();
-        case 3:
-          element.rect = _decodeRect(_ProtoReader(reader.readBytes()));
-        case 4:
-          element.rotation = reader.readDouble();
-        case 5:
-          element.opacity = reader.readDouble();
-        case 6:
-          element.zIndex = reader.readVarint();
-        case 7:
-          element.payload = reader.readBytes();
-        default:
-          reader.skipField(wireType);
-      }
-    }
-
-    return element;
-  }
-
-  static DrawPoint _decodePoint(_ProtoReader reader) {
-    var x = 0.0;
-    var y = 0.0;
-    var pressure = 0.0;
-    var timestamp = 0;
-
-    while (!reader.isDone) {
-      final tag = reader.readTag();
-      if (tag == 0) {
-        break;
-      }
-      final fieldNumber = tag >> 3;
-      final wireType = tag & 0x07;
-      switch (fieldNumber) {
-        case 1:
-          x = reader.readDouble();
-        case 2:
-          y = reader.readDouble();
-        case 3:
-          pressure = reader.readDouble();
-        case 4:
-          timestamp = reader.readVarint();
-        default:
-          reader.skipField(wireType);
-      }
-    }
-
-    return DrawPoint(x: x, y: y, pressure: pressure, timestamp: timestamp);
-  }
-
-  static DrawRect _decodeRect(_ProtoReader reader) {
-    var minX = 0.0;
-    var minY = 0.0;
-    var maxX = 0.0;
-    var maxY = 0.0;
-
-    while (!reader.isDone) {
-      final tag = reader.readTag();
-      if (tag == 0) {
-        break;
-      }
-      final fieldNumber = tag >> 3;
-      final wireType = tag & 0x07;
-      switch (fieldNumber) {
-        case 1:
-          minX = reader.readDouble();
-        case 2:
-          minY = reader.readDouble();
-        case 3:
-          maxX = reader.readDouble();
-        case 4:
-          maxY = reader.readDouble();
-        default:
-          reader.skipField(wireType);
-      }
-    }
-
-    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
-  }
 }
 
 final class _DecodedSnapshot {
@@ -1238,7 +1285,9 @@ final class _DecodedSnapshot {
     );
 
     final view = ViewState(camera: camera);
-    final interaction = interactionMode == 4
+    final interaction =
+        interactionMode ==
+            proto.InteractionMode.INTERACTION_MODE_BOX_SELECTING.value
         ? const BoxSelectingState(
             startPosition: DrawPoint.zero,
             currentPosition: DrawPoint.zero,
@@ -1320,7 +1369,7 @@ final class _DecodedSnapshot {
 
 final class _DecodedElement {
   String id = '';
-  int elementType = 1;
+  int elementType = proto.ElementType.ELEMENT_TYPE_RECTANGLE.value;
   DrawRect rect = const DrawRect();
   double rotation = 0.0;
   double opacity = 1.0;
@@ -1362,11 +1411,6 @@ final class _DecodedElement {
   }
 }
 
-final class _DecodedEvent {
-  int kind = 0;
-  String? message;
-}
-
 Map<String, dynamic> _asJsonMap(Object? raw) {
   if (raw is Map<String, dynamic>) {
     return raw;
@@ -1375,137 +1419,4 @@ Map<String, dynamic> _asJsonMap(Object? raw) {
     throw const FormatException('Expected JSON object');
   }
   return raw.map((key, value) => MapEntry(key.toString(), value));
-}
-
-final class _ProtoWriter {
-  _ProtoWriter() : _builder = BytesBuilder(copy: false);
-
-  final BytesBuilder _builder;
-
-  Uint8List takeBytes() => _builder.takeBytes();
-
-  void writeEnum(int fieldNumber, int value) => writeUInt64(fieldNumber, value);
-
-  void writeBool(int fieldNumber, bool value) {
-    if (!value) {
-      return;
-    }
-    writeUInt64(fieldNumber, 1);
-  }
-
-  void writeUInt64(int fieldNumber, int value) {
-    writeTag(fieldNumber, _RustProtoCodec._wireVarint);
-    writeRawVarint(value);
-  }
-
-  void writeDouble(int fieldNumber, double value) {
-    writeTag(fieldNumber, _RustProtoCodec._wireFixed64);
-    final bytes = ByteData(8)..setFloat64(0, value, Endian.little);
-    _builder.add(bytes.buffer.asUint8List());
-  }
-
-  void writeString(int fieldNumber, String value) {
-    if (value.isEmpty) {
-      return;
-    }
-    writeBytes(fieldNumber, Uint8List.fromList(utf8.encode(value)));
-  }
-
-  void writeBytes(int fieldNumber, Uint8List value) {
-    writeTag(fieldNumber, _RustProtoCodec._wireLengthDelimited);
-    writeRawVarint(value.length);
-    _builder.add(value);
-  }
-
-  void writeMessage(int fieldNumber, Uint8List message) {
-    writeBytes(fieldNumber, message);
-  }
-
-  void writeTag(int fieldNumber, int wireType) {
-    writeRawVarint((fieldNumber << 3) | wireType);
-  }
-
-  void writeRawVarint(int value) {
-    var v = value;
-    while (v > 0x7f) {
-      _builder.addByte((v & 0x7f) | 0x80);
-      v >>= 7;
-    }
-    _builder.addByte(v & 0x7f);
-  }
-}
-
-final class _ProtoReader {
-  _ProtoReader(Uint8List bytes) : _bytes = bytes;
-
-  final Uint8List _bytes;
-  int _offset = 0;
-
-  bool get isDone => _offset >= _bytes.length;
-
-  int readTag() {
-    if (isDone) {
-      return 0;
-    }
-    return readVarint();
-  }
-
-  int readVarint() {
-    var result = 0;
-    var shift = 0;
-    while (_offset < _bytes.length) {
-      final byte = _bytes[_offset++];
-      result |= (byte & 0x7f) << shift;
-      if ((byte & 0x80) == 0) {
-        return result;
-      }
-      shift += 7;
-      if (shift > 63) {
-        throw const FormatException('Varint too long');
-      }
-    }
-    throw const FormatException('Unexpected EOF while reading varint');
-  }
-
-  double readDouble() {
-    if (_offset + 8 > _bytes.length) {
-      throw const FormatException('Unexpected EOF while reading double');
-    }
-    final value = ByteData.sublistView(
-      _bytes,
-      _offset,
-      _offset + 8,
-    ).getFloat64(0, Endian.little);
-    _offset += 8;
-    return value;
-  }
-
-  Uint8List readBytes() {
-    final length = readVarint();
-    if (_offset + length > _bytes.length) {
-      throw const FormatException('Unexpected EOF while reading bytes');
-    }
-    final value = Uint8List.sublistView(_bytes, _offset, _offset + length);
-    _offset += length;
-    return value;
-  }
-
-  String readString() => utf8.decode(readBytes());
-
-  void skipField(int wireType) {
-    switch (wireType) {
-      case _RustProtoCodec._wireVarint:
-        readVarint();
-      case _RustProtoCodec._wireFixed64:
-        _offset += 8;
-      case _RustProtoCodec._wireLengthDelimited:
-        final length = readVarint();
-        _offset += length;
-      default:
-        throw FormatException('Unsupported wire type $wireType');
-    }
-    if (_offset > _bytes.length) {
-      throw const FormatException('Unexpected EOF while skipping field');
-    }
-  }
 }

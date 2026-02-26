@@ -1,0 +1,330 @@
+syntax = "proto3";
+
+package snowdraw.engine.v2;
+
+enum Capability {
+  CAPABILITY_UNSPECIFIED = 0;
+  CAPABILITY_EVENT_STREAM = 1;
+  CAPABILITY_FRAME_PLAN = 2;
+  CAPABILITY_DISPATCH_BATCH = 3;
+  CAPABILITY_INPUT_PIPELINE = 4;
+  CAPABILITY_TEXT_METRICS_HOST = 5;
+}
+
+enum ElementType {
+  ELEMENT_TYPE_UNKNOWN = 0;
+  ELEMENT_TYPE_RECTANGLE = 1;
+  ELEMENT_TYPE_ARROW = 2;
+  ELEMENT_TYPE_LINE = 3;
+  ELEMENT_TYPE_FREE_DRAW = 4;
+  ELEMENT_TYPE_FILTER = 5;
+  ELEMENT_TYPE_HIGHLIGHT = 6;
+  ELEMENT_TYPE_TEXT = 7;
+  ELEMENT_TYPE_SERIAL_NUMBER = 8;
+}
+
+enum InteractionMode {
+  INTERACTION_MODE_IDLE = 0;
+  INTERACTION_MODE_CREATING = 1;
+  INTERACTION_MODE_EDITING = 2;
+  INTERACTION_MODE_TEXT_EDITING = 3;
+  INTERACTION_MODE_BOX_SELECTING = 4;
+  INTERACTION_MODE_DRAG_PENDING = 5;
+}
+
+enum FrameTaskKind {
+  FRAME_TASK_KIND_UNKNOWN = 0;
+  FRAME_TASK_KIND_RECTANGLE = 1;
+  FRAME_TASK_KIND_LINE = 2;
+  FRAME_TASK_KIND_ARROW = 3;
+  FRAME_TASK_KIND_FREE_DRAW = 4;
+  FRAME_TASK_KIND_TEXT = 5;
+  FRAME_TASK_KIND_SERIAL_NUMBER = 6;
+  FRAME_TASK_KIND_HIGHLIGHT = 7;
+  FRAME_TASK_KIND_FILTER = 8;
+  FRAME_TASK_KIND_BACKGROUND = 9;
+  FRAME_TASK_KIND_GRID = 10;
+  FRAME_TASK_KIND_SELECTION_OUTLINE = 11;
+  FRAME_TASK_KIND_SELECTION_CONTROLS = 12;
+  FRAME_TASK_KIND_ARROW_POINT_OVERLAY = 13;
+  FRAME_TASK_KIND_ARROW_BINDING_HIGHLIGHT = 14;
+  FRAME_TASK_KIND_HOVER_OUTLINE = 15;
+  FRAME_TASK_KIND_SNAP_GUIDES = 16;
+  FRAME_TASK_KIND_BOX_SELECTION = 17;
+  FRAME_TASK_KIND_HIGHLIGHT_MASK = 18;
+  FRAME_TASK_KIND_WATERMARK = 19;
+}
+
+enum EngineEventKind {
+  ENGINE_EVENT_KIND_UNKNOWN = 0;
+  ENGINE_EVENT_KIND_STATE_CHANGED = 1;
+  ENGINE_EVENT_KIND_VALIDATION_FAILED = 2;
+  ENGINE_EVENT_KIND_ERROR = 3;
+  ENGINE_EVENT_KIND_HISTORY_CHANGED = 4;
+  ENGINE_EVENT_KIND_DEBUG = 5;
+}
+
+enum PointerPhase {
+  POINTER_PHASE_UNSPECIFIED = 0;
+  POINTER_PHASE_DOWN = 1;
+  POINTER_PHASE_MOVE = 2;
+  POINTER_PHASE_UP = 3;
+  POINTER_PHASE_CANCEL = 4;
+  POINTER_PHASE_HOVER = 5;
+}
+
+message DrawPoint {
+  double x = 1;
+  double y = 2;
+  double pressure = 3;
+  uint64 timestamp_us = 4;
+}
+
+message DrawRect {
+  double min_x = 1;
+  double min_y = 2;
+  double max_x = 3;
+  double max_y = 4;
+}
+
+message CameraState {
+  DrawPoint position = 1;
+  double zoom = 2;
+}
+
+message RectanglePayload {
+  uint64 color_argb32 = 1;
+  uint64 fill_color_argb32 = 2;
+  double stroke_width = 3;
+}
+
+message ArrowPayload {
+  repeated DrawPoint points = 1;
+  string arrow_type = 2;
+}
+
+message LinePayload {
+  repeated DrawPoint points = 1;
+  string line_type = 2;
+}
+
+message FreeDrawPayload {
+  repeated DrawPoint points = 1;
+}
+
+message FilterPayload {
+  string filter_type = 1;
+  double strength = 2;
+}
+
+message HighlightPayload {
+  string shape = 1;
+  uint64 color_argb32 = 2;
+}
+
+message TextPayload {
+  string text = 1;
+  double font_size = 2;
+  string font_family = 3;
+}
+
+message SerialNumberPayload {
+  int32 number = 1;
+  string text_element_id = 2;
+}
+
+message ElementPayload {
+  oneof payload {
+    RectanglePayload rectangle = 1;
+    ArrowPayload arrow = 2;
+    LinePayload line = 3;
+    FreeDrawPayload free_draw = 4;
+    FilterPayload filter = 5;
+    HighlightPayload highlight = 6;
+    TextPayload text = 7;
+    SerialNumberPayload serial_number = 8;
+    bytes raw_json_payload = 100;
+    bytes raw_binary_payload = 101;
+  }
+}
+
+message Element {
+  string id = 1;
+  ElementType element_type = 2;
+  DrawRect rect = 3;
+  double rotation = 4;
+  double opacity = 5;
+  int32 z_index = 6;
+  ElementPayload payload = 7;
+}
+
+message EngineSnapshot {
+  uint32 schema_version = 1;
+  uint64 document_version = 2;
+  uint64 selection_version = 3;
+  InteractionMode interaction_mode = 4;
+  CameraState camera = 5;
+  repeated Element elements = 6;
+  repeated string selected_ids = 7;
+  uint64 history_undo_len = 8;
+  uint64 history_redo_len = 9;
+  bytes global_elements_payload = 10;
+}
+
+message FrameTask {
+  FrameTaskKind kind = 1;
+  string element_id = 2;
+  ElementType element_type = 3;
+  ElementPayload payload = 4;
+}
+
+message FrameRenderPlan {
+  uint32 schema_version = 1;
+  CameraState camera = 2;
+  double scale_factor = 3;
+  string locale_tag = 4;
+  repeated FrameTask tasks = 5;
+}
+
+message EngineError {
+  uint32 code = 1;
+  string message = 2;
+  string details = 3;
+}
+
+message EngineEvent {
+  EngineEventKind kind = 1;
+  uint64 sequence = 2;
+  oneof payload {
+    EngineError error = 10;
+    bytes blob = 11;
+    string message = 12;
+  }
+}
+
+message EngineInitRequest {
+  uint32 requested_abi_version = 1;
+  uint32 schema_version = 2;
+  string locale_tag = 3;
+  double scale_factor = 4;
+  uint64 requested_capabilities_mask = 5;
+  uint64 deterministic_seed = 6;
+}
+
+message EngineInitAck {
+  uint32 abi_version = 1;
+  uint32 schema_version = 2;
+  uint64 granted_capabilities_mask = 3;
+  string message = 4;
+}
+
+message CommandEvent {
+  bytes command_bytes = 1;
+}
+
+message PointerEvent {
+  uint64 pointer_id = 1;
+  PointerPhase phase = 2;
+  DrawPoint position = 3;
+  uint32 buttons = 4;
+  uint32 modifiers = 5;
+}
+
+message KeyboardEvent {
+  string key = 1;
+  bool down = 2;
+  uint32 modifiers = 3;
+}
+
+message ToolEvent {
+  string tool_id = 1;
+  bytes payload = 2;
+}
+
+message ConfigEvent {
+  string locale_tag = 1;
+  double scale_factor = 2;
+  bytes config_payload = 3;
+}
+
+message TextMetricsRequest {
+  string text = 1;
+  double font_size = 2;
+  string font_family = 3;
+  double max_width = 4;
+  double min_width = 5;
+  string locale_tag = 6;
+  bool is_resizing = 7;
+}
+
+message TextMetricsLine {
+  double width = 1;
+  double height = 2;
+}
+
+message TextMetricsResult {
+  double width = 1;
+  double height = 2;
+  double line_height = 3;
+  repeated TextMetricsLine lines = 4;
+}
+
+message TextMetricsResponse {
+  uint64 request_id = 1;
+  bool ok = 2;
+  TextMetricsResult metrics = 3;
+  EngineError error = 4;
+}
+
+message EngineInput {
+  uint64 sequence = 1;
+  oneof payload {
+    CommandEvent command_event = 10;
+    PointerEvent pointer_event = 11;
+    KeyboardEvent keyboard_event = 12;
+    ToolEvent tool_event = 13;
+    ConfigEvent config_event = 14;
+    TextMetricsResponse text_metrics_response = 15;
+  }
+}
+
+message PointerHostRequest {
+  PointerEvent event = 1;
+}
+
+message KeyboardHostRequest {
+  KeyboardEvent event = 1;
+}
+
+message ToolHostRequest {
+  ToolEvent event = 1;
+}
+
+message HostRequest {
+  uint64 request_id = 1;
+  oneof payload {
+    TextMetricsRequest text_metrics_request = 10;
+    PointerHostRequest pointer_host_request = 11;
+    KeyboardHostRequest keyboard_host_request = 12;
+    ToolHostRequest tool_host_request = 13;
+  }
+}
+
+message EngineStateDelta {
+  uint64 document_version = 1;
+  uint64 selection_version = 2;
+  // Canonical deterministic element IDs affected by the state transition.
+  repeated string changed_element_ids = 3;
+}
+
+message EngineOutput {
+  uint64 sequence = 1;
+  oneof payload {
+    EngineInitAck init_ack = 10;
+    EngineSnapshot snapshot = 11;
+    EngineStateDelta state_delta = 12;
+    FrameRenderPlan frame_plan = 13;
+    EngineEvent event = 14;
+    HostRequest host_request = 15;
+  }
+}

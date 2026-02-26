@@ -10,4 +10,5 @@ crate-type = ["cdylib", "staticlib"]
 [dependencies]
 engine_core = { path = "../engine_core" }
 engine_proto = { path = "../engine_proto" }
+engine_proto_v2 = { path = "../engine_proto_v2" }
 prost.workspace = true

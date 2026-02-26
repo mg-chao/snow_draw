@@ -35,6 +35,22 @@ jobs:
       - name: Bootstrap workspace
         run: dart run melos bootstrap
 
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install Dart protoc plugin
+        run: dart pub global activate protoc_plugin
+
+      - name: Verify proto codegen drift
+        run: bash packages/snow_draw_engine/rust/scripts/check_proto_codegen_drift.sh
+
+      - name: Build Rust WASM artifact
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo build --manifest-path packages/snow_draw_engine/rust/Cargo.toml -p engine_wasm --target wasm32-unknown-unknown --release
+
       - name: Run static analysis
         run: dart run melos run analyze
 
@@ -43,6 +59,9 @@ jobs:
 
       - name: Verify core purity
         run: dart run melos run check:core-purity
+
+      - name: Verify Rust V2 runtime cutover guards
+        run: bash packages/snow_draw_engine/rust/scripts/check_runtime_v2_cutover.sh
 
       - name: Run test suite
         run: dart run melos run test
@@ -203,8 +222,38 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
+  build-rust-wasm:
+    needs: quality-gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Rust WASM runtime
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo build --manifest-path packages/snow_draw_engine/rust/Cargo.toml -p engine_wasm --target wasm32-unknown-unknown --release
+
+      - name: Package Rust WASM runtime
+        run: |
+          cd packages/snow_draw_engine/rust/target/wasm32-unknown-unknown/release
+          tar -czf $GITHUB_WORKSPACE/snow_draw-engine-rust-wasm.tar.gz \
+            engine_wasm.wasm
+
+      - name: Upload Rust WASM artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: snow_draw-engine-rust-wasm
+          path: snow_draw-engine-rust-wasm.tar.gz
+          if-no-files-found: error
+          retention-days: 14
+
   create-release:
-    needs: [quality-gate, build-windows, build-web, build-rust-abi-linux, build-rust-abi-macos, build-rust-abi-windows]
+    needs: [quality-gate, build-windows, build-web, build-rust-abi-linux, build-rust-abi-macos, build-rust-abi-windows, build-rust-wasm]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -239,6 +288,11 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: snow_draw-engine-rust-windows-x64
+
+      - name: Download Rust WASM artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: snow_draw-engine-rust-wasm
 
       - name: Get version
         id: get_version
@@ -310,6 +364,7 @@ jobs:
             | Rust ABI (Linux) | \`snow_draw-engine-rust-linux-x64.tar.gz\` | C ABI library + static archive |
             | Rust ABI (macOS) | \`snow_draw-engine-rust-macos-arm64.tar.gz\` | C ABI library + static archive |
             | Rust ABI (Windows) | \`snow_draw-engine-rust-windows-x64.zip\` | C ABI dynamic library + import library |
+            | Rust WASM | \`snow_draw-engine-rust-wasm.tar.gz\` | WebAssembly runtime module |
 
             ## Installation Instructions
 
@@ -342,6 +397,7 @@ jobs:
             snow_draw-engine-rust-linux-x64.tar.gz
             snow_draw-engine-rust-macos-arm64.tar.gz
             snow_draw-engine-rust-windows-x64.zip
+            snow_draw-engine-rust-wasm.tar.gz
           body: ${{ steps.release_notes.outputs.result }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

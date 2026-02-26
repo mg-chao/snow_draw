@@ -35,6 +35,22 @@ jobs:
       - name: Bootstrap workspace
         run: dart run melos bootstrap
 
+      - name: Install protobuf compiler
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y protobuf-compiler
+
+      - name: Install Dart protoc plugin
+        run: dart pub global activate protoc_plugin
+
+      - name: Verify proto codegen drift
+        run: bash packages/snow_draw_engine/rust/scripts/check_proto_codegen_drift.sh
+
+      - name: Build Rust WASM artifact
+        run: |
+          rustup target add wasm32-unknown-unknown
+          cargo build --manifest-path packages/snow_draw_engine/rust/Cargo.toml -p engine_wasm --target wasm32-unknown-unknown --release
+
       - name: Run static analysis
         run: dart run melos run analyze
 
@@ -46,6 +62,9 @@ jobs:
 
       - name: Verify compatibility contracts
         run: dart run melos run check:compatibility-contracts
+
+      - name: Verify Rust V2 runtime cutover guards
+        run: bash packages/snow_draw_engine/rust/scripts/check_runtime_v2_cutover.sh
 
       - name: Run test suite
         run: dart run melos run test

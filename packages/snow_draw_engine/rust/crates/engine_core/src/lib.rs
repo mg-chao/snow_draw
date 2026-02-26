@@ -1,5 +1,8 @@
 //! Headless Snow Draw engine core implemented in Rust.
 
+mod v2;
+pub use v2::EngineV2;
+
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use engine_proto::engine_command::Payload as CommandPayload;
