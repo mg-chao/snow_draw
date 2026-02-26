@@ -1045,8 +1045,7 @@ impl Engine {
             if let Some(bound_id) = existing_bound_id {
                 let has_bound_text = self.snapshot.elements.iter().any(|element| {
                     element.id == bound_id
-                        && normalize_element_type(element.element_type)
-                            == ElementType::Text as i32
+                        && normalize_element_type(element.element_type) == ElementType::Text as i32
                 });
                 if has_bound_text {
                     if focus_source_id.as_deref() == Some(source_id.as_str()) {
@@ -1104,7 +1103,11 @@ impl Engine {
                 .find(|element| element.id == focused_text_id)
                 .map(|element| {
                     let text = decode_json_map(&element.payload)
-                        .and_then(|map| map.get("text").and_then(JsonValue::as_str).map(str::to_string))
+                        .and_then(|map| {
+                            map.get("text")
+                                .and_then(JsonValue::as_str)
+                                .map(str::to_string)
+                        })
                         .unwrap_or_default();
                     (text, element.rect.clone())
                 })
@@ -1309,6 +1312,7 @@ impl Engine {
                 current,
                 &session.baseline_rects,
                 mode,
+                modifiers.maintain_aspect_ratio,
                 modifiers.from_center,
             ),
             EditSessionOperation::Rotate { pivot, snap_angle } => self.apply_update_rotate_edit(
@@ -1389,6 +1393,7 @@ impl Engine {
         current: DrawPoint,
         baseline_rects: &BTreeMap<String, DrawRect>,
         mode: ResizeMode,
+        maintain_aspect_ratio: bool,
         from_center: bool,
     ) -> bool {
         let dx = current.x - start.x;
@@ -1397,42 +1402,112 @@ impl Engine {
         let (move_left, move_right, move_top, move_bottom) = resize_mode_axes(mode);
 
         for (element_id, base_rect) in baseline_rects {
-            let mut min_x = base_rect.min_x;
-            let mut max_x = base_rect.max_x;
-            let mut min_y = base_rect.min_y;
-            let mut max_y = base_rect.max_y;
+            let base_width = (base_rect.max_x - base_rect.min_x).abs().max(1.0);
+            let base_height = (base_rect.max_y - base_rect.min_y).abs().max(1.0);
+            let center = rect_center(base_rect);
+            let axis_factor = if from_center { 2.0 } else { 1.0 };
 
-            if move_left {
-                min_x += dx;
-                if from_center {
-                    max_x -= dx;
-                }
-            }
-            if move_right {
-                max_x += dx;
-                if from_center {
-                    min_x -= dx;
-                }
-            }
-            if move_top {
-                min_y += dy;
-                if from_center {
-                    max_y -= dy;
-                }
-            }
-            if move_bottom {
-                max_y += dy;
-                if from_center {
-                    min_y -= dy;
+            let signed_width = if move_left {
+                base_width - dx * axis_factor
+            } else if move_right {
+                base_width + dx * axis_factor
+            } else {
+                base_width
+            };
+            let signed_height = if move_top {
+                base_height - dy * axis_factor
+            } else if move_bottom {
+                base_height + dy * axis_factor
+            } else {
+                base_height
+            };
+
+            let mut width = signed_width.abs().max(1.0);
+            let mut height = signed_height.abs().max(1.0);
+
+            if maintain_aspect_ratio {
+                let aspect_ratio = base_width / base_height;
+                let horizontal_active = move_left || move_right;
+                let vertical_active = move_top || move_bottom;
+
+                if horizontal_active && vertical_active {
+                    if (width / height) >= aspect_ratio {
+                        height = (width / aspect_ratio).max(1.0);
+                    } else {
+                        width = (height * aspect_ratio).max(1.0);
+                    }
+                } else if horizontal_active {
+                    height = (width / aspect_ratio).max(1.0);
+                } else if vertical_active {
+                    width = (height * aspect_ratio).max(1.0);
                 }
             }
 
-            let rect = normalize_rect(DrawRect {
-                min_x,
-                min_y,
-                max_x,
-                max_y,
-            });
+            let rect = if from_center {
+                DrawRect {
+                    min_x: center.x - width / 2.0,
+                    min_y: center.y - height / 2.0,
+                    max_x: center.x + width / 2.0,
+                    max_y: center.y + height / 2.0,
+                }
+            } else {
+                let anchor_x = if move_left {
+                    base_rect.max_x
+                } else if move_right {
+                    base_rect.min_x
+                } else {
+                    center.x
+                };
+                let anchor_y = if move_top {
+                    base_rect.max_y
+                } else if move_bottom {
+                    base_rect.min_y
+                } else {
+                    center.y
+                };
+
+                let width_positive = signed_width >= 0.0;
+                let height_positive = signed_height >= 0.0;
+
+                let (min_x, max_x) = if move_left {
+                    if width_positive {
+                        (anchor_x - width, anchor_x)
+                    } else {
+                        (anchor_x, anchor_x + width)
+                    }
+                } else if move_right {
+                    if width_positive {
+                        (anchor_x, anchor_x + width)
+                    } else {
+                        (anchor_x - width, anchor_x)
+                    }
+                } else {
+                    (anchor_x - width / 2.0, anchor_x + width / 2.0)
+                };
+
+                let (min_y, max_y) = if move_top {
+                    if height_positive {
+                        (anchor_y - height, anchor_y)
+                    } else {
+                        (anchor_y, anchor_y + height)
+                    }
+                } else if move_bottom {
+                    if height_positive {
+                        (anchor_y, anchor_y + height)
+                    } else {
+                        (anchor_y - height, anchor_y)
+                    }
+                } else {
+                    (anchor_y - height / 2.0, anchor_y + height / 2.0)
+                };
+
+                normalize_rect(DrawRect {
+                    min_x,
+                    min_y,
+                    max_x,
+                    max_y,
+                })
+            };
             if let Some(element) = self.element_mut(element_id) {
                 element.rect = Some(rect);
                 changed = true;
@@ -3916,6 +3991,157 @@ mod tests {
         assert_eq!(resized.min_y, original.min_y);
         assert_eq!(resized.max_x, original.max_x + 25.0);
         assert_eq!(resized.max_y, original.max_y + 10.0);
+    }
+
+    #[test]
+    fn resize_edit_honors_maintain_aspect_ratio_for_corner_handle() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "resize-ratio-corner".to_string(),
+                    position: Some(DrawPoint {
+                        x: 8.0,
+                        y: 12.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create");
+        let original = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "resize-ratio-corner")
+            .and_then(|element| element.rect.clone())
+            .expect("rect");
+        let original_ratio = (original.max_x - original.min_x) / (original.max_y - original.min_y);
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "resize".to_string(),
+                    position: Some(DrawPoint {
+                        x: original.max_x,
+                        y: original.max_y,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"resize","resizeMode":"bottomRight"}"#.to_vec(),
+                })),
+            })
+            .expect("start resize");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: original.max_x + 40.0,
+                        y: original.max_y + 5.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: br#"{"maintainAspectRatio":true}"#.to_vec(),
+                })),
+            })
+            .expect("update resize");
+
+        let resized = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "resize-ratio-corner")
+            .and_then(|element| element.rect.clone())
+            .expect("resized rect");
+        let width = resized.max_x - resized.min_x;
+        let height = resized.max_y - resized.min_y;
+        assert!(((width / height) - original_ratio).abs() < 1e-9);
+        assert_eq!(resized.min_x, original.min_x);
+        assert_eq!(resized.min_y, original.min_y);
+    }
+
+    #[test]
+    fn resize_edit_honors_maintain_aspect_ratio_for_side_handle() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "resize-ratio-side".to_string(),
+                    position: Some(DrawPoint {
+                        x: 20.0,
+                        y: 20.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create");
+        let original = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "resize-ratio-side")
+            .and_then(|element| element.rect.clone())
+            .expect("rect");
+        let original_ratio = (original.max_x - original.min_x) / (original.max_y - original.min_y);
+        let original_center_y = (original.min_y + original.max_y) / 2.0;
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "resize".to_string(),
+                    position: Some(DrawPoint {
+                        x: original.max_x,
+                        y: original_center_y,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"resize","resizeMode":"right"}"#.to_vec(),
+                })),
+            })
+            .expect("start resize");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: original.max_x + 36.0,
+                        y: original_center_y,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: br#"{"maintainAspectRatio":true}"#.to_vec(),
+                })),
+            })
+            .expect("update resize");
+
+        let resized = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "resize-ratio-side")
+            .and_then(|element| element.rect.clone())
+            .expect("resized rect");
+        let width = resized.max_x - resized.min_x;
+        let height = resized.max_y - resized.min_y;
+        let center_y = (resized.min_y + resized.max_y) / 2.0;
+        assert!(((width / height) - original_ratio).abs() < 1e-9);
+        assert!((center_y - original_center_y).abs() < 1e-9);
     }
 
     #[test]

@@ -35,7 +35,7 @@ Status legend:
 | `finish_text_edit` | implemented | Commits or removes new-empty text as expected. |
 | `cancel_text_edit` | implemented | Cancels text session and removes new draft text. |
 | `start_edit` | partial | `move`/`resize`/`rotate` are implemented; non-core operation types resolve to unknown. |
-| `update_edit` | partial | `move`/`resize`/`rotate` are implemented; only subset of modifier fields are applied. |
+| `update_edit` | partial | `move`/`resize`/`rotate` are implemented; `maintainAspectRatio`, `fromCenter`, and `discreteAngle` modifiers are applied, while `snap_override` remains deferred. |
 | `finish_edit` | implemented | Closes edit session. |
 | `cancel_edit` | implemented | Reverts to session baseline rect/rotation. |
 | `set_drag_pending` | implemented | Sets drag-pending interaction state. |
