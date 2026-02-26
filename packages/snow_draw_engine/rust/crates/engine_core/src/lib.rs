@@ -70,6 +70,7 @@ pub struct Engine {
     creating_start_position: Option<DrawPoint>,
     text_edit_session: Option<TextEditSession>,
     box_select_start: Option<DrawPoint>,
+    box_select_current: Option<DrawPoint>,
     edit_session: Option<EditSession>,
 }
 
@@ -133,6 +134,7 @@ impl Engine {
             creating_start_position: None,
             text_edit_session: None,
             box_select_start: None,
+            box_select_current: None,
             edit_session: None,
         }
     }
@@ -348,6 +350,7 @@ impl Engine {
             }
             EngineCommandKind::FinishBoxSelect | EngineCommandKind::CancelBoxSelect => {
                 self.box_select_start = None;
+                self.box_select_current = None;
                 self.set_interaction_mode(InteractionMode::Idle);
                 self.emit_state_changed();
             }
@@ -458,14 +461,36 @@ impl Engine {
                 element_type: ElementType::Unknown as i32,
                 payload: Vec::new(),
             });
+            if let Some(payload) = arrow_point_overlay_payload(&self.snapshot) {
+                tasks.push(FrameTask {
+                    kind: FrameTaskKind::ArrowPointOverlay as i32,
+                    element_id: String::new(),
+                    element_type: ElementType::Unknown as i32,
+                    payload,
+                });
+            }
+            if let Some(payload) = arrow_binding_highlight_payload(&self.snapshot) {
+                tasks.push(FrameTask {
+                    kind: FrameTaskKind::ArrowBindingHighlight as i32,
+                    element_id: String::new(),
+                    element_type: ElementType::Unknown as i32,
+                    payload,
+                });
+            }
         }
 
         if self.snapshot.interaction_mode == InteractionMode::BoxSelecting as i32 {
+            let payload = self
+                .box_select_start
+                .as_ref()
+                .zip(self.box_select_current.as_ref())
+                .and_then(|(start, current)| box_selection_payload(start, current))
+                .unwrap_or_default();
             tasks.push(FrameTask {
                 kind: FrameTaskKind::BoxSelection as i32,
                 element_id: String::new(),
                 element_type: ElementType::Unknown as i32,
-                payload: Vec::new(),
+                payload,
             });
         }
 
@@ -1313,10 +1338,12 @@ impl Engine {
 
     fn apply_set_drag_pending(&mut self, payload: SetDragPendingCommand) {
         self.box_select_start = payload.pointer_down_position;
+        self.box_select_current = None;
         self.set_interaction_mode(InteractionMode::DragPending);
     }
 
     fn apply_start_box_select(&mut self, payload: StartBoxSelectCommand) {
+        self.box_select_current = payload.start_position.clone();
         self.box_select_start = payload.start_position;
         self.set_interaction_mode(InteractionMode::BoxSelecting);
     }
@@ -1326,6 +1353,7 @@ impl Engine {
             return;
         };
         let current = payload.current_position.unwrap_or_else(|| start.clone());
+        self.box_select_current = Some(current.clone());
         let rect = rect_from_points(start.clone(), current, false);
 
         let selected = self
@@ -1409,6 +1437,7 @@ impl Engine {
         self.creating_start_position = None;
         self.text_edit_session = None;
         self.box_select_start = None;
+        self.box_select_current = None;
         self.edit_session = None;
     }
 
@@ -1669,6 +1698,146 @@ fn watermark_payload(global_payload: &[u8]) -> Option<Vec<u8>> {
         return None;
     }
     serde_json::to_vec(watermark).ok()
+}
+
+fn box_selection_payload(start: &DrawPoint, current: &DrawPoint) -> Option<Vec<u8>> {
+    let rect = rect_from_points(start.clone(), current.clone(), false);
+    let mut payload = JsonMap::new();
+    payload.insert(
+        "bounds".to_string(),
+        JsonValue::Object(JsonMap::from_iter([
+            ("minX".to_string(), JsonValue::from(rect.min_x)),
+            ("minY".to_string(), JsonValue::from(rect.min_y)),
+            ("maxX".to_string(), JsonValue::from(rect.max_x)),
+            ("maxY".to_string(), JsonValue::from(rect.max_y)),
+        ])),
+    );
+    serde_json::to_vec(&payload).ok()
+}
+
+fn arrow_point_overlay_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>> {
+    let element = selected_arrow_like_element(snapshot)?;
+    let rect = element.rect.as_ref()?;
+    let payload_map = decode_json_map(&element.payload)?;
+    let normalized_points = decode_arrow_points(&payload_map);
+    if normalized_points.len() < 2 {
+        return None;
+    }
+
+    let width = rect.max_x - rect.min_x;
+    let height = rect.max_y - rect.min_y;
+    let world_points = normalized_points
+        .iter()
+        .map(|(x, y)| (rect.min_x + x * width, rect.min_y + y * height))
+        .collect::<Vec<_>>();
+
+    let mut handles = Vec::new();
+    for (index, (x, y)) in world_points.iter().enumerate() {
+        handles.push(frame_handle_payload(
+            element.id.as_str(),
+            "turning",
+            index as i32,
+            *x,
+            *y,
+            false,
+        ));
+    }
+    for index in 0..(world_points.len() - 1) {
+        let (start_x, start_y) = world_points[index];
+        let (end_x, end_y) = world_points[index + 1];
+        handles.push(frame_handle_payload(
+            element.id.as_str(),
+            "addable",
+            index as i32,
+            (start_x + end_x) / 2.0,
+            (start_y + end_y) / 2.0,
+            false,
+        ));
+    }
+    if handles.is_empty() {
+        return None;
+    }
+
+    let mut payload = JsonMap::new();
+    payload.insert("handles".to_string(), JsonValue::Array(handles));
+    payload.insert("deleteIndicatorVisible".to_string(), JsonValue::from(false));
+    serde_json::to_vec(&payload).ok()
+}
+
+fn arrow_binding_highlight_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>> {
+    let element = selected_arrow_like_element(snapshot)?;
+    let payload_map = decode_json_map(&element.payload)?;
+    let mut ids = BTreeSet::new();
+    for key in ["startBinding", "endBinding"] {
+        let Some(binding) = payload_map.get(key).and_then(JsonValue::as_object) else {
+            continue;
+        };
+        let Some(element_id) = binding.get("elementId").and_then(JsonValue::as_str) else {
+            continue;
+        };
+        let trimmed = element_id.trim();
+        if !trimmed.is_empty() {
+            ids.insert(trimmed.to_string());
+        }
+    }
+    if ids.is_empty() {
+        return None;
+    }
+
+    let mut payload = JsonMap::new();
+    payload.insert(
+        "elementIds".to_string(),
+        JsonValue::Array(ids.into_iter().map(JsonValue::from).collect()),
+    );
+    serde_json::to_vec(&payload).ok()
+}
+
+fn selected_arrow_like_element(snapshot: &EngineSnapshot) -> Option<&Element> {
+    if snapshot.selected_ids.len() != 1 {
+        return None;
+    }
+    let selected_id = snapshot.selected_ids.first()?;
+    let element = snapshot
+        .elements
+        .iter()
+        .find(|candidate| candidate.id == *selected_id)?;
+    match ElementType::try_from(element.element_type).unwrap_or(ElementType::Unknown) {
+        ElementType::Arrow | ElementType::Line => Some(element),
+        _ => None,
+    }
+}
+
+fn decode_arrow_points(payload: &JsonMap<String, JsonValue>) -> Vec<(f64, f64)> {
+    let Some(entries) = payload.get("points").and_then(JsonValue::as_array) else {
+        return Vec::new();
+    };
+
+    entries
+        .iter()
+        .filter_map(JsonValue::as_object)
+        .filter_map(|entry| {
+            let x = entry.get("x").and_then(JsonValue::as_f64)?;
+            let y = entry.get("y").and_then(JsonValue::as_f64)?;
+            Some((x, y))
+        })
+        .collect()
+}
+
+fn frame_handle_payload(
+    element_id: &str,
+    kind: &str,
+    index: i32,
+    x: f64,
+    y: f64,
+    is_fixed: bool,
+) -> JsonValue {
+    JsonValue::Object(JsonMap::from_iter([
+        ("elementId".to_string(), JsonValue::from(element_id)),
+        ("kind".to_string(), JsonValue::from(kind)),
+        ("index".to_string(), JsonValue::from(index)),
+        ("position".to_string(), point_value(x, y)),
+        ("isFixed".to_string(), JsonValue::from(is_fixed)),
+    ]))
 }
 
 fn map_frame_task_kind(element_type: i32) -> FrameTaskKind {
@@ -2893,6 +3062,133 @@ mod tests {
             .tasks
             .iter()
             .any(|task| task.kind == FrameTaskKind::SelectionOutline as i32));
+    }
+
+    #[test]
+    fn frame_plan_emits_arrow_overlay_and_binding_highlight_payloads() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(create_command("binding-target", ElementType::Rectangle))
+            .expect("create target");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Arrow as i32,
+                    element_id: "arrow-overlay".to_string(),
+                    position: Some(DrawPoint {
+                        x: 20.0,
+                        y: 20.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: br#"{"typeId":"arrow","points":[{"x":0.0,"y":0.0},{"x":1.0,"y":1.0},{"x":1.0,"y":0.0}],"startBinding":{"elementId":"binding-target"}}"#.to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create arrow");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+
+        let overlay = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::ArrowPointOverlay as i32)
+            .expect("arrow overlay task");
+        let overlay_payload =
+            serde_json::from_slice::<serde_json::Value>(&overlay.payload).expect("overlay payload");
+        let handles = overlay_payload
+            .get("handles")
+            .and_then(|value| value.as_array())
+            .expect("overlay handles");
+        assert_eq!(handles.len(), 5);
+
+        let binding = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::ArrowBindingHighlight as i32)
+            .expect("binding highlight task");
+        let binding_payload =
+            serde_json::from_slice::<serde_json::Value>(&binding.payload).expect("binding payload");
+        let ids = binding_payload
+            .get("elementIds")
+            .and_then(|value| value.as_array())
+            .expect("binding ids");
+        assert_eq!(ids.len(), 1);
+        assert_eq!(
+            ids.first().and_then(|value| value.as_str()),
+            Some("binding-target")
+        );
+    }
+
+    #[test]
+    fn frame_plan_box_selection_payload_tracks_bounds() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartBoxSelect as i32,
+                payload: Some(CommandPayload::StartBoxSelect(StartBoxSelectCommand {
+                    start_position: Some(DrawPoint {
+                        x: 12.0,
+                        y: 18.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                })),
+            })
+            .expect("start box select");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateBoxSelect as i32,
+                payload: Some(CommandPayload::UpdateBoxSelect(UpdateBoxSelectCommand {
+                    current_position: Some(DrawPoint {
+                        x: 48.0,
+                        y: 36.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                })),
+            })
+            .expect("update box select");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        let task = plan
+            .tasks
+            .iter()
+            .find(|entry| entry.kind == FrameTaskKind::BoxSelection as i32)
+            .expect("box selection task");
+        let payload =
+            serde_json::from_slice::<serde_json::Value>(&task.payload).expect("box payload");
+        let bounds = payload
+            .get("bounds")
+            .and_then(|value| value.as_object())
+            .expect("bounds payload");
+        assert_eq!(
+            bounds.get("minX").and_then(|value| value.as_f64()),
+            Some(12.0)
+        );
+        assert_eq!(
+            bounds.get("minY").and_then(|value| value.as_f64()),
+            Some(18.0)
+        );
+        assert_eq!(
+            bounds.get("maxX").and_then(|value| value.as_f64()),
+            Some(48.0)
+        );
+        assert_eq!(
+            bounds.get("maxY").and_then(|value| value.as_f64()),
+            Some(36.0)
+        );
     }
 
     #[test]

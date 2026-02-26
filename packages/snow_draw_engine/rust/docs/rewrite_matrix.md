@@ -69,8 +69,8 @@ Status legend:
 | `highlight_mask` | implemented | Emitted when global highlight mask is visible. |
 | `watermark` | implemented | Emitted when watermark is visible. |
 | `grid` | implemented | Always emitted near the top of the plan (host decides enabled/visibility). |
-| `arrow_point_overlay` | missing | Not yet emitted by Rust frame planner. |
-| `arrow_binding_highlight` | missing | Not yet emitted by Rust frame planner. |
+| `arrow_point_overlay` | partial | Emitted for single selected arrow/line elements with deterministic handle payloads; advanced loop/elbow parity remains deferred. |
+| `arrow_binding_highlight` | partial | Emitted for selected arrow/line bindings; hover/edit-session driven highlight parity remains deferred. |
 | `hover_outline` | missing | Not yet emitted by Rust frame planner. |
 | `snap_guides` | missing | Not yet emitted by Rust frame planner. |
 

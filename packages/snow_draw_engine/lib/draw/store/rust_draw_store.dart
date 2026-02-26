@@ -15,6 +15,7 @@ import '../core/callbacks.dart';
 import '../core/draw_context.dart';
 import '../edit/core/edit_operation_params.dart';
 import '../elements/core/element_data.dart';
+import '../elements/types/arrow/arrow_points.dart';
 import '../elements/types/text/text_data.dart';
 import '../events/error_events.dart';
 import '../events/event_bus.dart';
@@ -35,6 +36,7 @@ import '../services/text/text_metrics_service.dart';
 import '../types/draw_color.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
+import '../types/snap_guides.dart';
 import '../utils/selection_calculator.dart';
 import 'draw_store_interface.dart';
 import 'listener_registry.dart';
@@ -840,6 +842,12 @@ final class _RustProtoCodec {
     required DrawConfig config,
   }) {
     final tasks = <FrameRenderTask>[];
+    final localeTag = message.localeTag.trim().isEmpty
+        ? null
+        : message.localeTag;
+    final elementById = <String, ElementState>{
+      for (final element in state.domain.document.elements) element.id: element,
+    };
     final selectedElements = SelectionCalculator.getSelectedElements(state);
     final selectionBounds =
         SelectionCalculator.computeSelectionBoundsForElements(selectedElements);
@@ -887,14 +895,80 @@ final class _RustProtoCodec {
           }
           break;
         case proto_v2.FrameTaskKind.FRAME_TASK_KIND_BOX_SELECTION:
-          final interaction = state.application.interaction;
-          if (interaction is BoxSelectingState) {
+          final payload = _decodeFrameTaskPayload(task);
+          final bounds =
+              _decodeRectMap(payload?['bounds']) ??
+              switch (state.application.interaction) {
+                BoxSelectingState(:final bounds) => bounds,
+                _ => null,
+              };
+          if (bounds != null) {
             tasks.add(
               BoxSelectionRenderTask(
-                bounds: interaction.bounds,
+                bounds: bounds,
                 config: config.boxSelection,
                 selectionConfig: config.selection,
                 previewElements: selectedElements,
+              ),
+            );
+          }
+          break;
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_ARROW_POINT_OVERLAY:
+          final payload = _decodeFrameTaskPayload(task);
+          final handles = _decodeArrowPointHandles(payload?['handles']);
+          if (handles.isNotEmpty) {
+            tasks.add(
+              ArrowPointOverlayRenderTask(
+                handles: List<ArrowPointHandle>.unmodifiable(handles),
+                selectionConfig: config.selection,
+                activeHandle: _decodeArrowPointHandle(payload?['activeHandle']),
+                hoveredHandle: _decodeArrowPointHandle(
+                  payload?['hoveredHandle'],
+                ),
+                deleteIndicatorVisible:
+                    payload?['deleteIndicatorVisible'] == true,
+              ),
+            );
+          }
+          break;
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_ARROW_BINDING_HIGHLIGHT:
+          final payload = _decodeFrameTaskPayload(task);
+          final elementIds = _decodeStringList(payload?['elementIds']);
+          if (elementIds.isNotEmpty) {
+            tasks.add(
+              ArrowBindingHighlightRenderTask(
+                elementIds: List<String>.unmodifiable(elementIds),
+                strokeColor: config.selection.render.strokeColor,
+              ),
+            );
+          }
+          break;
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_HOVER_OUTLINE:
+          final payload = _decodeFrameTaskPayload(task);
+          final hoverId = payload?['elementId'];
+          if (hoverId is String && hoverId.trim().isNotEmpty) {
+            final element = elementById[hoverId];
+            if (element != null) {
+              tasks.add(
+                HoverOutlineRenderTask(
+                  element: element,
+                  config: config.selection,
+                  useTextUnderlineStyle:
+                      payload?['useTextUnderlineStyle'] == true ||
+                      element.data is TextData,
+                ),
+              );
+            }
+          }
+          break;
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_SNAP_GUIDES:
+          final payload = _decodeFrameTaskPayload(task);
+          final guides = _decodeSnapGuides(payload?['guides']);
+          if (guides.isNotEmpty) {
+            tasks.add(
+              SnapGuidesRenderTask(
+                guides: List<SnapGuide>.unmodifiable(guides),
+                snapConfig: config.snap,
               ),
             );
           }
@@ -916,7 +990,6 @@ final class _RustProtoCodec {
             ),
           );
           break;
-        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_UNKNOWN:
         case proto_v2.FrameTaskKind.FRAME_TASK_KIND_RECTANGLE:
         case proto_v2.FrameTaskKind.FRAME_TASK_KIND_LINE:
         case proto_v2.FrameTaskKind.FRAME_TASK_KIND_ARROW:
@@ -925,10 +998,7 @@ final class _RustProtoCodec {
         case proto_v2.FrameTaskKind.FRAME_TASK_KIND_SERIAL_NUMBER:
         case proto_v2.FrameTaskKind.FRAME_TASK_KIND_HIGHLIGHT:
         case proto_v2.FrameTaskKind.FRAME_TASK_KIND_FILTER:
-        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_ARROW_POINT_OVERLAY:
-        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_ARROW_BINDING_HIGHLIGHT:
-        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_HOVER_OUTLINE:
-        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_SNAP_GUIDES:
+        case proto_v2.FrameTaskKind.FRAME_TASK_KIND_UNKNOWN:
           break;
       }
     }
@@ -939,9 +1009,215 @@ final class _RustProtoCodec {
           ? _decodeCameraV2(message.camera)
           : state.application.view.camera,
       scaleFactor: _resolveScaleFactor(message.scaleFactor),
-      localeTag: message.localeTag.trim().isEmpty ? null : message.localeTag,
+      localeTag: localeTag,
     );
   }
+
+  static Map<String, dynamic>? _decodeFrameTaskPayload(
+    proto_v2.FrameTask task,
+  ) {
+    if (!task.hasPayload()) {
+      return null;
+    }
+    final payload = task.payload;
+    List<int>? bytes;
+    switch (payload.whichPayload()) {
+      case proto_v2.ElementPayload_Payload.rawJsonPayload:
+        bytes = payload.rawJsonPayload;
+        break;
+      case proto_v2.ElementPayload_Payload.rawBinaryPayload:
+        bytes = payload.rawBinaryPayload;
+        break;
+      case proto_v2.ElementPayload_Payload.rectangle:
+      case proto_v2.ElementPayload_Payload.arrow:
+      case proto_v2.ElementPayload_Payload.line:
+      case proto_v2.ElementPayload_Payload.freeDraw:
+      case proto_v2.ElementPayload_Payload.filter:
+      case proto_v2.ElementPayload_Payload.highlight:
+      case proto_v2.ElementPayload_Payload.text:
+      case proto_v2.ElementPayload_Payload.serialNumber:
+      case proto_v2.ElementPayload_Payload.notSet:
+        bytes = null;
+        break;
+    }
+    if (bytes == null || bytes.isEmpty) {
+      return null;
+    }
+    try {
+      final decoded = jsonDecode(utf8.decode(bytes));
+      if (decoded is! Map) {
+        return null;
+      }
+      return decoded.cast<String, dynamic>();
+    } on Object {
+      return null;
+    }
+  }
+
+  static List<ArrowPointHandle> _decodeArrowPointHandles(Object? raw) {
+    if (raw is! List) {
+      return const <ArrowPointHandle>[];
+    }
+    final handles = <ArrowPointHandle>[];
+    for (final entry in raw) {
+      final handle = _decodeArrowPointHandle(entry);
+      if (handle != null) {
+        handles.add(handle);
+      }
+    }
+    return handles;
+  }
+
+  static ArrowPointHandle? _decodeArrowPointHandle(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    final map = raw.cast<String, dynamic>();
+    final elementId = map['elementId'];
+    if (elementId is! String || elementId.trim().isEmpty) {
+      return null;
+    }
+    final kind = _decodeArrowPointKind(map['kind']);
+    if (kind == null) {
+      return null;
+    }
+    final index = map['index'];
+    final position =
+        _decodePointMap(map['position']) ??
+        _decodePointMap(map) ??
+        DrawPoint.zero;
+    return ArrowPointHandle(
+      elementId: elementId,
+      kind: kind,
+      index: index is num ? index.toInt() : 0,
+      position: position,
+      isFixed: map['isFixed'] == true,
+    );
+  }
+
+  static ArrowPointKind? _decodeArrowPointKind(Object? raw) {
+    if (raw is! String || raw.trim().isEmpty) {
+      return null;
+    }
+    final normalized = raw.trim().split('.').last;
+    return switch (normalized) {
+      'turning' => ArrowPointKind.turning,
+      'addable' => ArrowPointKind.addable,
+      'loopStart' => ArrowPointKind.loopStart,
+      'loopEnd' => ArrowPointKind.loopEnd,
+      _ => null,
+    };
+  }
+
+  static List<String> _decodeStringList(Object? raw) {
+    if (raw is! List) {
+      return const <String>[];
+    }
+    final ids = <String>{};
+    for (final entry in raw) {
+      if (entry is String && entry.trim().isNotEmpty) {
+        ids.add(entry);
+      }
+    }
+    return ids.toList(growable: false);
+  }
+
+  static List<SnapGuide> _decodeSnapGuides(Object? raw) {
+    if (raw is! List) {
+      return const <SnapGuide>[];
+    }
+    final guides = <SnapGuide>[];
+    for (final entry in raw) {
+      if (entry is! Map) {
+        continue;
+      }
+      final map = entry.cast<String, dynamic>();
+      final kind = _decodeSnapGuideKind(map['kind']);
+      final axis = _decodeSnapGuideAxis(map['axis']);
+      final start = _decodePointMap(map['start']);
+      final end = _decodePointMap(map['end']);
+      if (kind == null || axis == null || start == null || end == null) {
+        continue;
+      }
+      final markers = <DrawPoint>[];
+      final rawMarkers = map['markers'];
+      if (rawMarkers is List) {
+        for (final marker in rawMarkers) {
+          final point = _decodePointMap(marker);
+          if (point != null) {
+            markers.add(point);
+          }
+        }
+      }
+      final rawLabel = map['label'];
+      guides.add(
+        SnapGuide(
+          kind: kind,
+          axis: axis,
+          start: start,
+          end: end,
+          markers: List<DrawPoint>.unmodifiable(markers),
+          label: rawLabel is num ? rawLabel.toDouble() : null,
+        ),
+      );
+    }
+    return guides;
+  }
+
+  static SnapGuideKind? _decodeSnapGuideKind(Object? raw) {
+    if (raw is! String || raw.trim().isEmpty) {
+      return null;
+    }
+    final normalized = raw.trim().split('.').last;
+    return switch (normalized) {
+      'point' => SnapGuideKind.point,
+      'gap' => SnapGuideKind.gap,
+      _ => null,
+    };
+  }
+
+  static SnapGuideAxis? _decodeSnapGuideAxis(Object? raw) {
+    if (raw is! String || raw.trim().isEmpty) {
+      return null;
+    }
+    final normalized = raw.trim().split('.').last;
+    return switch (normalized) {
+      'horizontal' => SnapGuideAxis.horizontal,
+      'vertical' => SnapGuideAxis.vertical,
+      _ => null,
+    };
+  }
+
+  static DrawRect? _decodeRectMap(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    final map = raw.cast<String, dynamic>();
+    final minX = _asDouble(map['minX'] ?? map['min_x']);
+    final minY = _asDouble(map['minY'] ?? map['min_y']);
+    final maxX = _asDouble(map['maxX'] ?? map['max_x']);
+    final maxY = _asDouble(map['maxY'] ?? map['max_y']);
+    if (minX == null || minY == null || maxX == null || maxY == null) {
+      return null;
+    }
+    return DrawRect(minX: minX, minY: minY, maxX: maxX, maxY: maxY);
+  }
+
+  static DrawPoint? _decodePointMap(Object? raw) {
+    if (raw is! Map) {
+      return null;
+    }
+    final map = raw.cast<String, dynamic>();
+    final x = _asDouble(map['x']);
+    final y = _asDouble(map['y']);
+    if (x == null || y == null) {
+      return null;
+    }
+    return DrawPoint(x: x, y: y);
+  }
+
+  static double? _asDouble(Object? value) =>
+      value is num ? value.toDouble() : null;
 
   static double _resolveScaleFactor(double value) =>
       value.isFinite && value > 0 ? value : 1.0;
