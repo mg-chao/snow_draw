@@ -27,6 +27,7 @@ const EVENT_QUEUE_LIMIT: usize = 2048;
 const CAMERA_MIN_ZOOM: f64 = 0.1;
 const CAMERA_MAX_ZOOM: f64 = 30.0;
 const TEXT_MIN_WIDTH: f64 = 24.0;
+const ARROW_POINT_LOOP_THRESHOLD: f64 = 9.0;
 const RUNTIME_CONFIG_KEY: &str = "__runtimeConfig";
 const RUNTIME_BOOTSTRAP_SNAPSHOT_KEY: &str = "__bootstrapSnapshotV1ProtoBase64";
 
@@ -3045,29 +3046,97 @@ fn arrow_point_overlay_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>> {
         return None;
     }
 
-    let mut handles = Vec::new();
-    for (index, point) in world_points.iter().enumerate() {
-        handles.push(frame_handle_payload(
+    let arrow_type = payload_map
+        .get("arrowType")
+        .or_else(|| payload_map.get("lineType"))
+        .and_then(JsonValue::as_str)
+        .unwrap_or("straight");
+    let mut addable_handles = Vec::new();
+    let mut turning_handles = Vec::new();
+    let mut loop_handles = Vec::new();
+
+    if arrow_type.eq_ignore_ascii_case("elbow") {
+        let fixed_segment_indices = parse_elbow_fixed_segment_indices(&payload_map);
+
+        for index in 0..(world_points.len() - 1) {
+            let start = &world_points[index];
+            let end = &world_points[index + 1];
+            addable_handles.push(frame_handle_payload(
+                element.id.as_str(),
+                "addable",
+                index as i32,
+                (start.x + end.x) / 2.0,
+                (start.y + end.y) / 2.0,
+                fixed_segment_indices.contains(&(index + 1)),
+            ));
+        }
+        turning_handles.push(frame_handle_payload(
             element.id.as_str(),
             "turning",
-            index as i32,
-            point.x,
-            point.y,
+            0,
+            world_points[0].x,
+            world_points[0].y,
             false,
         ));
-    }
-    for index in 0..(world_points.len() - 1) {
-        let start = &world_points[index];
-        let end = &world_points[index + 1];
-        handles.push(frame_handle_payload(
+        turning_handles.push(frame_handle_payload(
             element.id.as_str(),
-            "addable",
-            index as i32,
-            (start.x + end.x) / 2.0,
-            (start.y + end.y) / 2.0,
+            "turning",
+            (world_points.len() - 1) as i32,
+            world_points[world_points.len() - 1].x,
+            world_points[world_points.len() - 1].y,
             false,
         ));
+    } else {
+        let loop_active = is_loop_active(&world_points, ARROW_POINT_LOOP_THRESHOLD);
+        for index in 0..(world_points.len() - 1) {
+            let start = &world_points[index];
+            let end = &world_points[index + 1];
+            addable_handles.push(frame_handle_payload(
+                element.id.as_str(),
+                "addable",
+                index as i32,
+                (start.x + end.x) / 2.0,
+                (start.y + end.y) / 2.0,
+                false,
+            ));
+        }
+        for (index, point) in world_points.iter().enumerate() {
+            if loop_active && (index == 0 || index + 1 == world_points.len()) {
+                continue;
+            }
+            turning_handles.push(frame_handle_payload(
+                element.id.as_str(),
+                "turning",
+                index as i32,
+                point.x,
+                point.y,
+                false,
+            ));
+        }
+        if loop_active {
+            loop_handles.push(frame_handle_payload(
+                element.id.as_str(),
+                "loopStart",
+                0,
+                world_points[0].x,
+                world_points[0].y,
+                false,
+            ));
+            loop_handles.push(frame_handle_payload(
+                element.id.as_str(),
+                "loopEnd",
+                (world_points.len() - 1) as i32,
+                world_points[world_points.len() - 1].x,
+                world_points[world_points.len() - 1].y,
+                false,
+            ));
+        }
     }
+
+    let mut handles = Vec::new();
+    handles.extend(addable_handles);
+    handles.extend(turning_handles);
+    handles.extend(loop_handles);
     if handles.is_empty() {
         return None;
     }
@@ -3076,6 +3145,43 @@ fn arrow_point_overlay_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>> {
     payload.insert("handles".to_string(), JsonValue::Array(handles));
     payload.insert("deleteIndicatorVisible".to_string(), JsonValue::from(false));
     serde_json::to_vec(&payload).ok()
+}
+
+fn parse_elbow_fixed_segment_indices(payload: &JsonMap<String, JsonValue>) -> BTreeSet<usize> {
+    let Some(entries) = payload.get("fixedSegments").and_then(JsonValue::as_array) else {
+        return BTreeSet::new();
+    };
+    entries
+        .iter()
+        .filter_map(JsonValue::as_object)
+        .filter_map(|entry| {
+            entry
+                .get("index")
+                .and_then(JsonValue::as_u64)
+                .and_then(|value| usize::try_from(value).ok())
+                .or_else(|| {
+                    entry
+                        .get("index")
+                        .and_then(JsonValue::as_i64)
+                        .and_then(|value| usize::try_from(value).ok())
+                })
+        })
+        .collect()
+}
+
+fn is_loop_active(points: &[DrawPoint], threshold: f64) -> bool {
+    if points.len() < 2 || !threshold.is_finite() || threshold <= 0.0 {
+        return false;
+    }
+    let Some(first) = points.first() else {
+        return false;
+    };
+    let Some(last) = points.last() else {
+        return false;
+    };
+    let dx = first.x - last.x;
+    let dy = first.y - last.y;
+    (dx * dx + dy * dy) <= threshold * threshold
 }
 
 fn arrow_binding_highlight_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>> {
@@ -5421,6 +5527,16 @@ mod tests {
             .and_then(|value| value.as_array())
             .expect("overlay handles");
         assert_eq!(handles.len(), 5);
+        assert_eq!(
+            handles
+                .first()
+                .and_then(|value| value.get("kind"))
+                .and_then(|value| value.as_str()),
+            Some("addable")
+        );
+        assert!(!handles.iter().any(|entry| {
+            entry.get("kind").and_then(|value| value.as_str()) == Some("loopStart")
+        }));
 
         let binding = plan
             .tasks
@@ -5438,6 +5554,131 @@ mod tests {
             ids.first().and_then(|value| value.as_str()),
             Some("binding-target")
         );
+    }
+
+    #[test]
+    fn frame_plan_arrow_overlay_emits_loop_handles_for_closed_paths() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Arrow as i32,
+                    element_id: "arrow-loop".to_string(),
+                    position: Some(DrawPoint {
+                        x: 24.0,
+                        y: 16.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: br#"{"typeId":"arrow","arrowType":"straight","points":[{"x":0.0,"y":0.0},{"x":0.5,"y":1.0},{"x":0.04,"y":0.0}]}"#.to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create loop arrow");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        let overlay = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::ArrowPointOverlay as i32)
+            .expect("arrow overlay task");
+        let overlay_payload =
+            serde_json::from_slice::<serde_json::Value>(&overlay.payload).expect("overlay payload");
+        let handles = overlay_payload
+            .get("handles")
+            .and_then(|value| value.as_array())
+            .expect("overlay handles");
+        assert_eq!(handles.len(), 5);
+
+        let loop_start_count = handles
+            .iter()
+            .filter(|entry| entry.get("kind").and_then(|value| value.as_str()) == Some("loopStart"))
+            .count();
+        let loop_end_count = handles
+            .iter()
+            .filter(|entry| entry.get("kind").and_then(|value| value.as_str()) == Some("loopEnd"))
+            .count();
+        let turning_indices = handles
+            .iter()
+            .filter(|entry| entry.get("kind").and_then(|value| value.as_str()) == Some("turning"))
+            .filter_map(|entry| entry.get("index").and_then(|value| value.as_i64()))
+            .collect::<Vec<_>>();
+        assert_eq!(loop_start_count, 1);
+        assert_eq!(loop_end_count, 1);
+        assert_eq!(turning_indices, vec![1]);
+    }
+
+    #[test]
+    fn frame_plan_arrow_overlay_emits_elbow_endpoint_turning_and_fixed_segments() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Arrow as i32,
+                    element_id: "arrow-elbow".to_string(),
+                    position: Some(DrawPoint {
+                        x: 32.0,
+                        y: 28.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: br#"{"typeId":"arrow","arrowType":"elbow","points":[{"x":0.0,"y":0.0},{"x":0.5,"y":0.0},{"x":0.5,"y":0.8},{"x":1.0,"y":0.8}],"fixedSegments":[{"index":1},{"index":3}]}"#.to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create elbow arrow");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        let overlay = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::ArrowPointOverlay as i32)
+            .expect("arrow overlay task");
+        let overlay_payload =
+            serde_json::from_slice::<serde_json::Value>(&overlay.payload).expect("overlay payload");
+        let handles = overlay_payload
+            .get("handles")
+            .and_then(|value| value.as_array())
+            .expect("overlay handles");
+        assert_eq!(handles.len(), 5);
+
+        let turning_indices = handles
+            .iter()
+            .filter(|entry| entry.get("kind").and_then(|value| value.as_str()) == Some("turning"))
+            .filter_map(|entry| entry.get("index").and_then(|value| value.as_i64()))
+            .collect::<Vec<_>>();
+        assert_eq!(turning_indices, vec![0, 3]);
+        assert!(!handles.iter().any(|entry| {
+            let kind = entry.get("kind").and_then(|value| value.as_str());
+            kind == Some("loopStart") || kind == Some("loopEnd")
+        }));
+
+        let fixed_addable_indices = handles
+            .iter()
+            .filter(|entry| entry.get("kind").and_then(|value| value.as_str()) == Some("addable"))
+            .filter(|entry| {
+                entry
+                    .get("isFixed")
+                    .and_then(|value| value.as_bool())
+                    .unwrap_or(false)
+            })
+            .filter_map(|entry| entry.get("index").and_then(|value| value.as_i64()))
+            .collect::<Vec<_>>();
+        assert_eq!(fixed_addable_indices, vec![0, 2]);
     }
 
     #[test]
