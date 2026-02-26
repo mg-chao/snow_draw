@@ -7,8 +7,8 @@ use engine_proto::{
     default_engine_config, ChangeElementZIndexCommand, ChangeElementsZIndexCommand,
     CreateElementCommand, DeleteElementsCommand, DrawPoint, DuplicateElementsCommand, ElementType,
     EngineCommand, EngineCommandKind, EngineEventKind, FramePlanRequest, FrameTaskKind,
-    MoveCameraCommand, SelectElementCommand, UpdateElementsStyleCommand, UpdateGlobalElementsCommand,
-    ZIndexOperation, ZoomCameraCommand,
+    MoveCameraCommand, SelectElementCommand, UpdateElementsStyleCommand,
+    UpdateGlobalElementsCommand, ZIndexOperation, ZoomCameraCommand,
 };
 use serde::Deserialize;
 
@@ -304,11 +304,13 @@ fn to_engine_command(command: CorpusCommand) -> EngineCommand {
             offset_y,
         } => EngineCommand {
             kind: EngineCommandKind::DuplicateElements as i32,
-            payload: Some(CommandPayload::DuplicateElements(DuplicateElementsCommand {
-                element_ids,
-                offset_x,
-                offset_y,
-            })),
+            payload: Some(CommandPayload::DuplicateElements(
+                DuplicateElementsCommand {
+                    element_ids,
+                    offset_x,
+                    offset_y,
+                },
+            )),
         },
         CorpusCommand::ChangeElementZIndex {
             element_id,

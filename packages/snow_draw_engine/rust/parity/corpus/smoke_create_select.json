@@ -27,7 +27,12 @@
     ],
     "history_undo_len": 2,
     "history_redo_len": 0,
-    "frame_task_kinds": ["background", "rectangle", "selection_controls"],
+    "frame_task_kinds": [
+      "background",
+      "rectangle",
+      "selection_outline",
+      "selection_controls"
+    ],
     "event_kinds": ["state_changed", "state_changed"]
   }
 }

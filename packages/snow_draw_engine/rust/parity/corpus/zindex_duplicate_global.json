@@ -59,6 +59,7 @@
       "rectangle",
       "rectangle",
       "rectangle",
+      "selection_outline",
       "selection_controls"
     ],
     "event_kinds": [

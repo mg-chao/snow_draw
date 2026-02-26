@@ -1,6 +1,6 @@
 //! Headless Snow Draw engine core implemented in Rust.
 
-use std::collections::{BTreeSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use engine_proto::engine_command::Payload as CommandPayload;
 use engine_proto::engine_event::Payload as EventPayload;
@@ -16,7 +16,10 @@ use engine_proto::{
     UpdateCreatingElementCommand, UpdateEditCommand, UpdateElementsStyleCommand,
     UpdateGlobalElementsCommand, UpdateTextEditCommand, ZIndexOperation, ZoomCameraCommand,
 };
+use serde_json::{Map as JsonMap, Value as JsonValue};
 use thiserror::Error;
+
+const EVENT_QUEUE_LIMIT: usize = 2048;
 
 #[derive(Debug, Error)]
 pub enum EngineCoreError {
@@ -61,6 +64,7 @@ pub struct Engine {
     creating_element_id: Option<String>,
     text_edit_session: Option<TextEditSession>,
     box_select_start: Option<DrawPoint>,
+    edit_session: Option<EditSession>,
 }
 
 #[derive(Debug, Clone)]
@@ -69,6 +73,13 @@ struct TextEditSession {
     is_new: bool,
     text: String,
     rect: Option<DrawRect>,
+}
+
+#[derive(Debug, Clone)]
+struct EditSession {
+    operation_id: String,
+    start_position: DrawPoint,
+    baseline_rects: BTreeMap<String, DrawRect>,
 }
 
 impl Default for Engine {
@@ -82,6 +93,7 @@ impl Engine {
         let mut snapshot = default_engine_snapshot();
         snapshot.camera = Some(default_camera_state());
         snapshot.schema_version = config.schema_version;
+        let next_element_sequence = config.deterministic_seed.max(1);
         Self {
             config,
             snapshot,
@@ -89,10 +101,11 @@ impl Engine {
             redo_stack: Vec::new(),
             events: VecDeque::new(),
             next_event_sequence: 1,
-            next_element_sequence: 1,
+            next_element_sequence,
             creating_element_id: None,
             text_edit_session: None,
             box_select_start: None,
+            edit_session: None,
         }
     }
 
@@ -253,8 +266,13 @@ impl Engine {
                 self.emit_state_changed();
             }
             EngineCommandKind::StartEdit => {
-                self.set_interaction_mode(InteractionMode::Editing);
-                self.emit_state_changed();
+                if let Ok(payload) = extract_start_edit_payload(kind, command.payload) {
+                    self.record_history();
+                    self.apply_start_edit(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
             }
             EngineCommandKind::UpdateEdit => {
                 if let Ok(payload) = extract_update_edit_payload(kind, command.payload) {
@@ -264,8 +282,12 @@ impl Engine {
                     self.emit_debug(format!("command {kind:?} missing payload"));
                 }
             }
-            EngineCommandKind::FinishEdit | EngineCommandKind::CancelEdit => {
-                self.set_interaction_mode(InteractionMode::Idle);
+            EngineCommandKind::FinishEdit => {
+                self.apply_finish_edit();
+                self.emit_state_changed();
+            }
+            EngineCommandKind::CancelEdit => {
+                self.apply_cancel_edit();
                 self.emit_state_changed();
             }
             EngineCommandKind::SetDragPending => {
@@ -355,6 +377,24 @@ impl Engine {
             payload: Vec::new(),
         });
 
+        if let Some(mask_payload) = highlight_mask_payload(&self.snapshot.global_elements_payload) {
+            tasks.push(FrameTask {
+                kind: FrameTaskKind::HighlightMask as i32,
+                element_id: String::new(),
+                element_type: ElementType::Unknown as i32,
+                payload: mask_payload,
+            });
+        }
+
+        if let Some(watermark_payload) = watermark_payload(&self.snapshot.global_elements_payload) {
+            tasks.push(FrameTask {
+                kind: FrameTaskKind::Watermark as i32,
+                element_id: String::new(),
+                element_type: ElementType::Unknown as i32,
+                payload: watermark_payload,
+            });
+        }
+
         let mut sorted = self.snapshot.elements.clone();
         sorted.sort_by(|a, b| {
             a.z_index
@@ -373,7 +413,22 @@ impl Engine {
 
         if !self.snapshot.selected_ids.is_empty() {
             tasks.push(FrameTask {
+                kind: FrameTaskKind::SelectionOutline as i32,
+                element_id: String::new(),
+                element_type: ElementType::Unknown as i32,
+                payload: Vec::new(),
+            });
+            tasks.push(FrameTask {
                 kind: FrameTaskKind::SelectionControls as i32,
+                element_id: String::new(),
+                element_type: ElementType::Unknown as i32,
+                payload: Vec::new(),
+            });
+        }
+
+        if self.snapshot.interaction_mode == InteractionMode::BoxSelecting as i32 {
+            tasks.push(FrameTask {
+                kind: FrameTaskKind::BoxSelection as i32,
                 element_id: String::new(),
                 element_type: ElementType::Unknown as i32,
                 payload: Vec::new(),
@@ -451,6 +506,7 @@ impl Engine {
     }
 
     fn apply_create(&mut self, payload: CreateElementCommand) {
+        let element_type = normalize_element_type(payload.element_type);
         let id = if payload.element_id.trim().is_empty() {
             let generated = format!("rust_{}", self.next_element_sequence);
             self.next_element_sequence += 1;
@@ -484,16 +540,16 @@ impl Engine {
 
         self.snapshot.elements.push(Element {
             id: id.clone(),
-            element_type: if payload.element_type == 0 {
-                ElementType::Rectangle as i32
-            } else {
-                payload.element_type
-            },
+            element_type,
             rect: Some(rect),
             rotation: 0.0,
             opacity: 1.0,
             z_index,
-            payload: payload.initial_payload,
+            payload: if payload.initial_payload.is_empty() {
+                default_element_payload(element_type)
+            } else {
+                payload.initial_payload
+            },
         });
 
         self.sort_elements();
@@ -550,10 +606,19 @@ impl Engine {
             return;
         }
 
-        let mut bytes = element.payload.clone();
-        bytes.extend_from_slice(format!(";{},{}", position.x, position.y).as_bytes());
-        element.payload = bytes;
-        self.snapshot.document_version += 1;
+        let mut map = decode_json_map(&element.payload)
+            .unwrap_or_else(|| default_element_payload_map(element.element_type));
+        let points = map
+            .entry("points".to_string())
+            .or_insert_with(|| JsonValue::Array(Vec::new()));
+        if let JsonValue::Array(entries) = points {
+            entries.push(JsonValue::Object(JsonMap::from_iter([
+                ("x".to_string(), JsonValue::from(position.x)),
+                ("y".to_string(), JsonValue::from(position.y)),
+            ])));
+            element.payload = encode_json_map(&map);
+            self.snapshot.document_version += 1;
+        }
     }
 
     fn apply_finish_create(&mut self) {
@@ -601,9 +666,45 @@ impl Engine {
         }
         let ids = payload.element_ids.into_iter().collect::<BTreeSet<_>>();
         let mut changed = false;
+        let style_map = decode_json_map(&payload.style_payload);
 
         for element in &mut self.snapshot.elements {
-            if ids.contains(element.id.as_str()) {
+            if !ids.contains(element.id.as_str()) {
+                continue;
+            }
+
+            if let Some(style_map) = style_map.as_ref() {
+                let mut element_map = decode_json_map(&element.payload)
+                    .unwrap_or_else(|| default_element_payload_map(element.element_type));
+                let mut payload_changed = false;
+                for (key, value) in style_map {
+                    if key == "opacity" {
+                        if let Some(opacity) = value.as_f64() {
+                            let clamped = opacity.clamp(0.0, 1.0);
+                            if (element.opacity - clamped).abs() > f64::EPSILON {
+                                element.opacity = clamped;
+                                changed = true;
+                            }
+                        }
+                        continue;
+                    }
+
+                    let target_key = normalize_style_field_key(element.element_type, key);
+                    let should_write = match element_map.get(target_key) {
+                        Some(current) => current != value,
+                        None => true,
+                    };
+                    if should_write {
+                        element_map.insert(target_key.to_string(), value.clone());
+                        payload_changed = true;
+                    }
+                }
+                if payload_changed {
+                    element.payload = encode_json_map(&element_map);
+                    changed = true;
+                }
+            } else if element.payload != payload.style_payload {
+                // Preserve binary compatibility for callers that still send opaque style blobs.
                 element.payload = payload.style_payload.clone();
                 changed = true;
             }
@@ -744,8 +845,11 @@ impl Engine {
     }
 
     fn apply_update_global_elements(&mut self, payload: UpdateGlobalElementsCommand) {
-        if self.snapshot.global_elements_payload != payload.payload {
-            self.snapshot.global_elements_payload = payload.payload;
+        let normalized = decode_json_map(&payload.payload)
+            .map(|map| encode_json_map(&map))
+            .unwrap_or(payload.payload);
+        if self.snapshot.global_elements_payload != normalized {
+            self.snapshot.global_elements_payload = normalized;
             self.snapshot.document_version += 1;
         }
     }
@@ -788,7 +892,11 @@ impl Engine {
                 rotation: 0.0,
                 opacity: 1.0,
                 z_index: next_z,
-                payload: source.id.as_bytes().to_vec(),
+                payload: {
+                    let mut map = default_element_payload_map(ElementType::Text as i32);
+                    map.insert("text".to_string(), JsonValue::from(source.id.clone()));
+                    encode_json_map(&map)
+                },
             });
             next_z += 1;
         }
@@ -841,7 +949,7 @@ impl Engine {
                 rotation: 0.0,
                 opacity: 1.0,
                 z_index,
-                payload: Vec::new(),
+                payload: default_element_payload(ElementType::Text as i32),
             });
             self.sort_elements();
             self.snapshot.document_version += 1;
@@ -867,7 +975,7 @@ impl Engine {
         let text = payload.text;
         let rect = payload.rect;
         if let Some(element) = self.element_mut(&element_id) {
-            element.payload = text.into_bytes();
+            write_text_payload(element, &text);
             if let Some(rect) = rect {
                 element.rect = Some(rect);
             }
@@ -898,7 +1006,7 @@ impl Engine {
                 self.snapshot.document_version += 1;
             }
         } else if let Some(element) = self.element_mut(&session.element_id) {
-            element.payload = session.text.into_bytes();
+            write_text_payload(element, &session.text);
             if let Some(rect) = session.rect {
                 element.rect = Some(rect);
             }
@@ -923,7 +1031,90 @@ impl Engine {
         self.set_interaction_mode(InteractionMode::Idle);
     }
 
-    fn apply_update_edit(&mut self, _payload: UpdateEditCommand) {}
+    fn apply_start_edit(&mut self, payload: engine_proto::StartEditCommand) {
+        let operation_id = payload.operation_id.trim().to_string();
+        let start = payload.position.unwrap_or(DrawPoint {
+            x: 0.0,
+            y: 0.0,
+            pressure: 0.0,
+            timestamp_us: 0,
+        });
+        let baseline_rects = self
+            .snapshot
+            .selected_ids
+            .iter()
+            .filter_map(|id| {
+                self.snapshot
+                    .elements
+                    .iter()
+                    .find(|element| element.id == *id)
+                    .and_then(|element| element.rect.clone())
+                    .map(|rect| (id.clone(), rect))
+            })
+            .collect::<BTreeMap<_, _>>();
+        self.edit_session = Some(EditSession {
+            operation_id,
+            start_position: start,
+            baseline_rects,
+        });
+        self.set_interaction_mode(InteractionMode::Editing);
+    }
+
+    fn apply_update_edit(&mut self, payload: UpdateEditCommand) {
+        let Some(session) = self.edit_session.as_ref().cloned() else {
+            return;
+        };
+        let Some(current) = payload.current_position else {
+            return;
+        };
+
+        if session.operation_id != "move" {
+            return;
+        }
+
+        let dx = current.x - session.start_position.x;
+        let dy = current.y - session.start_position.y;
+        let mut changed = false;
+        for (element_id, base_rect) in session.baseline_rects {
+            if let Some(element) = self.element_mut(&element_id) {
+                element.rect = Some(DrawRect {
+                    min_x: base_rect.min_x + dx,
+                    min_y: base_rect.min_y + dy,
+                    max_x: base_rect.max_x + dx,
+                    max_y: base_rect.max_y + dy,
+                });
+                changed = true;
+            }
+        }
+
+        if changed {
+            self.snapshot.document_version += 1;
+            self.set_interaction_mode(InteractionMode::Editing);
+        }
+    }
+
+    fn apply_finish_edit(&mut self) {
+        self.edit_session = None;
+        self.set_interaction_mode(InteractionMode::Idle);
+    }
+
+    fn apply_cancel_edit(&mut self) {
+        let Some(session) = self.edit_session.take() else {
+            self.set_interaction_mode(InteractionMode::Idle);
+            return;
+        };
+        let mut changed = false;
+        for (element_id, rect) in session.baseline_rects {
+            if let Some(element) = self.element_mut(&element_id) {
+                element.rect = Some(rect);
+                changed = true;
+            }
+        }
+        if changed {
+            self.snapshot.document_version += 1;
+        }
+        self.set_interaction_mode(InteractionMode::Idle);
+    }
 
     fn apply_set_drag_pending(&mut self, payload: SetDragPendingCommand) {
         self.box_select_start = payload.pointer_down_position;
@@ -1006,6 +1197,7 @@ impl Engine {
         self.creating_element_id = None;
         self.text_edit_session = None;
         self.box_select_start = None;
+        self.edit_session = None;
     }
 
     fn element_index(&self, element_id: &str) -> Option<usize> {
@@ -1083,8 +1275,188 @@ impl Engine {
     fn push_event(&mut self, mut event: EngineEvent) {
         event.sequence = self.next_event_sequence;
         self.next_event_sequence += 1;
+        if self.events.len() >= EVENT_QUEUE_LIMIT {
+            self.events.pop_front();
+        }
         self.events.push_back(event);
     }
+}
+
+fn normalize_element_type(element_type: i32) -> i32 {
+    match ElementType::try_from(element_type).unwrap_or(ElementType::Unknown) {
+        ElementType::Unknown => ElementType::Rectangle as i32,
+        value => value as i32,
+    }
+}
+
+fn point_value(x: f64, y: f64) -> JsonValue {
+    JsonValue::Object(JsonMap::from_iter([
+        ("x".to_string(), JsonValue::from(x)),
+        ("y".to_string(), JsonValue::from(y)),
+    ]))
+}
+
+fn default_element_payload_map(element_type: i32) -> JsonMap<String, JsonValue> {
+    let kind = ElementType::try_from(normalize_element_type(element_type))
+        .unwrap_or(ElementType::Rectangle);
+    match kind {
+        ElementType::Rectangle => JsonMap::from_iter([
+            ("typeId".to_string(), JsonValue::from("rectangle")),
+            ("cornerRadius".to_string(), JsonValue::from(4.0)),
+            ("fillColor".to_string(), JsonValue::from(0u64)),
+            ("color".to_string(), JsonValue::from(0xFF1E1E1Eu64)),
+            ("strokeWidth".to_string(), JsonValue::from(2.0)),
+            ("strokeStyle".to_string(), JsonValue::from("solid")),
+            ("fillStyle".to_string(), JsonValue::from("solid")),
+        ]),
+        ElementType::Arrow => JsonMap::from_iter([
+            ("typeId".to_string(), JsonValue::from("arrow")),
+            (
+                "points".to_string(),
+                JsonValue::Array(vec![point_value(0.0, 0.0), point_value(1.0, 1.0)]),
+            ),
+            ("color".to_string(), JsonValue::from(0xFF1E1E1Eu64)),
+            ("strokeWidth".to_string(), JsonValue::from(2.0)),
+            ("strokeStyle".to_string(), JsonValue::from("solid")),
+            ("arrowType".to_string(), JsonValue::from("straight")),
+            ("startArrowhead".to_string(), JsonValue::from("none")),
+            ("endArrowhead".to_string(), JsonValue::from("standard")),
+        ]),
+        ElementType::Line => JsonMap::from_iter([
+            ("typeId".to_string(), JsonValue::from("line")),
+            (
+                "points".to_string(),
+                JsonValue::Array(vec![point_value(0.0, 0.0), point_value(1.0, 1.0)]),
+            ),
+            ("color".to_string(), JsonValue::from(0xFF1E1E1Eu64)),
+            ("fillColor".to_string(), JsonValue::from(0u64)),
+            ("strokeWidth".to_string(), JsonValue::from(2.0)),
+            ("strokeStyle".to_string(), JsonValue::from("solid")),
+            ("fillStyle".to_string(), JsonValue::from("solid")),
+            ("arrowType".to_string(), JsonValue::from("curved")),
+            ("startArrowhead".to_string(), JsonValue::from("none")),
+            ("endArrowhead".to_string(), JsonValue::from("none")),
+        ]),
+        ElementType::FreeDraw => JsonMap::from_iter([
+            ("typeId".to_string(), JsonValue::from("free_draw")),
+            (
+                "points".to_string(),
+                JsonValue::Array(vec![point_value(0.0, 0.0), point_value(1.0, 1.0)]),
+            ),
+            ("color".to_string(), JsonValue::from(0xFF1E1E1Eu64)),
+            ("fillColor".to_string(), JsonValue::from(0u64)),
+            ("strokeWidth".to_string(), JsonValue::from(2.0)),
+            ("strokeStyle".to_string(), JsonValue::from("solid")),
+            ("fillStyle".to_string(), JsonValue::from("solid")),
+        ]),
+        ElementType::Filter => JsonMap::from_iter([
+            ("typeId".to_string(), JsonValue::from("filter")),
+            ("type".to_string(), JsonValue::from("mosaic")),
+            ("strength".to_string(), JsonValue::from(0.5)),
+        ]),
+        ElementType::Highlight => JsonMap::from_iter([
+            ("typeId".to_string(), JsonValue::from("highlight")),
+            ("shape".to_string(), JsonValue::from("rectangle")),
+            ("color".to_string(), JsonValue::from(0xFFF5222Du64)),
+            ("strokeColor".to_string(), JsonValue::from(0xFF000000u64)),
+            ("strokeWidth".to_string(), JsonValue::from(0.0)),
+        ]),
+        ElementType::Text => JsonMap::from_iter([
+            ("typeId".to_string(), JsonValue::from("text")),
+            ("text".to_string(), JsonValue::from("")),
+            ("color".to_string(), JsonValue::from(0xFF1E1E1Eu64)),
+            ("fontSize".to_string(), JsonValue::from(21.0)),
+            ("fontFamily".to_string(), JsonValue::from("")),
+            ("horizontalAlign".to_string(), JsonValue::from("left")),
+            ("verticalAlign".to_string(), JsonValue::from("center")),
+            ("fillColor".to_string(), JsonValue::from(0u64)),
+            ("fillStyle".to_string(), JsonValue::from("solid")),
+            ("strokeColor".to_string(), JsonValue::from(0xFFF8F4ECu64)),
+            ("strokeWidth".to_string(), JsonValue::from(0.0)),
+            ("cornerRadius".to_string(), JsonValue::from(0.0)),
+            ("autoResize".to_string(), JsonValue::from(true)),
+        ]),
+        ElementType::SerialNumber => JsonMap::from_iter([
+            ("typeId".to_string(), JsonValue::from("serial_number")),
+            ("number".to_string(), JsonValue::from(1)),
+            ("color".to_string(), JsonValue::from(0xFF1E1E1Eu64)),
+            ("fillColor".to_string(), JsonValue::from(0u64)),
+            ("fillStyle".to_string(), JsonValue::from("solid")),
+            ("fontSize".to_string(), JsonValue::from(16.0)),
+            ("fontFamily".to_string(), JsonValue::from("")),
+            ("strokeWidth".to_string(), JsonValue::from(2.0)),
+            ("strokeStyle".to_string(), JsonValue::from("solid")),
+            ("textElementId".to_string(), JsonValue::from("")),
+        ]),
+        ElementType::Unknown => JsonMap::new(),
+    }
+}
+
+fn default_element_payload(element_type: i32) -> Vec<u8> {
+    encode_json_map(&default_element_payload_map(element_type))
+}
+
+fn decode_json_map(bytes: &[u8]) -> Option<JsonMap<String, JsonValue>> {
+    let value = serde_json::from_slice::<JsonValue>(bytes).ok()?;
+    value.as_object().cloned()
+}
+
+fn encode_json_map(map: &JsonMap<String, JsonValue>) -> Vec<u8> {
+    serde_json::to_vec(map).unwrap_or_default()
+}
+
+fn normalize_style_field_key(element_type: i32, key: &str) -> &str {
+    match key {
+        "textAlign" => "horizontalAlign",
+        "textStrokeColor" => "strokeColor",
+        "textStrokeWidth" => "strokeWidth",
+        "filterType" => "type",
+        "filterStrength" => "strength",
+        "highlightShape" => "shape",
+        "serialNumber" => "number",
+        _ => {
+            let _ = element_type;
+            key
+        }
+    }
+}
+
+fn write_text_payload(element: &mut Element, text: &str) {
+    let mut map = decode_json_map(&element.payload)
+        .unwrap_or_else(|| default_element_payload_map(ElementType::Text as i32));
+    map.insert("text".to_string(), JsonValue::from(text));
+    element.payload = encode_json_map(&map);
+}
+
+fn highlight_mask_payload(global_payload: &[u8]) -> Option<Vec<u8>> {
+    let map = decode_json_map(global_payload)?;
+    let highlight_mask = map.get("highlightMask")?.as_object()?;
+    let opacity = highlight_mask
+        .get("maskOpacity")
+        .and_then(JsonValue::as_f64)
+        .unwrap_or(0.0);
+    if opacity <= 0.0 {
+        return None;
+    }
+    serde_json::to_vec(highlight_mask).ok()
+}
+
+fn watermark_payload(global_payload: &[u8]) -> Option<Vec<u8>> {
+    let map = decode_json_map(global_payload)?;
+    let watermark = map.get("watermark")?.as_object()?;
+    let text = watermark
+        .get("text")
+        .and_then(JsonValue::as_str)
+        .map(str::trim)
+        .unwrap_or_default();
+    let opacity = watermark
+        .get("opacity")
+        .and_then(JsonValue::as_f64)
+        .unwrap_or(0.0);
+    if text.is_empty() || opacity <= 0.0 {
+        return None;
+    }
+    serde_json::to_vec(watermark).ok()
 }
 
 fn map_frame_task_kind(element_type: i32) -> FrameTaskKind {
@@ -1285,6 +1657,16 @@ fn extract_finish_text_edit_payload(
 ) -> Result<FinishTextEditCommand, EngineCoreError> {
     match payload {
         Some(CommandPayload::FinishTextEdit(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_start_edit_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<engine_proto::StartEditCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::StartEdit(value)) => Ok(value),
         _ => Err(EngineCoreError::InvalidPayload(kind)),
     }
 }
@@ -1556,7 +1938,16 @@ mod tests {
             },
             EngineCommand {
                 kind: EngineCommandKind::StartEdit as i32,
-                payload: None,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "move".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: Vec::new(),
+                })),
             },
             EngineCommand {
                 kind: EngineCommandKind::UpdateEdit as i32,
@@ -1758,7 +2149,12 @@ mod tests {
             .iter()
             .find(|element| element.id == edited_id)
             .expect("text element still present");
-        assert_eq!(element.payload, b"hello-rust");
+        let payload = serde_json::from_slice::<serde_json::Value>(&element.payload)
+            .expect("text payload json");
+        assert_eq!(
+            payload.get("text").and_then(|value| value.as_str()),
+            Some("hello-rust")
+        );
         assert_eq!(
             engine.snapshot.interaction_mode,
             InteractionMode::Idle as i32
@@ -1840,5 +2236,213 @@ mod tests {
 
         let event = engine.poll_event().expect("error event");
         assert_eq!(event.kind, EngineEventKind::Error as i32);
+    }
+
+    #[test]
+    fn create_default_payloads_are_json_for_all_builtin_types() {
+        let mut engine = Engine::default();
+        let builtins = [
+            ElementType::Rectangle,
+            ElementType::Arrow,
+            ElementType::Line,
+            ElementType::FreeDraw,
+            ElementType::Filter,
+            ElementType::Highlight,
+            ElementType::Text,
+            ElementType::SerialNumber,
+        ];
+
+        for (index, element_type) in builtins.into_iter().enumerate() {
+            engine
+                .dispatch(EngineCommand {
+                    kind: EngineCommandKind::CreateElement as i32,
+                    payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                        element_type: element_type as i32,
+                        element_id: format!("builtin-{index}"),
+                        position: None,
+                        initial_payload: Vec::new(),
+                        maintain_aspect_ratio: false,
+                        create_from_center: false,
+                        snap_override: false,
+                    })),
+                })
+                .expect("create builtin");
+        }
+
+        for element in &engine.snapshot.elements {
+            let payload = serde_json::from_slice::<serde_json::Value>(&element.payload)
+                .expect("json payload");
+            assert!(payload.get("typeId").is_some());
+        }
+    }
+
+    #[test]
+    fn update_style_merges_json_payload_and_opacity() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(create_command("rect-style", ElementType::Rectangle))
+            .expect("create");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateElementsStyle as i32,
+                payload: Some(CommandPayload::UpdateElementsStyle(
+                    UpdateElementsStyleCommand {
+                        element_ids: vec!["rect-style".to_string()],
+                        style_payload: br#"{"color":4278190335,"opacity":0.4}"#.to_vec(),
+                    },
+                )),
+            })
+            .expect("style update");
+
+        let element = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "rect-style")
+            .expect("rect");
+        let payload =
+            serde_json::from_slice::<serde_json::Value>(&element.payload).expect("json payload");
+        assert_eq!(
+            payload.get("color").and_then(|value| value.as_u64()),
+            Some(4278190335)
+        );
+        assert!((element.opacity - 0.4).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn frame_plan_adds_overlay_tasks_for_global_payloads() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(create_command("rect-overlay", ElementType::Rectangle))
+            .expect("create");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateGlobalElements as i32,
+                payload: Some(CommandPayload::UpdateGlobalElements(
+                    UpdateGlobalElementsCommand {
+                        payload: br#"{"highlightMask":{"maskColor":4278190080,"maskOpacity":0.5},"watermark":{"text":"CONFIDENTIAL","opacity":0.3}}"#.to_vec(),
+                    },
+                )),
+            })
+            .expect("update global");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+
+        assert!(plan
+            .tasks
+            .iter()
+            .any(|task| task.kind == FrameTaskKind::HighlightMask as i32));
+        assert!(plan
+            .tasks
+            .iter()
+            .any(|task| task.kind == FrameTaskKind::Watermark as i32));
+        assert!(plan
+            .tasks
+            .iter()
+            .any(|task| task.kind == FrameTaskKind::SelectionOutline as i32));
+    }
+
+    #[test]
+    fn move_edit_updates_selected_rect_deterministically() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "move-target".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create");
+        let original = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "move-target")
+            .and_then(|element| element.rect.clone())
+            .expect("rect");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "move".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: Vec::new(),
+                })),
+            })
+            .expect("start edit");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 12.0,
+                        y: -6.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: Vec::new(),
+                })),
+            })
+            .expect("update edit");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishEdit as i32,
+                payload: None,
+            })
+            .expect("finish edit");
+
+        let moved = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "move-target")
+            .and_then(|element| element.rect.clone())
+            .expect("moved rect");
+        assert_eq!(moved.min_x, original.min_x + 12.0);
+        assert_eq!(moved.min_y, original.min_y - 6.0);
+    }
+
+    #[test]
+    fn event_queue_is_bounded() {
+        let mut engine = Engine::default();
+        for _ in 0..(EVENT_QUEUE_LIMIT + 128) {
+            engine
+                .dispatch(EngineCommand {
+                    kind: EngineCommandKind::MoveCamera as i32,
+                    payload: Some(CommandPayload::MoveCamera(MoveCameraCommand {
+                        dx: 1.0,
+                        dy: 0.0,
+                    })),
+                })
+                .expect("dispatch");
+        }
+
+        let mut count = 0;
+        while engine.poll_event().is_some() {
+            count += 1;
+        }
+        assert_eq!(count, EVENT_QUEUE_LIMIT);
     }
 }
