@@ -72,13 +72,6 @@ class _MyAppState extends State<MyApp> {
       context: widget.context,
       includeSelectionInHistory: true,
       backend: backend,
-      onRustFallback: (error, stackTrace) {
-        widget.context.log.store.error(
-          'Rust draw store unavailable; falling back to legacy Dart store',
-          error,
-          stackTrace,
-        );
-      },
     );
     toolController = ToolController();
     styleToolbarAdapter = StyleToolbarAdapter(store: store);
@@ -93,7 +86,7 @@ class _MyAppState extends State<MyApp> {
     if (bindingName.contains('TestWidgetsFlutterBinding')) {
       return DrawStoreBackend.legacyDart;
     }
-    return DrawStoreBackend.auto;
+    return DrawStoreBackend.rust;
   }
 
   @override

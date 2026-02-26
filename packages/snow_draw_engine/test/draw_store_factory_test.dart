@@ -30,6 +30,7 @@ void main() {
     final store = createDrawStore(
       context: context,
       initialState: nonEmptyState,
+      backend: DrawStoreBackend.auto,
     );
 
     expect(store, isA<DefaultDrawStore>());

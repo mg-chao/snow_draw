@@ -26,7 +26,7 @@ DrawStore createDrawStore({
   DrawState? initialState,
   bool includeSelectionInHistory = false,
   EventBus? eventBus,
-  DrawStoreBackend backend = DrawStoreBackend.auto,
+  DrawStoreBackend backend = DrawStoreBackend.rust,
   RustCanvasEngine? engine,
   Uint8List? engineConfigBytes,
   void Function(Object error, StackTrace stackTrace)? onRustFallback,
