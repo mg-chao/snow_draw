@@ -1842,6 +1842,31 @@ final class _RustProtoCodec {
     return Uint8List.fromList(utf8.encode(jsonEncode(payload)));
   }
 
+  static Map<String, Object?> _encodeElementStyleConfig(
+    ElementStyleConfig style,
+  ) => {
+    'opacity': style.opacity,
+    'serialNumber': style.serialNumber,
+    'color': style.color.toARGB32(),
+    'fillColor': style.fillColor.toARGB32(),
+    'strokeWidth': style.strokeWidth,
+    'strokeStyle': style.strokeStyle.name,
+    'fillStyle': style.fillStyle.name,
+    'highlightShape': style.highlightShape.name,
+    'filterType': style.filterType.name,
+    'filterStrength': style.filterStrength,
+    'cornerRadius': style.cornerRadius,
+    'arrowType': style.arrowType.name,
+    'startArrowhead': style.startArrowhead.name,
+    'endArrowhead': style.endArrowhead.name,
+    'fontSize': style.fontSize,
+    'fontFamily': style.fontFamily ?? '',
+    'textAlign': style.textAlign.name,
+    'verticalAlign': style.verticalAlign.name,
+    'textStrokeColor': style.textStrokeColor.toARGB32(),
+    'textStrokeWidth': style.textStrokeWidth,
+  };
+
   static Uint8List encodeRuntimeConfigPayload(DrawConfig config) =>
       Uint8List.fromList(
         utf8.encode(
@@ -1850,6 +1875,18 @@ final class _RustProtoCodec {
             'snap': {
               'enabled': config.snap.enabled,
               'distance': config.snap.distance,
+            },
+            'styles': {
+              'rectangle': _encodeElementStyleConfig(config.rectangleStyle),
+              'arrow': _encodeElementStyleConfig(config.arrowStyle),
+              'line': _encodeElementStyleConfig(config.lineStyle),
+              'freeDraw': _encodeElementStyleConfig(config.freeDrawStyle),
+              'text': _encodeElementStyleConfig(config.textStyle),
+              'serialNumber': _encodeElementStyleConfig(
+                config.serialNumberStyle,
+              ),
+              'filter': _encodeElementStyleConfig(config.filterStyle),
+              'highlight': _encodeElementStyleConfig(config.highlightStyle),
             },
           }),
         ),

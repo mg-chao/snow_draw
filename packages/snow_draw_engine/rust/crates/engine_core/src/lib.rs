@@ -25,6 +25,7 @@ use thiserror::Error;
 const EVENT_QUEUE_LIMIT: usize = 2048;
 const CAMERA_MIN_ZOOM: f64 = 0.1;
 const CAMERA_MAX_ZOOM: f64 = 30.0;
+const TEXT_MIN_WIDTH: f64 = 24.0;
 const RUNTIME_CONFIG_KEY: &str = "__runtimeConfig";
 
 #[derive(Debug, Error)]
@@ -62,6 +63,7 @@ impl EngineCoreError {
 pub struct Engine {
     config: EngineConfig,
     runtime_snap_config: RuntimeSnapConfig,
+    runtime_style_defaults: RuntimeStyleDefaults,
     runtime_snap_guides: Vec<JsonValue>,
     snapshot: EngineSnapshot,
     undo_stack: Vec<EngineSnapshot>,
@@ -167,6 +169,23 @@ struct RuntimeSnapConfigPatch {
     object_distance: Option<f64>,
 }
 
+#[derive(Debug, Clone, PartialEq, Default)]
+struct RuntimeStyleDefaults {
+    by_element_type: BTreeMap<i32, JsonMap<String, JsonValue>>,
+}
+
+impl RuntimeStyleDefaults {
+    fn style_for_element_type(&self, element_type: i32) -> Option<&JsonMap<String, JsonValue>> {
+        self.by_element_type
+            .get(&normalize_element_type(element_type))
+    }
+
+    fn set_for_element_type(&mut self, element_type: i32, style: JsonMap<String, JsonValue>) {
+        self.by_element_type
+            .insert(normalize_element_type(element_type), style);
+    }
+}
+
 #[derive(Debug, Clone)]
 struct SnappedPointResult {
     point: DrawPoint,
@@ -202,6 +221,7 @@ impl Engine {
         Self {
             config,
             runtime_snap_config: RuntimeSnapConfig::default(),
+            runtime_style_defaults: RuntimeStyleDefaults::default(),
             runtime_snap_guides: Vec::new(),
             snapshot,
             undo_stack: Vec::new(),
@@ -477,10 +497,17 @@ impl Engine {
         let Some(mut map) = decode_json_map(payload) else {
             return false;
         };
-        let Some(patch) = extract_runtime_snap_config_patch(&mut map) else {
-            return false;
-        };
-        self.apply_runtime_snap_config_patch(patch)
+        let mut changed = false;
+        if let Some(patch) = extract_runtime_snap_config_patch(&mut map) {
+            changed |= self.apply_runtime_snap_config_patch(patch);
+        }
+        if let Some(next_styles) = runtime_style_defaults_from_map(&map) {
+            if self.runtime_style_defaults != next_styles {
+                self.runtime_style_defaults = next_styles;
+                changed = true;
+            }
+        }
+        changed
     }
 
     pub fn get_snapshot(&self) -> EngineSnapshot {
@@ -746,6 +773,31 @@ impl Engine {
         changed
     }
 
+    fn runtime_default_opacity_for_element_type(&self, element_type: i32) -> Option<f64> {
+        let style_defaults = self
+            .runtime_style_defaults
+            .style_for_element_type(element_type)?;
+        style_default_opacity_from_map(style_defaults)
+    }
+
+    fn resolve_runtime_default_payload_map_and_opacity(
+        &self,
+        element_type: i32,
+    ) -> (JsonMap<String, JsonValue>, f64) {
+        let mut payload_map = default_element_payload_map(element_type);
+        let opacity = self
+            .runtime_style_defaults
+            .style_for_element_type(element_type)
+            .map(|style_defaults| {
+                apply_style_defaults_to_payload_map(element_type, &mut payload_map, style_defaults)
+            })
+            .unwrap_or(1.0);
+        if normalize_element_type(element_type) == ElementType::SerialNumber as i32 {
+            apply_next_serial_number_default(&self.snapshot.elements, &mut payload_map);
+        }
+        (payload_map, opacity)
+    }
+
     fn resolve_runtime_snapping_mode(&self, snap_override: bool) -> RuntimeSnappingMode {
         if snap_override {
             return RuntimeSnappingMode::None;
@@ -981,6 +1033,16 @@ impl Engine {
             .max()
             .unwrap_or(-1)
             + 1;
+        let default_opacity = self
+            .runtime_default_opacity_for_element_type(element_type)
+            .unwrap_or(1.0);
+        let (resolved_payload, resolved_opacity) = if payload.initial_payload.is_empty() {
+            let (payload_map, opacity) =
+                self.resolve_runtime_default_payload_map_and_opacity(element_type);
+            (encode_json_map(&payload_map), opacity)
+        } else {
+            (payload.initial_payload, default_opacity)
+        };
 
         let rect = DrawRect {
             min_x: point.x,
@@ -994,13 +1056,9 @@ impl Engine {
             element_type,
             rect: Some(rect),
             rotation: 0.0,
-            opacity: 1.0,
+            opacity: resolved_opacity,
             z_index,
-            payload: if payload.initial_payload.is_empty() {
-                default_element_payload(element_type)
-            } else {
-                payload.initial_payload
-            },
+            payload: resolved_payload,
         });
 
         self.sort_elements();
@@ -1385,6 +1443,8 @@ impl Engine {
         let mut created = Vec::new();
         let mut serial_payload_updates = Vec::new();
         let mut focus_text_id = None;
+        let (text_payload_template, text_opacity) =
+            self.resolve_runtime_default_payload_map_and_opacity(ElementType::Text as i32);
 
         for source in self.snapshot.elements.clone() {
             if !source_ids.contains(source.id.as_str()) {
@@ -1418,7 +1478,7 @@ impl Engine {
 
             let id = format!("rust_{}", self.next_element_sequence);
             self.next_element_sequence += 1;
-            let text_payload = default_element_payload_map(ElementType::Text as i32);
+            let text_payload = text_payload_template.clone();
             let rect = source.rect.as_ref().map(|source_rect| {
                 resolve_serial_bound_text_rect(source_rect, &serial_payload, &text_payload)
             });
@@ -1427,7 +1487,7 @@ impl Engine {
                 element_type: ElementType::Text as i32,
                 rect,
                 rotation: 0.0,
-                opacity: 1.0,
+                opacity: text_opacity,
                 z_index: next_z,
                 payload: encode_json_map(&text_payload),
             });
@@ -1512,19 +1572,28 @@ impl Engine {
                 .max()
                 .unwrap_or(-1)
                 + 1;
+            let (text_payload, text_opacity) =
+                self.resolve_runtime_default_payload_map_and_opacity(ElementType::Text as i32);
+            let fallback_layout =
+                fallback_text_metrics_for_payload(&text_payload, f64::INFINITY, None);
+            let initial_width = fallback_layout.width.max(TEXT_MIN_WIDTH).max(1.0);
+            let initial_height = fallback_layout
+                .height
+                .max(fallback_layout.line_height)
+                .max(1.0);
             self.snapshot.elements.push(Element {
                 id: element_id.clone(),
                 element_type: ElementType::Text as i32,
                 rect: Some(DrawRect {
                     min_x: point.x,
                     min_y: point.y,
-                    max_x: point.x + 160.0,
-                    max_y: point.y + 40.0,
+                    max_x: point.x + initial_width,
+                    max_y: point.y + initial_height,
                 }),
                 rotation: 0.0,
-                opacity: 1.0,
+                opacity: text_opacity,
                 z_index,
-                payload: default_element_payload(ElementType::Text as i32),
+                payload: encode_json_map(&text_payload),
             });
             self.sort_elements();
             self.snapshot.document_version += 1;
@@ -2587,10 +2656,6 @@ fn default_element_payload_map(element_type: i32) -> JsonMap<String, JsonValue> 
     }
 }
 
-fn default_element_payload(element_type: i32) -> Vec<u8> {
-    encode_json_map(&default_element_payload_map(element_type))
-}
-
 fn decode_json_map(bytes: &[u8]) -> Option<JsonMap<String, JsonValue>> {
     let value = serde_json::from_slice::<JsonValue>(bytes).ok()?;
     value.as_object().cloned()
@@ -3599,6 +3664,166 @@ fn runtime_snap_config_patch_from_map(
     } else {
         None
     }
+}
+
+fn runtime_style_defaults_from_map(
+    map: &JsonMap<String, JsonValue>,
+) -> Option<RuntimeStyleDefaults> {
+    let source = map
+        .get("runtime")
+        .and_then(JsonValue::as_object)
+        .unwrap_or(map);
+    let styles = source.get("styles").and_then(JsonValue::as_object)?;
+    let mut defaults = RuntimeStyleDefaults::default();
+    let mut found = false;
+
+    for (style_key, style_value) in styles {
+        let Some(element_type) = style_defaults_element_type_for_key(style_key.as_str()) else {
+            continue;
+        };
+        let Some(style_map) = style_value.as_object() else {
+            continue;
+        };
+        let normalized_style = sanitize_runtime_style_defaults_map(style_map);
+        defaults.set_for_element_type(element_type, normalized_style);
+        found = true;
+    }
+
+    if found {
+        Some(defaults)
+    } else {
+        None
+    }
+}
+
+fn style_defaults_element_type_for_key(style_key: &str) -> Option<i32> {
+    match style_key {
+        "rectangle" => Some(ElementType::Rectangle as i32),
+        "arrow" => Some(ElementType::Arrow as i32),
+        "line" => Some(ElementType::Line as i32),
+        "freeDraw" | "free_draw" => Some(ElementType::FreeDraw as i32),
+        "text" => Some(ElementType::Text as i32),
+        "serialNumber" | "serial_number" => Some(ElementType::SerialNumber as i32),
+        "filter" => Some(ElementType::Filter as i32),
+        "highlight" => Some(ElementType::Highlight as i32),
+        _ => None,
+    }
+}
+
+fn sanitize_runtime_style_defaults_map(
+    style: &JsonMap<String, JsonValue>,
+) -> JsonMap<String, JsonValue> {
+    let mut normalized = JsonMap::new();
+    for key in [
+        "opacity",
+        "serialNumber",
+        "color",
+        "fillColor",
+        "strokeWidth",
+        "strokeStyle",
+        "fillStyle",
+        "highlightShape",
+        "filterType",
+        "filterStrength",
+        "cornerRadius",
+        "arrowType",
+        "startArrowhead",
+        "endArrowhead",
+        "fontSize",
+        "fontFamily",
+        "textAlign",
+        "verticalAlign",
+        "textStrokeColor",
+        "textStrokeWidth",
+    ] {
+        let Some(value) = style.get(key) else {
+            continue;
+        };
+        let normalized_value = if key == "fontFamily" && value.is_null() {
+            JsonValue::from("")
+        } else {
+            value.clone()
+        };
+        normalized.insert(key.to_string(), normalized_value);
+    }
+    normalized
+}
+
+fn style_default_opacity_from_map(style_defaults: &JsonMap<String, JsonValue>) -> Option<f64> {
+    style_defaults
+        .get("opacity")
+        .and_then(JsonValue::as_f64)
+        .map(sanitize_opacity)
+}
+
+fn apply_style_defaults_to_payload_map(
+    element_type: i32,
+    payload_map: &mut JsonMap<String, JsonValue>,
+    style_defaults: &JsonMap<String, JsonValue>,
+) -> f64 {
+    let mut opacity = 1.0;
+    for (key, value) in style_defaults {
+        if key == "opacity" {
+            if let Some(parsed) = value.as_f64() {
+                opacity = sanitize_opacity(parsed);
+            }
+            continue;
+        }
+        let normalized_key = normalize_style_field_key(element_type, key);
+        let normalized_value = if key == "fontFamily" && value.is_null() {
+            JsonValue::from("")
+        } else {
+            value.clone()
+        };
+        payload_map.insert(normalized_key.to_string(), normalized_value);
+    }
+    opacity
+}
+
+fn sanitize_opacity(value: f64) -> f64 {
+    if !value.is_finite() {
+        return 1.0;
+    }
+    value.clamp(0.0, 1.0)
+}
+
+fn apply_next_serial_number_default(
+    elements: &[Element],
+    payload_map: &mut JsonMap<String, JsonValue>,
+) {
+    let next_serial = resolve_next_serial_number(elements);
+    let current_serial = payload_map
+        .get("number")
+        .and_then(json_i64_value)
+        .unwrap_or(1);
+    if current_serial < next_serial {
+        payload_map.insert("number".to_string(), JsonValue::from(next_serial));
+    }
+}
+
+fn resolve_next_serial_number(elements: &[Element]) -> i64 {
+    let mut next_serial = 1_i64;
+    for element in elements {
+        if normalize_element_type(element.element_type) != ElementType::SerialNumber as i32 {
+            continue;
+        }
+        let Some(payload_map) = decode_json_map(&element.payload) else {
+            continue;
+        };
+        let Some(number) = payload_map.get("number").and_then(json_i64_value) else {
+            continue;
+        };
+        if number >= next_serial {
+            next_serial = number.saturating_add(1);
+        }
+    }
+    next_serial.max(1)
+}
+
+fn json_i64_value(value: &JsonValue) -> Option<i64> {
+    value
+        .as_i64()
+        .or_else(|| value.as_u64().and_then(|raw| i64::try_from(raw).ok()))
 }
 
 fn encode_global_payload_map(map: JsonMap<String, JsonValue>) -> Vec<u8> {
@@ -6053,6 +6278,216 @@ mod tests {
         assert!((engine.runtime_snap_config.object_distance - 6.5).abs() < 1e-9);
         assert_eq!(engine.snapshot.document_version, initial_document_version);
         assert_eq!(engine.snapshot.selection_version, initial_selection_version);
+    }
+
+    #[test]
+    fn runtime_config_payload_applies_style_defaults_to_create_element() {
+        let mut engine = Engine::default();
+        assert!(engine.apply_runtime_config_payload(
+            br#"{"styles":{"rectangle":{"opacity":0.35,"color":4289379276,"fillColor":255,"strokeWidth":5.0,"strokeStyle":"dashed","fillStyle":"line","cornerRadius":12.0}}}"#,
+        ));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "style-create-rect".to_string(),
+                    position: Some(DrawPoint {
+                        x: 10.0,
+                        y: 20.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create rectangle");
+
+        let element = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "style-create-rect")
+            .expect("created rectangle");
+        let payload = decode_json_map(&element.payload).expect("rectangle payload");
+        assert!((element.opacity - 0.35).abs() < 1e-9);
+        assert_eq!(
+            payload.get("color").and_then(JsonValue::as_u64),
+            Some(4289379276)
+        );
+        assert_eq!(
+            payload.get("fillColor").and_then(JsonValue::as_u64),
+            Some(255)
+        );
+        assert_eq!(
+            payload.get("strokeWidth").and_then(JsonValue::as_f64),
+            Some(5.0)
+        );
+        assert_eq!(
+            payload.get("strokeStyle").and_then(JsonValue::as_str),
+            Some("dashed"),
+        );
+        assert_eq!(
+            payload.get("fillStyle").and_then(JsonValue::as_str),
+            Some("line"),
+        );
+        assert_eq!(
+            payload.get("cornerRadius").and_then(JsonValue::as_f64),
+            Some(12.0),
+        );
+    }
+
+    #[test]
+    fn runtime_config_payload_applies_text_style_defaults_to_new_text_edit() {
+        let mut engine = Engine::default();
+        assert!(engine.apply_runtime_config_payload(
+            br#"{"styles":{"text":{"opacity":0.4,"fontSize":60.0,"fontFamily":"Fira Code","textAlign":"center","verticalAlign":"bottom","color":4279312947}}}"#,
+        ));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartTextEdit as i32,
+                payload: Some(CommandPayload::StartTextEdit(StartTextEditCommand {
+                    element_id: String::new(),
+                    position: Some(DrawPoint {
+                        x: 40.0,
+                        y: 50.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                })),
+            })
+            .expect("start text edit");
+
+        let element_id = engine
+            .snapshot
+            .selected_ids
+            .first()
+            .cloned()
+            .expect("selected text id");
+        let element = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == element_id)
+            .expect("new text element");
+        let payload = decode_json_map(&element.payload).expect("text payload");
+        let rect = element.rect.as_ref().expect("text rect");
+
+        assert!((element.opacity - 0.4).abs() < 1e-9);
+        assert_eq!(
+            payload.get("fontSize").and_then(JsonValue::as_f64),
+            Some(60.0)
+        );
+        assert_eq!(
+            payload.get("fontFamily").and_then(JsonValue::as_str),
+            Some("Fira Code"),
+        );
+        assert_eq!(
+            payload.get("horizontalAlign").and_then(JsonValue::as_str),
+            Some("center"),
+        );
+        assert_eq!(
+            payload.get("verticalAlign").and_then(JsonValue::as_str),
+            Some("bottom"),
+        );
+        assert_eq!(
+            payload.get("color").and_then(JsonValue::as_u64),
+            Some(4279312947)
+        );
+        let width = rect.max_x - rect.min_x;
+        let height = rect.max_y - rect.min_y;
+        assert!(width >= TEXT_MIN_WIDTH);
+        assert!(width < 80.0);
+        assert!(height >= 60.0);
+    }
+
+    #[test]
+    fn create_serial_number_text_elements_uses_runtime_text_style_defaults() {
+        let mut engine = Engine::default();
+        assert!(engine.apply_runtime_config_payload(
+            br#"{"styles":{"text":{"opacity":0.25,"fontSize":30.0,"fontFamily":"Fira Code","textAlign":"right","verticalAlign":"top","color":4278255873}}}"#,
+        ));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::SerialNumber as i32,
+                    element_id: "serial-styled".to_string(),
+                    position: Some(DrawPoint {
+                        x: 20.0,
+                        y: 30.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create serial number");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateSerialNumberTextElements as i32,
+                payload: Some(CommandPayload::CreateSerialNumberTextElements(
+                    CreateSerialNumberTextElementsCommand {
+                        element_ids: vec!["serial-styled".to_string()],
+                    },
+                )),
+            })
+            .expect("create serial text");
+
+        let serial = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "serial-styled")
+            .expect("serial");
+        let serial_payload = decode_json_map(&serial.payload).expect("serial payload");
+        let text_id = serial_payload
+            .get("textElementId")
+            .and_then(JsonValue::as_str)
+            .expect("bound text id");
+        let text = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == text_id)
+            .expect("bound text");
+        let text_payload = decode_json_map(&text.payload).expect("text payload");
+
+        assert!((text.opacity - 0.25).abs() < 1e-9);
+        assert_eq!(
+            text_payload.get("fontSize").and_then(JsonValue::as_f64),
+            Some(30.0),
+        );
+        assert_eq!(
+            text_payload.get("fontFamily").and_then(JsonValue::as_str),
+            Some("Fira Code"),
+        );
+        assert_eq!(
+            text_payload
+                .get("horizontalAlign")
+                .and_then(JsonValue::as_str),
+            Some("right"),
+        );
+        assert_eq!(
+            text_payload
+                .get("verticalAlign")
+                .and_then(JsonValue::as_str),
+            Some("top"),
+        );
+        assert_eq!(
+            text_payload.get("color").and_then(JsonValue::as_u64),
+            Some(4278255873),
+        );
     }
 
     #[test]

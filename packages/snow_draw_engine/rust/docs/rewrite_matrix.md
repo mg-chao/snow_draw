@@ -17,7 +17,7 @@ Status legend:
 | `select_element` | implemented | Deterministic selection/version updates. |
 | `clear_selection` | implemented | Clears selected IDs and bumps selection version. |
 | `select_all` | implemented | Selects all elements in snapshot. |
-| `create_element` | partial | Creation works with deterministic anchor capture; runtime grid + object anchor snapping honor `snap_override` when runtime config enables snapping, while full guide/gap parity remains deferred. |
+| `create_element` | partial | Creation works with deterministic anchor capture and runtime style defaults (payload + opacity) from config events; runtime grid + object anchor snapping honor `snap_override` when runtime config enables snapping, while full guide/gap parity remains deferred. |
 | `update_creating_element` | partial | Resizing preview supports `create_from_center`; runtime grid + object anchor snapping honor `snap_override`, while full guide/gap parity remains deferred. |
 | `add_arrow_point` | partial | Appends points for currently creating arrow/line elements and re-normalizes payload points against updated rect bounds; runtime grid + object anchor snapping honor `snap_override`, while full guide/gap parity remains deferred. |
 | `finish_create_element` | implemented | Ends create interaction. |
@@ -28,8 +28,8 @@ Status legend:
 | `change_elements_z_index` | implemented | Deterministic reordering and z-index normalization. |
 | `update_elements_style` | partial | JSON style merge works; opaque/binary payloads pass through as compatibility fallback. |
 | `update_global_elements` | implemented | Stores normalized global payload and drives overlay tasks. |
-| `create_serial_number_text_elements` | partial | Creates/reuses companion text elements, updates `serial_number.textElementId`, and focuses single-target text edit; text style/layout defaults are still simplified. |
-| `start_text_edit` | implemented | Opens/creates text edit session. |
+| `create_serial_number_text_elements` | partial | Creates/reuses companion text elements, updates `serial_number.textElementId`, focuses single-target text edit, and applies runtime text style defaults from config events; advanced text-metrics parity remains deferred. |
+| `start_text_edit` | implemented | Opens/creates text edit session and applies runtime text style defaults for newly created text drafts. |
 | `update_text_edit` | implemented | Updates text payload and optional rect. |
 | `refresh_auto_resize_text_layouts_after_font_load` | implemented | V2 runtime emits text-metrics host requests for auto-resize text elements and applies response-driven layout updates; direct v1 flow now recomputes deterministic fallback auto-resize text bounds. |
 | `finish_text_edit` | implemented | Commits or removes new-empty text as expected. |
@@ -79,7 +79,7 @@ Status legend:
 | V2 Path | Status | Notes |
 | --- | --- | --- |
 | `command_event -> snapshot/state_delta/frame_plan` | implemented | Core runtime flow for store dispatch. |
-| `config_event -> runtime config` | implemented | Locale/scale updates plus typed runtime config payload application (e.g. grid/object snap toggles) without mutating document snapshots. |
+| `config_event -> runtime config` | implemented | Locale/scale updates plus typed runtime config payload application (e.g. grid/object snap toggles and per-element runtime style defaults) without mutating document snapshots. |
 | `pointer_event -> host_request` | implemented | Forwarded as typed host request. |
 | `keyboard_event -> host_request` | implemented | Forwarded as typed host request. |
 | `tool_event -> host_request` | implemented | Forwarded as typed host request. |
