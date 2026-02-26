@@ -94,8 +94,13 @@ struct EditSession {
 #[derive(Debug, Clone)]
 enum EditSessionOperation {
     Move,
-    Resize { mode: ResizeMode },
-    Rotate { pivot: DrawPoint, snap_angle: f64 },
+    Resize {
+        mode: ResizeMode,
+    },
+    Rotate {
+        pivot: DrawPoint,
+        snap_angle: f64,
+    },
     ArrowPoint {
         element_id: String,
         point_kind: ArrowPointKind,
@@ -295,7 +300,9 @@ impl Engine {
                 }
             }
             EngineCommandKind::RefreshAutoResizeTextLayoutsAfterFontLoad => {
-                self.emit_state_changed();
+                if self.apply_refresh_auto_resize_text_layouts_after_font_load() {
+                    self.emit_state_changed();
+                }
             }
             EngineCommandKind::FinishTextEdit => {
                 if let Ok(payload) = extract_finish_text_edit_payload(kind, command.payload) {
@@ -416,6 +423,7 @@ impl Engine {
         expected_text: &str,
         measured_width: f64,
         measured_height: f64,
+        measured_line_height: f64,
     ) -> bool {
         let Some(element) = self.element_mut(element_id) else {
             return false;
@@ -446,16 +454,14 @@ impl Engine {
             return false;
         };
 
-        let width = if measured_width.is_finite() && measured_width > 0.0 {
-            measured_width
-        } else {
-            (current_rect.max_x - current_rect.min_x).abs().max(1.0)
-        };
-        let height = if measured_height.is_finite() && measured_height > 0.0 {
-            measured_height
-        } else {
-            fallback_text_metrics_height(&payload_map)
-        };
+        let fallback_metrics = fallback_text_metrics_for_payload(&payload_map, f64::INFINITY, None);
+        let line_height =
+            sanitize_positive_extent(measured_line_height, fallback_metrics.line_height.max(1.0));
+        let layout_padding = resolve_text_layout_horizontal_padding(line_height) * 2.0;
+        let content_width = sanitize_positive_extent(measured_width, fallback_metrics.width);
+        let content_height = sanitize_positive_extent(measured_height, fallback_metrics.height);
+        let width = sanitize_positive_extent(content_width + layout_padding, 1.0);
+        let height = sanitize_positive_extent(content_height.max(line_height), line_height);
 
         let next_rect = DrawRect {
             min_x: current_rect.min_x,
@@ -1291,6 +1297,44 @@ impl Engine {
         self.set_interaction_mode(InteractionMode::Idle);
     }
 
+    fn apply_refresh_auto_resize_text_layouts_after_font_load(&mut self) -> bool {
+        let mut changed = false;
+
+        for element in &mut self.snapshot.elements {
+            if normalize_element_type(element.element_type) != ElementType::Text as i32 {
+                continue;
+            }
+
+            let payload_map = decode_json_map(&element.payload)
+                .unwrap_or_else(|| default_element_payload_map(ElementType::Text as i32));
+            let auto_resize = payload_map
+                .get("autoResize")
+                .and_then(JsonValue::as_bool)
+                .unwrap_or(true);
+            if !auto_resize {
+                continue;
+            }
+
+            let Some(current_rect) = element.rect.clone() else {
+                continue;
+            };
+            let next_rect =
+                resolve_auto_resize_text_rect(current_rect.min_x, current_rect.min_y, &payload_map);
+            if rects_close(&current_rect, &next_rect) {
+                continue;
+            }
+
+            element.rect = Some(next_rect);
+            changed = true;
+        }
+
+        if changed {
+            self.snapshot.document_version += 1;
+        }
+
+        changed
+    }
+
     fn apply_start_edit(&mut self, payload: engine_proto::StartEditCommand) {
         let operation_id = payload.operation_id.trim().to_string();
         let params = decode_json_map(&payload.params);
@@ -1703,8 +1747,8 @@ impl Engine {
         };
 
         let element_type = self.snapshot.elements[element_index].element_type;
-        let resolved_type =
-            ElementType::try_from(normalize_element_type(element_type)).unwrap_or(ElementType::Unknown);
+        let resolved_type = ElementType::try_from(normalize_element_type(element_type))
+            .unwrap_or(ElementType::Unknown);
         if resolved_type != ElementType::Arrow && resolved_type != ElementType::Line {
             return false;
         }
@@ -1765,8 +1809,8 @@ impl Engine {
         };
 
         let element_type = self.snapshot.elements[element_index].element_type;
-        let resolved_type =
-            ElementType::try_from(normalize_element_type(element_type)).unwrap_or(ElementType::Unknown);
+        let resolved_type = ElementType::try_from(normalize_element_type(element_type))
+            .unwrap_or(ElementType::Unknown);
         if resolved_type != ElementType::Arrow && resolved_type != ElementType::Line {
             return false;
         }
@@ -2116,13 +2160,129 @@ fn encode_json_map(map: &JsonMap<String, JsonValue>) -> Vec<u8> {
     serde_json::to_vec(map).unwrap_or_default()
 }
 
-fn fallback_text_metrics_height(payload_map: &JsonMap<String, JsonValue>) -> f64 {
+struct FallbackTextMetrics {
+    width: f64,
+    height: f64,
+    line_height: f64,
+}
+
+fn fallback_text_metrics_for_payload(
+    payload_map: &JsonMap<String, JsonValue>,
+    max_width: f64,
+    min_width: Option<f64>,
+) -> FallbackTextMetrics {
     let font_size = payload_map
         .get("fontSize")
         .and_then(JsonValue::as_f64)
         .filter(|value| value.is_finite() && *value > 0.0)
-        .unwrap_or(21.0);
-    (font_size * 1.2).max(1.0)
+        .unwrap_or(14.0);
+    let line_height = sanitize_positive_extent(font_size * 1.2, 1.0);
+    let glyph_width = sanitize_positive_extent(font_size * 0.6, 1.0);
+    let raw_text = payload_map
+        .get("text")
+        .and_then(JsonValue::as_str)
+        .unwrap_or_default();
+    let text = if raw_text.is_empty() { " " } else { raw_text };
+    let resolved_max_width = resolve_text_max_width(max_width);
+
+    let mut line_widths = Vec::new();
+    for line in text.split('\n') {
+        append_fallback_line_metrics(&mut line_widths, line, glyph_width, resolved_max_width);
+    }
+    if line_widths.is_empty() {
+        line_widths.push(glyph_width);
+    }
+
+    let mut width = line_widths.iter().copied().fold(0.0, f64::max);
+    if let Some(min_width) = min_width.filter(|value| value.is_finite() && *value > 0.0) {
+        let capped_min_width = if resolved_max_width.is_finite() {
+            min_width.min(resolved_max_width)
+        } else {
+            min_width
+        };
+        if width < capped_min_width {
+            width = capped_min_width;
+        }
+    }
+    width = sanitize_positive_extent(width, glyph_width);
+    let height = sanitize_positive_extent(line_height * line_widths.len() as f64, line_height);
+
+    FallbackTextMetrics {
+        width,
+        height,
+        line_height,
+    }
+}
+
+fn append_fallback_line_metrics(
+    line_widths: &mut Vec<f64>,
+    line: &str,
+    glyph_width: f64,
+    max_width: f64,
+) {
+    let grapheme_count = line.chars().count().max(1) as f64;
+    let raw_width = sanitize_positive_extent(grapheme_count * glyph_width, glyph_width);
+
+    if !max_width.is_finite() {
+        line_widths.push(raw_width);
+        return;
+    }
+
+    let wraps = ((raw_width / max_width).ceil() as usize).max(1);
+    for index in 0..wraps {
+        let line_width = if index == wraps - 1 {
+            let remaining = raw_width - (max_width * index as f64);
+            sanitize_positive_extent(remaining, raw_width.min(max_width))
+        } else {
+            max_width
+        };
+        line_widths.push(sanitize_positive_extent(line_width, glyph_width));
+    }
+}
+
+fn resolve_text_max_width(max_width: f64) -> f64 {
+    if !max_width.is_finite() {
+        return f64::INFINITY;
+    }
+    if max_width <= 0.0 {
+        return 1.0;
+    }
+    max_width
+}
+
+fn resolve_text_layout_horizontal_padding(line_height: f64) -> f64 {
+    let padding = line_height * 0.01;
+    if padding.is_finite() {
+        padding.max(0.0)
+    } else {
+        0.0
+    }
+}
+
+fn sanitize_positive_extent(value: f64, fallback: f64) -> f64 {
+    if value.is_finite() && value > 0.0 {
+        return value;
+    }
+    fallback
+}
+
+fn resolve_auto_resize_text_rect(
+    origin_x: f64,
+    origin_y: f64,
+    payload_map: &JsonMap<String, JsonValue>,
+) -> DrawRect {
+    let layout = fallback_text_metrics_for_payload(payload_map, f64::INFINITY, None);
+    let horizontal_padding = resolve_text_layout_horizontal_padding(layout.line_height);
+    let width = sanitize_positive_extent(layout.width + horizontal_padding * 2.0, 1.0);
+    let height =
+        sanitize_positive_extent(layout.height.max(layout.line_height), layout.line_height);
+
+    DrawRect {
+        min_x: origin_x,
+        min_y: origin_y,
+        max_x: origin_x + width,
+        max_y: origin_y + height,
+    }
 }
 
 fn rects_close(a: &DrawRect, b: &DrawRect) -> bool {
@@ -2396,22 +2556,28 @@ fn selected_arrow_like_element(snapshot: &EngineSnapshot) -> Option<&Element> {
     }
 }
 
-fn decode_arrow_points_world(payload: &JsonMap<String, JsonValue>, rect: &DrawRect) -> Vec<DrawPoint> {
+fn decode_arrow_points_world(
+    payload: &JsonMap<String, JsonValue>,
+    rect: &DrawRect,
+) -> Vec<DrawPoint> {
     let Some(entries) = payload.get("points").and_then(JsonValue::as_array) else {
         return Vec::new();
     };
 
     let width = rect.max_x - rect.min_x;
     let height = rect.max_y - rect.min_y;
-    let has_world_space_points = entries.iter().filter_map(JsonValue::as_object).any(|entry| {
-        let Some(x) = entry.get("x").and_then(JsonValue::as_f64) else {
-            return false;
-        };
-        let Some(y) = entry.get("y").and_then(JsonValue::as_f64) else {
-            return false;
-        };
-        !is_normalized_coord(x) || !is_normalized_coord(y)
-    });
+    let has_world_space_points = entries
+        .iter()
+        .filter_map(JsonValue::as_object)
+        .any(|entry| {
+            let Some(x) = entry.get("x").and_then(JsonValue::as_f64) else {
+                return false;
+            };
+            let Some(y) = entry.get("y").and_then(JsonValue::as_f64) else {
+                return false;
+            };
+            !is_normalized_coord(x) || !is_normalized_coord(y)
+        });
 
     entries
         .iter()
@@ -3604,8 +3770,8 @@ mod tests {
         let baseline_version = engine.snapshot.document_version;
         while engine.poll_event().is_some() {}
 
-        assert!(engine.apply_text_metrics_layout("text-metrics", "hello", 88.0, 24.0));
-        assert!(!engine.apply_text_metrics_layout("text-metrics", "stale", 120.0, 40.0));
+        assert!(engine.apply_text_metrics_layout("text-metrics", "hello", 88.0, 24.0, 24.0));
+        assert!(!engine.apply_text_metrics_layout("text-metrics", "stale", 120.0, 40.0, 40.0));
 
         let element = engine
             .snapshot
@@ -3614,12 +3780,109 @@ mod tests {
             .find(|element| element.id == "text-metrics")
             .expect("text element");
         let rect = element.rect.as_ref().expect("text rect");
-        assert!(((rect.max_x - rect.min_x) - 88.0).abs() < 1e-9);
+        assert!(((rect.max_x - rect.min_x) - 88.48).abs() < 1e-9);
         assert!(((rect.max_y - rect.min_y) - 24.0).abs() < 1e-9);
         assert!(engine.snapshot.document_version > baseline_version);
 
         let event = engine.poll_event().expect("state changed event");
         assert_eq!(event.kind, EngineEventKind::StateChanged as i32);
+    }
+
+    #[test]
+    fn refresh_auto_resize_text_layouts_recomputes_text_bounds() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Text as i32,
+                    element_id: "refresh-auto".to_string(),
+                    position: Some(DrawPoint {
+                        x: 10.0,
+                        y: 20.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload:
+                        br#"{"typeId":"text","text":"hello","fontSize":20.0,"autoResize":true}"#
+                            .to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create auto text");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Text as i32,
+                    element_id: "refresh-fixed".to_string(),
+                    position: Some(DrawPoint {
+                        x: 200.0,
+                        y: 120.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload:
+                        br#"{"typeId":"text","text":"fixed","fontSize":20.0,"autoResize":false}"#
+                            .to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create fixed text");
+
+        let auto_before = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "refresh-auto")
+            .and_then(|element| element.rect.clone())
+            .expect("auto rect before");
+        let fixed_before = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "refresh-fixed")
+            .and_then(|element| element.rect.clone())
+            .expect("fixed rect before");
+        let document_version_before = engine.snapshot.document_version;
+
+        while engine.poll_event().is_some() {}
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::RefreshAutoResizeTextLayoutsAfterFontLoad as i32,
+                payload: None,
+            })
+            .expect("refresh auto-resize text");
+
+        let auto_after = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "refresh-auto")
+            .and_then(|element| element.rect.clone())
+            .expect("auto rect after");
+        let fixed_after = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "refresh-fixed")
+            .and_then(|element| element.rect.clone())
+            .expect("fixed rect after");
+
+        assert_ne!(auto_after, auto_before);
+        assert_eq!(fixed_after, fixed_before);
+        assert!(engine.snapshot.document_version > document_version_before);
+        assert!(((auto_after.max_x - auto_after.min_x) - 60.48).abs() < 1e-9);
+        assert!(((auto_after.max_y - auto_after.min_y) - 24.0).abs() < 1e-9);
+
+        let event = engine.poll_event().expect("state changed event");
+        assert_eq!(event.kind, EngineEventKind::StateChanged as i32);
+        assert!(engine.poll_event().is_none());
     }
 
     #[test]
@@ -4779,7 +5042,9 @@ mod tests {
                         pressure: 0.0,
                         timestamp_us: 0,
                     }),
-                    initial_payload: br#"{"typeId":"arrow","points":[{"x":0.0,"y":0.0},{"x":1.0,"y":1.0}]}"#.to_vec(),
+                    initial_payload:
+                        br#"{"typeId":"arrow","points":[{"x":0.0,"y":0.0},{"x":1.0,"y":1.0}]}"#
+                            .to_vec(),
                     maintain_aspect_ratio: false,
                     create_from_center: false,
                     snap_override: false,

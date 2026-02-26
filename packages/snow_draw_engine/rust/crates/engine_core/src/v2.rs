@@ -273,6 +273,7 @@ impl EngineV2 {
             pending.expected_text.as_str(),
             metrics.width,
             metrics.height,
+            metrics.line_height,
         ) {
             while let Some(event) = self.engine.poll_event() {
                 self.push_output(V2OutputPayload::Event(convert_event(event)));
@@ -359,12 +360,7 @@ fn build_text_metrics_target(
     let text = json_string(&payload, "text", "");
     let font_size = json_f64(&payload, "fontSize", 21.0);
     let font_family = json_string(&payload, "fontFamily", "");
-    let max_width = element
-        .rect
-        .as_ref()
-        .map(|rect| (rect.max_x - rect.min_x).abs())
-        .filter(|width| width.is_finite() && *width > 0.0)
-        .unwrap_or(4096.0);
+    let max_width = f64::INFINITY;
 
     Some(TextMetricsTarget {
         element_id: element.id.clone(),
@@ -774,7 +770,7 @@ mod tests {
         assert!(request_id > 0);
         assert_eq!(request.text, "metrics");
         assert!((request.font_size - 21.0).abs() < 1e-9);
-        assert!((request.max_width - 160.0).abs() < 1e-9);
+        assert!(request.max_width.is_infinite());
     }
 
     #[test]
@@ -877,7 +873,7 @@ mod tests {
             .find(|element| element.id == edited_id)
             .expect("text element in snapshot");
         let rect = text.rect.as_ref().expect("text rect");
-        assert!(((rect.max_x - rect.min_x) - 88.0).abs() < 1e-9);
+        assert!(((rect.max_x - rect.min_x) - 88.48).abs() < 1e-9);
         assert!(((rect.max_y - rect.min_y) - 24.0).abs() < 1e-9);
     }
 }
