@@ -72,7 +72,7 @@ Status legend:
 | `arrow_point_overlay` | partial | Emitted for single selected arrow/line elements with deterministic handle payloads and mixed normalized/world payload compatibility; advanced loop/elbow parity remains deferred. |
 | `arrow_binding_highlight` | partial | Emitted for selected arrow/line bindings; hover/edit-session driven highlight parity remains deferred. |
 | `hover_outline` | partial | Emitted when `global_elements_payload.hoverOutline` (or `hoveredElementId`) is present with a valid non-selected target; pointer-driven hover parity remains deferred. |
-| `snap_guides` | partial | Emitted when `global_elements_payload.snapGuides` provides guide entries; runtime-computed snapping guide parity remains deferred. |
+| `snap_guides` | partial | Emitted from `global_elements_payload.snapGuides` and from runtime snapping during create/edit sessions (grid + object-anchor point guides); full Dart gap-guide parity remains deferred. |
 
 ## V2 Host Request/Response Coverage
 

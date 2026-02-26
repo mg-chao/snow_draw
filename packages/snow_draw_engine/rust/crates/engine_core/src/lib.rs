@@ -62,6 +62,7 @@ impl EngineCoreError {
 pub struct Engine {
     config: EngineConfig,
     runtime_snap_config: RuntimeSnapConfig,
+    runtime_snap_guides: Vec<JsonValue>,
     snapshot: EngineSnapshot,
     undo_stack: Vec<EngineSnapshot>,
     redo_stack: Vec<EngineSnapshot>,
@@ -166,6 +167,26 @@ struct RuntimeSnapConfigPatch {
     object_distance: Option<f64>,
 }
 
+#[derive(Debug, Clone)]
+struct SnappedPointResult {
+    point: DrawPoint,
+    guides: Vec<JsonValue>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct AnchorSnapMatch {
+    offset: f64,
+    reference: f64,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct ObjectSnapResult {
+    dx: f64,
+    dy: f64,
+    x_match: Option<AnchorSnapMatch>,
+    y_match: Option<AnchorSnapMatch>,
+}
+
 impl Default for Engine {
     fn default() -> Self {
         Self::new(default_engine_config())
@@ -181,6 +202,7 @@ impl Engine {
         Self {
             config,
             runtime_snap_config: RuntimeSnapConfig::default(),
+            runtime_snap_guides: Vec::new(),
             snapshot,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -439,6 +461,7 @@ impl Engine {
             EngineCommandKind::ClearHistory => {
                 self.undo_stack.clear();
                 self.redo_stack.clear();
+                self.clear_runtime_snap_guides();
                 self.sync_history_lengths();
                 self.emit_history_changed();
             }
@@ -579,7 +602,11 @@ impl Engine {
             });
         }
 
-        if let Some(payload) = snap_guides_payload(&self.snapshot.global_elements_payload) {
+        if let Some(payload) = snap_guides_payload(
+            &self.snapshot.global_elements_payload,
+            self.snapshot.interaction_mode,
+            &self.runtime_snap_guides,
+        ) {
             tasks.push(FrameTask {
                 kind: FrameTaskKind::SnapGuides as i32,
                 element_id: String::new(),
@@ -740,43 +767,54 @@ impl Engine {
         point: DrawPoint,
         mode: RuntimeSnappingMode,
         excluded_ids: &BTreeSet<String>,
-    ) -> DrawPoint {
+    ) -> SnappedPointResult {
         match mode {
-            RuntimeSnappingMode::None => point,
-            RuntimeSnappingMode::Grid => DrawPoint {
-                x: snap_value_to_grid(point.x, self.runtime_snap_config.grid_size),
-                y: snap_value_to_grid(point.y, self.runtime_snap_config.grid_size),
-                pressure: point.pressure,
-                timestamp_us: point.timestamp_us,
+            RuntimeSnappingMode::None => SnappedPointResult {
+                point,
+                guides: Vec::new(),
             },
-            RuntimeSnappingMode::Object => {
-                let (dx, dy) = self.object_snap_offset_for_rect(
-                    &DrawRect {
-                        min_x: point.x,
-                        min_y: point.y,
-                        max_x: point.x,
-                        max_y: point.y,
-                    },
-                    excluded_ids,
-                );
-                DrawPoint {
-                    x: point.x + dx,
-                    y: point.y + dy,
+            RuntimeSnappingMode::Grid => {
+                let snapped = DrawPoint {
+                    x: snap_value_to_grid(point.x, self.runtime_snap_config.grid_size),
+                    y: snap_value_to_grid(point.y, self.runtime_snap_config.grid_size),
                     pressure: point.pressure,
                     timestamp_us: point.timestamp_us,
+                };
+                SnappedPointResult {
+                    guides: point_snap_guides(&point, &snapped),
+                    point: snapped,
+                }
+            }
+            RuntimeSnappingMode::Object => {
+                let point_rect = DrawRect {
+                    min_x: point.x,
+                    min_y: point.y,
+                    max_x: point.x,
+                    max_y: point.y,
+                };
+                let snapped_result = self.object_snap_result_for_rect(&point_rect, excluded_ids);
+                let snapped = DrawPoint {
+                    x: point.x + snapped_result.dx,
+                    y: point.y + snapped_result.dy,
+                    pressure: point.pressure,
+                    timestamp_us: point.timestamp_us,
+                };
+                SnappedPointResult {
+                    guides: point_snap_guides(&point, &snapped),
+                    point: snapped,
                 }
             }
         }
     }
 
-    fn object_snap_offset_for_rect(
+    fn object_snap_result_for_rect(
         &self,
         target_rect: &DrawRect,
         excluded_ids: &BTreeSet<String>,
-    ) -> (f64, f64) {
+    ) -> ObjectSnapResult {
         let max_distance = self.runtime_snap_config.object_distance;
         if max_distance <= 0.0 || !max_distance.is_finite() {
-            return (0.0, 0.0);
+            return ObjectSnapResult::default();
         }
 
         let mut reference_anchors_x = Vec::new();
@@ -792,14 +830,20 @@ impl Engine {
             reference_anchors_y.extend(rect_axis_anchors_y(rect));
         }
         if reference_anchors_x.is_empty() && reference_anchors_y.is_empty() {
-            return (0.0, 0.0);
+            return ObjectSnapResult::default();
         }
 
         let target_anchors_x = rect_axis_anchors_x(target_rect);
         let target_anchors_y = rect_axis_anchors_y(target_rect);
-        let dx = best_anchor_offset(&target_anchors_x, &reference_anchors_x, max_distance);
-        let dy = best_anchor_offset(&target_anchors_y, &reference_anchors_y, max_distance);
-        (dx, dy)
+        let x_match = best_anchor_match(&target_anchors_x, &reference_anchors_x, max_distance);
+        let y_match = best_anchor_match(&target_anchors_y, &reference_anchors_y, max_distance);
+
+        ObjectSnapResult {
+            dx: x_match.map(|item| item.offset).unwrap_or(0.0),
+            dy: y_match.map(|item| item.offset).unwrap_or(0.0),
+            x_match,
+            y_match,
+        }
     }
 
     fn object_snap_resize_rect(
@@ -808,13 +852,13 @@ impl Engine {
         mode: ResizeMode,
         from_center: bool,
         excluded_ids: &BTreeSet<String>,
-    ) -> DrawRect {
+    ) -> (DrawRect, Vec<JsonValue>) {
         if from_center {
-            return rect;
+            return (rect, Vec::new());
         }
         let max_distance = self.runtime_snap_config.object_distance;
         if max_distance <= 0.0 || !max_distance.is_finite() {
-            return rect;
+            return (rect, Vec::new());
         }
 
         let mut reference_anchors_x = Vec::new();
@@ -830,10 +874,12 @@ impl Engine {
             reference_anchors_y.extend(rect_axis_anchors_y(candidate));
         }
         if reference_anchors_x.is_empty() && reference_anchors_y.is_empty() {
-            return rect;
+            return (rect, Vec::new());
         }
 
         let mut snapped = rect;
+        let mut x_match = None;
+        let mut y_match = None;
         let (move_left, move_right, move_top, move_bottom) = resize_mode_axes(mode);
 
         if move_left || move_right {
@@ -844,7 +890,8 @@ impl Engine {
                 (false, false) => Vec::new(),
             };
             if !target_x.is_empty() {
-                let offset = best_anchor_offset(&target_x, &reference_anchors_x, max_distance);
+                x_match = best_anchor_match(&target_x, &reference_anchors_x, max_distance);
+                let offset = x_match.map(|item| item.offset).unwrap_or(0.0);
                 apply_resize_horizontal_offset(&mut snapped, offset, move_left, move_right);
             }
         }
@@ -857,12 +904,23 @@ impl Engine {
                 (false, false) => Vec::new(),
             };
             if !target_y.is_empty() {
-                let offset = best_anchor_offset(&target_y, &reference_anchors_y, max_distance);
+                y_match = best_anchor_match(&target_y, &reference_anchors_y, max_distance);
+                let offset = y_match.map(|item| item.offset).unwrap_or(0.0);
                 apply_resize_vertical_offset(&mut snapped, offset, move_top, move_bottom);
             }
         }
 
-        normalize_rect(snapped)
+        let normalized = normalize_rect(snapped);
+        let guides = rect_snap_guides_with_matches(&normalized, x_match, y_match);
+        (normalized, guides)
+    }
+
+    fn set_runtime_snap_guides(&mut self, guides: Vec<JsonValue>) {
+        self.runtime_snap_guides = guides;
+    }
+
+    fn clear_runtime_snap_guides(&mut self) {
+        self.runtime_snap_guides.clear();
     }
 
     fn apply_select(&mut self, payload: SelectElementCommand) {
@@ -911,7 +969,9 @@ impl Engine {
             pressure: 0.0,
             timestamp_us: 0,
         });
-        let point = self.maybe_snap_point(point, snap_mode, &BTreeSet::new());
+        let snapped = self.maybe_snap_point(point, snap_mode, &BTreeSet::new());
+        let point = snapped.point;
+        self.set_runtime_snap_guides(snapped.guides);
 
         let z_index = self
             .snapshot
@@ -961,7 +1021,9 @@ impl Engine {
         let snap_mode = self.resolve_runtime_snapping_mode(payload.snap_override);
         let mut excluded_ids = BTreeSet::new();
         excluded_ids.insert(creating_id.clone());
-        let last_position = self.maybe_snap_point(last_position, snap_mode, &excluded_ids);
+        let snapped = self.maybe_snap_point(last_position, snap_mode, &excluded_ids);
+        self.set_runtime_snap_guides(snapped.guides);
+        let last_position = snapped.point;
         let creating_start_position = self.creating_start_position.clone();
         let Some(element) = self.element_mut(&creating_id) else {
             return;
@@ -1000,7 +1062,9 @@ impl Engine {
         let snap_mode = self.resolve_runtime_snapping_mode(payload.snap_override);
         let mut excluded_ids = BTreeSet::new();
         excluded_ids.insert(creating_id.clone());
-        let position = self.maybe_snap_point(position, snap_mode, &excluded_ids);
+        let snapped = self.maybe_snap_point(position, snap_mode, &excluded_ids);
+        self.set_runtime_snap_guides(snapped.guides);
+        let position = snapped.point;
         let Some(element) = self.element_mut(&creating_id) else {
             return;
         };
@@ -1057,6 +1121,7 @@ impl Engine {
     fn apply_finish_create(&mut self) {
         self.creating_element_id = None;
         self.creating_start_position = None;
+        self.clear_runtime_snap_guides();
         self.set_interaction_mode(InteractionMode::Idle);
     }
 
@@ -1072,6 +1137,7 @@ impl Engine {
         }
         self.creating_element_id = None;
         self.creating_start_position = None;
+        self.clear_runtime_snap_guides();
         self.set_selected(BTreeSet::new());
         self.set_interaction_mode(InteractionMode::Idle);
     }
@@ -1653,6 +1719,7 @@ impl Engine {
             baseline_rotations,
             baseline_payloads,
         });
+        self.clear_runtime_snap_guides();
         self.set_interaction_mode(InteractionMode::Editing);
     }
 
@@ -1704,7 +1771,10 @@ impl Engine {
                 *delete_point_on_finish,
                 modifiers.snap_override,
             ),
-            EditSessionOperation::Unknown => false,
+            EditSessionOperation::Unknown => {
+                self.clear_runtime_snap_guides();
+                false
+            }
         };
 
         if changed {
@@ -1738,6 +1808,7 @@ impl Engine {
         if changed {
             self.snapshot.document_version += 1;
         }
+        self.clear_runtime_snap_guides();
         self.set_interaction_mode(InteractionMode::Idle);
     }
 
@@ -1772,6 +1843,7 @@ impl Engine {
         if changed {
             self.snapshot.document_version += 1;
         }
+        self.clear_runtime_snap_guides();
         self.set_interaction_mode(InteractionMode::Idle);
     }
 
@@ -1782,9 +1854,12 @@ impl Engine {
         baseline_rects: &BTreeMap<String, DrawRect>,
         snap_override: bool,
     ) -> bool {
-        let mut dx = current.x - start.x;
-        let mut dy = current.y - start.y;
+        let base_dx = current.x - start.x;
+        let base_dy = current.y - start.y;
+        let mut dx = base_dx;
+        let mut dy = base_dy;
         let snap_mode = self.resolve_runtime_snapping_mode(snap_override);
+        let mut guides = Vec::new();
         if let Some(bounds) = selection_bounds_from_rects(baseline_rects) {
             match snap_mode {
                 RuntimeSnappingMode::Grid => {
@@ -1794,6 +1869,25 @@ impl Engine {
                         snap_value_to_grid(bounds.min_y + dy, self.runtime_snap_config.grid_size);
                     dx = snapped_min_x - bounds.min_x;
                     dy = snapped_min_y - bounds.min_y;
+                    let x_coord = if (snapped_min_x - (bounds.min_x + base_dx)).abs() > f64::EPSILON
+                    {
+                        Some(snapped_min_x)
+                    } else {
+                        None
+                    };
+                    let y_coord = if (snapped_min_y - (bounds.min_y + base_dy)).abs() > f64::EPSILON
+                    {
+                        Some(snapped_min_y)
+                    } else {
+                        None
+                    };
+                    let snapped_bounds = DrawRect {
+                        min_x: bounds.min_x + dx,
+                        min_y: bounds.min_y + dy,
+                        max_x: bounds.max_x + dx,
+                        max_y: bounds.max_y + dy,
+                    };
+                    guides = rect_snap_guides_for_axes(&snapped_bounds, x_coord, y_coord);
                 }
                 RuntimeSnappingMode::Object => {
                     let moved_bounds = DrawRect {
@@ -1803,18 +1897,31 @@ impl Engine {
                         max_y: bounds.max_y + dy,
                     };
                     let excluded_ids = baseline_rects.keys().cloned().collect::<BTreeSet<_>>();
-                    let (snap_dx, snap_dy) =
-                        self.object_snap_offset_for_rect(&moved_bounds, &excluded_ids);
-                    dx += snap_dx;
-                    dy += snap_dy;
+                    let snap_result =
+                        self.object_snap_result_for_rect(&moved_bounds, &excluded_ids);
+                    dx += snap_result.dx;
+                    dy += snap_result.dy;
+                    let snapped_bounds = DrawRect {
+                        min_x: bounds.min_x + dx,
+                        min_y: bounds.min_y + dy,
+                        max_x: bounds.max_x + dx,
+                        max_y: bounds.max_y + dy,
+                    };
+                    guides = rect_snap_guides_with_matches(
+                        &snapped_bounds,
+                        snap_result.x_match,
+                        snap_result.y_match,
+                    );
                 }
                 RuntimeSnappingMode::None => {}
             }
         } else if !matches!(snap_mode, RuntimeSnappingMode::None) {
             let snapped = self.maybe_snap_point(current, snap_mode, &BTreeSet::new());
-            dx = snapped.x - start.x;
-            dy = snapped.y - start.y;
+            dx = snapped.point.x - start.x;
+            dy = snapped.point.y - start.y;
+            guides = snapped.guides;
         }
+        self.set_runtime_snap_guides(guides);
         let mut changed = false;
         for (element_id, base_rect) in baseline_rects {
             if let Some(element) = self.element_mut(element_id) {
@@ -1844,6 +1951,7 @@ impl Engine {
         let dy = current.y - start.y;
         let snap_mode = self.resolve_runtime_snapping_mode(snap_override);
         let mut changed = false;
+        let mut guides = Vec::new();
         let (move_left, move_right, move_top, move_bottom) = resize_mode_axes(mode);
         let excluded_ids = baseline_rects.keys().cloned().collect::<BTreeSet<_>>();
 
@@ -1955,10 +2063,42 @@ impl Engine {
                 })
             };
             if matches!(snap_mode, RuntimeSnappingMode::Grid) {
-                rect = snap_rect_to_grid(&rect, self.runtime_snap_config.grid_size);
+                let unsnapped = rect.clone();
+                let snapped = snap_rect_to_grid(&rect, self.runtime_snap_config.grid_size);
+                let x_coord = if (snapped.min_x - unsnapped.min_x).abs() > f64::EPSILON
+                    || (snapped.max_x - unsnapped.max_x).abs() > f64::EPSILON
+                {
+                    Some(if move_left && !move_right {
+                        snapped.min_x
+                    } else if move_right && !move_left {
+                        snapped.max_x
+                    } else {
+                        (snapped.min_x + snapped.max_x) * 0.5
+                    })
+                } else {
+                    None
+                };
+                let y_coord = if (snapped.min_y - unsnapped.min_y).abs() > f64::EPSILON
+                    || (snapped.max_y - unsnapped.max_y).abs() > f64::EPSILON
+                {
+                    Some(if move_top && !move_bottom {
+                        snapped.min_y
+                    } else if move_bottom && !move_top {
+                        snapped.max_y
+                    } else {
+                        (snapped.min_y + snapped.max_y) * 0.5
+                    })
+                } else {
+                    None
+                };
+                guides.extend(rect_snap_guides_for_axes(&snapped, x_coord, y_coord));
+                rect = snapped;
             }
             if matches!(snap_mode, RuntimeSnappingMode::Object) {
-                rect = self.object_snap_resize_rect(rect, mode, from_center, &excluded_ids);
+                let (snapped, snapped_guides) =
+                    self.object_snap_resize_rect(rect, mode, from_center, &excluded_ids);
+                rect = snapped;
+                guides.extend(snapped_guides);
             }
             if let Some(element) = self.element_mut(element_id) {
                 element.rect = Some(rect);
@@ -1966,6 +2106,7 @@ impl Engine {
             }
         }
 
+        self.set_runtime_snap_guides(dedupe_snap_guides(guides));
         changed
     }
 
@@ -1986,6 +2127,7 @@ impl Engine {
             delta = (delta / snap_angle).round() * snap_angle;
         }
 
+        self.clear_runtime_snap_guides();
         let mut changed = false;
         for (element_id, base_rect) in baseline_rects {
             if let Some(element) = self.element_mut(element_id) {
@@ -2026,7 +2168,9 @@ impl Engine {
         let snap_mode = self.resolve_runtime_snapping_mode(snap_override);
         let mut excluded_ids = BTreeSet::new();
         excluded_ids.insert(element_id.to_string());
-        let current = self.maybe_snap_point(current, snap_mode, &excluded_ids);
+        let snapped = self.maybe_snap_point(current, snap_mode, &excluded_ids);
+        self.set_runtime_snap_guides(snapped.guides);
+        let current = snapped.point;
 
         let Some(base_rect) = session.baseline_rects.get(element_id) else {
             return false;
@@ -2245,6 +2389,7 @@ impl Engine {
         self.box_select_start = None;
         self.box_select_current = None;
         self.edit_session = None;
+        self.clear_runtime_snap_guides();
     }
 
     fn element_index(&self, element_id: &str) -> Option<usize> {
@@ -2269,6 +2414,9 @@ impl Engine {
 
     fn set_interaction_mode(&mut self, mode: InteractionMode) {
         self.snapshot.interaction_mode = mode as i32;
+        if !matches!(mode, InteractionMode::Creating | InteractionMode::Editing) {
+            self.clear_runtime_snap_guides();
+        }
     }
 
     fn set_selected(&mut self, selected: BTreeSet<String>) {
@@ -2721,24 +2869,19 @@ fn hover_outline_payload(snapshot: &EngineSnapshot) -> Option<Vec<u8>> {
     serde_json::to_vec(&payload).ok()
 }
 
-fn snap_guides_payload(global_payload: &[u8]) -> Option<Vec<u8>> {
-    let map = decode_json_map(global_payload)?;
-    let guides = if let Some(value) = map.get("snapGuides") {
-        match value {
-            JsonValue::Array(entries) => entries.clone(),
-            JsonValue::Object(payload) => payload
-                .get("guides")
-                .and_then(JsonValue::as_array)
-                .cloned()
-                .unwrap_or_default(),
-            _ => Vec::new(),
-        }
-    } else {
-        map.get("guides")
-            .and_then(JsonValue::as_array)
-            .cloned()
-            .unwrap_or_default()
-    };
+fn snap_guides_payload(
+    global_payload: &[u8],
+    interaction_mode: i32,
+    runtime_guides: &[JsonValue],
+) -> Option<Vec<u8>> {
+    let mut guides = decode_json_map(global_payload)
+        .map(|map| extract_snap_guides_from_map(&map))
+        .unwrap_or_default();
+    if interaction_mode_supports_runtime_snap_guides(interaction_mode) && !runtime_guides.is_empty()
+    {
+        guides.extend(runtime_guides.iter().cloned());
+    }
+    guides = dedupe_snap_guides(guides);
     if guides.is_empty() {
         return None;
     }
@@ -2746,6 +2889,31 @@ fn snap_guides_payload(global_payload: &[u8]) -> Option<Vec<u8>> {
     let mut payload = JsonMap::new();
     payload.insert("guides".to_string(), JsonValue::Array(guides));
     serde_json::to_vec(&payload).ok()
+}
+
+fn extract_snap_guides_from_map(map: &JsonMap<String, JsonValue>) -> Vec<JsonValue> {
+    if let Some(value) = map.get("snapGuides") {
+        return match value {
+            JsonValue::Array(entries) => entries.clone(),
+            JsonValue::Object(payload) => payload
+                .get("guides")
+                .and_then(JsonValue::as_array)
+                .cloned()
+                .unwrap_or_default(),
+            _ => Vec::new(),
+        };
+    }
+    map.get("guides")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default()
+}
+
+fn interaction_mode_supports_runtime_snap_guides(mode: i32) -> bool {
+    matches!(
+        InteractionMode::try_from(mode).unwrap_or(InteractionMode::Idle),
+        InteractionMode::Creating | InteractionMode::Editing
+    )
 }
 
 fn box_selection_payload(start: &DrawPoint, current: &DrawPoint) -> Option<Vec<u8>> {
@@ -3125,11 +3293,15 @@ fn rect_axis_anchors_y(rect: &DrawRect) -> [f64; 3] {
     [rect.min_y, (rect.min_y + rect.max_y) * 0.5, rect.max_y]
 }
 
-fn best_anchor_offset(targets: &[f64], references: &[f64], max_distance: f64) -> f64 {
+fn best_anchor_match(
+    targets: &[f64],
+    references: &[f64],
+    max_distance: f64,
+) -> Option<AnchorSnapMatch> {
     if targets.is_empty() || references.is_empty() {
-        return 0.0;
+        return None;
     }
-    let mut best_offset = 0.0;
+    let mut best_match = None;
     let mut best_abs = max_distance + f64::EPSILON;
     for target in targets {
         for reference in references {
@@ -3140,15 +3312,132 @@ fn best_anchor_offset(targets: &[f64], references: &[f64], max_distance: f64) ->
             }
             if abs + f64::EPSILON < best_abs {
                 best_abs = abs;
-                best_offset = offset;
+                best_match = Some(AnchorSnapMatch {
+                    offset,
+                    reference: *reference,
+                });
             }
         }
     }
     if best_abs <= max_distance {
-        best_offset
+        best_match
     } else {
-        0.0
+        None
     }
+}
+
+fn point_snap_guides(original: &DrawPoint, snapped: &DrawPoint) -> Vec<JsonValue> {
+    let mut guides = Vec::new();
+    let span = 60.0;
+    if (snapped.x - original.x).abs() > f64::EPSILON {
+        guides.push(vertical_snap_guide(
+            snapped.x,
+            snapped.y - span,
+            snapped.y + span,
+            Some((snapped.x, snapped.y)),
+        ));
+    }
+    if (snapped.y - original.y).abs() > f64::EPSILON {
+        guides.push(horizontal_snap_guide(
+            snapped.y,
+            snapped.x - span,
+            snapped.x + span,
+            Some((snapped.x, snapped.y)),
+        ));
+    }
+    guides
+}
+
+fn rect_snap_guides_with_matches(
+    rect: &DrawRect,
+    x_match: Option<AnchorSnapMatch>,
+    y_match: Option<AnchorSnapMatch>,
+) -> Vec<JsonValue> {
+    rect_snap_guides_for_axes(
+        rect,
+        x_match.map(|item| item.reference),
+        y_match.map(|item| item.reference),
+    )
+}
+
+fn rect_snap_guides_for_axes(
+    rect: &DrawRect,
+    x_coord: Option<f64>,
+    y_coord: Option<f64>,
+) -> Vec<JsonValue> {
+    let mut guides = Vec::new();
+    let padding = 24.0;
+    let center = rect_center(rect);
+    if let Some(x) = x_coord {
+        guides.push(vertical_snap_guide(
+            x,
+            rect.min_y - padding,
+            rect.max_y + padding,
+            Some((x, center.y)),
+        ));
+    }
+    if let Some(y) = y_coord {
+        guides.push(horizontal_snap_guide(
+            y,
+            rect.min_x - padding,
+            rect.max_x + padding,
+            Some((center.x, y)),
+        ));
+    }
+    guides
+}
+
+fn vertical_snap_guide(x: f64, start_y: f64, end_y: f64, marker: Option<(f64, f64)>) -> JsonValue {
+    let mut map = JsonMap::new();
+    map.insert("kind".to_string(), JsonValue::from("point"));
+    map.insert("axis".to_string(), JsonValue::from("vertical"));
+    map.insert("start".to_string(), point_value(x, start_y.min(end_y)));
+    map.insert("end".to_string(), point_value(x, start_y.max(end_y)));
+    if let Some((marker_x, marker_y)) = marker {
+        map.insert(
+            "markers".to_string(),
+            JsonValue::Array(vec![point_value(marker_x, marker_y)]),
+        );
+    }
+    JsonValue::Object(map)
+}
+
+fn horizontal_snap_guide(
+    y: f64,
+    start_x: f64,
+    end_x: f64,
+    marker: Option<(f64, f64)>,
+) -> JsonValue {
+    let mut map = JsonMap::new();
+    map.insert("kind".to_string(), JsonValue::from("point"));
+    map.insert("axis".to_string(), JsonValue::from("horizontal"));
+    map.insert("start".to_string(), point_value(start_x.min(end_x), y));
+    map.insert("end".to_string(), point_value(start_x.max(end_x), y));
+    if let Some((marker_x, marker_y)) = marker {
+        map.insert(
+            "markers".to_string(),
+            JsonValue::Array(vec![point_value(marker_x, marker_y)]),
+        );
+    }
+    JsonValue::Object(map)
+}
+
+fn dedupe_snap_guides(guides: Vec<JsonValue>) -> Vec<JsonValue> {
+    let mut deduped = Vec::new();
+    let mut seen = BTreeSet::new();
+    for guide in guides {
+        let key = match serde_json::to_string(&guide) {
+            Ok(serialized) => serialized,
+            Err(_) => {
+                deduped.push(guide);
+                continue;
+            }
+        };
+        if seen.insert(key) {
+            deduped.push(guide);
+        }
+    }
+    deduped
 }
 
 fn apply_resize_horizontal_offset(
@@ -6259,6 +6548,195 @@ mod tests {
             .expect("snapped resize object");
         assert_eq!(snapped.min_x, 0.0);
         assert_eq!(snapped.max_x, 200.0);
+    }
+
+    #[test]
+    fn frame_plan_emits_runtime_grid_snap_guides_during_create() {
+        let mut engine = Engine::default();
+        assert!(engine.apply_runtime_config_payload(br#"{"grid":{"enabled":true,"size":10.0}}"#,));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "snap-guides-grid".to_string(),
+                    position: Some(DrawPoint {
+                        x: 13.0,
+                        y: 27.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create with grid snap");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        let snap_guides = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::SnapGuides as i32)
+            .expect("runtime grid snap guides task");
+        let payload =
+            serde_json::from_slice::<serde_json::Value>(&snap_guides.payload).expect("payload");
+        let guides = payload
+            .get("guides")
+            .and_then(serde_json::Value::as_array)
+            .expect("guides");
+        assert!(guides.len() >= 2);
+        assert!(guides.iter().any(|guide| {
+            guide.get("axis").and_then(serde_json::Value::as_str) == Some("vertical")
+        }));
+        assert!(guides.iter().any(|guide| {
+            guide.get("axis").and_then(serde_json::Value::as_str) == Some("horizontal")
+        }));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish create");
+        let idle_plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        assert!(!idle_plan
+            .tasks
+            .iter()
+            .any(|task| task.kind == FrameTaskKind::SnapGuides as i32));
+    }
+
+    #[test]
+    fn frame_plan_emits_runtime_object_snap_guides_during_move_edit() {
+        let mut engine = Engine::default();
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "snap-guide-reference".to_string(),
+                    position: Some(DrawPoint {
+                        x: 100.0,
+                        y: 100.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create reference");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish reference");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "snap-guide-target".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create target");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish target");
+        assert!(engine.apply_runtime_config_payload(
+            br#"{"grid":{"enabled":false},"snap":{"enabled":true,"distance":8.0}}"#,
+        ));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "move".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"move"}"#.to_vec(),
+                })),
+            })
+            .expect("start move");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 96.0,
+                        y: 95.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: br#"{"snapOverride":false}"#.to_vec(),
+                })),
+            })
+            .expect("update move");
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        let snap_guides = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::SnapGuides as i32)
+            .expect("runtime object snap guides task");
+        let payload =
+            serde_json::from_slice::<serde_json::Value>(&snap_guides.payload).expect("payload");
+        let guides = payload
+            .get("guides")
+            .and_then(serde_json::Value::as_array)
+            .expect("guides");
+        assert!(!guides.is_empty());
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CancelEdit as i32,
+                payload: None,
+            })
+            .expect("cancel move");
+        let idle_plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        assert!(!idle_plan
+            .tasks
+            .iter()
+            .any(|task| task.kind == FrameTaskKind::SnapGuides as i32));
     }
 
     #[test]
