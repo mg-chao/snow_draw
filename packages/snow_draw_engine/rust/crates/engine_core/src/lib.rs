@@ -25,6 +25,7 @@ use thiserror::Error;
 const EVENT_QUEUE_LIMIT: usize = 2048;
 const CAMERA_MIN_ZOOM: f64 = 0.1;
 const CAMERA_MAX_ZOOM: f64 = 30.0;
+const RUNTIME_CONFIG_KEY: &str = "__runtimeConfig";
 
 #[derive(Debug, Error)]
 pub enum EngineCoreError {
@@ -128,6 +129,30 @@ enum ArrowPointKind {
     Addable,
     LoopStart,
     LoopEnd,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct RuntimeSnapConfig {
+    grid_enabled: bool,
+    object_enabled: bool,
+    grid_size: f64,
+}
+
+impl Default for RuntimeSnapConfig {
+    fn default() -> Self {
+        Self {
+            grid_enabled: false,
+            object_enabled: false,
+            grid_size: 20.0,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RuntimeSnappingMode {
+    None,
+    Object,
+    Grid,
 }
 
 impl Default for Engine {
