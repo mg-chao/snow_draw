@@ -4,9 +4,11 @@ use std::path::{Path, PathBuf};
 use engine_core::Engine;
 use engine_proto::engine_command::Payload as CommandPayload;
 use engine_proto::{
-    default_engine_config, CreateElementCommand, DeleteElementsCommand, DrawPoint, ElementType,
+    default_engine_config, ChangeElementZIndexCommand, ChangeElementsZIndexCommand,
+    CreateElementCommand, DeleteElementsCommand, DrawPoint, DuplicateElementsCommand, ElementType,
     EngineCommand, EngineCommandKind, EngineEventKind, FramePlanRequest, FrameTaskKind,
-    MoveCameraCommand, SelectElementCommand, UpdateElementsStyleCommand, ZoomCameraCommand,
+    MoveCameraCommand, SelectElementCommand, UpdateElementsStyleCommand, UpdateGlobalElementsCommand,
+    ZIndexOperation, ZoomCameraCommand,
 };
 use serde::Deserialize;
 
@@ -74,8 +76,26 @@ enum CorpusCommand {
     DeleteElements {
         element_ids: Vec<String>,
     },
+    DuplicateElements {
+        element_ids: Vec<String>,
+        #[serde(default)]
+        offset_x: f64,
+        #[serde(default)]
+        offset_y: f64,
+    },
+    ChangeElementZIndex {
+        element_id: String,
+        operation: String,
+    },
+    ChangeElementsZIndex {
+        element_ids: Vec<String>,
+        operation: String,
+    },
     UpdateElementsStyle {
         element_ids: Vec<String>,
+        payload_hex: String,
+    },
+    UpdateGlobalElements {
         payload_hex: String,
     },
     MoveCamera {
@@ -248,6 +268,9 @@ fn to_engine_command(command: CorpusCommand) -> EngineCommand {
                     _ => None,
                 },
                 initial_payload: payload_hex.map_or_else(Vec::new, |hex| parse_hex(&hex)),
+                maintain_aspect_ratio: false,
+                create_from_center: false,
+                snap_override: false,
             })),
         },
         CorpusCommand::SelectElement {
@@ -275,6 +298,42 @@ fn to_engine_command(command: CorpusCommand) -> EngineCommand {
                 element_ids,
             })),
         },
+        CorpusCommand::DuplicateElements {
+            element_ids,
+            offset_x,
+            offset_y,
+        } => EngineCommand {
+            kind: EngineCommandKind::DuplicateElements as i32,
+            payload: Some(CommandPayload::DuplicateElements(DuplicateElementsCommand {
+                element_ids,
+                offset_x,
+                offset_y,
+            })),
+        },
+        CorpusCommand::ChangeElementZIndex {
+            element_id,
+            operation,
+        } => EngineCommand {
+            kind: EngineCommandKind::ChangeElementZIndex as i32,
+            payload: Some(CommandPayload::ChangeElementZIndex(
+                ChangeElementZIndexCommand {
+                    element_id,
+                    operation: parse_z_index_operation(&operation) as i32,
+                },
+            )),
+        },
+        CorpusCommand::ChangeElementsZIndex {
+            element_ids,
+            operation,
+        } => EngineCommand {
+            kind: EngineCommandKind::ChangeElementsZIndex as i32,
+            payload: Some(CommandPayload::ChangeElementsZIndex(
+                ChangeElementsZIndexCommand {
+                    element_ids,
+                    operation: parse_z_index_operation(&operation) as i32,
+                },
+            )),
+        },
         CorpusCommand::UpdateElementsStyle {
             element_ids,
             payload_hex,
@@ -284,6 +343,14 @@ fn to_engine_command(command: CorpusCommand) -> EngineCommand {
                 UpdateElementsStyleCommand {
                     element_ids,
                     style_payload: parse_hex(&payload_hex),
+                },
+            )),
+        },
+        CorpusCommand::UpdateGlobalElements { payload_hex } => EngineCommand {
+            kind: EngineCommandKind::UpdateGlobalElements as i32,
+            payload: Some(CommandPayload::UpdateGlobalElements(
+                UpdateGlobalElementsCommand {
+                    payload: parse_hex(&payload_hex),
                 },
             )),
         },
@@ -324,6 +391,16 @@ fn parse_element_type(value: &str) -> ElementType {
         "text" => ElementType::Text,
         "serial_number" => ElementType::SerialNumber,
         _ => ElementType::Unknown,
+    }
+}
+
+fn parse_z_index_operation(value: &str) -> ZIndexOperation {
+    match value {
+        "bring_to_front" => ZIndexOperation::BringToFront,
+        "send_to_back" => ZIndexOperation::SendToBack,
+        "bring_forward" => ZIndexOperation::BringForward,
+        "send_backward" => ZIndexOperation::SendBackward,
+        _ => ZIndexOperation::BringToFront,
     }
 }
 

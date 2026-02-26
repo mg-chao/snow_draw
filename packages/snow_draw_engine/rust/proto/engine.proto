@@ -62,6 +62,13 @@ enum EngineCommandKind {
   ENGINE_COMMAND_KIND_CLEAR_HISTORY = 35;
 }
 
+enum ZIndexOperation {
+  Z_INDEX_OPERATION_BRING_TO_FRONT = 0;
+  Z_INDEX_OPERATION_SEND_TO_BACK = 1;
+  Z_INDEX_OPERATION_BRING_FORWARD = 2;
+  Z_INDEX_OPERATION_SEND_BACKWARD = 3;
+}
+
 enum FrameTaskKind {
   FRAME_TASK_KIND_UNKNOWN = 0;
   FRAME_TASK_KIND_RECTANGLE = 1;
@@ -136,12 +143,27 @@ message CreateElementCommand {
   string element_id = 2;
   DrawPoint position = 3;
   bytes initial_payload = 4;
+  bool maintain_aspect_ratio = 5;
+  bool create_from_center = 6;
+  bool snap_override = 7;
 }
 
 message SelectElementCommand {
   string element_id = 1;
   bool add_to_selection = 2;
   DrawPoint position = 3;
+}
+
+message UpdateCreatingElementCommand {
+  repeated DrawPoint positions = 1;
+  bool maintain_aspect_ratio = 2;
+  bool create_from_center = 3;
+  bool snap_override = 4;
+}
+
+message AddArrowPointCommand {
+  DrawPoint position = 1;
+  bool snap_override = 2;
 }
 
 message DeleteElementsCommand {
@@ -151,6 +173,70 @@ message DeleteElementsCommand {
 message UpdateElementsStyleCommand {
   repeated string element_ids = 1;
   bytes style_payload = 2;
+}
+
+message DuplicateElementsCommand {
+  repeated string element_ids = 1;
+  double offset_x = 2;
+  double offset_y = 3;
+}
+
+message ChangeElementZIndexCommand {
+  string element_id = 1;
+  ZIndexOperation operation = 2;
+}
+
+message ChangeElementsZIndexCommand {
+  repeated string element_ids = 1;
+  ZIndexOperation operation = 2;
+}
+
+message UpdateGlobalElementsCommand {
+  bytes payload = 1;
+}
+
+message CreateSerialNumberTextElementsCommand {
+  repeated string element_ids = 1;
+}
+
+message StartTextEditCommand {
+  string element_id = 1;
+  DrawPoint position = 2;
+}
+
+message UpdateTextEditCommand {
+  string text = 1;
+  DrawRect rect = 2;
+}
+
+message FinishTextEditCommand {
+  string element_id = 1;
+  string text = 2;
+  bool is_new = 3;
+}
+
+message StartEditCommand {
+  string operation_id = 1;
+  DrawPoint position = 2;
+  bytes params = 3;
+}
+
+message UpdateEditCommand {
+  DrawPoint current_position = 1;
+  bytes modifiers = 2;
+}
+
+message SetDragPendingCommand {
+  DrawPoint pointer_down_position = 1;
+  string intent = 2;
+}
+
+message StartBoxSelectCommand {
+  DrawPoint start_position = 1;
+}
+
+message UpdateBoxSelectCommand {
+  DrawPoint current_position = 1;
 }
 
 message MoveCameraCommand {
@@ -172,6 +258,21 @@ message EngineCommand {
     UpdateElementsStyleCommand update_elements_style = 13;
     MoveCameraCommand move_camera = 14;
     ZoomCameraCommand zoom_camera = 15;
+    UpdateCreatingElementCommand update_creating_element = 16;
+    AddArrowPointCommand add_arrow_point = 17;
+    DuplicateElementsCommand duplicate_elements = 18;
+    ChangeElementZIndexCommand change_element_z_index = 19;
+    ChangeElementsZIndexCommand change_elements_z_index = 20;
+    UpdateGlobalElementsCommand update_global_elements = 21;
+    CreateSerialNumberTextElementsCommand create_serial_number_text_elements = 22;
+    StartTextEditCommand start_text_edit = 23;
+    UpdateTextEditCommand update_text_edit = 24;
+    FinishTextEditCommand finish_text_edit = 25;
+    StartEditCommand start_edit = 26;
+    UpdateEditCommand update_edit = 27;
+    SetDragPendingCommand set_drag_pending = 28;
+    StartBoxSelectCommand start_box_select = 29;
+    UpdateBoxSelectCommand update_box_select = 30;
   }
 }
 
@@ -185,6 +286,7 @@ message EngineSnapshot {
   repeated string selected_ids = 7;
   uint64 history_undo_len = 8;
   uint64 history_redo_len = 9;
+  bytes global_elements_payload = 10;
 }
 
 message FramePlanRequest {

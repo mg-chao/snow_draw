@@ -87,6 +87,15 @@ pub enum EngineCommandKind {
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, prost::Enumeration)]
 #[repr(i32)]
+pub enum ZIndexOperation {
+    BringToFront = 0,
+    SendToBack = 1,
+    BringForward = 2,
+    SendBackward = 3,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, prost::Enumeration)]
+#[repr(i32)]
 pub enum FrameTaskKind {
     Unknown = 0,
     Rectangle = 1,
@@ -205,6 +214,8 @@ pub struct EngineSnapshot {
     pub history_undo_len: u64,
     #[prost(uint64, tag = "9")]
     pub history_redo_len: u64,
+    #[prost(bytes = "vec", tag = "10")]
+    pub global_elements_payload: Vec<u8>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -217,6 +228,12 @@ pub struct CreateElementCommand {
     pub position: Option<DrawPoint>,
     #[prost(bytes = "vec", tag = "4")]
     pub initial_payload: Vec<u8>,
+    #[prost(bool, tag = "5")]
+    pub maintain_aspect_ratio: bool,
+    #[prost(bool, tag = "6")]
+    pub create_from_center: bool,
+    #[prost(bool, tag = "7")]
+    pub snap_override: bool,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -227,6 +244,26 @@ pub struct SelectElementCommand {
     pub add_to_selection: bool,
     #[prost(message, optional, tag = "3")]
     pub position: Option<DrawPoint>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct UpdateCreatingElementCommand {
+    #[prost(message, repeated, tag = "1")]
+    pub positions: Vec<DrawPoint>,
+    #[prost(bool, tag = "2")]
+    pub maintain_aspect_ratio: bool,
+    #[prost(bool, tag = "3")]
+    pub create_from_center: bool,
+    #[prost(bool, tag = "4")]
+    pub snap_override: bool,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct AddArrowPointCommand {
+    #[prost(message, optional, tag = "1")]
+    pub position: Option<DrawPoint>,
+    #[prost(bool, tag = "2")]
+    pub snap_override: bool,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -241,6 +278,108 @@ pub struct UpdateElementsStyleCommand {
     pub element_ids: Vec<String>,
     #[prost(bytes = "vec", tag = "2")]
     pub style_payload: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct DuplicateElementsCommand {
+    #[prost(string, repeated, tag = "1")]
+    pub element_ids: Vec<String>,
+    #[prost(double, tag = "2")]
+    pub offset_x: f64,
+    #[prost(double, tag = "3")]
+    pub offset_y: f64,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ChangeElementZIndexCommand {
+    #[prost(string, tag = "1")]
+    pub element_id: String,
+    #[prost(enumeration = "ZIndexOperation", tag = "2")]
+    pub operation: i32,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct ChangeElementsZIndexCommand {
+    #[prost(string, repeated, tag = "1")]
+    pub element_ids: Vec<String>,
+    #[prost(enumeration = "ZIndexOperation", tag = "2")]
+    pub operation: i32,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct UpdateGlobalElementsCommand {
+    #[prost(bytes = "vec", tag = "1")]
+    pub payload: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct CreateSerialNumberTextElementsCommand {
+    #[prost(string, repeated, tag = "1")]
+    pub element_ids: Vec<String>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct StartTextEditCommand {
+    #[prost(string, tag = "1")]
+    pub element_id: String,
+    #[prost(message, optional, tag = "2")]
+    pub position: Option<DrawPoint>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct UpdateTextEditCommand {
+    #[prost(string, tag = "1")]
+    pub text: String,
+    #[prost(message, optional, tag = "2")]
+    pub rect: Option<DrawRect>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct FinishTextEditCommand {
+    #[prost(string, tag = "1")]
+    pub element_id: String,
+    #[prost(string, tag = "2")]
+    pub text: String,
+    #[prost(bool, tag = "3")]
+    pub is_new: bool,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct StartEditCommand {
+    #[prost(string, tag = "1")]
+    pub operation_id: String,
+    #[prost(message, optional, tag = "2")]
+    pub position: Option<DrawPoint>,
+    #[prost(bytes = "vec", tag = "3")]
+    pub params: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct UpdateEditCommand {
+    #[prost(message, optional, tag = "1")]
+    pub current_position: Option<DrawPoint>,
+    #[prost(bytes = "vec", tag = "2")]
+    pub modifiers: Vec<u8>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct SetDragPendingCommand {
+    #[prost(message, optional, tag = "1")]
+    pub pointer_down_position: Option<DrawPoint>,
+    #[prost(string, tag = "2")]
+    pub intent: String,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct StartBoxSelectCommand {
+    #[prost(message, optional, tag = "1")]
+    pub start_position: Option<DrawPoint>,
+}
+
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct UpdateBoxSelectCommand {
+    #[prost(message, optional, tag = "1")]
+    pub current_position: Option<DrawPoint>,
 }
 
 #[derive(Clone, PartialEq, prost::Message)]
@@ -263,7 +402,10 @@ pub struct ZoomCameraCommand {
 pub struct EngineCommand {
     #[prost(enumeration = "EngineCommandKind", tag = "1")]
     pub kind: i32,
-    #[prost(oneof = "engine_command::Payload", tags = "10, 11, 12, 13, 14, 15")]
+    #[prost(
+        oneof = "engine_command::Payload",
+        tags = "10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30"
+    )]
     pub payload: Option<engine_command::Payload>,
 }
 
@@ -282,6 +424,36 @@ pub mod engine_command {
         MoveCamera(super::MoveCameraCommand),
         #[prost(message, tag = "15")]
         ZoomCamera(super::ZoomCameraCommand),
+        #[prost(message, tag = "16")]
+        UpdateCreatingElement(super::UpdateCreatingElementCommand),
+        #[prost(message, tag = "17")]
+        AddArrowPoint(super::AddArrowPointCommand),
+        #[prost(message, tag = "18")]
+        DuplicateElements(super::DuplicateElementsCommand),
+        #[prost(message, tag = "19")]
+        ChangeElementZIndex(super::ChangeElementZIndexCommand),
+        #[prost(message, tag = "20")]
+        ChangeElementsZIndex(super::ChangeElementsZIndexCommand),
+        #[prost(message, tag = "21")]
+        UpdateGlobalElements(super::UpdateGlobalElementsCommand),
+        #[prost(message, tag = "22")]
+        CreateSerialNumberTextElements(super::CreateSerialNumberTextElementsCommand),
+        #[prost(message, tag = "23")]
+        StartTextEdit(super::StartTextEditCommand),
+        #[prost(message, tag = "24")]
+        UpdateTextEdit(super::UpdateTextEditCommand),
+        #[prost(message, tag = "25")]
+        FinishTextEdit(super::FinishTextEditCommand),
+        #[prost(message, tag = "26")]
+        StartEdit(super::StartEditCommand),
+        #[prost(message, tag = "27")]
+        UpdateEdit(super::UpdateEditCommand),
+        #[prost(message, tag = "28")]
+        SetDragPending(super::SetDragPendingCommand),
+        #[prost(message, tag = "29")]
+        StartBoxSelect(super::StartBoxSelectCommand),
+        #[prost(message, tag = "30")]
+        UpdateBoxSelect(super::UpdateBoxSelectCommand),
     }
 }
 
@@ -390,6 +562,7 @@ pub fn default_engine_snapshot() -> EngineSnapshot {
         selected_ids: Vec::new(),
         history_undo_len: 0,
         history_redo_len: 0,
+        global_elements_payload: Vec::new(),
     }
 }
 

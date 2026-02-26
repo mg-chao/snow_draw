@@ -395,6 +395,9 @@ mod tests {
                         timestamp_us: 0,
                     }),
                     initial_payload: vec![7, 8, 9],
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
                 })),
             };
             let mut command_bytes = encode_message(&command);
@@ -463,6 +466,9 @@ mod tests {
                     element_id: "engine-a".to_string(),
                     position: None,
                     initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
                 })),
             };
             let command_b = EngineCommand {
@@ -472,6 +478,9 @@ mod tests {
                     element_id: "engine-b".to_string(),
                     position: None,
                     initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
                 })),
             };
 

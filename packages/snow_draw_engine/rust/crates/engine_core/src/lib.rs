@@ -6,10 +6,15 @@ use engine_proto::engine_command::Payload as CommandPayload;
 use engine_proto::engine_event::Payload as EventPayload;
 use engine_proto::{
     decode_message, default_camera_state, default_engine_config, default_engine_snapshot,
-    encode_message, CameraState, CreateElementCommand, DrawPoint, DrawRect, Element, ElementType,
-    EngineCommand, EngineCommandKind, EngineConfig, EngineError, EngineEvent, EngineEventKind,
-    EngineSnapshot, FramePlanRequest, FrameRenderPlan, FrameTask, FrameTaskKind, MoveCameraCommand,
-    SelectElementCommand, UpdateElementsStyleCommand, ZoomCameraCommand,
+    encode_message, AddArrowPointCommand, CameraState, ChangeElementZIndexCommand,
+    ChangeElementsZIndexCommand, CreateElementCommand, CreateSerialNumberTextElementsCommand,
+    DrawPoint, DrawRect, DuplicateElementsCommand, Element, ElementType, EngineCommand,
+    EngineCommandKind, EngineConfig, EngineError, EngineEvent, EngineEventKind, EngineSnapshot,
+    FinishTextEditCommand, FramePlanRequest, FrameRenderPlan, FrameTask, FrameTaskKind,
+    InteractionMode, MoveCameraCommand, SelectElementCommand, SetDragPendingCommand,
+    StartBoxSelectCommand, StartTextEditCommand, UpdateBoxSelectCommand,
+    UpdateCreatingElementCommand, UpdateEditCommand, UpdateElementsStyleCommand,
+    UpdateGlobalElementsCommand, UpdateTextEditCommand, ZIndexOperation, ZoomCameraCommand,
 };
 use thiserror::Error;
 
@@ -53,6 +58,17 @@ pub struct Engine {
     events: VecDeque<EngineEvent>,
     next_event_sequence: u64,
     next_element_sequence: u64,
+    creating_element_id: Option<String>,
+    text_edit_session: Option<TextEditSession>,
+    box_select_start: Option<DrawPoint>,
+}
+
+#[derive(Debug, Clone)]
+struct TextEditSession {
+    element_id: String,
+    is_new: bool,
+    text: String,
+    rect: Option<DrawRect>,
 }
 
 impl Default for Engine {
@@ -74,6 +90,9 @@ impl Engine {
             events: VecDeque::new(),
             next_event_sequence: 1,
             next_element_sequence: 1,
+            creating_element_id: None,
+            text_edit_session: None,
+            box_select_start: None,
         }
     }
 
@@ -119,16 +138,167 @@ impl Engine {
                 self.apply_create(payload);
                 self.emit_state_changed();
             }
+            EngineCommandKind::UpdateCreatingElement => {
+                if let Ok(payload) = extract_update_creating_payload(kind, command.payload) {
+                    self.apply_update_creating(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::AddArrowPoint => {
+                if let Ok(payload) = extract_add_arrow_point_payload(kind, command.payload) {
+                    self.apply_add_arrow_point(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::FinishCreateElement => {
+                self.apply_finish_create();
+                self.emit_state_changed();
+            }
+            EngineCommandKind::CancelCreateElement => {
+                self.record_history();
+                self.apply_cancel_create();
+                self.emit_state_changed();
+            }
             EngineCommandKind::DeleteElements => {
                 let payload = extract_delete_payload(kind, command.payload)?;
                 self.record_history();
                 self.apply_delete(payload.element_ids);
                 self.emit_state_changed();
             }
+            EngineCommandKind::DuplicateElements => {
+                if let Ok(payload) = extract_duplicate_payload(kind, command.payload) {
+                    self.record_history();
+                    self.apply_duplicate(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::ChangeElementZIndex => {
+                if let Ok(payload) = extract_change_element_z_payload(kind, command.payload) {
+                    self.record_history();
+                    self.apply_change_element_z_index(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::ChangeElementsZIndex => {
+                if let Ok(payload) = extract_change_elements_z_payload(kind, command.payload) {
+                    self.record_history();
+                    self.apply_change_elements_z_index(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
             EngineCommandKind::UpdateElementsStyle => {
                 let payload = extract_update_style_payload(kind, command.payload)?;
                 self.record_history();
                 self.apply_update_style(payload);
+                self.emit_state_changed();
+            }
+            EngineCommandKind::UpdateGlobalElements => {
+                if let Ok(payload) = extract_update_global_payload(kind, command.payload) {
+                    self.record_history();
+                    self.apply_update_global_elements(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::CreateSerialNumberTextElements => {
+                if let Ok(payload) = extract_create_serial_text_payload(kind, command.payload) {
+                    self.record_history();
+                    self.apply_create_serial_number_text_elements(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::StartTextEdit => {
+                if let Ok(payload) = extract_start_text_edit_payload(kind, command.payload) {
+                    self.apply_start_text_edit(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::UpdateTextEdit => {
+                if let Ok(payload) = extract_update_text_edit_payload(kind, command.payload) {
+                    self.apply_update_text_edit(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::RefreshAutoResizeTextLayoutsAfterFontLoad => {
+                self.emit_state_changed();
+            }
+            EngineCommandKind::FinishTextEdit => {
+                if let Ok(payload) = extract_finish_text_edit_payload(kind, command.payload) {
+                    self.record_history();
+                    self.apply_finish_text_edit(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::CancelTextEdit => {
+                self.apply_cancel_text_edit();
+                self.emit_state_changed();
+            }
+            EngineCommandKind::StartEdit => {
+                self.set_interaction_mode(InteractionMode::Editing);
+                self.emit_state_changed();
+            }
+            EngineCommandKind::UpdateEdit => {
+                if let Ok(payload) = extract_update_edit_payload(kind, command.payload) {
+                    self.apply_update_edit(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::FinishEdit | EngineCommandKind::CancelEdit => {
+                self.set_interaction_mode(InteractionMode::Idle);
+                self.emit_state_changed();
+            }
+            EngineCommandKind::SetDragPending => {
+                if let Ok(payload) = extract_set_drag_pending_payload(kind, command.payload) {
+                    self.apply_set_drag_pending(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::ClearDragPending => {
+                self.set_interaction_mode(InteractionMode::Idle);
+                self.emit_state_changed();
+            }
+            EngineCommandKind::StartBoxSelect => {
+                if let Ok(payload) = extract_start_box_select_payload(kind, command.payload) {
+                    self.apply_start_box_select(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::UpdateBoxSelect => {
+                if let Ok(payload) = extract_update_box_select_payload(kind, command.payload) {
+                    self.apply_update_box_select(payload);
+                    self.emit_state_changed();
+                } else {
+                    self.emit_debug(format!("command {kind:?} missing payload"));
+                }
+            }
+            EngineCommandKind::FinishBoxSelect | EngineCommandKind::CancelBoxSelect => {
+                self.box_select_start = None;
+                self.set_interaction_mode(InteractionMode::Idle);
                 self.emit_state_changed();
             }
             EngineCommandKind::MoveCamera => {
@@ -160,7 +330,7 @@ impl Engine {
                 self.sync_history_lengths();
                 self.emit_history_changed();
             }
-            _ => {
+            EngineCommandKind::Unknown => {
                 self.emit_debug(format!("command {kind:?} accepted as no-op"));
             }
         }
@@ -329,6 +499,81 @@ impl Engine {
         self.sort_elements();
         self.snapshot.document_version += 1;
         self.set_selected(BTreeSet::from([id]));
+        self.creating_element_id = self.snapshot.selected_ids.first().cloned();
+        self.set_interaction_mode(InteractionMode::Creating);
+    }
+
+    fn apply_update_creating(&mut self, payload: UpdateCreatingElementCommand) {
+        let Some(creating_id) = self.creating_element_id.clone() else {
+            return;
+        };
+        let Some(last_position) = payload.positions.last().cloned() else {
+            return;
+        };
+        let Some(element) = self.element_mut(&creating_id) else {
+            return;
+        };
+        let start = element
+            .rect
+            .as_ref()
+            .map(|rect| DrawPoint {
+                x: rect.min_x,
+                y: rect.min_y,
+                pressure: 0.0,
+                timestamp_us: 0,
+            })
+            .unwrap_or(DrawPoint {
+                x: last_position.x,
+                y: last_position.y,
+                pressure: 0.0,
+                timestamp_us: 0,
+            });
+        element.rect = Some(rect_from_points(
+            start,
+            last_position,
+            payload.maintain_aspect_ratio,
+        ));
+        self.snapshot.document_version += 1;
+    }
+
+    fn apply_add_arrow_point(&mut self, payload: AddArrowPointCommand) {
+        let Some(creating_id) = self.creating_element_id.clone() else {
+            return;
+        };
+        let Some(position) = payload.position else {
+            return;
+        };
+        let Some(element) = self.element_mut(&creating_id) else {
+            return;
+        };
+        if element.element_type != ElementType::Arrow as i32 {
+            return;
+        }
+
+        let mut bytes = element.payload.clone();
+        bytes.extend_from_slice(format!(";{},{}", position.x, position.y).as_bytes());
+        element.payload = bytes;
+        self.snapshot.document_version += 1;
+    }
+
+    fn apply_finish_create(&mut self) {
+        self.creating_element_id = None;
+        self.set_interaction_mode(InteractionMode::Idle);
+    }
+
+    fn apply_cancel_create(&mut self) {
+        if let Some(creating_id) = self.creating_element_id.clone() {
+            let original_len = self.snapshot.elements.len();
+            self.snapshot
+                .elements
+                .retain(|element| element.id != creating_id);
+            if original_len != self.snapshot.elements.len() {
+                self.snapshot.document_version += 1;
+            }
+        }
+        self.creating_element_id = None;
+        self.set_selected(BTreeSet::new());
+        self.set_interaction_mode(InteractionMode::Idle);
     }
 
     fn apply_delete(&mut self, element_ids: Vec<String>) {
@@ -369,6 +614,349 @@ impl Engine {
         }
     }
 
+    fn apply_duplicate(&mut self, payload: DuplicateElementsCommand) {
+        if payload.element_ids.is_empty() {
+            return;
+        }
+        let ids = payload.element_ids.iter().collect::<BTreeSet<_>>();
+        let mut clones = Vec::new();
+        let mut selected = BTreeSet::new();
+        let mut next_z = self
+            .snapshot
+            .elements
+            .iter()
+            .map(|element| element.z_index)
+            .max()
+            .unwrap_or(-1)
+            + 1;
+
+        for element in self.snapshot.elements.clone() {
+            if !ids.contains(&element.id) {
+                continue;
+            }
+            let id = format!("rust_{}", self.next_element_sequence);
+            self.next_element_sequence += 1;
+            let rect = element.rect.map(|rect| DrawRect {
+                min_x: rect.min_x + payload.offset_x,
+                min_y: rect.min_y + payload.offset_y,
+                max_x: rect.max_x + payload.offset_x,
+                max_y: rect.max_y + payload.offset_y,
+            });
+            clones.push(Element {
+                id: id.clone(),
+                element_type: element.element_type,
+                rect,
+                rotation: element.rotation,
+                opacity: element.opacity,
+                z_index: next_z,
+                payload: element.payload.clone(),
+            });
+            selected.insert(id);
+            next_z += 1;
+        }
+
+        if clones.is_empty() {
+            return;
+        }
+        self.snapshot.elements.extend(clones);
+        self.sort_elements();
+        self.snapshot.document_version += 1;
+        self.set_selected(selected);
+    }
+
+    fn apply_change_element_z_index(&mut self, payload: ChangeElementZIndexCommand) {
+        if payload.element_id.is_empty() {
+            return;
+        }
+        self.apply_change_elements_z_index(ChangeElementsZIndexCommand {
+            element_ids: vec![payload.element_id],
+            operation: payload.operation,
+        });
+    }
+
+    fn apply_change_elements_z_index(&mut self, payload: ChangeElementsZIndexCommand) {
+        if payload.element_ids.is_empty() {
+            return;
+        }
+
+        let selected = payload.element_ids.into_iter().collect::<BTreeSet<_>>();
+        if selected.is_empty() {
+            return;
+        }
+
+        let operation =
+            ZIndexOperation::try_from(payload.operation).unwrap_or(ZIndexOperation::BringToFront);
+        let mut ordered = self.snapshot.elements.clone();
+        ordered.sort_by(|a, b| {
+            a.z_index
+                .cmp(&b.z_index)
+                .then_with(|| a.id.as_str().cmp(b.id.as_str()))
+        });
+
+        match operation {
+            ZIndexOperation::BringToFront => {
+                ordered.sort_by_key(|element| {
+                    if selected.contains(element.id.as_str()) {
+                        1
+                    } else {
+                        0
+                    }
+                });
+            }
+            ZIndexOperation::SendToBack => {
+                ordered.sort_by_key(|element| {
+                    if selected.contains(element.id.as_str()) {
+                        0
+                    } else {
+                        1
+                    }
+                });
+            }
+            ZIndexOperation::BringForward => {
+                if ordered.len() > 1 {
+                    for index in (0..ordered.len() - 1).rev() {
+                        let current = selected.contains(ordered[index].id.as_str());
+                        let next = selected.contains(ordered[index + 1].id.as_str());
+                        if current && !next {
+                            ordered.swap(index, index + 1);
+                        }
+                    }
+                }
+            }
+            ZIndexOperation::SendBackward => {
+                if ordered.len() > 1 {
+                    for index in 1..ordered.len() {
+                        let current = selected.contains(ordered[index].id.as_str());
+                        let prev = selected.contains(ordered[index - 1].id.as_str());
+                        if current && !prev {
+                            ordered.swap(index - 1, index);
+                        }
+                    }
+                }
+            }
+        }
+
+        for (index, element) in ordered.iter_mut().enumerate() {
+            element.z_index = index as i32;
+        }
+        self.snapshot.elements = ordered;
+        self.snapshot.document_version += 1;
+    }
+
+    fn apply_update_global_elements(&mut self, payload: UpdateGlobalElementsCommand) {
+        if self.snapshot.global_elements_payload != payload.payload {
+            self.snapshot.global_elements_payload = payload.payload;
+            self.snapshot.document_version += 1;
+        }
+    }
+
+    fn apply_create_serial_number_text_elements(
+        &mut self,
+        payload: CreateSerialNumberTextElementsCommand,
+    ) {
+        if payload.element_ids.is_empty() {
+            return;
+        }
+
+        let source_ids = payload.element_ids.into_iter().collect::<BTreeSet<_>>();
+        let mut next_z = self
+            .snapshot
+            .elements
+            .iter()
+            .map(|element| element.z_index)
+            .max()
+            .unwrap_or(-1)
+            + 1;
+        let mut created = Vec::new();
+
+        for source in self.snapshot.elements.clone() {
+            if !source_ids.contains(source.id.as_str()) {
+                continue;
+            }
+            let id = format!("rust_{}", self.next_element_sequence);
+            self.next_element_sequence += 1;
+            let rect = source.rect.map(|source_rect| DrawRect {
+                min_x: source_rect.min_x,
+                min_y: source_rect.max_y + 8.0,
+                max_x: source_rect.min_x + 120.0,
+                max_y: source_rect.max_y + 32.0,
+            });
+            created.push(Element {
+                id,
+                element_type: ElementType::Text as i32,
+                rect,
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index: next_z,
+                payload: source.id.as_bytes().to_vec(),
+            });
+            next_z += 1;
+        }
+
+        if created.is_empty() {
+            return;
+        }
+        self.snapshot.elements.extend(created);
+        self.sort_elements();
+        self.snapshot.document_version += 1;
+    }
+
+    fn apply_start_text_edit(&mut self, payload: StartTextEditCommand) {
+        let requested_id = payload.element_id.trim().to_string();
+        let (element_id, is_new) = if requested_id.is_empty() {
+            (format!("rust_{}", self.next_element_sequence), true)
+        } else if self.element_index(&requested_id).is_some() {
+            (requested_id, false)
+        } else {
+            (requested_id, true)
+        };
+
+        if is_new {
+            if payload.element_id.trim().is_empty() {
+                self.next_element_sequence += 1;
+            }
+            let point = payload.position.unwrap_or(DrawPoint {
+                x: 0.0,
+                y: 0.0,
+                pressure: 0.0,
+                timestamp_us: 0,
+            });
+            let z_index = self
+                .snapshot
+                .elements
+                .iter()
+                .map(|element| element.z_index)
+                .max()
+                .unwrap_or(-1)
+                + 1;
+            self.snapshot.elements.push(Element {
+                id: element_id.clone(),
+                element_type: ElementType::Text as i32,
+                rect: Some(DrawRect {
+                    min_x: point.x,
+                    min_y: point.y,
+                    max_x: point.x + 160.0,
+                    max_y: point.y + 40.0,
+                }),
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index,
+                payload: Vec::new(),
+            });
+            self.sort_elements();
+            self.snapshot.document_version += 1;
+        }
+
+        self.set_selected(BTreeSet::from([element_id.clone()]));
+        self.set_interaction_mode(InteractionMode::TextEditing);
+        self.text_edit_session = Some(TextEditSession {
+            element_id,
+            is_new,
+            text: String::new(),
+            rect: None,
+        });
+    }
+
+    fn apply_update_text_edit(&mut self, payload: UpdateTextEditCommand) {
+        let Some(session) = self.text_edit_session.as_mut() else {
+            return;
+        };
+        session.text = payload.text.clone();
+        session.rect = payload.rect.clone();
+        let element_id = session.element_id.clone();
+        let text = payload.text;
+        let rect = payload.rect;
+        if let Some(element) = self.element_mut(&element_id) {
+            element.payload = text.into_bytes();
+            if let Some(rect) = rect {
+                element.rect = Some(rect);
+            }
+            self.snapshot.document_version += 1;
+        }
+    }
+
+    fn apply_finish_text_edit(&mut self, payload: FinishTextEditCommand) {
+        let mut session = self.text_edit_session.take().unwrap_or(TextEditSession {
+            element_id: payload.element_id.clone(),
+            is_new: payload.is_new,
+            text: payload.text.clone(),
+            rect: None,
+        });
+
+        if !payload.element_id.trim().is_empty() {
+            session.element_id = payload.element_id.clone();
+        }
+        session.is_new = payload.is_new;
+        session.text = payload.text.clone();
+
+        if session.text.trim().is_empty() && session.is_new {
+            let original = self.snapshot.elements.len();
+            self.snapshot
+                .elements
+                .retain(|element| element.id != session.element_id);
+            if original != self.snapshot.elements.len() {
+                self.snapshot.document_version += 1;
+            }
+        } else if let Some(element) = self.element_mut(&session.element_id) {
+            element.payload = session.text.into_bytes();
+            if let Some(rect) = session.rect {
+                element.rect = Some(rect);
+            }
+            self.snapshot.document_version += 1;
+        }
+
+        self.set_interaction_mode(InteractionMode::Idle);
+    }
+
+    fn apply_cancel_text_edit(&mut self) {
+        if let Some(session) = self.text_edit_session.take() {
+            if session.is_new {
+                let original = self.snapshot.elements.len();
+                self.snapshot
+                    .elements
+                    .retain(|element| element.id != session.element_id);
+                if original != self.snapshot.elements.len() {
+                    self.snapshot.document_version += 1;
+                }
+            }
+        }
+        self.set_interaction_mode(InteractionMode::Idle);
+    }
+
+    fn apply_update_edit(&mut self, _payload: UpdateEditCommand) {}
+
+    fn apply_set_drag_pending(&mut self, payload: SetDragPendingCommand) {
+        self.box_select_start = payload.pointer_down_position;
+        self.set_interaction_mode(InteractionMode::DragPending);
+    }
+
+    fn apply_start_box_select(&mut self, payload: StartBoxSelectCommand) {
+        self.box_select_start = payload.start_position;
+        self.set_interaction_mode(InteractionMode::BoxSelecting);
+    }
+
+    fn apply_update_box_select(&mut self, payload: UpdateBoxSelectCommand) {
+        let Some(start) = self.box_select_start.as_ref() else {
+            return;
+        };
+        let current = payload.current_position.unwrap_or_else(|| start.clone());
+        let rect = rect_from_points(start.clone(), current, false);
+
+        let selected = self
+            .snapshot
+            .elements
+            .iter()
+            .filter(|element| {
+                element
+                    .rect
+                    .as_ref()
+                    .is_some_and(|candidate| rects_intersect(candidate, &rect))
+            })
+            .map(|element| element.id.clone())
+            .collect::<BTreeSet<_>>();
+        self.set_selected(selected);
+    }
+
     fn apply_move_camera(&mut self, payload: MoveCameraCommand) {
         let camera = self
             .snapshot
@@ -396,6 +984,7 @@ impl Engine {
         if let Some(previous) = self.undo_stack.pop() {
             self.redo_stack.push(self.snapshot.clone());
             self.snapshot = previous;
+            self.reset_ephemeral_state();
             self.sync_history_lengths();
             self.emit_history_changed();
             self.emit_state_changed();
@@ -406,10 +995,29 @@ impl Engine {
         if let Some(next) = self.redo_stack.pop() {
             self.undo_stack.push(self.snapshot.clone());
             self.snapshot = next;
+            self.reset_ephemeral_state();
             self.sync_history_lengths();
             self.emit_history_changed();
             self.emit_state_changed();
         }
+    }
+
+    fn reset_ephemeral_state(&mut self) {
+        self.creating_element_id = None;
+        self.text_edit_session = None;
+        self.box_select_start = None;
+    }
+
+    fn element_index(&self, element_id: &str) -> Option<usize> {
+        self.snapshot
+            .elements
+            .iter()
+            .position(|element| element.id == element_id)
+    }
+
+    fn element_mut(&mut self, element_id: &str) -> Option<&mut Element> {
+        let index = self.element_index(element_id)?;
+        self.snapshot.elements.get_mut(index)
     }
 
     fn sort_elements(&mut self) {
@@ -418,6 +1026,10 @@ impl Engine {
                 .cmp(&b.z_index)
                 .then_with(|| a.id.as_str().cmp(b.id.as_str()))
         });
+    }
+
+    fn set_interaction_mode(&mut self, mode: InteractionMode) {
+        self.snapshot.interaction_mode = mode as i32;
     }
 
     fn set_selected(&mut self, selected: BTreeSet<String>) {
@@ -493,6 +1105,30 @@ fn selected_set(snapshot: &EngineSnapshot) -> BTreeSet<String> {
     snapshot.selected_ids.iter().cloned().collect()
 }
 
+fn rect_from_points(start: DrawPoint, current: DrawPoint, keep_square: bool) -> DrawRect {
+    let min_x = start.x.min(current.x);
+    let min_y = start.y.min(current.y);
+    let mut max_x = start.x.max(current.x);
+    let mut max_y = start.y.max(current.y);
+
+    if keep_square {
+        let side = (max_x - min_x).abs().max((max_y - min_y).abs());
+        max_x = min_x + side;
+        max_y = min_y + side;
+    }
+
+    DrawRect {
+        min_x,
+        min_y,
+        max_x,
+        max_y,
+    }
+}
+
+fn rects_intersect(a: &DrawRect, b: &DrawRect) -> bool {
+    !(a.max_x < b.min_x || a.min_x > b.max_x || a.max_y < b.min_y || a.min_y > b.max_y)
+}
+
 fn extract_create_payload(
     kind: EngineCommandKind,
     payload: Option<CommandPayload>,
@@ -553,6 +1189,146 @@ fn extract_zoom_camera_payload(
     }
 }
 
+fn extract_update_creating_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<UpdateCreatingElementCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::UpdateCreatingElement(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_add_arrow_point_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<AddArrowPointCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::AddArrowPoint(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_duplicate_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<DuplicateElementsCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::DuplicateElements(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_change_element_z_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<ChangeElementZIndexCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::ChangeElementZIndex(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_change_elements_z_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<ChangeElementsZIndexCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::ChangeElementsZIndex(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_update_global_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<UpdateGlobalElementsCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::UpdateGlobalElements(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_create_serial_text_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<CreateSerialNumberTextElementsCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::CreateSerialNumberTextElements(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_start_text_edit_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<StartTextEditCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::StartTextEdit(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_update_text_edit_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<UpdateTextEditCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::UpdateTextEdit(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_finish_text_edit_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<FinishTextEditCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::FinishTextEdit(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_update_edit_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<UpdateEditCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::UpdateEdit(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_set_drag_pending_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<SetDragPendingCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::SetDragPending(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_start_box_select_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<StartBoxSelectCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::StartBoxSelect(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
+fn extract_update_box_select_payload(
+    kind: EngineCommandKind,
+    payload: Option<CommandPayload>,
+) -> Result<UpdateBoxSelectCommand, EngineCoreError> {
+    match payload {
+        Some(CommandPayload::UpdateBoxSelect(value)) => Ok(value),
+        _ => Err(EngineCoreError::InvalidPayload(kind)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -570,6 +1346,9 @@ mod tests {
                     timestamp_us: 0,
                 }),
                 initial_payload: vec![1, 2, 3],
+                maintain_aspect_ratio: false,
+                create_from_center: false,
+                snap_override: false,
             })),
         }
     }
@@ -645,11 +1424,31 @@ mod tests {
             create_command("rect-coverage", ElementType::Rectangle),
             EngineCommand {
                 kind: EngineCommandKind::UpdateCreatingElement as i32,
-                payload: None,
+                payload: Some(CommandPayload::UpdateCreatingElement(
+                    UpdateCreatingElementCommand {
+                        positions: vec![DrawPoint {
+                            x: 42.0,
+                            y: 52.0,
+                            pressure: 0.0,
+                            timestamp_us: 0,
+                        }],
+                        maintain_aspect_ratio: false,
+                        create_from_center: false,
+                        snap_override: false,
+                    },
+                )),
             },
             EngineCommand {
                 kind: EngineCommandKind::AddArrowPoint as i32,
-                payload: None,
+                payload: Some(CommandPayload::AddArrowPoint(AddArrowPointCommand {
+                    position: Some(DrawPoint {
+                        x: 55.0,
+                        y: 66.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    snap_override: false,
+                })),
             },
             EngineCommand {
                 kind: EngineCommandKind::FinishCreateElement as i32,
@@ -669,15 +1468,31 @@ mod tests {
             },
             EngineCommand {
                 kind: EngineCommandKind::DuplicateElements as i32,
-                payload: None,
+                payload: Some(CommandPayload::DuplicateElements(
+                    DuplicateElementsCommand {
+                        element_ids: vec!["rect-coverage".to_string()],
+                        offset_x: 10.0,
+                        offset_y: 10.0,
+                    },
+                )),
             },
             EngineCommand {
                 kind: EngineCommandKind::ChangeElementZIndex as i32,
-                payload: None,
+                payload: Some(CommandPayload::ChangeElementZIndex(
+                    ChangeElementZIndexCommand {
+                        element_id: "rect-coverage".to_string(),
+                        operation: ZIndexOperation::BringToFront as i32,
+                    },
+                )),
             },
             EngineCommand {
                 kind: EngineCommandKind::ChangeElementsZIndex as i32,
-                payload: None,
+                payload: Some(CommandPayload::ChangeElementsZIndex(
+                    ChangeElementsZIndexCommand {
+                        element_ids: vec!["rect-coverage".to_string()],
+                        operation: ZIndexOperation::SendToBack as i32,
+                    },
+                )),
             },
             EngineCommand {
                 kind: EngineCommandKind::UpdateElementsStyle as i32,
@@ -690,19 +1505,38 @@ mod tests {
             },
             EngineCommand {
                 kind: EngineCommandKind::UpdateGlobalElements as i32,
-                payload: None,
+                payload: Some(CommandPayload::UpdateGlobalElements(
+                    UpdateGlobalElementsCommand {
+                        payload: vec![1, 2, 3, 4],
+                    },
+                )),
             },
             EngineCommand {
                 kind: EngineCommandKind::CreateSerialNumberTextElements as i32,
-                payload: None,
+                payload: Some(CommandPayload::CreateSerialNumberTextElements(
+                    CreateSerialNumberTextElementsCommand {
+                        element_ids: vec!["rect-coverage".to_string()],
+                    },
+                )),
             },
             EngineCommand {
                 kind: EngineCommandKind::StartTextEdit as i32,
-                payload: None,
+                payload: Some(CommandPayload::StartTextEdit(StartTextEditCommand {
+                    element_id: "text-coverage".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                })),
             },
             EngineCommand {
                 kind: EngineCommandKind::UpdateTextEdit as i32,
-                payload: None,
+                payload: Some(CommandPayload::UpdateTextEdit(UpdateTextEditCommand {
+                    text: "hello".to_string(),
+                    rect: None,
+                })),
             },
             EngineCommand {
                 kind: EngineCommandKind::RefreshAutoResizeTextLayoutsAfterFontLoad as i32,
@@ -710,7 +1544,11 @@ mod tests {
             },
             EngineCommand {
                 kind: EngineCommandKind::FinishTextEdit as i32,
-                payload: None,
+                payload: Some(CommandPayload::FinishTextEdit(FinishTextEditCommand {
+                    element_id: "text-coverage".to_string(),
+                    text: "world".to_string(),
+                    is_new: false,
+                })),
             },
             EngineCommand {
                 kind: EngineCommandKind::CancelTextEdit as i32,
@@ -722,7 +1560,15 @@ mod tests {
             },
             EngineCommand {
                 kind: EngineCommandKind::UpdateEdit as i32,
-                payload: None,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 10.0,
+                        y: 20.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: vec![9],
+                })),
             },
             EngineCommand {
                 kind: EngineCommandKind::FinishEdit as i32,
@@ -734,7 +1580,15 @@ mod tests {
             },
             EngineCommand {
                 kind: EngineCommandKind::SetDragPending as i32,
-                payload: None,
+                payload: Some(CommandPayload::SetDragPending(SetDragPendingCommand {
+                    pointer_down_position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    intent: "move".to_string(),
+                })),
             },
             EngineCommand {
                 kind: EngineCommandKind::ClearDragPending as i32,
@@ -742,11 +1596,25 @@ mod tests {
             },
             EngineCommand {
                 kind: EngineCommandKind::StartBoxSelect as i32,
-                payload: None,
+                payload: Some(CommandPayload::StartBoxSelect(StartBoxSelectCommand {
+                    start_position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                })),
             },
             EngineCommand {
                 kind: EngineCommandKind::UpdateBoxSelect as i32,
-                payload: None,
+                payload: Some(CommandPayload::UpdateBoxSelect(UpdateBoxSelectCommand {
+                    current_position: Some(DrawPoint {
+                        x: 100.0,
+                        y: 100.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                })),
             },
             EngineCommand {
                 kind: EngineCommandKind::FinishBoxSelect as i32,
@@ -788,6 +1656,148 @@ mod tests {
             let result = engine.dispatch(command);
             assert!(result.is_ok());
         }
+    }
+
+    #[test]
+    fn duplicate_and_zindex_are_deterministic() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(create_command("z-a", ElementType::Rectangle))
+            .expect("create z-a");
+        engine
+            .dispatch(create_command("z-b", ElementType::Rectangle))
+            .expect("create z-b");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::DuplicateElements as i32,
+                payload: Some(CommandPayload::DuplicateElements(
+                    DuplicateElementsCommand {
+                        element_ids: vec!["z-a".to_string()],
+                        offset_x: 4.0,
+                        offset_y: 8.0,
+                    },
+                )),
+            })
+            .expect("duplicate");
+
+        let duplicated = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id.starts_with("rust_"))
+            .expect("duplicated element exists")
+            .id
+            .clone();
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::ChangeElementZIndex as i32,
+                payload: Some(CommandPayload::ChangeElementZIndex(
+                    ChangeElementZIndexCommand {
+                        element_id: duplicated.clone(),
+                        operation: ZIndexOperation::SendToBack as i32,
+                    },
+                )),
+            })
+            .expect("send to back");
+
+        let first = engine.snapshot.elements.first().expect("first element");
+        assert_eq!(first.id, duplicated);
+    }
+
+    #[test]
+    fn text_edit_session_updates_payload() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartTextEdit as i32,
+                payload: Some(CommandPayload::StartTextEdit(StartTextEditCommand {
+                    element_id: String::new(),
+                    position: Some(DrawPoint {
+                        x: 12.0,
+                        y: 34.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                })),
+            })
+            .expect("start text edit");
+
+        let edited_id = engine
+            .snapshot
+            .selected_ids
+            .first()
+            .expect("selected")
+            .clone();
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateTextEdit as i32,
+                payload: Some(CommandPayload::UpdateTextEdit(UpdateTextEditCommand {
+                    text: "hello-rust".to_string(),
+                    rect: None,
+                })),
+            })
+            .expect("update text edit");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishTextEdit as i32,
+                payload: Some(CommandPayload::FinishTextEdit(FinishTextEditCommand {
+                    element_id: edited_id.clone(),
+                    text: "hello-rust".to_string(),
+                    is_new: true,
+                })),
+            })
+            .expect("finish text edit");
+
+        let element = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == edited_id)
+            .expect("text element still present");
+        assert_eq!(element.payload, b"hello-rust");
+        assert_eq!(
+            engine.snapshot.interaction_mode,
+            InteractionMode::Idle as i32
+        );
+    }
+
+    #[test]
+    fn box_select_selects_intersecting_elements() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(create_command("box-a", ElementType::Rectangle))
+            .expect("create box-a");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartBoxSelect as i32,
+                payload: Some(CommandPayload::StartBoxSelect(StartBoxSelectCommand {
+                    start_position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                })),
+            })
+            .expect("start box select");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateBoxSelect as i32,
+                payload: Some(CommandPayload::UpdateBoxSelect(UpdateBoxSelectCommand {
+                    current_position: Some(DrawPoint {
+                        x: 200.0,
+                        y: 200.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                })),
+            })
+            .expect("update box select");
+        assert!(engine.snapshot.selected_ids.iter().any(|id| id == "box-a"));
     }
 
     #[test]
