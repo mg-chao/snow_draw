@@ -82,12 +82,6 @@ class RustDrawStore implements DrawStore {
       },
     );
 
-    if (initialState != null && !_isEmptyInitialState(initialState)) {
-      throw UnsupportedError(
-        'RustDrawStore currently supports only empty initialState.',
-      );
-    }
-
     _state = DrawState.initial();
     _canUndo = false;
     _canRedo = false;
@@ -96,6 +90,9 @@ class RustDrawStore implements DrawStore {
       throw StateError(
         'RustDrawStore initialization failed: missing EngineInitAck from V2 runtime.',
       );
+    }
+    if (initialState != null) {
+      _pushBootstrapSnapshotEvent(initialState);
     }
     _pushRuntimeConfigEvent();
   }
@@ -280,12 +277,6 @@ class RustDrawStore implements DrawStore {
     }
   }
 
-  bool _isEmptyInitialState(DrawState state) =>
-      state.domain.document.elements.isEmpty &&
-      state.domain.selection.selectedIds.isEmpty &&
-      state.domain.document.elementsVersion == 0 &&
-      state.domain.selection.selectionVersion == 0;
-
   static RustCanvasEngine _createV2Engine(Uint8List? engineConfigBytes) {
     if (engineConfigBytes != null && engineConfigBytes.isNotEmpty) {
       throw UnsupportedError(
@@ -300,6 +291,15 @@ class RustDrawStore implements DrawStore {
   }
 
   int _nextSequence() => _nextInputSequence++;
+
+  void _pushBootstrapSnapshotEvent(DrawState initialState) {
+    final input = _RustProtoCodec.encodeInputConfigEvent(
+      _RustProtoCodec.encodeBootstrapSnapshotConfig(initialState),
+      sequence: _nextSequence(),
+    );
+    _engine.processInputV2(input);
+    _drainNativeOutputs(applySnapshot: true);
+  }
 
   void _pushRuntimeConfigEvent() {
     final input = _RustProtoCodec.encodeInputConfigEvent(
@@ -880,6 +880,7 @@ final class _RustProtoCodec {
   static const _allowRawPayloadInRelease = bool.fromEnvironment(
     'snow_draw_engine.allow_raw_payload_v2',
   );
+  static const _bootstrapSnapshotConfigKey = '__bootstrapSnapshotV1ProtoBase64';
 
   static int lastDecodedHistoryUndo = 0;
   static int lastDecodedHistoryRedo = 0;
@@ -1892,6 +1893,58 @@ final class _RustProtoCodec {
         ),
       );
 
+  static Uint8List encodeBootstrapSnapshotConfig(DrawState state) {
+    final elements = [...state.domain.document.elements]
+      ..sort((left, right) {
+        final zIndexCompare = left.zIndex.compareTo(right.zIndex);
+        if (zIndexCompare != 0) {
+          return zIndexCompare;
+        }
+        return left.id.compareTo(right.id);
+      });
+    final selectedIds = state.domain.selection.selectedIds.toList()..sort();
+
+    final snapshot = proto.EngineSnapshot(
+      schemaVersion: runtimeSchemaVersion,
+      documentVersion: $fixnum.Int64(state.domain.document.elementsVersion),
+      selectionVersion: $fixnum.Int64(state.domain.selection.selectionVersion),
+      interactionMode: _encodeInteractionMode(state.application.interaction),
+      camera: _encodeCamera(state.application.view.camera),
+      elements: elements
+          .map(
+            (element) => proto.Element(
+              id: element.id,
+              elementType: _bootstrapElementTypeFromTypeValue(
+                element.data.typeId.value,
+              ),
+              rect: _encodeRect(element.rect),
+              rotation: element.rotation,
+              opacity: element.opacity,
+              zIndex: element.zIndex,
+              payload: Uint8List.fromList(
+                utf8.encode(jsonEncode(element.data.toJson())),
+              ),
+            ),
+          )
+          .toList(growable: false),
+      selectedIds: selectedIds,
+      historyUndoLen: $fixnum.Int64(0),
+      historyRedoLen: $fixnum.Int64(0),
+      globalElementsPayload: _encodeUpdateGlobalElements(
+        highlightMask: state.domain.document.globalElements.highlightMask,
+        watermark: state.domain.document.globalElements.watermark,
+      ),
+    );
+
+    return Uint8List.fromList(
+      utf8.encode(
+        jsonEncode({
+          _bootstrapSnapshotConfigKey: base64Encode(snapshot.writeToBuffer()),
+        }),
+      ),
+    );
+  }
+
   static proto.ElementType _elementTypeFromTypeValue(String typeValue) =>
       switch (typeValue) {
         'rectangle' => proto.ElementType.ELEMENT_TYPE_RECTANGLE,
@@ -1904,6 +1957,20 @@ final class _RustProtoCodec {
         'serial_number' => proto.ElementType.ELEMENT_TYPE_SERIAL_NUMBER,
         _ => proto.ElementType.ELEMENT_TYPE_RECTANGLE,
       };
+
+  static proto.ElementType _bootstrapElementTypeFromTypeValue(
+    String typeValue,
+  ) => switch (typeValue) {
+    'rectangle' => proto.ElementType.ELEMENT_TYPE_RECTANGLE,
+    'arrow' => proto.ElementType.ELEMENT_TYPE_ARROW,
+    'line' => proto.ElementType.ELEMENT_TYPE_LINE,
+    'free_draw' => proto.ElementType.ELEMENT_TYPE_FREE_DRAW,
+    'filter' => proto.ElementType.ELEMENT_TYPE_FILTER,
+    'highlight' => proto.ElementType.ELEMENT_TYPE_HIGHLIGHT,
+    'text' => proto.ElementType.ELEMENT_TYPE_TEXT,
+    'serial_number' => proto.ElementType.ELEMENT_TYPE_SERIAL_NUMBER,
+    _ => proto.ElementType.ELEMENT_TYPE_UNKNOWN,
+  };
 
   static String _typeValueFromElementType(int elementType) {
     final resolved =
@@ -1975,6 +2042,23 @@ final class _RustProtoCodec {
           },
         _ => const {'type': 'unknown'},
       };
+
+  static proto.CameraState _encodeCamera(CameraState camera) =>
+      proto.CameraState(
+        position: _encodePoint(camera.position),
+        zoom: camera.zoom,
+      );
+
+  static proto.InteractionMode _encodeInteractionMode(
+    InteractionState interaction,
+  ) => switch (interaction) {
+    CreatingState() => proto.InteractionMode.INTERACTION_MODE_CREATING,
+    EditingState() => proto.InteractionMode.INTERACTION_MODE_EDITING,
+    TextEditingState() => proto.InteractionMode.INTERACTION_MODE_TEXT_EDITING,
+    BoxSelectingState() => proto.InteractionMode.INTERACTION_MODE_BOX_SELECTING,
+    DragPendingState() => proto.InteractionMode.INTERACTION_MODE_DRAG_PENDING,
+    IdleState() => proto.InteractionMode.INTERACTION_MODE_IDLE,
+  };
 }
 
 final class _DecodedSnapshot {

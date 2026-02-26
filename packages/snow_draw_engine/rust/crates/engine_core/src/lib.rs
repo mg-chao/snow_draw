@@ -5,6 +5,7 @@ pub use v2::EngineV2;
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
+use base64::Engine as _;
 use engine_proto::engine_command::Payload as CommandPayload;
 use engine_proto::engine_event::Payload as EventPayload;
 use engine_proto::{
@@ -27,6 +28,7 @@ const CAMERA_MIN_ZOOM: f64 = 0.1;
 const CAMERA_MAX_ZOOM: f64 = 30.0;
 const TEXT_MIN_WIDTH: f64 = 24.0;
 const RUNTIME_CONFIG_KEY: &str = "__runtimeConfig";
+const RUNTIME_BOOTSTRAP_SNAPSHOT_KEY: &str = "__bootstrapSnapshotV1ProtoBase64";
 
 #[derive(Debug, Error)]
 pub enum EngineCoreError {
@@ -498,6 +500,9 @@ impl Engine {
             return false;
         };
         let mut changed = false;
+        if let Some(snapshot) = extract_bootstrap_snapshot_from_map(&mut map) {
+            changed |= self.apply_bootstrap_snapshot(snapshot);
+        }
         if let Some(patch) = extract_runtime_snap_config_patch(&mut map) {
             changed |= self.apply_runtime_snap_config_patch(patch);
         }
@@ -508,6 +513,41 @@ impl Engine {
             }
         }
         changed
+    }
+
+    fn apply_bootstrap_snapshot(&mut self, mut snapshot: EngineSnapshot) -> bool {
+        sanitize_bootstrap_snapshot(&mut snapshot, self.config.schema_version);
+        if self.snapshot == snapshot {
+            return false;
+        }
+
+        self.snapshot = snapshot;
+        self.undo_stack.clear();
+        self.redo_stack.clear();
+        self.sync_history_lengths();
+        self.clear_runtime_snap_guides();
+        self.creating_element_id = None;
+        self.creating_start_position = None;
+        self.text_edit_session = None;
+        self.box_select_start = None;
+        self.box_select_current = None;
+        self.edit_session = None;
+        self.reseed_next_element_sequence_from_snapshot();
+        true
+    }
+
+    fn reseed_next_element_sequence_from_snapshot(&mut self) {
+        let mut next = self.config.deterministic_seed.max(1);
+        for element in &self.snapshot.elements {
+            let Some(raw) = element.id.strip_prefix("rust_") else {
+                continue;
+            };
+            let Some(parsed) = raw.parse::<u64>().ok() else {
+                continue;
+            };
+            next = next.max(parsed.saturating_add(1));
+        }
+        self.next_element_sequence = next;
     }
 
     pub fn get_snapshot(&self) -> EngineSnapshot {
@@ -3598,6 +3638,48 @@ fn extract_runtime_snap_config_patch(
     runtime_snap_config_patch_from_map(&runtime_map)
 }
 
+fn extract_bootstrap_snapshot_from_map(
+    map: &mut JsonMap<String, JsonValue>,
+) -> Option<EngineSnapshot> {
+    let encoded = map.remove(RUNTIME_BOOTSTRAP_SNAPSHOT_KEY)?;
+    let encoded = encoded.as_str()?.trim();
+    if encoded.is_empty() {
+        return None;
+    }
+    let decoded = base64::engine::general_purpose::STANDARD
+        .decode(encoded)
+        .ok()?;
+    decode_message::<EngineSnapshot>(&decoded).ok()
+}
+
+fn sanitize_bootstrap_snapshot(snapshot: &mut EngineSnapshot, schema_version: u32) {
+    snapshot.schema_version = schema_version;
+    if snapshot.camera.is_none() {
+        snapshot.camera = Some(default_camera_state());
+    }
+
+    snapshot.elements.sort_by(|a, b| {
+        a.z_index
+            .cmp(&b.z_index)
+            .then_with(|| a.id.as_str().cmp(b.id.as_str()))
+    });
+
+    let available_ids = snapshot
+        .elements
+        .iter()
+        .map(|element| element.id.clone())
+        .collect::<BTreeSet<_>>();
+    snapshot
+        .selected_ids
+        .retain(|id| available_ids.contains(id));
+    snapshot.selected_ids.sort();
+    snapshot.selected_ids.dedup();
+
+    snapshot.interaction_mode = InteractionMode::Idle as i32;
+    snapshot.history_undo_len = 0;
+    snapshot.history_redo_len = 0;
+}
+
 fn runtime_snap_config_patch_from_value(value: &JsonValue) -> Option<RuntimeSnapConfigPatch> {
     value
         .as_object()
@@ -6278,6 +6360,82 @@ mod tests {
         assert!((engine.runtime_snap_config.object_distance - 6.5).abs() < 1e-9);
         assert_eq!(engine.snapshot.document_version, initial_document_version);
         assert_eq!(engine.snapshot.selection_version, initial_selection_version);
+    }
+
+    #[test]
+    fn runtime_config_payload_bootstrap_snapshot_replaces_state() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(create_command("legacy", ElementType::Rectangle))
+            .expect("create legacy element");
+        assert!(!engine.snapshot.elements.is_empty());
+
+        let bootstrap_snapshot = EngineSnapshot {
+            schema_version: 999,
+            document_version: 42,
+            selection_version: 9,
+            interaction_mode: InteractionMode::Editing as i32,
+            camera: Some(CameraState {
+                position: Some(DrawPoint {
+                    x: 320.0,
+                    y: -140.0,
+                    pressure: 0.0,
+                    timestamp_us: 0,
+                }),
+                zoom: 2.5,
+            }),
+            elements: vec![Element {
+                id: "bootstrap-rect".to_string(),
+                element_type: ElementType::Rectangle as i32,
+                rect: Some(DrawRect {
+                    min_x: 100.0,
+                    min_y: 120.0,
+                    max_x: 260.0,
+                    max_y: 300.0,
+                }),
+                rotation: 0.25,
+                opacity: 0.66,
+                z_index: 10,
+                payload: br#"{"typeId":"rectangle","color":4278255360}"#.to_vec(),
+            }],
+            selected_ids: vec!["bootstrap-rect".to_string(), "missing".to_string()],
+            history_undo_len: 7,
+            history_redo_len: 3,
+            global_elements_payload: br#"{"watermark":{"text":"bootstrapped","opacity":0.2}}"#
+                .to_vec(),
+        };
+        let encoded_snapshot = encode_message(&bootstrap_snapshot);
+        let payload = serde_json::json!({
+            RUNTIME_BOOTSTRAP_SNAPSHOT_KEY:
+                base64::engine::general_purpose::STANDARD.encode(encoded_snapshot),
+        })
+        .to_string();
+
+        let changed = engine.apply_runtime_config_payload(payload.as_bytes());
+        assert!(changed);
+
+        assert_eq!(engine.snapshot.schema_version, engine.config.schema_version);
+        assert_eq!(engine.snapshot.document_version, 42);
+        assert_eq!(engine.snapshot.selection_version, 9);
+        assert_eq!(engine.snapshot.elements.len(), 1);
+        assert_eq!(engine.snapshot.elements[0].id, "bootstrap-rect");
+        let camera = engine.snapshot.camera.as_ref().expect("camera");
+        assert!((camera.zoom - 2.5).abs() < 1e-9);
+        assert_eq!(camera.position.as_ref().expect("camera position").x, 320.0);
+        assert_eq!(
+            engine.snapshot.interaction_mode,
+            InteractionMode::Idle as i32
+        );
+        assert_eq!(
+            engine.snapshot.selected_ids,
+            vec!["bootstrap-rect".to_string()]
+        );
+        assert!(!engine.snapshot.global_elements_payload.is_empty());
+        assert_eq!(engine.snapshot.history_undo_len, 0);
+        assert_eq!(engine.snapshot.history_redo_len, 0);
+        assert_eq!(engine.undo_stack.len(), 0);
+        assert_eq!(engine.redo_stack.len(), 0);
+        assert_eq!(engine.next_element_sequence, 1);
     }
 
     #[test]

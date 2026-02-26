@@ -22,6 +22,66 @@ void main() {
     );
   });
 
+  test(
+    'RustDrawStore hydrates non-empty initialState through V2 config bootstrap',
+    () {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+      final context = DrawContext.withDefaults(elementRegistry: registry);
+
+      final initialElement = ElementState(
+        id: 'bootstrap-rect',
+        rect: const DrawRect(minX: 12, minY: 24, maxX: 132, maxY: 94),
+        rotation: 0.2,
+        opacity: 0.75,
+        zIndex: 4,
+        data: const RectangleData(
+          color: DrawColor(0xFF336699),
+          fillColor: DrawColor(0x00000000),
+          strokeWidth: 3.5,
+        ),
+      );
+      final initialState = DrawState(
+        domain: DomainState(
+          document: DocumentState(
+            elements: [initialElement],
+            elementsVersion: 7,
+          ),
+          selection: const SelectionState(
+            selectedIds: {'bootstrap-rect'},
+            selectionVersion: 3,
+          ),
+        ),
+        application: const ApplicationState(
+          view: ViewState(
+            camera: CameraState(position: DrawPoint(x: 50, y: -30), zoom: 1.5),
+          ),
+          interaction: IdleState(),
+        ),
+      );
+
+      final store = RustDrawStore(
+        context: context,
+        initialState: initialState,
+        engine: _BootstrapConfigRustCanvasEngine(),
+      );
+      addTearDown(store.dispose);
+
+      final hydrated = store.state.domain.document.getElementById(
+        'bootstrap-rect',
+      );
+      expect(hydrated, isNotNull);
+      expect(hydrated!.rect, initialElement.rect);
+      expect(store.state.domain.document.elementsVersion, 7);
+      expect(store.state.domain.selection.selectionVersion, 3);
+      expect(
+        store.state.application.view.camera,
+        const CameraState(position: DrawPoint(x: 50, y: -30), zoom: 1.5),
+      );
+      expect(store.state.domain.selection.selectedIds, {'bootstrap-rect'});
+    },
+  );
+
   test('RustDrawStore consumes V2 command input and snapshot output', () async {
     final registry = DefaultElementRegistry();
     registerBuiltInElements(registry);
@@ -391,6 +451,156 @@ final class _ScriptedRustCanvasEngine implements RustCanvasEngine {
       ),
     );
   }
+
+  @override
+  Uint8List? pollOutputV2() {
+    if (_outputs.isEmpty) {
+      return null;
+    }
+    return _outputs.removeAt(0);
+  }
+
+  @override
+  void dispose() {}
+
+  @override
+  void dispatch(Uint8List commandBytes) {
+    throw UnimplementedError();
+  }
+
+  @override
+  void dispatchBatch(List<Uint8List> commandBatch) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Uint8List getSnapshotBytes() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Uint8List buildFramePlanBytes(Uint8List requestBytes) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Uint8List? pollEventBytes() {
+    throw UnimplementedError();
+  }
+}
+
+final class _BootstrapConfigRustCanvasEngine implements RustCanvasEngine {
+  _BootstrapConfigRustCanvasEngine() {
+    _outputs.add(
+      Uint8List.fromList(
+        proto_v2.EngineOutput(
+          sequence: $fixnum.Int64(0),
+          initAck: proto_v2.EngineInitAck(
+            abiVersion: 2,
+            schemaVersion: 2,
+            grantedCapabilitiesMask: $fixnum.Int64(0x1F),
+            message: 'ok',
+          ),
+        ).writeToBuffer(),
+      ),
+    );
+  }
+
+  static const _bootstrapSnapshotConfigKey = '__bootstrapSnapshotV1ProtoBase64';
+
+  final _outputs = <Uint8List>[];
+
+  @override
+  int get abiVersion => 2;
+
+  @override
+  int get capabilities => 0;
+
+  @override
+  void processInputV2(Uint8List inputBytes) {
+    final input = proto_v2.EngineInput.fromBuffer(inputBytes);
+    if (input.whichPayload() != proto_v2.EngineInput_Payload.configEvent) {
+      return;
+    }
+    final payload = input.configEvent.configPayload;
+    if (payload.isEmpty) {
+      return;
+    }
+
+    try {
+      final decoded = jsonDecode(utf8.decode(payload));
+      if (decoded is! Map) {
+        return;
+      }
+      final map = decoded.cast<String, dynamic>();
+      final encoded = map[_bootstrapSnapshotConfigKey];
+      if (encoded is! String || encoded.isEmpty) {
+        return;
+      }
+      final snapshot = proto.EngineSnapshot.fromBuffer(base64Decode(encoded));
+      _outputs.add(
+        Uint8List.fromList(
+          proto_v2.EngineOutput(
+            sequence: $fixnum.Int64(1),
+            snapshot: _toSnapshotV2(snapshot),
+          ).writeToBuffer(),
+        ),
+      );
+    } on Object {
+      // Ignore malformed bootstrap payloads in fake engine tests.
+    }
+  }
+
+  static proto_v2.EngineSnapshot _toSnapshotV2(proto.EngineSnapshot snapshot) =>
+      proto_v2.EngineSnapshot(
+        schemaVersion: snapshot.schemaVersion,
+        documentVersion: snapshot.documentVersion,
+        selectionVersion: snapshot.selectionVersion,
+        interactionMode:
+            proto_v2.InteractionMode.valueOf(snapshot.interactionMode.value) ??
+            proto_v2.InteractionMode.INTERACTION_MODE_IDLE,
+        camera: snapshot.hasCamera()
+            ? proto_v2.CameraState(
+                position: snapshot.camera.hasPosition()
+                    ? proto_v2.DrawPoint(
+                        x: snapshot.camera.position.x,
+                        y: snapshot.camera.position.y,
+                        pressure: snapshot.camera.position.pressure,
+                        timestampUs: snapshot.camera.position.timestampUs,
+                      )
+                    : null,
+                zoom: snapshot.camera.zoom,
+              )
+            : null,
+        elements: snapshot.elements
+            .map(
+              (element) => proto_v2.Element(
+                id: element.id,
+                elementType:
+                    proto_v2.ElementType.valueOf(element.elementType.value) ??
+                    proto_v2.ElementType.ELEMENT_TYPE_UNKNOWN,
+                rect: element.hasRect()
+                    ? proto_v2.DrawRect(
+                        minX: element.rect.minX,
+                        minY: element.rect.minY,
+                        maxX: element.rect.maxX,
+                        maxY: element.rect.maxY,
+                      )
+                    : null,
+                rotation: element.rotation,
+                opacity: element.opacity,
+                zIndex: element.zIndex,
+                payload: proto_v2.ElementPayload(
+                  rawJsonPayload: Uint8List.fromList(element.payload),
+                ),
+              ),
+            )
+            .toList(growable: false),
+        selectedIds: snapshot.selectedIds,
+        historyUndoLen: snapshot.historyUndoLen,
+        historyRedoLen: snapshot.historyRedoLen,
+        globalElementsPayload: snapshot.globalElementsPayload,
+      );
 
   @override
   Uint8List? pollOutputV2() {

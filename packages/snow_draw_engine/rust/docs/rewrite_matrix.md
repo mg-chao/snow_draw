@@ -79,7 +79,7 @@ Status legend:
 | V2 Path | Status | Notes |
 | --- | --- | --- |
 | `command_event -> snapshot/state_delta/frame_plan` | implemented | Core runtime flow for store dispatch. |
-| `config_event -> runtime config` | implemented | Locale/scale updates plus typed runtime config payload application (e.g. grid/object snap toggles and per-element runtime style defaults) without mutating document snapshots. |
+| `config_event -> runtime config` | implemented | Locale/scale updates plus typed runtime config payload application (e.g. grid/object snap toggles and per-element runtime style defaults); supports optional snapshot bootstrap via `__bootstrapSnapshotV1ProtoBase64` for Rust runtime hydration from host-provided initial state. |
 | `pointer_event -> host_request` | implemented | Forwarded as typed host request. |
 | `keyboard_event -> host_request` | implemented | Forwarded as typed host request. |
 | `tool_event -> host_request` | implemented | Forwarded as typed host request. |

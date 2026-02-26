@@ -147,6 +147,9 @@ impl EngineV2 {
                     self.engine
                         .apply_runtime_config_payload(&event.config_payload)
                 };
+                if runtime_config_updated {
+                    let _ = self.emit_snapshot_state_and_frame();
+                }
                 self.push_debug(format!(
                     "engine_v2 config updated (runtime_config_updated={runtime_config_updated})"
                 ));
@@ -628,10 +631,12 @@ fn convert_frame_plan(plan: v1::FrameRenderPlan) -> v2::FrameRenderPlan {
 
 #[cfg(test)]
 mod tests {
+    use base64::Engine as _;
     use engine_proto::engine_command::Payload as V1CommandPayload;
     use engine_proto::{
-        CreateElementCommand, DrawPoint, ElementType, EngineCommand, EngineCommandKind,
-        StartTextEditCommand, UpdateTextEditCommand,
+        CameraState, CreateElementCommand, DrawPoint, DrawRect, Element, ElementType,
+        EngineCommand, EngineCommandKind, EngineSnapshot, InteractionMode, StartTextEditCommand,
+        UpdateTextEditCommand,
     };
 
     use super::*;
@@ -779,6 +784,84 @@ mod tests {
         let rect = element.rect.as_ref().expect("rect");
         assert_eq!(rect.min_x, 10.0);
         assert_eq!(rect.min_y, 30.0);
+    }
+
+    #[test]
+    fn config_event_bootstrap_snapshot_emits_snapshot_and_frame_plan() {
+        let mut engine = EngineV2::from_init_request(v2::default_init_request());
+        let _ = engine.poll_output();
+
+        let snapshot = EngineSnapshot {
+            schema_version: 1,
+            document_version: 77,
+            selection_version: 11,
+            interaction_mode: InteractionMode::Editing as i32,
+            camera: Some(CameraState {
+                position: Some(DrawPoint {
+                    x: 30.0,
+                    y: 45.0,
+                    pressure: 0.0,
+                    timestamp_us: 0,
+                }),
+                zoom: 1.5,
+            }),
+            elements: vec![Element {
+                id: "bootstrap-v2".to_string(),
+                element_type: ElementType::Rectangle as i32,
+                rect: Some(DrawRect {
+                    min_x: 5.0,
+                    min_y: 6.0,
+                    max_x: 50.0,
+                    max_y: 60.0,
+                }),
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index: 0,
+                payload: br#"{"typeId":"rectangle","strokeWidth":2.0}"#.to_vec(),
+            }],
+            selected_ids: vec!["bootstrap-v2".to_string()],
+            history_undo_len: 4,
+            history_redo_len: 2,
+            global_elements_payload: Vec::new(),
+        };
+        let encoded_snapshot = v1::encode_message(&snapshot);
+        let payload = serde_json::json!({
+            "__bootstrapSnapshotV1ProtoBase64":
+                base64::engine::general_purpose::STANDARD.encode(encoded_snapshot),
+        })
+        .to_string();
+
+        engine
+            .process_input(v2::EngineInput {
+                sequence: 5,
+                payload: Some(V2InputPayload::ConfigEvent(v2::ConfigEvent {
+                    locale_tag: String::new(),
+                    scale_factor: 0.0,
+                    config_payload: payload.into_bytes(),
+                })),
+            })
+            .expect("bootstrap config event");
+
+        let mut saw_snapshot = false;
+        let mut saw_frame_plan = false;
+        while let Some(output) = engine.poll_output() {
+            match output.payload {
+                Some(V2OutputPayload::Snapshot(snapshot)) => {
+                    saw_snapshot = true;
+                    assert_eq!(snapshot.document_version, 77);
+                    assert_eq!(snapshot.elements.len(), 1);
+                    assert_eq!(snapshot.elements[0].id, "bootstrap-v2");
+                    assert_eq!(snapshot.interaction_mode, v2::InteractionMode::Idle as i32);
+                }
+                Some(V2OutputPayload::FramePlan(_)) => {
+                    saw_frame_plan = true;
+                }
+                _ => {}
+            }
+        }
+
+        assert!(saw_snapshot);
+        assert!(saw_frame_plan);
     }
 
     #[test]

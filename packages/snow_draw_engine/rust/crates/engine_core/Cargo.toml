@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+base64 = "0.22"
 engine_proto = { path = "../engine_proto" }
 engine_proto_v2 = { path = "../engine_proto_v2" }
 serde_json.workspace = true
