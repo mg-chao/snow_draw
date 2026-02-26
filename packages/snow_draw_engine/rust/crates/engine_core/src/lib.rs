@@ -77,9 +77,30 @@ struct TextEditSession {
 
 #[derive(Debug, Clone)]
 struct EditSession {
-    operation_id: String,
+    operation: EditSessionOperation,
     start_position: DrawPoint,
     baseline_rects: BTreeMap<String, DrawRect>,
+    baseline_rotations: BTreeMap<String, f64>,
+}
+
+#[derive(Debug, Clone)]
+enum EditSessionOperation {
+    Move,
+    Resize { mode: ResizeMode },
+    Rotate { pivot: DrawPoint, snap_angle: f64 },
+    Unknown,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum ResizeMode {
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+    Top,
+    Bottom,
+    Left,
+    Right,
 }
 
 impl Default for Engine {
@@ -1033,6 +1054,7 @@ impl Engine {
 
     fn apply_start_edit(&mut self, payload: engine_proto::StartEditCommand) {
         let operation_id = payload.operation_id.trim().to_string();
+        let params = decode_json_map(&payload.params);
         let start = payload.position.unwrap_or(DrawPoint {
             x: 0.0,
             y: 0.0,
@@ -1052,10 +1074,27 @@ impl Engine {
                     .map(|rect| (id.clone(), rect))
             })
             .collect::<BTreeMap<_, _>>();
+        let baseline_rotations = self
+            .snapshot
+            .selected_ids
+            .iter()
+            .filter_map(|id| {
+                self.snapshot
+                    .elements
+                    .iter()
+                    .find(|element| element.id == *id)
+                    .map(|element| (id.clone(), element.rotation))
+            })
+            .collect::<BTreeMap<_, _>>();
+
+        let operation =
+            resolve_edit_operation(operation_id.as_str(), params.as_ref(), &baseline_rects);
+
         self.edit_session = Some(EditSession {
-            operation_id,
+            operation,
             start_position: start,
             baseline_rects,
+            baseline_rotations,
         });
         self.set_interaction_mode(InteractionMode::Editing);
     }
@@ -1067,25 +1106,32 @@ impl Engine {
         let Some(current) = payload.current_position else {
             return;
         };
+        let modifiers = parse_edit_modifiers(&payload.modifiers);
 
-        if session.operation_id != "move" {
-            return;
-        }
-
-        let dx = current.x - session.start_position.x;
-        let dy = current.y - session.start_position.y;
-        let mut changed = false;
-        for (element_id, base_rect) in session.baseline_rects {
-            if let Some(element) = self.element_mut(&element_id) {
-                element.rect = Some(DrawRect {
-                    min_x: base_rect.min_x + dx,
-                    min_y: base_rect.min_y + dy,
-                    max_x: base_rect.max_x + dx,
-                    max_y: base_rect.max_y + dy,
-                });
-                changed = true;
-            }
-        }
+        let changed = match session.operation {
+            EditSessionOperation::Move => self.apply_update_move_edit(
+                session.start_position,
+                current,
+                &session.baseline_rects,
+            ),
+            EditSessionOperation::Resize { mode } => self.apply_update_resize_edit(
+                session.start_position,
+                current,
+                &session.baseline_rects,
+                mode,
+                modifiers.from_center,
+            ),
+            EditSessionOperation::Rotate { pivot, snap_angle } => self.apply_update_rotate_edit(
+                session.start_position,
+                current,
+                pivot,
+                snap_angle,
+                modifiers.discrete_angle,
+                &session.baseline_rects,
+                &session.baseline_rotations,
+            ),
+            EditSessionOperation::Unknown => false,
+        };
 
         if changed {
             self.snapshot.document_version += 1;
@@ -1110,10 +1156,141 @@ impl Engine {
                 changed = true;
             }
         }
+        for (element_id, rotation) in session.baseline_rotations {
+            if let Some(element) = self.element_mut(&element_id) {
+                if (element.rotation - rotation).abs() > f64::EPSILON {
+                    element.rotation = rotation;
+                    changed = true;
+                }
+            }
+        }
         if changed {
             self.snapshot.document_version += 1;
         }
         self.set_interaction_mode(InteractionMode::Idle);
+    }
+
+    fn apply_update_move_edit(
+        &mut self,
+        start: DrawPoint,
+        current: DrawPoint,
+        baseline_rects: &BTreeMap<String, DrawRect>,
+    ) -> bool {
+        let dx = current.x - start.x;
+        let dy = current.y - start.y;
+        let mut changed = false;
+        for (element_id, base_rect) in baseline_rects {
+            if let Some(element) = self.element_mut(element_id) {
+                element.rect = Some(DrawRect {
+                    min_x: base_rect.min_x + dx,
+                    min_y: base_rect.min_y + dy,
+                    max_x: base_rect.max_x + dx,
+                    max_y: base_rect.max_y + dy,
+                });
+                changed = true;
+            }
+        }
+        changed
+    }
+
+    fn apply_update_resize_edit(
+        &mut self,
+        start: DrawPoint,
+        current: DrawPoint,
+        baseline_rects: &BTreeMap<String, DrawRect>,
+        mode: ResizeMode,
+        from_center: bool,
+    ) -> bool {
+        let dx = current.x - start.x;
+        let dy = current.y - start.y;
+        let mut changed = false;
+        let (move_left, move_right, move_top, move_bottom) = resize_mode_axes(mode);
+
+        for (element_id, base_rect) in baseline_rects {
+            let mut min_x = base_rect.min_x;
+            let mut max_x = base_rect.max_x;
+            let mut min_y = base_rect.min_y;
+            let mut max_y = base_rect.max_y;
+
+            if move_left {
+                min_x += dx;
+                if from_center {
+                    max_x -= dx;
+                }
+            }
+            if move_right {
+                max_x += dx;
+                if from_center {
+                    min_x -= dx;
+                }
+            }
+            if move_top {
+                min_y += dy;
+                if from_center {
+                    max_y -= dy;
+                }
+            }
+            if move_bottom {
+                max_y += dy;
+                if from_center {
+                    min_y -= dy;
+                }
+            }
+
+            let rect = normalize_rect(DrawRect {
+                min_x,
+                min_y,
+                max_x,
+                max_y,
+            });
+            if let Some(element) = self.element_mut(element_id) {
+                element.rect = Some(rect);
+                changed = true;
+            }
+        }
+
+        changed
+    }
+
+    fn apply_update_rotate_edit(
+        &mut self,
+        start: DrawPoint,
+        current: DrawPoint,
+        pivot: DrawPoint,
+        snap_angle: f64,
+        discrete_angle: bool,
+        baseline_rects: &BTreeMap<String, DrawRect>,
+        baseline_rotations: &BTreeMap<String, f64>,
+    ) -> bool {
+        let start_angle = angle_between_points(&start, &pivot);
+        let current_angle = angle_between_points(&current, &pivot);
+        let mut delta = normalize_angle_radians(current_angle - start_angle);
+        if discrete_angle && snap_angle > 0.0 {
+            delta = (delta / snap_angle).round() * snap_angle;
+        }
+
+        let mut changed = false;
+        for (element_id, base_rect) in baseline_rects {
+            if let Some(element) = self.element_mut(element_id) {
+                let center = rect_center(base_rect);
+                let rotated_center = rotate_point_around(&center, &pivot, delta);
+                let width = base_rect.max_x - base_rect.min_x;
+                let height = base_rect.max_y - base_rect.min_y;
+                element.rect = Some(DrawRect {
+                    min_x: rotated_center.x - width / 2.0,
+                    min_y: rotated_center.y - height / 2.0,
+                    max_x: rotated_center.x + width / 2.0,
+                    max_y: rotated_center.y + height / 2.0,
+                });
+                if let Some(base_rotation) = baseline_rotations.get(element_id) {
+                    element.rotation = base_rotation + delta;
+                } else {
+                    element.rotation += delta;
+                }
+                changed = true;
+            }
+        }
+        changed
     }
 
     fn apply_set_drag_pending(&mut self, payload: SetDragPendingCommand) {
@@ -1499,6 +1676,158 @@ fn rect_from_points(start: DrawPoint, current: DrawPoint, keep_square: bool) -> 
 
 fn rects_intersect(a: &DrawRect, b: &DrawRect) -> bool {
     !(a.max_x < b.min_x || a.min_x > b.max_x || a.max_y < b.min_y || a.min_y > b.max_y)
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+struct EditModifiersPayload {
+    maintain_aspect_ratio: bool,
+    from_center: bool,
+    discrete_angle: bool,
+}
+
+fn parse_edit_modifiers(bytes: &[u8]) -> EditModifiersPayload {
+    let mut parsed = EditModifiersPayload::default();
+    let Some(map) = decode_json_map(bytes) else {
+        return parsed;
+    };
+    parsed.maintain_aspect_ratio = map
+        .get("maintainAspectRatio")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false);
+    parsed.from_center = map
+        .get("fromCenter")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false);
+    parsed.discrete_angle = map
+        .get("discreteAngle")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false);
+    parsed
+}
+
+fn resolve_edit_operation(
+    operation_id: &str,
+    params: Option<&JsonMap<String, JsonValue>>,
+    baseline_rects: &BTreeMap<String, DrawRect>,
+) -> EditSessionOperation {
+    let kind = params
+        .and_then(|map| map.get("type"))
+        .and_then(JsonValue::as_str)
+        .unwrap_or(operation_id);
+
+    match kind {
+        "move" => EditSessionOperation::Move,
+        "resize" => {
+            let mode = params
+                .and_then(|map| map.get("resizeMode"))
+                .and_then(JsonValue::as_str)
+                .and_then(parse_resize_mode)
+                .unwrap_or(ResizeMode::BottomRight);
+            EditSessionOperation::Resize { mode }
+        }
+        "rotate" => {
+            let pivot = selection_bounds_from_rects(baseline_rects)
+                .map(|rect| rect_center(&rect))
+                .unwrap_or(DrawPoint {
+                    x: 0.0,
+                    y: 0.0,
+                    pressure: 0.0,
+                    timestamp_us: 0,
+                });
+            let snap_angle = params
+                .and_then(|map| map.get("rotationSnapAngle"))
+                .and_then(JsonValue::as_f64)
+                .unwrap_or(0.0);
+            EditSessionOperation::Rotate { pivot, snap_angle }
+        }
+        _ => EditSessionOperation::Unknown,
+    }
+}
+
+fn parse_resize_mode(value: &str) -> Option<ResizeMode> {
+    match value {
+        "topLeft" => Some(ResizeMode::TopLeft),
+        "topRight" => Some(ResizeMode::TopRight),
+        "bottomLeft" => Some(ResizeMode::BottomLeft),
+        "bottomRight" => Some(ResizeMode::BottomRight),
+        "top" => Some(ResizeMode::Top),
+        "bottom" => Some(ResizeMode::Bottom),
+        "left" => Some(ResizeMode::Left),
+        "right" => Some(ResizeMode::Right),
+        _ => None,
+    }
+}
+
+fn resize_mode_axes(mode: ResizeMode) -> (bool, bool, bool, bool) {
+    match mode {
+        ResizeMode::TopLeft => (true, false, true, false),
+        ResizeMode::TopRight => (false, true, true, false),
+        ResizeMode::BottomLeft => (true, false, false, true),
+        ResizeMode::BottomRight => (false, true, false, true),
+        ResizeMode::Top => (false, false, true, false),
+        ResizeMode::Bottom => (false, false, false, true),
+        ResizeMode::Left => (true, false, false, false),
+        ResizeMode::Right => (false, true, false, false),
+    }
+}
+
+fn normalize_rect(rect: DrawRect) -> DrawRect {
+    DrawRect {
+        min_x: rect.min_x.min(rect.max_x),
+        min_y: rect.min_y.min(rect.max_y),
+        max_x: rect.min_x.max(rect.max_x),
+        max_y: rect.min_y.max(rect.max_y),
+    }
+}
+
+fn selection_bounds_from_rects(rects: &BTreeMap<String, DrawRect>) -> Option<DrawRect> {
+    let mut iter = rects.values();
+    let first = iter.next()?;
+    let mut bounds = first.clone();
+    for rect in iter {
+        bounds.min_x = bounds.min_x.min(rect.min_x);
+        bounds.min_y = bounds.min_y.min(rect.min_y);
+        bounds.max_x = bounds.max_x.max(rect.max_x);
+        bounds.max_y = bounds.max_y.max(rect.max_y);
+    }
+    Some(bounds)
+}
+
+fn rect_center(rect: &DrawRect) -> DrawPoint {
+    DrawPoint {
+        x: (rect.min_x + rect.max_x) / 2.0,
+        y: (rect.min_y + rect.max_y) / 2.0,
+        pressure: 0.0,
+        timestamp_us: 0,
+    }
+}
+
+fn angle_between_points(point: &DrawPoint, pivot: &DrawPoint) -> f64 {
+    (point.y - pivot.y).atan2(point.x - pivot.x)
+}
+
+fn normalize_angle_radians(angle: f64) -> f64 {
+    let tau = std::f64::consts::TAU;
+    let mut normalized = angle % tau;
+    if normalized > std::f64::consts::PI {
+        normalized -= tau;
+    } else if normalized < -std::f64::consts::PI {
+        normalized += tau;
+    }
+    normalized
+}
+
+fn rotate_point_around(point: &DrawPoint, pivot: &DrawPoint, angle: f64) -> DrawPoint {
+    let dx = point.x - pivot.x;
+    let dy = point.y - pivot.y;
+    let sin = angle.sin();
+    let cos = angle.cos();
+    DrawPoint {
+        x: pivot.x + dx * cos - dy * sin,
+        y: pivot.y + dx * sin + dy * cos,
+        pressure: 0.0,
+        timestamp_us: 0,
+    }
 }
 
 fn extract_create_payload(
@@ -2422,6 +2751,164 @@ mod tests {
             .expect("moved rect");
         assert_eq!(moved.min_x, original.min_x + 12.0);
         assert_eq!(moved.min_y, original.min_y - 6.0);
+    }
+
+    #[test]
+    fn resize_edit_updates_selected_rect() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "resize-target".to_string(),
+                    position: Some(DrawPoint {
+                        x: 10.0,
+                        y: 10.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create");
+        let original = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "resize-target")
+            .and_then(|element| element.rect.clone())
+            .expect("rect");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "resize".to_string(),
+                    position: Some(DrawPoint {
+                        x: original.max_x,
+                        y: original.max_y,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"resize","resizeMode":"bottomRight"}"#.to_vec(),
+                })),
+            })
+            .expect("start resize");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: original.max_x + 25.0,
+                        y: original.max_y + 10.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: Vec::new(),
+                })),
+            })
+            .expect("update resize");
+
+        let resized = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "resize-target")
+            .and_then(|element| element.rect.clone())
+            .expect("resized rect");
+        assert_eq!(resized.min_x, original.min_x);
+        assert_eq!(resized.min_y, original.min_y);
+        assert_eq!(resized.max_x, original.max_x + 25.0);
+        assert_eq!(resized.max_y, original.max_y + 10.0);
+    }
+
+    #[test]
+    fn rotate_edit_updates_rotation_and_center() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "rotate-target".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create");
+        let original = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "rotate-target")
+            .expect("element")
+            .clone();
+        let original_rect = original.rect.clone().expect("rect");
+        let center = DrawPoint {
+            x: (original_rect.min_x + original_rect.max_x) / 2.0,
+            y: (original_rect.min_y + original_rect.max_y) / 2.0,
+            pressure: 0.0,
+            timestamp_us: 0,
+        };
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "rotate".to_string(),
+                    position: Some(DrawPoint {
+                        x: center.x + 100.0,
+                        y: center.y,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"rotate","rotationSnapAngle":0.0}"#.to_vec(),
+                })),
+            })
+            .expect("start rotate");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: center.x,
+                        y: center.y + 100.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: Vec::new(),
+                })),
+            })
+            .expect("update rotate");
+
+        let rotated = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "rotate-target")
+            .expect("rotated element");
+        assert!(rotated.rotation > original.rotation);
+        let rotated_rect = rotated.rect.clone().expect("rotated rect");
+        let rotated_center = DrawPoint {
+            x: (rotated_rect.min_x + rotated_rect.max_x) / 2.0,
+            y: (rotated_rect.min_y + rotated_rect.max_y) / 2.0,
+            pressure: 0.0,
+            timestamp_us: 0,
+        };
+        assert!((rotated_center.x - center.x).abs() < 1e-9);
+        assert!((rotated_center.y - center.y).abs() < 1e-9);
     }
 
     #[test]
