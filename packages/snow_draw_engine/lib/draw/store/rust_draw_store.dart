@@ -15,6 +15,7 @@ import '../core/callbacks.dart';
 import '../core/draw_context.dart';
 import '../edit/core/edit_operation_params.dart';
 import '../elements/core/element_data.dart';
+import '../elements/types/arrow/arrow_like_data.dart';
 import '../elements/types/arrow/arrow_points.dart';
 import '../elements/types/text/text_data.dart';
 import '../events/error_events.dart';
@@ -36,6 +37,10 @@ import '../services/text/text_metrics_service.dart';
 import '../types/draw_color.dart';
 import '../types/draw_point.dart';
 import '../types/draw_rect.dart';
+import '../types/edit_context.dart';
+import '../types/edit_operation_id.dart';
+import '../types/edit_transform.dart';
+import '../types/element_geometry.dart';
 import '../types/snap_guides.dart';
 import '../utils/selection_calculator.dart';
 import 'draw_store_interface.dart';
@@ -110,6 +115,18 @@ class RustDrawStore implements DrawStore {
   var _canRedo = false;
   var _didValidateInitAck = false;
   var _latestFramePlan = FrameRenderPlan.empty;
+  DrawPoint? _creatingStartPositionHint;
+  DrawPoint? _dragPendingPointerDownHint;
+  PendingIntent? _dragPendingIntentHint;
+  DrawPoint? _boxSelectStartHint;
+  DrawPoint? _boxSelectCurrentHint;
+  DrawPoint? _textEditStartHint;
+  var _pendingTextEditIsNew = false;
+  String? _activeTextEditElementId;
+  var _activeTextEditIsNew = false;
+  DrawPoint? _editStartHint;
+  EditOperationId? _editOperationHint;
+  var _editSessionSequence = 0;
 
   @override
   bool get canUndo => _canUndo;
@@ -204,6 +221,8 @@ class RustDrawStore implements DrawStore {
       );
       return;
     }
+
+    _updateInteractionHints(action);
 
     final command = _RustProtoCodec.encodeAction(action, context: context);
     if (command == null) {
@@ -358,7 +377,13 @@ class RustDrawStore implements DrawStore {
           // parity and future incremental application.
           break;
         case proto_v2.EngineOutput_Payload.framePlan:
-          final stateForPlan = lastSnapshot?.toDrawState(context) ?? _state;
+          final stateForPlan = lastSnapshot == null
+              ? _state
+              : _buildStateFromSnapshot(
+                  lastSnapshot,
+                  previousState: _state,
+                  updateHints: false,
+                );
           _latestFramePlan = _RustProtoCodec.decodeFramePlanV2(
             output.framePlan,
             state: stateForPlan,
@@ -374,9 +399,344 @@ class RustDrawStore implements DrawStore {
     }
 
     if (applySnapshot && lastSnapshot != null) {
-      _refreshSnapshotAndNotify(lastSnapshot.toDrawState(context));
+      final nextState = _buildStateFromSnapshot(
+        lastSnapshot,
+        previousState: _state,
+        updateHints: true,
+      );
+      _refreshSnapshotAndNotify(nextState);
     }
   }
+
+  void _updateInteractionHints(DrawAction action) {
+    switch (action) {
+      case CreateElement(:final position):
+        _creatingStartPositionHint = position;
+        break;
+      case FinishCreateElement() || CancelCreateElement():
+        _creatingStartPositionHint = null;
+        break;
+      case SetDragPending(:final pointerDownPosition, :final intent):
+        _dragPendingPointerDownHint = pointerDownPosition;
+        _dragPendingIntentHint = intent;
+        break;
+      case ClearDragPending():
+        _dragPendingPointerDownHint = null;
+        _dragPendingIntentHint = null;
+        break;
+      case StartBoxSelect(:final startPosition):
+        _boxSelectStartHint = startPosition;
+        _boxSelectCurrentHint = startPosition;
+        break;
+      case UpdateBoxSelect(:final currentPosition):
+        _boxSelectCurrentHint = currentPosition;
+        break;
+      case FinishBoxSelect() || CancelBoxSelect():
+        _boxSelectStartHint = null;
+        _boxSelectCurrentHint = null;
+        break;
+      case StartTextEdit(:final position, :final elementId):
+        _textEditStartHint = position;
+        _pendingTextEditIsNew = elementId == null || elementId.isEmpty;
+        break;
+      case FinishTextEdit() || CancelTextEdit():
+        _pendingTextEditIsNew = false;
+        _activeTextEditElementId = null;
+        _activeTextEditIsNew = false;
+        break;
+      case StartEdit(:final position, :final operationId):
+        _editStartHint = position;
+        _editOperationHint = operationId;
+        break;
+      case FinishEdit() || CancelEdit():
+        _editStartHint = null;
+        _editOperationHint = null;
+        break;
+      case Undo() || Redo() || ClearHistory():
+        _creatingStartPositionHint = null;
+        _boxSelectStartHint = null;
+        _boxSelectCurrentHint = null;
+        _dragPendingPointerDownHint = null;
+        _dragPendingIntentHint = null;
+        _pendingTextEditIsNew = false;
+        _activeTextEditElementId = null;
+        _activeTextEditIsNew = false;
+        _editStartHint = null;
+        _editOperationHint = null;
+        break;
+      default:
+        break;
+    }
+  }
+
+  DrawState _buildStateFromSnapshot(
+    _DecodedSnapshot snapshot, {
+    required DrawState previousState,
+    required bool updateHints,
+  }) {
+    final decoded = snapshot.toDrawState(context);
+    final interaction = _resolveInteractionFromSnapshot(
+      snapshot: snapshot,
+      decodedState: decoded,
+      previousState: previousState,
+      updateHints: updateHints,
+    );
+    return decoded.copyWith(
+      application: decoded.application.copyWith(interaction: interaction),
+    );
+  }
+
+  InteractionState _resolveInteractionFromSnapshot({
+    required _DecodedSnapshot snapshot,
+    required DrawState decodedState,
+    required DrawState previousState,
+    required bool updateHints,
+  }) {
+    final previousInteraction = previousState.application.interaction;
+    final mode =
+        proto_v2.InteractionMode.valueOf(snapshot.interactionMode) ??
+        proto_v2.InteractionMode.INTERACTION_MODE_IDLE;
+
+    switch (mode) {
+      case proto_v2.InteractionMode.INTERACTION_MODE_CREATING:
+        return _resolveCreatingInteraction(
+          decodedState: decodedState,
+          previousInteraction: previousInteraction,
+          updateHints: updateHints,
+        );
+      case proto_v2.InteractionMode.INTERACTION_MODE_EDITING:
+        return _resolveEditingInteraction(
+          decodedState: decodedState,
+          previousInteraction: previousInteraction,
+        );
+      case proto_v2.InteractionMode.INTERACTION_MODE_TEXT_EDITING:
+        return _resolveTextEditingInteraction(
+          decodedState: decodedState,
+          previousInteraction: previousInteraction,
+          updateHints: updateHints,
+        );
+      case proto_v2.InteractionMode.INTERACTION_MODE_BOX_SELECTING:
+        return _resolveBoxSelectingInteraction(
+          previousInteraction: previousInteraction,
+        );
+      case proto_v2.InteractionMode.INTERACTION_MODE_DRAG_PENDING:
+        return _resolveDragPendingInteraction(
+          previousInteraction: previousInteraction,
+        );
+      case proto_v2.InteractionMode.INTERACTION_MODE_IDLE:
+        if (updateHints && previousInteraction is TextEditingState) {
+          _activeTextEditElementId = null;
+          _activeTextEditIsNew = false;
+          _pendingTextEditIsNew = false;
+        }
+        return const IdleState();
+    }
+
+    return const IdleState();
+  }
+
+  InteractionState _resolveCreatingInteraction({
+    required DrawState decodedState,
+    required InteractionState previousInteraction,
+    required bool updateHints,
+  }) {
+    final selectedIds = decodedState.domain.selection.selectedIds;
+    final selectedId = selectedIds.isEmpty ? null : selectedIds.first;
+    if (selectedId == null) {
+      return previousInteraction is CreatingState
+          ? previousInteraction
+          : const IdleState();
+    }
+    final element = decodedState.domain.document.getElementById(selectedId);
+    if (element == null) {
+      return previousInteraction is CreatingState
+          ? previousInteraction
+          : const IdleState();
+    }
+
+    final startPosition = switch (previousInteraction) {
+      CreatingState(:final startPosition) => startPosition,
+      _ => _creatingStartPositionHint ?? _pointFromRectTopLeft(element.rect),
+    };
+    if (updateHints) {
+      _creatingStartPositionHint ??= startPosition;
+    }
+
+    final creationMode = _resolveCreationMode(
+      element: element,
+      previousInteraction: previousInteraction,
+    );
+    final snapGuides = switch (previousInteraction) {
+      CreatingState(:final snapGuides) => snapGuides,
+      _ => const <SnapGuide>[],
+    };
+
+    return CreatingState(
+      element: element,
+      startPosition: startPosition,
+      currentRect: element.rect,
+      snapGuides: snapGuides,
+      creationMode: creationMode,
+    );
+  }
+
+  CreationMode _resolveCreationMode({
+    required ElementState element,
+    required InteractionState previousInteraction,
+  }) {
+    final data = element.data;
+    if (data is! ArrowLikeData) {
+      return const RectCreationMode();
+    }
+
+    final fixedPoints = _toArrowWorldPoints(data.points, element.rect);
+    final previousPointMode = switch (previousInteraction) {
+      CreatingState(:final creationMode)
+          when creationMode is PointCreationMode =>
+        creationMode as PointCreationMode,
+      _ => null,
+    };
+    return PointCreationMode(
+      fixedPoints: List<DrawPoint>.unmodifiable(fixedPoints),
+      currentPoint:
+          previousPointMode?.currentPoint ??
+          (fixedPoints.isEmpty ? null : fixedPoints.last),
+      sessionData: previousPointMode?.sessionData,
+    );
+  }
+
+  List<DrawPoint> _toArrowWorldPoints(
+    List<DrawPoint> normalizedPoints,
+    DrawRect rect,
+  ) {
+    final width = rect.width;
+    final height = rect.height;
+    final worldPoints = <DrawPoint>[];
+    for (final point in normalizedPoints) {
+      final isNormalized =
+          point.x >= 0.0 && point.x <= 1.0 && point.y >= 0.0 && point.y <= 1.0;
+      worldPoints.add(
+        isNormalized
+            ? DrawPoint(
+                x: rect.minX + point.x * width,
+                y: rect.minY + point.y * height,
+              )
+            : DrawPoint(x: point.x, y: point.y),
+      );
+    }
+    return worldPoints;
+  }
+
+  InteractionState _resolveTextEditingInteraction({
+    required DrawState decodedState,
+    required InteractionState previousInteraction,
+    required bool updateHints,
+  }) {
+    final previous = previousInteraction is TextEditingState
+        ? previousInteraction
+        : null;
+    final selectedIds = decodedState.domain.selection.selectedIds;
+    final selectedId = selectedIds.isEmpty
+        ? previous?.elementId
+        : selectedIds.first;
+    if (selectedId == null) {
+      return previous ?? const IdleState();
+    }
+
+    final element = decodedState.domain.document.getElementById(selectedId);
+    if (element == null || element.data is! TextData) {
+      return previous ?? const IdleState();
+    }
+    final textData = element.data as TextData;
+    final isNew = previous != null && previous.elementId == selectedId
+        ? previous.isNew
+        : (_activeTextEditElementId == selectedId
+              ? _activeTextEditIsNew
+              : _pendingTextEditIsNew);
+
+    if (updateHints) {
+      _activeTextEditElementId = selectedId;
+      _activeTextEditIsNew = isNew;
+      _pendingTextEditIsNew = false;
+    }
+
+    return TextEditingState(
+      elementId: selectedId,
+      draftData: textData,
+      rect: element.rect,
+      isNew: isNew,
+      opacity: element.opacity,
+      rotation: element.rotation,
+      initialCursorPosition:
+          previous?.initialCursorPosition ?? _textEditStartHint,
+    );
+  }
+
+  InteractionState _resolveEditingInteraction({
+    required DrawState decodedState,
+    required InteractionState previousInteraction,
+  }) {
+    if (previousInteraction is EditingState) {
+      return previousInteraction;
+    }
+
+    final selectedElements = <ElementState>[
+      for (final id in decodedState.domain.selection.selectedIds)
+        if (decodedState.domain.document.getElementById(id) case final element?)
+          element,
+    ];
+    final startPosition = _editStartHint ?? DrawPoint.zero;
+    final startBounds =
+        SelectionCalculator.computeSelectionBoundsForElements(
+          selectedElements,
+        ) ??
+        DrawRect.fromPoint(startPosition);
+    final operationId = _editOperationHint ?? EditOperationIds.move;
+
+    return EditingState(
+      operationId: operationId,
+      sessionId: 'rust_edit_${_editSessionSequence++}',
+      context: MoveEditContext(
+        startPosition: startPosition,
+        startBounds: startBounds,
+        selectedIdsAtStart: decodedState.domain.selection.selectedIds,
+        selectionVersion: decodedState.domain.selection.selectionVersion,
+        elementsVersion: decodedState.domain.document.elementsVersion,
+        elementSnapshots: const <String, ElementMoveSnapshot>{},
+      ),
+      currentTransform: MoveTransform.zero,
+    );
+  }
+
+  InteractionState _resolveBoxSelectingInteraction({
+    required InteractionState previousInteraction,
+  }) {
+    final previous = previousInteraction is BoxSelectingState
+        ? previousInteraction
+        : null;
+    final start =
+        _boxSelectStartHint ??
+        previous?.startPosition ??
+        _boxSelectCurrentHint ??
+        DrawPoint.zero;
+    final current = _boxSelectCurrentHint ?? previous?.currentPosition ?? start;
+    return BoxSelectingState(startPosition: start, currentPosition: current);
+  }
+
+  InteractionState _resolveDragPendingInteraction({
+    required InteractionState previousInteraction,
+  }) {
+    if (previousInteraction is DragPendingState) {
+      return previousInteraction;
+    }
+    return DragPendingState(
+      pointerDownPosition: _dragPendingPointerDownHint ?? DrawPoint.zero,
+      intent: _dragPendingIntentHint ?? const PendingMoveIntent(),
+    );
+  }
+
+  DrawPoint _pointFromRectTopLeft(DrawRect rect) =>
+      DrawPoint(x: rect.minX, y: rect.minY);
 
   void _validateInitAck(proto_v2.EngineInitAck ack) {
     if (_didValidateInitAck) {
@@ -1315,9 +1675,19 @@ final class _RustProtoCodec {
         });
       case proto_v2.ElementPayload_Payload.text:
         return _jsonBytes({
+          'typeId': 'text',
           'text': payload.text.text,
           'fontSize': payload.text.fontSize,
           'fontFamily': payload.text.fontFamily,
+          'color': 0xFF1E1E1E,
+          'horizontalAlign': 'left',
+          'verticalAlign': 'center',
+          'fillColor': 0,
+          'fillStyle': 'solid',
+          'strokeColor': 0xFFF8F4EC,
+          'strokeWidth': 0.0,
+          'cornerRadius': 0.0,
+          'autoResize': true,
         });
       case proto_v2.ElementPayload_Payload.serialNumber:
         return _jsonBytes({

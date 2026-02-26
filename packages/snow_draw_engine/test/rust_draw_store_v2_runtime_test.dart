@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:fixnum/fixnum.dart' as $fixnum;
 import 'package:snow_draw_engine/snow_draw_engine.dart';
+import 'package:snow_draw_engine/src/proto/engine.pb.dart' as proto;
 import 'package:snow_draw_engine/src/proto/engine_v2.pb.dart' as proto_v2;
 import 'package:test/test.dart';
 
@@ -90,6 +91,260 @@ void main() {
       );
     },
   );
+
+  test(
+    'RustDrawStore preserves creating interaction from V2 snapshots',
+    () async {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+      final context = DrawContext.withDefaults(elementRegistry: registry);
+
+      final store = RustDrawStore(
+        context: context,
+        engine: _ScriptedRustCanvasEngine(
+          (_) => proto_v2.EngineSnapshot(
+            schemaVersion: 2,
+            documentVersion: $fixnum.Int64(1),
+            selectionVersion: $fixnum.Int64(1),
+            interactionMode: proto_v2.InteractionMode.INTERACTION_MODE_CREATING,
+            camera: _cameraPayload,
+            elements: [_rectangleElementPayload(id: 'create-rect')],
+            selectedIds: const ['create-rect'],
+            historyUndoLen: $fixnum.Int64(1),
+            historyRedoLen: $fixnum.Int64(0),
+          ),
+        ),
+      );
+      addTearDown(store.dispose);
+
+      await store.dispatch(
+        const CreateElement(
+          typeId: RectangleData.typeIdToken,
+          position: DrawPoint(x: 32, y: 40),
+        ),
+      );
+
+      final interaction = store.state.application.interaction;
+      expect(interaction, isA<CreatingState>());
+      final creating = interaction as CreatingState;
+      expect(creating.element.id, 'create-rect');
+      expect(creating.startPosition, const DrawPoint(x: 32, y: 40));
+    },
+  );
+
+  test(
+    'RustDrawStore preserves text editing interaction from V2 snapshots',
+    () async {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+      final context = DrawContext.withDefaults(elementRegistry: registry);
+
+      final store = RustDrawStore(
+        context: context,
+        engine: _ScriptedRustCanvasEngine(
+          (_) => proto_v2.EngineSnapshot(
+            schemaVersion: 2,
+            documentVersion: $fixnum.Int64(3),
+            selectionVersion: $fixnum.Int64(2),
+            interactionMode:
+                proto_v2.InteractionMode.INTERACTION_MODE_TEXT_EDITING,
+            camera: _cameraPayload,
+            elements: [_textElementPayload(id: 'text-1', text: 'draft')],
+            selectedIds: const ['text-1'],
+            historyUndoLen: $fixnum.Int64(1),
+            historyRedoLen: $fixnum.Int64(0),
+          ),
+        ),
+      );
+      addTearDown(store.dispose);
+
+      await store.dispatch(
+        const StartTextEdit(position: DrawPoint(x: 12, y: 18)),
+      );
+
+      final interaction = store.state.application.interaction;
+      expect(interaction, isA<TextEditingState>());
+      final textEditing = interaction as TextEditingState;
+      expect(textEditing.elementId, 'text-1');
+      expect(textEditing.draftData.text, 'draft');
+      expect(textEditing.isNew, isTrue);
+    },
+  );
+
+  test(
+    'RustDrawStore restores drag pending metadata from action hints',
+    () async {
+      final registry = DefaultElementRegistry();
+      registerBuiltInElements(registry);
+      final context = DrawContext.withDefaults(elementRegistry: registry);
+
+      final store = RustDrawStore(
+        context: context,
+        engine: _ScriptedRustCanvasEngine(
+          (_) => proto_v2.EngineSnapshot(
+            schemaVersion: 2,
+            documentVersion: $fixnum.Int64(2),
+            selectionVersion: $fixnum.Int64(1),
+            interactionMode:
+                proto_v2.InteractionMode.INTERACTION_MODE_DRAG_PENDING,
+            camera: _cameraPayload,
+            elements: const [],
+            selectedIds: const [],
+            historyUndoLen: $fixnum.Int64(0),
+            historyRedoLen: $fixnum.Int64(0),
+          ),
+        ),
+      );
+      addTearDown(store.dispose);
+
+      await store.dispatch(
+        const SetDragPending(
+          pointerDownPosition: DrawPoint(x: 55, y: 77),
+          intent: PendingMoveIntent(),
+        ),
+      );
+
+      final interaction = store.state.application.interaction;
+      expect(interaction, isA<DragPendingState>());
+      final dragPending = interaction as DragPendingState;
+      expect(dragPending.pointerDownPosition, const DrawPoint(x: 55, y: 77));
+      expect(dragPending.intent, const PendingMoveIntent());
+    },
+  );
+}
+
+final _cameraPayload = proto_v2.CameraState(
+  position: proto_v2.DrawPoint(
+    x: 0,
+    y: 0,
+    pressure: 0,
+    timestampUs: $fixnum.Int64(0),
+  ),
+  zoom: 1,
+);
+
+proto_v2.Element _rectangleElementPayload({required String id}) =>
+    proto_v2.Element(
+      id: id,
+      elementType: proto_v2.ElementType.ELEMENT_TYPE_RECTANGLE,
+      rect: proto_v2.DrawRect(minX: 10, minY: 20, maxX: 110, maxY: 70),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      payload: proto_v2.ElementPayload(
+        rawJsonPayload: Uint8List.fromList(
+          utf8.encode(
+            jsonEncode({
+              'color': 0xFF1E1E1E,
+              'fillColor': 0,
+              'strokeWidth': 2.0,
+              'strokeStyle': 'solid',
+              'fillStyle': 'solid',
+              'cornerRadius': 4.0,
+            }),
+          ),
+        ),
+      ),
+    );
+
+proto_v2.Element _textElementPayload({
+  required String id,
+  required String text,
+}) => proto_v2.Element(
+  id: id,
+  elementType: proto_v2.ElementType.ELEMENT_TYPE_TEXT,
+  rect: proto_v2.DrawRect(minX: 20, minY: 24, maxX: 160, maxY: 52),
+  rotation: 0,
+  opacity: 1,
+  zIndex: 0,
+  payload: proto_v2.ElementPayload(
+    text: proto_v2.TextPayload(text: text, fontSize: 21.0, fontFamily: ''),
+  ),
+);
+
+final class _ScriptedRustCanvasEngine implements RustCanvasEngine {
+  _ScriptedRustCanvasEngine(this._snapshotForCommand) {
+    _outputs.add(
+      Uint8List.fromList(
+        proto_v2.EngineOutput(
+          sequence: $fixnum.Int64(0),
+          initAck: proto_v2.EngineInitAck(
+            abiVersion: 2,
+            schemaVersion: 2,
+            grantedCapabilitiesMask: $fixnum.Int64(0x1F),
+            message: 'ok',
+          ),
+        ).writeToBuffer(),
+      ),
+    );
+  }
+
+  final proto_v2.EngineSnapshot Function(proto.EngineCommand command)
+  _snapshotForCommand;
+  final _outputs = <Uint8List>[];
+
+  @override
+  int get abiVersion => 2;
+
+  @override
+  int get capabilities => 0;
+
+  @override
+  void processInputV2(Uint8List inputBytes) {
+    final input = proto_v2.EngineInput.fromBuffer(inputBytes);
+    if (input.whichPayload() != proto_v2.EngineInput_Payload.commandEvent) {
+      return;
+    }
+
+    final command = proto.EngineCommand.fromBuffer(
+      input.commandEvent.commandBytes,
+    );
+    final snapshot = _snapshotForCommand(command);
+    _outputs.add(
+      Uint8List.fromList(
+        proto_v2.EngineOutput(
+          sequence: $fixnum.Int64(1),
+          snapshot: snapshot,
+        ).writeToBuffer(),
+      ),
+    );
+  }
+
+  @override
+  Uint8List? pollOutputV2() {
+    if (_outputs.isEmpty) {
+      return null;
+    }
+    return _outputs.removeAt(0);
+  }
+
+  @override
+  void dispose() {}
+
+  @override
+  void dispatch(Uint8List commandBytes) {
+    throw UnimplementedError();
+  }
+
+  @override
+  void dispatchBatch(List<Uint8List> commandBatch) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Uint8List getSnapshotBytes() {
+    throw UnimplementedError();
+  }
+
+  @override
+  Uint8List buildFramePlanBytes(Uint8List requestBytes) {
+    throw UnimplementedError();
+  }
+
+  @override
+  Uint8List? pollEventBytes() {
+    throw UnimplementedError();
+  }
 }
 
 final class _FakeRustCanvasEngine implements RustCanvasEngine {
