@@ -97,6 +97,7 @@ class RustDrawStore implements DrawStore {
         'RustDrawStore initialization failed: missing EngineInitAck from V2 runtime.',
       );
     }
+    _pushRuntimeConfigEvent();
   }
 
   @override
@@ -207,18 +208,21 @@ class RustDrawStore implements DrawStore {
 
     if (action is UpdateConfig) {
       _configManager.update(action.config);
+      _pushRuntimeConfigEvent();
       return;
     }
     if (action is UpdateSelectionConfig) {
       _configManager.update(
         _configManager.current.copyWith(selection: action.selection),
       );
+      _pushRuntimeConfigEvent();
       return;
     }
     if (action is UpdateCanvasConfig) {
       _configManager.update(
         _configManager.current.copyWith(canvas: action.canvas),
       );
+      _pushRuntimeConfigEvent();
       return;
     }
 
@@ -296,6 +300,15 @@ class RustDrawStore implements DrawStore {
   }
 
   int _nextSequence() => _nextInputSequence++;
+
+  void _pushRuntimeConfigEvent() {
+    final input = _RustProtoCodec.encodeInputConfigEvent(
+      _RustProtoCodec.encodeRuntimeConfigPayload(_configManager.current),
+      sequence: _nextSequence(),
+    );
+    _engine.processInputV2(input);
+    _drainNativeOutputs(applySnapshot: false);
+  }
 
   void _refreshSnapshotAndNotify(DrawState next) {
     final previous = _state;
@@ -1157,6 +1170,20 @@ final class _RustProtoCodec {
     ).writeToBuffer(),
   );
 
+  static Uint8List encodeInputConfigEvent(
+    Uint8List configPayload, {
+    required int sequence,
+  }) => Uint8List.fromList(
+    proto_v2.EngineInput(
+      sequence: $fixnum.Int64(sequence),
+      configEvent: proto_v2.ConfigEvent(
+        localeTag: '',
+        scaleFactor: 0,
+        configPayload: configPayload,
+      ),
+    ).writeToBuffer(),
+  );
+
   static Uint8List encodeInputTextMetricsResponse(
     proto_v2.TextMetricsResponse response, {
     required int sequence,
@@ -1811,6 +1838,16 @@ final class _RustProtoCodec {
     }
     return Uint8List.fromList(utf8.encode(jsonEncode(payload)));
   }
+
+  static Uint8List encodeRuntimeConfigPayload(DrawConfig config) =>
+      Uint8List.fromList(
+        utf8.encode(
+          jsonEncode({
+            'grid': {'enabled': config.grid.enabled, 'size': config.grid.size},
+            'snap': {'enabled': config.snap.enabled},
+          }),
+        ),
+      );
 
   static proto.ElementType _elementTypeFromTypeValue(String typeValue) =>
       switch (typeValue) {

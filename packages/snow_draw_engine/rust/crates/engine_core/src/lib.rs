@@ -61,6 +61,7 @@ impl EngineCoreError {
 #[derive(Debug)]
 pub struct Engine {
     config: EngineConfig,
+    runtime_snap_config: RuntimeSnapConfig,
     snapshot: EngineSnapshot,
     undo_stack: Vec<EngineSnapshot>,
     redo_stack: Vec<EngineSnapshot>,
@@ -131,7 +132,7 @@ enum ArrowPointKind {
     LoopEnd,
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 struct RuntimeSnapConfig {
     grid_enabled: bool,
     object_enabled: bool,
@@ -155,6 +156,13 @@ enum RuntimeSnappingMode {
     Grid,
 }
 
+#[derive(Debug, Clone, Copy, Default)]
+struct RuntimeSnapConfigPatch {
+    grid_enabled: Option<bool>,
+    object_enabled: Option<bool>,
+    grid_size: Option<f64>,
+}
+
 impl Default for Engine {
     fn default() -> Self {
         Self::new(default_engine_config())
@@ -169,6 +177,7 @@ impl Engine {
         let next_element_sequence = config.deterministic_seed.max(1);
         Self {
             config,
+            runtime_snap_config: RuntimeSnapConfig::default(),
             snapshot,
             undo_stack: Vec::new(),
             redo_stack: Vec::new(),
@@ -438,6 +447,16 @@ impl Engine {
         Ok(())
     }
 
+    pub(crate) fn apply_runtime_config_payload(&mut self, payload: &[u8]) -> bool {
+        let Some(mut map) = decode_json_map(payload) else {
+            return false;
+        };
+        let Some(patch) = extract_runtime_snap_config_patch(&mut map) else {
+            return false;
+        };
+        self.apply_runtime_snap_config_patch(patch)
+    }
+
     pub fn get_snapshot(&self) -> EngineSnapshot {
         self.snapshot.clone()
     }
@@ -662,6 +681,62 @@ impl Engine {
         self.sync_history_lengths();
     }
 
+    fn apply_runtime_snap_config_patch(&mut self, patch: RuntimeSnapConfigPatch) -> bool {
+        let mut next = self.runtime_snap_config;
+        let mut changed = false;
+        if let Some(value) = patch.grid_enabled {
+            if next.grid_enabled != value {
+                next.grid_enabled = value;
+                changed = true;
+            }
+        }
+        if let Some(value) = patch.object_enabled {
+            if next.object_enabled != value {
+                next.object_enabled = value;
+                changed = true;
+            }
+        }
+        if let Some(value) = patch.grid_size {
+            let resolved = sanitize_grid_size(value);
+            if (next.grid_size - resolved).abs() > f64::EPSILON {
+                next.grid_size = resolved;
+                changed = true;
+            }
+        }
+        if changed {
+            self.runtime_snap_config = next;
+        }
+        changed
+    }
+
+    fn resolve_runtime_snapping_mode(&self, snap_override: bool) -> RuntimeSnappingMode {
+        if snap_override {
+            return RuntimeSnappingMode::None;
+        }
+        if self.runtime_snap_config.object_enabled {
+            if self.runtime_snap_config.grid_enabled {
+                return RuntimeSnappingMode::Grid;
+            }
+            return RuntimeSnappingMode::Object;
+        }
+        if self.runtime_snap_config.grid_enabled {
+            return RuntimeSnappingMode::Grid;
+        }
+        RuntimeSnappingMode::None
+    }
+
+    fn maybe_snap_point(&self, point: DrawPoint, mode: RuntimeSnappingMode) -> DrawPoint {
+        let RuntimeSnappingMode::Grid = mode else {
+            return point;
+        };
+        DrawPoint {
+            x: snap_value_to_grid(point.x, self.runtime_snap_config.grid_size),
+            y: snap_value_to_grid(point.y, self.runtime_snap_config.grid_size),
+            pressure: point.pressure,
+            timestamp_us: point.timestamp_us,
+        }
+    }
+
     fn apply_select(&mut self, payload: SelectElementCommand) {
         let mut selected = selected_set(&self.snapshot);
         if payload.add_to_selection {
@@ -700,6 +775,7 @@ impl Engine {
         } else {
             payload.element_id
         };
+        let snap_mode = self.resolve_runtime_snapping_mode(payload.snap_override);
 
         let point = payload.position.unwrap_or(DrawPoint {
             x: 0.0,
@@ -707,6 +783,7 @@ impl Engine {
             pressure: 0.0,
             timestamp_us: 0,
         });
+        let point = self.maybe_snap_point(point, snap_mode);
 
         let z_index = self
             .snapshot
@@ -753,6 +830,8 @@ impl Engine {
         let Some(last_position) = payload.positions.last().cloned() else {
             return;
         };
+        let snap_mode = self.resolve_runtime_snapping_mode(payload.snap_override);
+        let last_position = self.maybe_snap_point(last_position, snap_mode);
         let creating_start_position = self.creating_start_position.clone();
         let Some(element) = self.element_mut(&creating_id) else {
             return;
@@ -788,6 +867,8 @@ impl Engine {
         let Some(position) = payload.position else {
             return;
         };
+        let snap_mode = self.resolve_runtime_snapping_mode(payload.snap_override);
+        let position = self.maybe_snap_point(position, snap_mode);
         let Some(element) = self.element_mut(&creating_id) else {
             return;
         };
@@ -1067,9 +1148,14 @@ impl Engine {
     }
 
     fn apply_update_global_elements(&mut self, payload: UpdateGlobalElementsCommand) {
-        let normalized = decode_json_map(&payload.payload)
-            .map(|map| encode_json_map(&map))
-            .unwrap_or(payload.payload);
+        let normalized = if let Some(mut map) = decode_json_map(&payload.payload) {
+            if let Some(patch) = extract_runtime_snap_config_patch(&mut map) {
+                self.apply_runtime_snap_config_patch(patch);
+            }
+            encode_global_payload_map(map)
+        } else {
+            payload.payload
+        };
         if self.snapshot.global_elements_payload != normalized {
             self.snapshot.global_elements_payload = normalized;
             self.snapshot.document_version += 1;
@@ -1452,6 +1538,7 @@ impl Engine {
                 session.start_position,
                 current,
                 &session.baseline_rects,
+                modifiers.snap_override,
             ),
             EditSessionOperation::Resize { mode } => self.apply_update_resize_edit(
                 session.start_position,
@@ -1460,6 +1547,7 @@ impl Engine {
                 *mode,
                 modifiers.maintain_aspect_ratio,
                 modifiers.from_center,
+                modifiers.snap_override,
             ),
             EditSessionOperation::Rotate { pivot, snap_angle } => self.apply_update_rotate_edit(
                 session.start_position,
@@ -1482,6 +1570,7 @@ impl Engine {
                 *point_kind,
                 *point_index,
                 *delete_point_on_finish,
+                modifiers.snap_override,
             ),
             EditSessionOperation::Unknown => false,
         };
@@ -1559,9 +1648,25 @@ impl Engine {
         start: DrawPoint,
         current: DrawPoint,
         baseline_rects: &BTreeMap<String, DrawRect>,
+        snap_override: bool,
     ) -> bool {
-        let dx = current.x - start.x;
-        let dy = current.y - start.y;
+        let mut dx = current.x - start.x;
+        let mut dy = current.y - start.y;
+        let snap_mode = self.resolve_runtime_snapping_mode(snap_override);
+        if matches!(snap_mode, RuntimeSnappingMode::Grid) {
+            if let Some(bounds) = selection_bounds_from_rects(baseline_rects) {
+                let snapped_min_x =
+                    snap_value_to_grid(bounds.min_x + dx, self.runtime_snap_config.grid_size);
+                let snapped_min_y =
+                    snap_value_to_grid(bounds.min_y + dy, self.runtime_snap_config.grid_size);
+                dx = snapped_min_x - bounds.min_x;
+                dy = snapped_min_y - bounds.min_y;
+            } else {
+                let snapped = self.maybe_snap_point(current, snap_mode);
+                dx = snapped.x - start.x;
+                dy = snapped.y - start.y;
+            }
+        }
         let mut changed = false;
         for (element_id, base_rect) in baseline_rects {
             if let Some(element) = self.element_mut(element_id) {
@@ -1585,9 +1690,11 @@ impl Engine {
         mode: ResizeMode,
         maintain_aspect_ratio: bool,
         from_center: bool,
+        snap_override: bool,
     ) -> bool {
         let dx = current.x - start.x;
         let dy = current.y - start.y;
+        let snap_mode = self.resolve_runtime_snapping_mode(snap_override);
         let mut changed = false;
         let (move_left, move_right, move_top, move_bottom) = resize_mode_axes(mode);
 
@@ -1633,7 +1740,7 @@ impl Engine {
                 }
             }
 
-            let rect = if from_center {
+            let mut rect = if from_center {
                 DrawRect {
                     min_x: center.x - width / 2.0,
                     min_y: center.y - height / 2.0,
@@ -1698,6 +1805,9 @@ impl Engine {
                     max_y,
                 })
             };
+            if matches!(snap_mode, RuntimeSnappingMode::Grid) {
+                rect = snap_rect_to_grid(&rect, self.runtime_snap_config.grid_size);
+            }
             if let Some(element) = self.element_mut(element_id) {
                 element.rect = Some(rect);
                 changed = true;
@@ -1756,10 +1866,13 @@ impl Engine {
         point_kind: ArrowPointKind,
         point_index: usize,
         delete_point_on_finish: bool,
+        snap_override: bool,
     ) -> bool {
         if delete_point_on_finish {
             return false;
         }
+        let snap_mode = self.resolve_runtime_snapping_mode(snap_override);
+        let current = self.maybe_snap_point(current, snap_mode);
 
         let Some(base_rect) = session.baseline_rects.get(element_id) else {
             return false;
@@ -2834,11 +2947,124 @@ fn clamp_zoom(zoom: f64) -> f64 {
     zoom.clamp(CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM)
 }
 
+fn sanitize_grid_size(value: f64) -> f64 {
+    if value.is_finite() && value > 0.0 {
+        value.max(1.0)
+    } else {
+        RuntimeSnapConfig::default().grid_size
+    }
+}
+
+fn snap_value_to_grid(value: f64, grid_size: f64) -> f64 {
+    let size = sanitize_grid_size(grid_size);
+    (value / size).round() * size
+}
+
+fn snap_rect_to_grid(rect: &DrawRect, grid_size: f64) -> DrawRect {
+    normalize_rect(DrawRect {
+        min_x: snap_value_to_grid(rect.min_x, grid_size),
+        min_y: snap_value_to_grid(rect.min_y, grid_size),
+        max_x: snap_value_to_grid(rect.max_x, grid_size),
+        max_y: snap_value_to_grid(rect.max_y, grid_size),
+    })
+}
+
+fn extract_runtime_snap_config_patch(
+    map: &mut JsonMap<String, JsonValue>,
+) -> Option<RuntimeSnapConfigPatch> {
+    if let Some(value) = map.remove(RUNTIME_CONFIG_KEY) {
+        return runtime_snap_config_patch_from_value(&value);
+    }
+
+    let mut runtime_map = JsonMap::new();
+    for key in [
+        "grid",
+        "snap",
+        "objectSnap",
+        "gridEnabled",
+        "gridSize",
+        "objectSnapEnabled",
+    ] {
+        if let Some(value) = map.remove(key) {
+            runtime_map.insert(key.to_string(), value);
+        }
+    }
+    if runtime_map.is_empty() {
+        return None;
+    }
+    runtime_snap_config_patch_from_map(&runtime_map)
+}
+
+fn runtime_snap_config_patch_from_value(value: &JsonValue) -> Option<RuntimeSnapConfigPatch> {
+    value
+        .as_object()
+        .and_then(runtime_snap_config_patch_from_map)
+}
+
+fn runtime_snap_config_patch_from_map(
+    map: &JsonMap<String, JsonValue>,
+) -> Option<RuntimeSnapConfigPatch> {
+    let mut patch = RuntimeSnapConfigPatch::default();
+    let mut found = false;
+
+    if let Some(grid) = map.get("grid").and_then(JsonValue::as_object) {
+        if let Some(enabled) = grid.get("enabled").and_then(JsonValue::as_bool) {
+            patch.grid_enabled = Some(enabled);
+            found = true;
+        }
+        if let Some(size) = grid.get("size").and_then(JsonValue::as_f64) {
+            patch.grid_size = Some(size);
+            found = true;
+        }
+    }
+
+    if let Some(snap) = map.get("snap").and_then(JsonValue::as_object) {
+        if let Some(enabled) = snap.get("enabled").and_then(JsonValue::as_bool) {
+            patch.object_enabled = Some(enabled);
+            found = true;
+        }
+    }
+    if let Some(snap) = map.get("objectSnap").and_then(JsonValue::as_object) {
+        if let Some(enabled) = snap.get("enabled").and_then(JsonValue::as_bool) {
+            patch.object_enabled = Some(enabled);
+            found = true;
+        }
+    }
+
+    if let Some(enabled) = map.get("gridEnabled").and_then(JsonValue::as_bool) {
+        patch.grid_enabled = Some(enabled);
+        found = true;
+    }
+    if let Some(size) = map.get("gridSize").and_then(JsonValue::as_f64) {
+        patch.grid_size = Some(size);
+        found = true;
+    }
+    if let Some(enabled) = map.get("objectSnapEnabled").and_then(JsonValue::as_bool) {
+        patch.object_enabled = Some(enabled);
+        found = true;
+    }
+
+    if found {
+        Some(patch)
+    } else {
+        None
+    }
+}
+
+fn encode_global_payload_map(map: JsonMap<String, JsonValue>) -> Vec<u8> {
+    if map.is_empty() {
+        Vec::new()
+    } else {
+        encode_json_map(&map)
+    }
+}
+
 #[derive(Debug, Clone, Copy, Default)]
 struct EditModifiersPayload {
     maintain_aspect_ratio: bool,
     from_center: bool,
     discrete_angle: bool,
+    snap_override: bool,
 }
 
 fn parse_edit_modifiers(bytes: &[u8]) -> EditModifiersPayload {
@@ -2856,6 +3082,10 @@ fn parse_edit_modifiers(bytes: &[u8]) -> EditModifiersPayload {
         .unwrap_or(false);
     parsed.discrete_angle = map
         .get("discreteAngle")
+        .and_then(JsonValue::as_bool)
+        .unwrap_or(false);
+    parsed.snap_override = map
+        .get("snapOverride")
         .and_then(JsonValue::as_bool)
         .unwrap_or(false);
     parsed
@@ -5254,6 +5484,231 @@ mod tests {
             .expect("restored arrow");
         assert_eq!(restored.rect, original.rect);
         assert_eq!(restored.payload, original.payload);
+    }
+
+    #[test]
+    fn runtime_config_payload_updates_snap_config_without_touching_snapshot_versions() {
+        let mut engine = Engine::default();
+        let initial_document_version = engine.snapshot.document_version;
+        let initial_selection_version = engine.snapshot.selection_version;
+
+        let changed = engine.apply_runtime_config_payload(
+            br#"{"grid":{"enabled":true,"size":10.0},"snap":{"enabled":false}}"#,
+        );
+
+        assert!(changed);
+        assert!(engine.runtime_snap_config.grid_enabled);
+        assert!(!engine.runtime_snap_config.object_enabled);
+        assert!((engine.runtime_snap_config.grid_size - 10.0).abs() < 1e-9);
+        assert_eq!(engine.snapshot.document_version, initial_document_version);
+        assert_eq!(engine.snapshot.selection_version, initial_selection_version);
+    }
+
+    #[test]
+    fn create_and_update_creating_respect_grid_snap_override() {
+        let mut engine = Engine::default();
+        assert!(engine.apply_runtime_config_payload(br#"{"grid":{"enabled":true,"size":10.0}}"#,));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "snap-create".to_string(),
+                    position: Some(DrawPoint {
+                        x: 13.0,
+                        y: 27.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateCreatingElement as i32,
+                payload: Some(CommandPayload::UpdateCreatingElement(
+                    UpdateCreatingElementCommand {
+                        positions: vec![DrawPoint {
+                            x: 46.0,
+                            y: 44.0,
+                            pressure: 0.0,
+                            timestamp_us: 0,
+                        }],
+                        maintain_aspect_ratio: false,
+                        create_from_center: false,
+                        snap_override: false,
+                    },
+                )),
+            })
+            .expect("update");
+        let snapped = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "snap-create")
+            .and_then(|entry| entry.rect.clone())
+            .expect("snapped rect");
+        assert_eq!(snapped.min_x, 10.0);
+        assert_eq!(snapped.min_y, 30.0);
+        assert_eq!(snapped.max_x, 50.0);
+        assert_eq!(snapped.max_y, 40.0);
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CancelCreateElement as i32,
+                payload: None,
+            })
+            .expect("cancel");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "no-snap-create".to_string(),
+                    position: Some(DrawPoint {
+                        x: 13.0,
+                        y: 27.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create no snap");
+        let unsnapped = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "no-snap-create")
+            .and_then(|entry| entry.rect.clone())
+            .expect("unsnapped rect");
+        assert_eq!(unsnapped.min_x, 13.0);
+        assert_eq!(unsnapped.min_y, 27.0);
+    }
+
+    #[test]
+    fn move_edit_applies_grid_snap_unless_snap_override_is_enabled() {
+        let mut engine = Engine::default();
+        assert!(engine.apply_runtime_config_payload(br#"{"grid":{"enabled":true,"size":10.0}}"#,));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Rectangle as i32,
+                    element_id: "snap-move".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: Vec::new(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: true,
+                })),
+            })
+            .expect("create");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::FinishCreateElement as i32,
+                payload: None,
+            })
+            .expect("finish create");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "move".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"move"}"#.to_vec(),
+                })),
+            })
+            .expect("start move");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 13.0,
+                        y: 27.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: br#"{"snapOverride":false}"#.to_vec(),
+                })),
+            })
+            .expect("move snapped");
+        let snapped = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "snap-move")
+            .and_then(|entry| entry.rect.clone())
+            .expect("snapped rect");
+        assert_eq!(snapped.min_x, 10.0);
+        assert_eq!(snapped.min_y, 30.0);
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CancelEdit as i32,
+                payload: None,
+            })
+            .expect("cancel edit");
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "move".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"move"}"#.to_vec(),
+                })),
+            })
+            .expect("start move no snap");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 13.0,
+                        y: 27.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: br#"{"snapOverride":true}"#.to_vec(),
+                })),
+            })
+            .expect("move no snap");
+        let unsnapped = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "snap-move")
+            .and_then(|entry| entry.rect.clone())
+            .expect("unsnapped rect");
+        assert_eq!(unsnapped.min_x, 13.0);
+        assert_eq!(unsnapped.min_y, 27.0);
     }
 
     #[test]

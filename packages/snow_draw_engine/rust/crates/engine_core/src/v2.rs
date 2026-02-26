@@ -141,7 +141,15 @@ impl EngineV2 {
                 if event.scale_factor.is_finite() && event.scale_factor > 0.0 {
                     self.scale_factor = event.scale_factor;
                 }
-                self.push_debug("engine_v2 config updated");
+                let runtime_config_updated = if event.config_payload.is_empty() {
+                    false
+                } else {
+                    self.engine
+                        .apply_runtime_config_payload(&event.config_payload)
+                };
+                self.push_debug(format!(
+                    "engine_v2 config updated (runtime_config_updated={runtime_config_updated})"
+                ));
             }
             V2InputPayload::PointerEvent(event) => {
                 self.push_output(V2OutputPayload::HostRequest(v2::HostRequest {
@@ -711,6 +719,66 @@ mod tests {
             }
             _ => panic!("expected host request output"),
         }
+    }
+
+    #[test]
+    fn config_event_payload_updates_runtime_snap_behavior() {
+        let mut engine = EngineV2::from_init_request(v2::default_init_request());
+        let _ = engine.poll_output();
+
+        engine
+            .process_input(v2::EngineInput {
+                sequence: 3,
+                payload: Some(V2InputPayload::ConfigEvent(v2::ConfigEvent {
+                    locale_tag: String::new(),
+                    scale_factor: 0.0,
+                    config_payload: br#"{"grid":{"enabled":true,"size":10.0}}"#.to_vec(),
+                })),
+            })
+            .expect("process config event");
+        while engine.poll_output().is_some() {}
+
+        let command = EngineCommand {
+            kind: EngineCommandKind::CreateElement as i32,
+            payload: Some(V1CommandPayload::CreateElement(CreateElementCommand {
+                element_type: ElementType::Rectangle as i32,
+                element_id: "config-snap".to_string(),
+                position: Some(DrawPoint {
+                    x: 13.0,
+                    y: 27.0,
+                    pressure: 0.0,
+                    timestamp_us: 0,
+                }),
+                initial_payload: Vec::new(),
+                maintain_aspect_ratio: false,
+                create_from_center: false,
+                snap_override: false,
+            })),
+        };
+        engine
+            .process_input(v2::EngineInput {
+                sequence: 4,
+                payload: Some(V2InputPayload::CommandEvent(v2::CommandEvent {
+                    command_bytes: v1::encode_message(&command),
+                })),
+            })
+            .expect("process create command");
+
+        let mut snapshot_after_create = None;
+        while let Some(output) = engine.poll_output() {
+            if let Some(V2OutputPayload::Snapshot(snapshot)) = output.payload {
+                snapshot_after_create = Some(snapshot);
+            }
+        }
+        let snapshot = snapshot_after_create.expect("snapshot after create");
+        let element = snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "config-snap")
+            .expect("created element");
+        let rect = element.rect.as_ref().expect("rect");
+        assert_eq!(rect.min_x, 10.0);
+        assert_eq!(rect.min_y, 30.0);
     }
 
     #[test]
