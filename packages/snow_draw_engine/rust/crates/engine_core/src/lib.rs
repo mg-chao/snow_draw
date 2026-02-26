@@ -28,6 +28,15 @@ const CAMERA_MIN_ZOOM: f64 = 0.1;
 const CAMERA_MAX_ZOOM: f64 = 30.0;
 const TEXT_MIN_WIDTH: f64 = 24.0;
 const ARROW_POINT_LOOP_THRESHOLD: f64 = 9.0;
+const GAP_CANDIDATE_EPSILON: f64 = 0.0001;
+const GAP_STRENGTH_SLACK: f64 = 0.05;
+const GAP_DISTANCE_SLACK_FACTOR: f64 = 0.05;
+const GAP_DISTANCE_SLACK_MAX: f64 = 0.5;
+const GAP_DISTANCE_WEIGHT: f64 = 0.7;
+const GAP_FREQUENCY_WEIGHT: f64 = 0.2;
+const GAP_KIND_WEIGHT: f64 = 0.1;
+const GAP_KIND_CENTER_STRENGTH: f64 = 1.0;
+const GAP_KIND_SIDE_STRENGTH: f64 = 0.75;
 const RUNTIME_CONFIG_KEY: &str = "__runtimeConfig";
 const RUNTIME_BOOTSTRAP_SNAPSHOT_KEY: &str = "__bootstrapSnapshotV1ProtoBase64";
 
@@ -219,6 +228,38 @@ struct GapSnapMatch {
     start: f64,
     end: f64,
     size: f64,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum GapSnapKind {
+    Center,
+    Side,
+}
+
+#[derive(Debug, Clone, Copy)]
+enum GapNeighborDirection {
+    Before,
+    After,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct GapCandidate {
+    snap: GapSnapMatch,
+    frequency: usize,
+    kind: GapSnapKind,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct GapSegment {
+    gap_start: f64,
+    gap_end: f64,
+    gap: f64,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct GapSizeBucket {
+    size: f64,
+    count: usize,
 }
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -987,12 +1028,12 @@ impl Engine {
             None
         };
         let x_gap = if self.runtime_snap_config.object_gap_enabled && x_match.is_none() {
-            best_gap_center_match(target_rect, &reference_rects, SnapAxis::X, max_distance)
+            best_gap_match(target_rect, &reference_rects, SnapAxis::X, max_distance)
         } else {
             None
         };
         let y_gap = if self.runtime_snap_config.object_gap_enabled && y_match.is_none() {
-            best_gap_center_match(target_rect, &reference_rects, SnapAxis::Y, max_distance)
+            best_gap_match(target_rect, &reference_rects, SnapAxis::Y, max_distance)
         } else {
             None
         };
@@ -3782,7 +3823,7 @@ fn best_anchor_match(
     }
 }
 
-fn best_gap_center_match(
+fn best_gap_match(
     target_rect: &DrawRect,
     reference_rects: &[DrawRect],
     axis: SnapAxis,
@@ -3792,57 +3833,287 @@ fn best_gap_center_match(
         return None;
     }
 
+    let overlapping = gap_reference_rects(target_rect, reference_rects, axis);
+    if overlapping.len() < 2 {
+        return None;
+    }
+
+    let segments = gap_segments(&overlapping, axis);
+    if segments.is_empty() {
+        return None;
+    }
+
+    let buckets = gap_size_buckets(&segments);
+    if buckets.is_empty() {
+        return None;
+    }
+
+    let target_start = axis_rect_min(target_rect, axis);
+    let target_size = axis_rect_size(target_rect, axis);
+    let before_neighbor =
+        closest_gap_neighbor(target_rect, &overlapping, axis, GapNeighborDirection::Before);
+    let after_neighbor =
+        closest_gap_neighbor(target_rect, &overlapping, axis, GapNeighborDirection::After);
+
+    let mut candidates = Vec::new();
+
+    for segment in &segments {
+        let desired_start = segment.gap_start + (segment.gap - target_size) * 0.5;
+        let offset = desired_start - target_start;
+        let frequency = gap_frequency_for(&buckets, segment.gap);
+        maybe_push_gap_candidate(
+            &mut candidates,
+            GapCandidate {
+                snap: GapSnapMatch {
+                    offset,
+                    start: segment.gap_start,
+                    end: segment.gap_end,
+                    size: segment.gap,
+                },
+                frequency,
+                kind: GapSnapKind::Center,
+            },
+            max_distance,
+        );
+    }
+
+    for bucket in &buckets {
+        if let Some(neighbor) = before_neighbor.as_ref() {
+            let neighbor_edge = axis_rect_max(neighbor, axis);
+            let desired_start = neighbor_edge + bucket.size;
+            let offset = desired_start - target_start;
+            maybe_push_gap_candidate(
+                &mut candidates,
+                GapCandidate {
+                    snap: GapSnapMatch {
+                        offset,
+                        start: neighbor_edge,
+                        end: desired_start,
+                        size: bucket.size,
+                    },
+                    frequency: bucket.count,
+                    kind: GapSnapKind::Side,
+                },
+                max_distance,
+            );
+        }
+        if let Some(neighbor) = after_neighbor.as_ref() {
+            let neighbor_edge = axis_rect_min(neighbor, axis);
+            let desired_start = neighbor_edge - bucket.size - target_size;
+            let target_end = desired_start + target_size;
+            let offset = desired_start - target_start;
+            maybe_push_gap_candidate(
+                &mut candidates,
+                GapCandidate {
+                    snap: GapSnapMatch {
+                        offset,
+                        start: target_end,
+                        end: neighbor_edge,
+                        size: bucket.size,
+                    },
+                    frequency: bucket.count,
+                    kind: GapSnapKind::Side,
+                },
+                max_distance,
+            );
+        }
+    }
+
+    select_best_gap_candidate(&candidates, max_distance).map(|candidate| candidate.snap)
+}
+
+fn gap_reference_rects(
+    target_rect: &DrawRect,
+    reference_rects: &[DrawRect],
+    axis: SnapAxis,
+) -> Vec<DrawRect> {
     let mut overlapping = reference_rects
         .iter()
         .filter(|rect| rects_overlap_perpendicular_axis(target_rect, rect, axis))
         .cloned()
         .collect::<Vec<_>>();
-    if overlapping.len() < 2 {
-        return None;
-    }
     overlapping.sort_by(|left, right| {
         axis_rect_min(left, axis)
             .total_cmp(&axis_rect_min(right, axis))
             .then_with(|| axis_rect_max(left, axis).total_cmp(&axis_rect_max(right, axis)))
     });
+    overlapping
+}
 
-    let target_size = axis_rect_size(target_rect, axis);
-    let target_start = axis_rect_min(target_rect, axis);
-    let mut best_match = None;
-    let mut best_abs = max_distance + f64::EPSILON;
-
-    for index in 0..(overlapping.len() - 1) {
-        let before = &overlapping[index];
-        let after = &overlapping[index + 1];
+fn gap_segments(sorted_rects: &[DrawRect], axis: SnapAxis) -> Vec<GapSegment> {
+    if sorted_rects.len() < 2 {
+        return Vec::new();
+    }
+    let mut segments = Vec::new();
+    for index in 0..(sorted_rects.len() - 1) {
+        let before = &sorted_rects[index];
+        let after = &sorted_rects[index + 1];
         let gap_start = axis_rect_max(before, axis);
         let gap_end = axis_rect_min(after, axis);
-        let gap_size = gap_end - gap_start;
-        if !gap_size.is_finite() || gap_size <= 0.0 {
-            continue;
-        }
-
-        let desired_start = gap_start + (gap_size - target_size) * 0.5;
-        let offset = desired_start - target_start;
-        let abs = offset.abs();
-        if abs > max_distance {
-            continue;
-        }
-        if abs + f64::EPSILON < best_abs {
-            best_abs = abs;
-            best_match = Some(GapSnapMatch {
-                offset,
-                start: gap_start,
-                end: gap_end,
-                size: gap_size,
+        let gap = gap_end - gap_start;
+        if gap > 0.0 && gap.is_finite() {
+            segments.push(GapSegment {
+                gap_start,
+                gap_end,
+                gap,
             });
         }
     }
+    segments
+}
 
-    if best_abs <= max_distance {
-        best_match
-    } else {
-        None
+fn gap_size_buckets(segments: &[GapSegment]) -> Vec<GapSizeBucket> {
+    let mut buckets: Vec<GapSizeBucket> = Vec::new();
+    for segment in segments {
+        if let Some(bucket) = buckets
+            .iter_mut()
+            .find(|bucket| (bucket.size - segment.gap).abs() <= GAP_CANDIDATE_EPSILON)
+        {
+            bucket.count += 1;
+        } else {
+            buckets.push(GapSizeBucket {
+                size: segment.gap,
+                count: 1,
+            });
+        }
     }
+    buckets
+}
+
+fn gap_frequency_for(buckets: &[GapSizeBucket], gap: f64) -> usize {
+    buckets
+        .iter()
+        .find(|bucket| (bucket.size - gap).abs() <= GAP_CANDIDATE_EPSILON)
+        .map(|bucket| bucket.count)
+        .unwrap_or(0)
+}
+
+fn closest_gap_neighbor(
+    target_rect: &DrawRect,
+    reference_rects: &[DrawRect],
+    axis: SnapAxis,
+    direction: GapNeighborDirection,
+) -> Option<DrawRect> {
+    let target_min = axis_rect_min(target_rect, axis);
+    let target_max = axis_rect_max(target_rect, axis);
+    let mut best = None;
+    let mut best_distance = f64::INFINITY;
+
+    for rect in reference_rects {
+        let distance = match direction {
+            GapNeighborDirection::Before => target_min - axis_rect_max(rect, axis),
+            GapNeighborDirection::After => axis_rect_min(rect, axis) - target_max,
+        };
+        if distance < -GAP_CANDIDATE_EPSILON || distance > best_distance {
+            continue;
+        }
+        best_distance = distance;
+        best = Some(rect.clone());
+    }
+
+    best
+}
+
+fn maybe_push_gap_candidate(
+    candidates: &mut Vec<GapCandidate>,
+    candidate: GapCandidate,
+    max_distance: f64,
+) {
+    if candidate.snap.offset.abs() > max_distance {
+        return;
+    }
+    if !candidate.snap.start.is_finite()
+        || !candidate.snap.end.is_finite()
+        || !candidate.snap.size.is_finite()
+        || candidate.snap.size <= 0.0
+    {
+        return;
+    }
+    candidates.push(candidate);
+}
+
+fn select_best_gap_candidate(candidates: &[GapCandidate], max_distance: f64) -> Option<GapCandidate> {
+    let mut best = None;
+    for candidate in candidates {
+        if best
+            .map(|current| is_better_gap_candidate(candidate, &current, max_distance))
+            .unwrap_or(true)
+        {
+            best = Some(*candidate);
+        }
+    }
+    best
+}
+
+fn is_better_gap_candidate(
+    left: &GapCandidate,
+    right: &GapCandidate,
+    max_distance: f64,
+) -> bool {
+    let left_strength = gap_candidate_strength(left, max_distance);
+    let right_strength = gap_candidate_strength(right, max_distance);
+    let strength_delta = left_strength - right_strength;
+    if strength_delta.abs() > GAP_STRENGTH_SLACK {
+        return strength_delta > 0.0;
+    }
+
+    let left_exact = left.snap.offset.abs() <= GAP_CANDIDATE_EPSILON;
+    let right_exact = right.snap.offset.abs() <= GAP_CANDIDATE_EPSILON;
+    if left_exact != right_exact {
+        return left_exact;
+    }
+
+    let left_distance = left.snap.offset.abs();
+    let right_distance = right.snap.offset.abs();
+    let distance_delta = left_distance - right_distance;
+    if distance_delta.abs() > gap_distance_slack(max_distance) {
+        return distance_delta < 0.0;
+    }
+
+    if left.frequency != right.frequency {
+        return left.frequency > right.frequency;
+    }
+
+    if left.kind != right.kind {
+        return left.kind == GapSnapKind::Center;
+    }
+
+    if distance_delta.abs() > GAP_CANDIDATE_EPSILON {
+        return distance_delta < 0.0;
+    }
+
+    false
+}
+
+fn gap_candidate_strength(candidate: &GapCandidate, max_distance: f64) -> f64 {
+    let distance_strength = if max_distance <= f64::EPSILON {
+        0.0
+    } else {
+        clamp_unit(1.0 - (candidate.snap.offset.abs() / max_distance))
+    };
+    let frequency_strength = if candidate.frequency == 0 {
+        0.0
+    } else {
+        1.0 - (1.0 / ((candidate.frequency as f64) + 1.0))
+    };
+    let kind_strength = if candidate.kind == GapSnapKind::Center {
+        GAP_KIND_CENTER_STRENGTH
+    } else {
+        GAP_KIND_SIDE_STRENGTH
+    };
+    clamp_unit(
+        distance_strength * GAP_DISTANCE_WEIGHT
+            + frequency_strength * GAP_FREQUENCY_WEIGHT
+            + kind_strength * GAP_KIND_WEIGHT,
+    )
+}
+
+fn gap_distance_slack(max_distance: f64) -> f64 {
+    (max_distance * GAP_DISTANCE_SLACK_FACTOR).min(GAP_DISTANCE_SLACK_MAX)
+}
+
+fn clamp_unit(value: f64) -> f64 {
+    value.clamp(0.0, 1.0)
 }
 
 fn object_snap_guides_for_rect(rect: &DrawRect, snap: &ObjectSnapResult) -> Vec<JsonValue> {
@@ -7964,6 +8235,136 @@ mod tests {
         assert!(guides.iter().any(|guide| {
             guide.get("kind").and_then(serde_json::Value::as_str) == Some("gap")
                 && guide.get("axis").and_then(serde_json::Value::as_str) == Some("horizontal")
+        }));
+    }
+
+    #[test]
+    fn move_edit_applies_side_gap_snap_when_point_snap_disabled() {
+        let mut engine = Engine::default();
+        engine.snapshot.elements = vec![
+            Element {
+                id: "gap-a".to_string(),
+                element_type: ElementType::Rectangle as i32,
+                rect: Some(DrawRect {
+                    min_x: 0.0,
+                    min_y: 0.0,
+                    max_x: 10.0,
+                    max_y: 10.0,
+                }),
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index: 0,
+                payload: br#"{"typeId":"rectangle"}"#.to_vec(),
+            },
+            Element {
+                id: "gap-b".to_string(),
+                element_type: ElementType::Rectangle as i32,
+                rect: Some(DrawRect {
+                    min_x: 20.0,
+                    min_y: 0.0,
+                    max_x: 30.0,
+                    max_y: 10.0,
+                }),
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index: 1,
+                payload: br#"{"typeId":"rectangle"}"#.to_vec(),
+            },
+            Element {
+                id: "gap-c".to_string(),
+                element_type: ElementType::Rectangle as i32,
+                rect: Some(DrawRect {
+                    min_x: 40.0,
+                    min_y: 0.0,
+                    max_x: 50.0,
+                    max_y: 10.0,
+                }),
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index: 2,
+                payload: br#"{"typeId":"rectangle"}"#.to_vec(),
+            },
+            Element {
+                id: "gap-target-side".to_string(),
+                element_type: ElementType::Rectangle as i32,
+                rect: Some(DrawRect {
+                    min_x: 55.0,
+                    min_y: 0.0,
+                    max_x: 65.0,
+                    max_y: 10.0,
+                }),
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index: 3,
+                payload: br#"{"typeId":"rectangle"}"#.to_vec(),
+            },
+        ];
+        engine.snapshot.selected_ids = vec!["gap-target-side".to_string()];
+
+        assert!(engine.apply_runtime_config_payload(
+            br#"{"snap":{"enabled":true,"distance":6.0,"enablePointSnaps":false,"enableGapSnaps":true}}"#,
+        ));
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::StartEdit as i32,
+                payload: Some(CommandPayload::StartEdit(engine_proto::StartEditCommand {
+                    operation_id: "move".to_string(),
+                    position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    params: br#"{"type":"move"}"#.to_vec(),
+                })),
+            })
+            .expect("start move");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::UpdateEdit as i32,
+                payload: Some(CommandPayload::UpdateEdit(UpdateEditCommand {
+                    current_position: Some(DrawPoint {
+                        x: 0.0,
+                        y: 0.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    modifiers: br#"{"snapOverride":false}"#.to_vec(),
+                })),
+            })
+            .expect("update move");
+
+        let snapped = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|entry| entry.id == "gap-target-side")
+            .and_then(|entry| entry.rect.clone())
+            .expect("snapped side target");
+        assert_eq!(snapped.min_x, 60.0);
+        assert_eq!(snapped.max_x, 70.0);
+
+        let plan = engine.build_frame_plan(FramePlanRequest {
+            viewport: None,
+            locale_tag: String::new(),
+            scale_factor: 1.0,
+        });
+        let snap_guides = plan
+            .tasks
+            .iter()
+            .find(|task| task.kind == FrameTaskKind::SnapGuides as i32)
+            .expect("snap guides task");
+        let payload =
+            serde_json::from_slice::<serde_json::Value>(&snap_guides.payload).expect("payload");
+        let guides = payload
+            .get("guides")
+            .and_then(serde_json::Value::as_array)
+            .expect("guides");
+        assert!(guides.iter().any(|guide| {
+            guide.get("kind").and_then(serde_json::Value::as_str) == Some("gap")
+                && guide.get("axis").and_then(serde_json::Value::as_str) == Some("horizontal")
+                && guide.get("label").and_then(serde_json::Value::as_f64) == Some(10.0)
         }));
     }
 
