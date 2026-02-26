@@ -28,7 +28,7 @@ Status legend:
 | `change_elements_z_index` | implemented | Deterministic reordering and z-index normalization. |
 | `update_elements_style` | partial | JSON style merge works; opaque/binary payloads pass through as compatibility fallback. |
 | `update_global_elements` | implemented | Stores normalized global payload and drives overlay tasks. |
-| `create_serial_number_text_elements` | partial | Creates companion text elements with simplified layout defaults. |
+| `create_serial_number_text_elements` | partial | Creates/reuses companion text elements, updates `serial_number.textElementId`, and focuses single-target text edit; text style/layout defaults are still simplified. |
 | `start_text_edit` | implemented | Opens/creates text edit session. |
 | `update_text_edit` | implemented | Updates text payload and optional rect. |
 | `refresh_auto_resize_text_layouts_after_font_load` | partial | V2 runtime now emits text-metrics host requests for auto-resize text elements and applies response-driven layout updates; direct v1-only flow remains a no-op refresh. |

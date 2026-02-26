@@ -1008,6 +1008,11 @@ impl Engine {
         }
 
         let source_ids = payload.element_ids.into_iter().collect::<BTreeSet<_>>();
+        let focus_source_id = if source_ids.len() == 1 {
+            source_ids.iter().next().cloned()
+        } else {
+            None
+        };
         let mut next_z = self
             .snapshot
             .elements
@@ -1017,41 +1022,102 @@ impl Engine {
             .unwrap_or(-1)
             + 1;
         let mut created = Vec::new();
+        let mut serial_payload_updates = Vec::new();
+        let mut focus_text_id = None;
 
         for source in self.snapshot.elements.clone() {
             if !source_ids.contains(source.id.as_str()) {
                 continue;
             }
+            let source_id = source.id.clone();
+            if normalize_element_type(source.element_type) != ElementType::SerialNumber as i32 {
+                continue;
+            }
+
+            let mut serial_payload = decode_json_map(&source.payload)
+                .unwrap_or_else(|| default_element_payload_map(ElementType::SerialNumber as i32));
+            let existing_bound_id = serial_payload
+                .get("textElementId")
+                .and_then(JsonValue::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(ToOwned::to_owned);
+            if let Some(bound_id) = existing_bound_id {
+                let has_bound_text = self.snapshot.elements.iter().any(|element| {
+                    element.id == bound_id
+                        && normalize_element_type(element.element_type)
+                            == ElementType::Text as i32
+                });
+                if has_bound_text {
+                    if focus_source_id.as_deref() == Some(source_id.as_str()) {
+                        focus_text_id = Some(bound_id);
+                    }
+                    continue;
+                }
+            }
+
             let id = format!("rust_{}", self.next_element_sequence);
             self.next_element_sequence += 1;
-            let rect = source.rect.map(|source_rect| DrawRect {
-                min_x: source_rect.min_x,
-                min_y: source_rect.max_y + 8.0,
-                max_x: source_rect.min_x + 120.0,
-                max_y: source_rect.max_y + 32.0,
+            let text_payload = default_element_payload_map(ElementType::Text as i32);
+            let rect = source.rect.as_ref().map(|source_rect| {
+                resolve_serial_bound_text_rect(source_rect, &serial_payload, &text_payload)
             });
             created.push(Element {
-                id,
+                id: id.clone(),
                 element_type: ElementType::Text as i32,
                 rect,
                 rotation: 0.0,
                 opacity: 1.0,
                 z_index: next_z,
-                payload: {
-                    let mut map = default_element_payload_map(ElementType::Text as i32);
-                    map.insert("text".to_string(), JsonValue::from(source.id.clone()));
-                    encode_json_map(&map)
-                },
+                payload: encode_json_map(&text_payload),
             });
+            serial_payload.insert("textElementId".to_string(), JsonValue::from(id.clone()));
+            serial_payload_updates.push((source_id.clone(), encode_json_map(&serial_payload)));
+            if focus_source_id.as_deref() == Some(source_id.as_str()) {
+                focus_text_id = Some(id);
+            }
             next_z += 1;
         }
 
-        if created.is_empty() {
-            return;
+        let mut changed = false;
+        for (serial_id, updated_payload) in serial_payload_updates {
+            if let Some(element) = self.element_mut(&serial_id) {
+                if element.payload != updated_payload {
+                    element.payload = updated_payload;
+                    changed = true;
+                }
+            }
         }
-        self.snapshot.elements.extend(created);
-        self.sort_elements();
-        self.snapshot.document_version += 1;
+        if !created.is_empty() {
+            self.snapshot.elements.extend(created);
+            self.sort_elements();
+            changed = true;
+        }
+        if changed {
+            self.snapshot.document_version += 1;
+        }
+        if let Some(focused_text_id) = focus_text_id {
+            let (text, rect) = self
+                .snapshot
+                .elements
+                .iter()
+                .find(|element| element.id == focused_text_id)
+                .map(|element| {
+                    let text = decode_json_map(&element.payload)
+                        .and_then(|map| map.get("text").and_then(JsonValue::as_str).map(str::to_string))
+                        .unwrap_or_default();
+                    (text, element.rect.clone())
+                })
+                .unwrap_or_else(|| (String::new(), None));
+            self.set_selected(BTreeSet::from([focused_text_id.clone()]));
+            self.set_interaction_mode(InteractionMode::TextEditing);
+            self.text_edit_session = Some(TextEditSession {
+                element_id: focused_text_id,
+                is_new: false,
+                text,
+                rect,
+            });
+        }
     }
 
     fn apply_start_text_edit(&mut self, payload: StartTextEditCommand) {
@@ -1765,6 +1831,43 @@ fn write_text_payload(element: &mut Element, text: &str) {
         .unwrap_or_else(|| default_element_payload_map(ElementType::Text as i32));
     map.insert("text".to_string(), JsonValue::from(text));
     element.payload = encode_json_map(&map);
+}
+
+fn resolve_serial_bound_text_rect(
+    serial_rect: &DrawRect,
+    serial_payload: &JsonMap<String, JsonValue>,
+    text_payload: &JsonMap<String, JsonValue>,
+) -> DrawRect {
+    let font_size = text_payload
+        .get("fontSize")
+        .and_then(JsonValue::as_f64)
+        .filter(|value| value.is_finite() && *value > 0.0)
+        .unwrap_or(21.0);
+    let line_height = (font_size * 1.2).max(1.0);
+    let glyph_width = (font_size * 0.6).max(1.0);
+    let text = text_payload
+        .get("text")
+        .and_then(JsonValue::as_str)
+        .unwrap_or_default();
+    let grapheme_count = text.chars().count().max(1) as f64;
+    let horizontal_padding = line_height * 0.01;
+    let text_width = (glyph_width * grapheme_count + horizontal_padding * 2.0).max(1.0);
+    let text_height = line_height;
+    let stroke_width = serial_payload
+        .get("strokeWidth")
+        .and_then(JsonValue::as_f64)
+        .filter(|value| value.is_finite() && *value >= 0.0)
+        .unwrap_or(2.0);
+    let gap = 18.0_f64.max(stroke_width * 2.0);
+    let min_x = serial_rect.max_x + gap;
+    let min_y = ((serial_rect.min_y + serial_rect.max_y) / 2.0) - text_height / 2.0;
+
+    DrawRect {
+        min_x,
+        min_y,
+        max_x: min_x + text_width,
+        max_y: min_y + text_height,
+    }
 }
 
 fn highlight_mask_payload(global_payload: &[u8]) -> Option<Vec<u8>> {
@@ -3240,6 +3343,141 @@ mod tests {
             Some(4278190335)
         );
         assert!((element.opacity - 0.4).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn create_serial_number_text_elements_binds_and_focuses_single_target() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(create_command("serial-focus", ElementType::SerialNumber))
+            .expect("create serial");
+        let previous_document_version = engine.snapshot.document_version;
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateSerialNumberTextElements as i32,
+                payload: Some(CommandPayload::CreateSerialNumberTextElements(
+                    CreateSerialNumberTextElementsCommand {
+                        element_ids: vec!["serial-focus".to_string()],
+                    },
+                )),
+            })
+            .expect("create bound text");
+
+        assert!(engine.snapshot.document_version > previous_document_version);
+        let serial = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == "serial-focus")
+            .expect("serial element");
+        let serial_payload = decode_json_map(&serial.payload).expect("serial payload");
+        let text_id = serial_payload
+            .get("textElementId")
+            .and_then(JsonValue::as_str)
+            .map(str::to_string)
+            .expect("textElementId");
+        assert!(!text_id.is_empty());
+
+        let text = engine
+            .snapshot
+            .elements
+            .iter()
+            .find(|element| element.id == text_id)
+            .expect("bound text");
+        assert_eq!(
+            normalize_element_type(text.element_type),
+            ElementType::Text as i32
+        );
+        assert_eq!(engine.snapshot.selected_ids, vec![text_id.clone()]);
+        assert_eq!(
+            engine.snapshot.interaction_mode,
+            InteractionMode::TextEditing as i32
+        );
+        assert_eq!(
+            engine
+                .text_edit_session
+                .as_ref()
+                .map(|session| session.element_id.clone()),
+            Some(text_id)
+        );
+        let serial_rect = serial.rect.as_ref().expect("serial rect");
+        let text_rect = text.rect.as_ref().expect("text rect");
+        assert!(text_rect.min_x >= serial_rect.max_x);
+    }
+
+    #[test]
+    fn create_serial_number_text_elements_reuses_existing_binding() {
+        let mut engine = Engine::default();
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::Text as i32,
+                    element_id: "serial-bound-text".to_string(),
+                    position: Some(DrawPoint {
+                        x: 120.0,
+                        y: 40.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: br#"{"typeId":"text","text":"bound"}"#.to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create text");
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateElement as i32,
+                payload: Some(CommandPayload::CreateElement(CreateElementCommand {
+                    element_type: ElementType::SerialNumber as i32,
+                    element_id: "serial-reuse".to_string(),
+                    position: Some(DrawPoint {
+                        x: 10.0,
+                        y: 10.0,
+                        pressure: 0.0,
+                        timestamp_us: 0,
+                    }),
+                    initial_payload: br#"{"typeId":"serial_number","number":7,"textElementId":"serial-bound-text"}"#.to_vec(),
+                    maintain_aspect_ratio: false,
+                    create_from_center: false,
+                    snap_override: false,
+                })),
+            })
+            .expect("create serial");
+        let before_len = engine.snapshot.elements.len();
+        let before_document_version = engine.snapshot.document_version;
+
+        engine
+            .dispatch(EngineCommand {
+                kind: EngineCommandKind::CreateSerialNumberTextElements as i32,
+                payload: Some(CommandPayload::CreateSerialNumberTextElements(
+                    CreateSerialNumberTextElementsCommand {
+                        element_ids: vec!["serial-reuse".to_string()],
+                    },
+                )),
+            })
+            .expect("reuse bound text");
+
+        assert_eq!(engine.snapshot.elements.len(), before_len);
+        assert_eq!(engine.snapshot.document_version, before_document_version);
+        assert_eq!(
+            engine.snapshot.selected_ids,
+            vec!["serial-bound-text".to_string()]
+        );
+        assert_eq!(
+            engine.snapshot.interaction_mode,
+            InteractionMode::TextEditing as i32
+        );
+        assert_eq!(
+            engine
+                .text_edit_session
+                .as_ref()
+                .map(|session| session.element_id.as_str()),
+            Some("serial-bound-text")
+        );
     }
 
     #[test]
