@@ -87,7 +87,10 @@ class RustDrawStore implements DrawStore {
   var _canUndo = false;
   var _canRedo = false;
 
+  @override
   bool get canUndo => _canUndo;
+
+  @override
   bool get canRedo => _canRedo;
 
   @override
@@ -194,10 +197,13 @@ class RustDrawStore implements DrawStore {
     _refreshSnapshotAndNotify();
   }
 
+  @override
   Future<void> undo() => dispatch(const Undo());
 
+  @override
   Future<void> redo() => dispatch(const Redo());
 
+  @override
   Future<void> clearHistory() => dispatch(const ClearHistory());
 
   void dispose() {

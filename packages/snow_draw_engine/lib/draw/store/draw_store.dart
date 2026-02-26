@@ -103,7 +103,10 @@ class DefaultDrawStore implements DrawStore {
   @override
   DrawState get state => _state;
 
+  @override
   bool get canUndo => _historyManager.canUndo;
+
+  @override
   bool get canRedo => _historyManager.canRedo;
 
   @override
@@ -211,10 +214,13 @@ class DefaultDrawStore implements DrawStore {
     return _actionProcessor.dispatch(action);
   }
 
+  @override
   Future<void> undo() => dispatch(const Undo());
 
+  @override
   Future<void> redo() => dispatch(const Redo());
 
+  @override
   Future<void> clearHistory() => dispatch(const ClearHistory());
 
   HistoryManagerSnapshot exportHistory() => _historyManager.snapshot();

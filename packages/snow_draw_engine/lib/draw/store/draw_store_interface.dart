@@ -25,6 +25,8 @@ abstract interface class DrawStore implements StateProvider {
   DrawConfig get config;
   Stream<DrawConfig> get configStream;
   Stream<DrawEvent> get eventStream;
+  bool get canUndo;
+  bool get canRedo;
 
   /// Returns a typed event stream for [T].
   Stream<T> eventStreamOf<T extends DrawEvent>();
@@ -37,6 +39,9 @@ abstract interface class DrawStore implements StateProvider {
     bool? cancelOnError,
   });
   Future<void> dispatch(DrawAction action);
+  Future<void> undo();
+  Future<void> redo();
+  Future<void> clearHistory();
 
   VoidCallback listen(
     StateChangeListener<DrawState> listener, {

@@ -15,7 +15,7 @@ class CanvasLayer extends StatelessWidget {
   });
 
   final Size size;
-  final DefaultDrawStore store;
+  final DrawStore store;
   final ToolController toolController;
   final ValueListenable<WatermarkConfig?>? watermarkPreviewListenable;
 
@@ -24,7 +24,7 @@ class CanvasLayer extends StatelessWidget {
     super.debugFillProperties(properties);
     properties
       ..add(DiagnosticsProperty<Size>('size', size))
-      ..add(DiagnosticsProperty<DefaultDrawStore>('store', store))
+      ..add(DiagnosticsProperty<DrawStore>('store', store))
       ..add(
         DiagnosticsProperty<ToolController>('toolController', toolController),
       )

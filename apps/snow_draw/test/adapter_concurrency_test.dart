@@ -85,6 +85,12 @@ class _QueuedConfigStore implements DrawStore {
   DrawConfig get config => _config;
 
   @override
+  bool get canUndo => false;
+
+  @override
+  bool get canRedo => false;
+
+  @override
   Stream<DrawConfig> get configStream => _configController.stream;
 
   @override
@@ -124,6 +130,15 @@ class _QueuedConfigStore implements DrawStore {
     }
     return completer.future;
   }
+
+  @override
+  Future<void> undo() => Future<void>.value();
+
+  @override
+  Future<void> redo() => Future<void>.value();
+
+  @override
+  Future<void> clearHistory() => Future<void>.value();
 
   Future<void> _drainQueue() async {
     _isProcessing = true;

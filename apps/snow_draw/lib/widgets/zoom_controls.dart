@@ -13,7 +13,7 @@ class ZoomControls extends StatefulWidget {
   });
 
   final AppLocalizations strings;
-  final DefaultDrawStore store;
+  final DrawStore store;
   final Size size;
 
   @override
@@ -24,7 +24,7 @@ class ZoomControls extends StatefulWidget {
     super.debugFillProperties(properties);
     properties
       ..add(DiagnosticsProperty<AppLocalizations>('strings', strings))
-      ..add(DiagnosticsProperty<DefaultDrawStore>('store', store))
+      ..add(DiagnosticsProperty<DrawStore>('store', store))
       ..add(DiagnosticsProperty<Size>('size', size));
   }
 }
@@ -65,7 +65,7 @@ class _ZoomControlsState extends State<ZoomControls> {
     }
   }
 
-  void _subscribe(DefaultDrawStore store) {
+  void _subscribe(DrawStore store) {
     _unsubscribe = store.select<double>(
       SimpleSelector<DrawState, double>(
         (state) => state.application.view.camera.zoom,

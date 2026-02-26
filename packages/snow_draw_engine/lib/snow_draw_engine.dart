@@ -70,6 +70,7 @@ export 'draw/services/log/log_config.dart';
 export 'draw/services/log/log_service.dart';
 export 'draw/services/text/text_metrics_service.dart';
 export 'draw/store/draw_store.dart';
+export 'draw/store/draw_store_factory.dart';
 export 'draw/store/draw_store_interface.dart';
 export 'draw/store/rust_draw_store.dart';
 export 'draw/store/selector.dart';

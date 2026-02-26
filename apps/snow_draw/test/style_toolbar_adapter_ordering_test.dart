@@ -93,6 +93,12 @@ class _OutOfOrderStyleStore implements DrawStore {
   DrawConfig get config => _config;
 
   @override
+  bool get canUndo => false;
+
+  @override
+  bool get canRedo => false;
+
+  @override
   Stream<DrawConfig> get configStream => _configController.stream;
 
   @override
@@ -128,6 +134,15 @@ class _OutOfOrderStyleStore implements DrawStore {
     }
     throw UnsupportedError('Action not supported in test store: $action');
   }
+
+  @override
+  Future<void> undo() => Future<void>.value();
+
+  @override
+  Future<void> redo() => Future<void>.value();
+
+  @override
+  Future<void> clearHistory() => Future<void>.value();
 
   Future<void> _applyElementsStyle(UpdateElementsStyle action) async {
     if (_heldStyleUpdateGate != null && !_heldStyleUpdateConsumed) {

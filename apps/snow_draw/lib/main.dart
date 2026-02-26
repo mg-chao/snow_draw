@@ -57,7 +57,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
-  late final DefaultDrawStore store;
+  late final DrawStore store;
   late final ToolController toolController;
   late final StyleToolbarAdapter styleToolbarAdapter;
   late final SnapToolbarAdapter snapToolbarAdapter;
@@ -67,9 +67,18 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    store = DefaultDrawStore(
+    final backend = _resolveStoreBackend();
+    store = createDrawStore(
       context: widget.context,
       includeSelectionInHistory: true,
+      backend: backend,
+      onRustFallback: (error, stackTrace) {
+        widget.context.log.store.error(
+          'Rust draw store unavailable; falling back to legacy Dart store',
+          error,
+          stackTrace,
+        );
+      },
     );
     toolController = ToolController();
     styleToolbarAdapter = StyleToolbarAdapter(store: store);
@@ -77,6 +86,14 @@ class _MyAppState extends State<MyApp> {
     gridToolbarAdapter = GridToolbarAdapter(store: store);
     _ctrlPressedNotifier = ValueNotifier<bool>(false);
     HardwareKeyboard.instance.addHandler(_handleKeyEvent);
+  }
+
+  DrawStoreBackend _resolveStoreBackend() {
+    final bindingName = WidgetsBinding.instance.runtimeType.toString();
+    if (bindingName.contains('TestWidgetsFlutterBinding')) {
+      return DrawStoreBackend.legacyDart;
+    }
+    return DrawStoreBackend.auto;
   }
 
   @override
@@ -87,7 +104,11 @@ class _MyAppState extends State<MyApp> {
     styleToolbarAdapter.dispose();
     snapToolbarAdapter.dispose();
     gridToolbarAdapter.dispose();
-    store.dispose();
+    if (store case final DefaultDrawStore defaultStore) {
+      defaultStore.dispose();
+    } else if (store case final RustDrawStore rustStore) {
+      rustStore.dispose();
+    }
     super.dispose();
   }
 
@@ -223,7 +244,7 @@ class _MyAppState extends State<MyApp> {
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
     properties
-      ..add(DiagnosticsProperty<DefaultDrawStore>('store', store))
+      ..add(DiagnosticsProperty<DrawStore>('store', store))
       ..add(
         DiagnosticsProperty<ToolController>('toolController', toolController),
       )

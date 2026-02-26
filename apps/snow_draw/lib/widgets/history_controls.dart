@@ -14,7 +14,7 @@ class HistoryControls extends StatefulWidget {
   });
 
   final AppLocalizations strings;
-  final DefaultDrawStore store;
+  final DrawStore store;
 
   @override
   State<HistoryControls> createState() => _HistoryControlsState();
@@ -24,7 +24,7 @@ class HistoryControls extends StatefulWidget {
     super.debugFillProperties(properties);
     properties
       ..add(DiagnosticsProperty<AppLocalizations>('strings', strings))
-      ..add(DiagnosticsProperty<DefaultDrawStore>('store', store));
+      ..add(DiagnosticsProperty<DrawStore>('store', store));
   }
 }
 
@@ -54,7 +54,7 @@ class _HistoryControlsState extends State<HistoryControls> {
     }
   }
 
-  void _attachToStore(DefaultDrawStore store) {
+  void _attachToStore(DrawStore store) {
     unawaited(_eventSubscription?.cancel());
     _eventSubscription = store.onEvent<HistoryAvailabilityChangedEvent>((
       event,
@@ -108,9 +108,9 @@ class _HistoryControlsState extends State<HistoryControls> {
     );
   }
 
-  Future<void> _handleUndo() => widget.store.dispatch(const Undo());
+  Future<void> _handleUndo() => widget.store.undo();
 
-  Future<void> _handleRedo() => widget.store.dispatch(const Redo());
+  Future<void> _handleRedo() => widget.store.redo();
 
   void _updateAvailability(bool nextUndo, bool nextRedo) {
     if (nextUndo == _canUndo && nextRedo == _canRedo) {
