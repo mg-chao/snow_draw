@@ -8,6 +8,7 @@ environment:
   flutter: ">=1.17.0"
 workspace:
   - apps/snow_draw
+  - packages/snow_draw_arrow_core
   - packages/snow_draw_engine
   - packages/snow_draw_flutter_backend
 dev_dependencies:
