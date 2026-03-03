@@ -25,6 +25,89 @@ void main() {
     expect(error['code'], 'invalid-request');
   });
 
+  test(
+    'safe protocol rejects bindable payload missing shape/strokeWidth fields',
+    () {
+      final response = executeArrowOperationSafe(<String, dynamic>{
+        'type': 'is-point-in-bindable',
+        'input': <String, dynamic>{
+          'point': const <double>[0, 0],
+          'bindable': <String, dynamic>{
+            'id': 'bind-1',
+            'x': 0,
+            'y': 0,
+            'width': 100,
+            'height': 40,
+            'angle': 0,
+          },
+        },
+      });
+
+      expect(response['type'], 'error');
+      final error = response['error'] as Map<String, dynamic>;
+      expect(error['code'], 'invalid-request');
+      final message = error['message'] as String;
+      expect(message.contains('request.input.bindable.shape'), isTrue);
+      expect(message.contains('request.input.bindable.strokeWidth'), isTrue);
+    },
+  );
+
+  test('safe protocol rejects arrow payload missing required arrow fields', () {
+    final response = executeArrowOperationSafe(<String, dynamic>{
+      'type': 'validate-arrow-invariant',
+      'input': <String, dynamic>{
+        'arrow': <String, dynamic>{
+          'id': 'arrow-1',
+          'x': 0,
+          'y': 0,
+          'width': 100,
+          'height': 0,
+          'points': const <Point>[
+            <double>[0, 0],
+            <double>[100, 0],
+          ],
+          'angle': 0,
+        },
+      },
+    });
+
+    expect(response['type'], 'error');
+    final error = response['error'] as Map<String, dynamic>;
+    expect(error['code'], 'invalid-request');
+    final message = error['message'] as String;
+    expect(
+      message.contains('request.input.arrow.startArrowhead is required'),
+      isTrue,
+    );
+    expect(
+      message.contains('request.input.arrow.elbowed must be a boolean'),
+      isTrue,
+    );
+  });
+
+  test('avoid-rectangular-corner accepts elbow-only arrow payload shape', () {
+    final response = executeArrowOperationSafe(<String, dynamic>{
+      'type': 'avoid-rectangular-corner',
+      'input': <String, dynamic>{
+        'arrow': <String, dynamic>{'elbowed': false},
+        'bindable': <String, dynamic>{
+          'id': 'bind-1',
+          'shape': 'rectangle',
+          'x': 0,
+          'y': 0,
+          'width': 100,
+          'height': 40,
+          'angle': 0,
+          'strokeWidth': 1,
+        },
+        'point': const <double>[120, 20],
+      },
+    });
+
+    expect(response['type'], 'point');
+    expect(response['point'], isA<List<double>>());
+  });
+
   test('update-bound-point returns null when binding is null', () {
     final arrow = ArrowState(
       id: 'arrow-1',
@@ -274,7 +357,12 @@ void main() {
         'arrow': arrow,
         'updates': <String, dynamic>{},
         'bindables': const <BindableState>[],
-        'context': const <String, dynamic>{},
+        'context': const <String, dynamic>{
+          'zoom': 1,
+          'isBindingEnabled': true,
+          'bindMode': 'inside',
+          'maxCoordinate': 10000,
+        },
       },
     });
 
@@ -319,7 +407,12 @@ void main() {
             ],
           },
           'bindables': const <BindableState>[],
-          'context': const <String, dynamic>{},
+          'context': const <String, dynamic>{
+            'zoom': 1,
+            'isBindingEnabled': true,
+            'bindMode': 'inside',
+            'maxCoordinate': 10000,
+          },
           'options': <String, dynamic>{'validateInvariants': true},
         },
       });
@@ -329,6 +422,169 @@ void main() {
       expect(error['code'], 'operation-failed');
       expect(
         (error['message'] as String).contains('Updated point array length'),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'finalize-focus-point-drag requires ArrowBindingState arrow payload',
+    () {
+      final response = executeArrowOperationSafe(<String, dynamic>{
+        'type': 'finalize-focus-point-drag',
+        'input': <String, dynamic>{
+          'arrow': <String, dynamic>{'id': 'arrow-1'},
+          'bindables': <Map<String, dynamic>>[
+            <String, dynamic>{'id': 'bind-1', 'boundArrowIds': <String>[]},
+          ],
+        },
+      });
+
+      expect(response['type'], 'error');
+      final error = response['error'] as Map<String, dynamic>;
+      expect(error['code'], 'invalid-request');
+      expect(
+        (error['message'] as String).contains(
+          'request.input.arrow.startBinding is required',
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test('apply-arrow-patch rejects invalid patch.points tuples', () {
+    final response = executeArrowOperationSafe(<String, dynamic>{
+      'type': 'apply-arrow-patch',
+      'input': <String, dynamic>{
+        'arrow': <String, dynamic>{
+          'id': 'arrow-1',
+          'x': 0,
+          'y': 0,
+          'width': 100,
+          'height': 0,
+          'points': const <Point>[
+            <double>[0, 0],
+            <double>[100, 0],
+          ],
+          'startBinding': null,
+          'endBinding': null,
+          'startArrowhead': null,
+          'endArrowhead': null,
+          'elbowed': false,
+          'fixedSegments': null,
+          'startIsSpecial': null,
+          'endIsSpecial': null,
+        },
+        'patch': <String, dynamic>{
+          'points': const <dynamic>[
+            <double>[0, 0],
+            <double>[50, 0, 1],
+          ],
+        },
+      },
+    });
+
+    expect(response['type'], 'error');
+    final error = response['error'] as Map<String, dynamic>;
+    expect(error['code'], 'invalid-request');
+    expect(
+      (error['message'] as String).contains(
+        'request.input.patch.points must be an array of points when provided',
+      ),
+      isTrue,
+    );
+  });
+
+  test('bind-point-to-outline rejects null customIntersector', () {
+    final response = executeArrowOperationSafe(<String, dynamic>{
+      'type': 'bind-point-to-outline',
+      'input': <String, dynamic>{
+        'arrow': <String, dynamic>{
+          'id': 'arrow-1',
+          'x': 0,
+          'y': 0,
+          'width': 100,
+          'height': 0,
+          'points': const <Point>[
+            <double>[0, 0],
+            <double>[100, 0],
+          ],
+          'startBinding': null,
+          'endBinding': null,
+          'startArrowhead': null,
+          'endArrowhead': null,
+          'elbowed': false,
+          'fixedSegments': null,
+          'startIsSpecial': null,
+          'endIsSpecial': null,
+        },
+        'bindable': <String, dynamic>{
+          'id': 'bind-1',
+          'shape': 'rectangle',
+          'x': 0,
+          'y': 0,
+          'width': 100,
+          'height': 40,
+          'angle': 0,
+          'strokeWidth': 1,
+        },
+        'edge': 'start',
+        'customIntersector': null,
+      },
+    });
+
+    expect(response['type'], 'error');
+    final error = response['error'] as Map<String, dynamic>;
+    expect(error['code'], 'invalid-request');
+    expect(
+      (error['message'] as String).contains(
+        'request.input.customIntersector must be a tuple of two points',
+      ),
+      isTrue,
+    );
+  });
+
+  test(
+    'max-binding-distance ignores unrelated malformed fields by operation scope',
+    () {
+      final response = executeArrowOperationSafe(<String, dynamic>{
+        'type': 'max-binding-distance',
+        'input': <String, dynamic>{
+          'zoom': 1,
+          'bindable': <String, dynamic>{'id': 'ignored-invalid-bindable'},
+        },
+      });
+
+      expect(response['type'], 'number');
+      expect(response['value'], isA<double>());
+    },
+  );
+
+  test(
+    'remap-arrow-bindings-after-duplication validates preserveUnmapped type',
+    () {
+      final response = executeArrowOperationSafe(<String, dynamic>{
+        'type': 'remap-arrow-bindings-after-duplication',
+        'input': <String, dynamic>{
+          'arrows': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'id': 'arrow-1',
+              'startBinding': null,
+              'endBinding': null,
+            },
+          ],
+          'bindableIdMap': <String, String>{'a': 'b'},
+          'preserveUnmapped': 'yes',
+        },
+      });
+
+      expect(response['type'], 'error');
+      final error = response['error'] as Map<String, dynamic>;
+      expect(error['code'], 'invalid-request');
+      expect(
+        (error['message'] as String).contains(
+          'request.input.preserveUnmapped must be a boolean',
+        ),
         isTrue,
       );
     },

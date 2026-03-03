@@ -293,6 +293,74 @@ Map<String, List<String>> _buildRequiredFieldsMap() {
 final Map<String, List<String>> _operationRequiredFields =
     _buildRequiredFieldsMap();
 
+const List<String> _optionalFieldSpecs = <String>[
+  'compute-endpoint-drag|options',
+  'get-endpoint-binding-strategy|options',
+  'compute-simple-binding-patch|options',
+  'finalize-endpoint-drag|options',
+  'compute-focus-point-drag|options',
+  'recompute-after-bindable-change|changedBindableIds,options',
+  'recompute-bindings-for-changed-bindables|changedBindableIds,options',
+  'prune-arrow-bindings|options',
+  'recompute-bindings-after-bindable-change|changedBindableIds,options',
+  'update-elbow-arrow|options',
+  'compute-elbow-resize-patch|points',
+  'create-directional-link-arrow|arrowheadSize',
+  'offset-arrow-endpoints-for-binding-overlap|minimumLength',
+  'snap-to-mid|tolerance,elbowed',
+  'bind-point-to-outline|customIntersector',
+  'update-bound-point|dragging',
+  'list-hovered-bindables|stopAtOpaque',
+  'reorder-arrow-above-hovered-bindable|hoveredBindableId,point,bindables,tolerance,anchorElementIdsByBindableId',
+  'reduce-arrow-engine-events-to-order|anchorElementIdsByBindableId',
+  'validate-elbow-points|tolerance',
+  'repair-binding-on-restore|arrow,edge,existingBindables',
+  'repair-self-bound-extreme-elbow-arrow-on-restore|maxCoordinate',
+  'is-focus-point-visible|ignoreOverlap',
+  'get-heading-for-elbow-snap|aabb,originPoint,zoom',
+  'bind-arrow-endpoint|mode,focusPoint',
+  'resolve-bindable-relation-patches|arrowPatch,bindablePatches',
+  'remap-arrow-bindings-after-duplication|preserveUnmapped',
+  'remap-bindable-relations-after-duplication|preserveUnmapped',
+  'sync-bindings-after-duplication|preserveUnmapped,geometryBindables,context',
+  'sync-bindings-after-bindable-prune|geometryBindables,context,options',
+  'sync-bindings-after-deletion|geometryBindables,context',
+  'apply-engine-result|orderedElementIds,anchorElementIdsByBindableId',
+];
+
+Map<String, Set<String>> _buildOptionalFieldsMap() {
+  final out = <String, Set<String>>{};
+  for (final spec in _optionalFieldSpecs) {
+    final parts = spec.split('|');
+    if (parts.isEmpty) {
+      continue;
+    }
+    final operation = parts.first;
+    final fieldSet = parts.length < 2 || parts[1].trim().isEmpty
+        ? <String>{}
+        : parts[1].split(',').toSet();
+    out[operation] = fieldSet;
+  }
+  return Map<String, Set<String>>.unmodifiable(out);
+}
+
+final Map<String, Set<String>> _operationOptionalFields =
+    _buildOptionalFieldsMap();
+
+Map<String, Set<String>> _buildValidatedFieldsMap() {
+  final out = <String, Set<String>>{};
+  for (final operation in _operationResponseTypeMap.keys) {
+    final fieldSet = <String>{};
+    fieldSet.addAll(_operationRequiredFields[operation] ?? const <String>[]);
+    fieldSet.addAll(_operationOptionalFields[operation] ?? const <String>{});
+    out[operation] = fieldSet;
+  }
+  return Map<String, Set<String>>.unmodifiable(out);
+}
+
+final Map<String, Set<String>> _operationValidatedFields =
+    _buildValidatedFieldsMap();
+
 typedef _OperationInputShapeValidator =
     List<String> Function(Map<String, dynamic> input, String operationType);
 
@@ -301,6 +369,7 @@ const Set<String> _operationsWithoutShapeValidation = <String>{
 };
 
 const Set<String> _operationsWithArrowBindingStateArrowField = <String>{
+  'finalize-focus-point-drag',
   'reconcile-bindable-patches-for-arrow',
   'resolve-bindable-relation-patches',
   'apply-arrow-binding-state-patch',
@@ -310,6 +379,15 @@ const Set<String> _operationsWithArrowBindingStateArrowsField = <String>{
   'remap-arrow-bindings-after-duplication',
   'repair-arrow-bindings-after-bindable-deletion',
   'apply-arrow-binding-state-patches',
+};
+
+const Set<String> _operationsWithArrowElbowOnlyField = <String>{
+  'avoid-rectangular-corner',
+  'pick-hovered-bindable-for-focus',
+};
+
+const Set<String> _operationsWithArrowPointsOnlyField = <String>{
+  'get-resize-arrow-direction',
 };
 
 const Set<String> _operationsWithRelationBindablesField = <String>{
@@ -342,6 +420,48 @@ const Set<String> _operationsRequireBindingMode = <String>{
 
 const Set<String> _operationsAllowNullBindableField = <String>{
   'get-heading-for-elbow-snap',
+};
+
+const Set<String> _operationsContextRequireBindModeAndMaxCoordinate = <String>{
+  'compute-endpoint-drag',
+  'get-endpoint-binding-strategy',
+  'compute-simple-binding-patch',
+  'finalize-endpoint-drag',
+  'compute-focus-point-drag',
+  'recompute-after-bindable-change',
+  'recompute-bindings-for-changed-bindables',
+  'refresh-endpoint-binding',
+  'recompute-bindings-after-bindable-change',
+  'recompute-elbow',
+  'update-elbow-arrow',
+  'repair-invalid-unbound-elbow-arrow-on-restore',
+  'sync-bindings-after-duplication',
+  'sync-bindings-after-bindable-prune',
+  'sync-bindings-after-deletion',
+};
+
+const Set<String> _arrowheadValues = <String>{
+  'arrow',
+  'bar',
+  'dot',
+  'circle',
+  'circle_outline',
+  'triangle',
+  'triangle_outline',
+  'diamond',
+  'diamond_outline',
+  'crowfoot_one',
+  'crowfoot_many',
+  'crowfoot_one_or_many',
+};
+
+const Set<String> _bindableShapeValues = <String>{
+  'rectangle',
+  'ellipse',
+  'diamond',
+  'rect',
+  'circle',
+  'rhombus',
 };
 
 bool _isFiniteNumber(Object? value) => value is num && value.isFinite;
@@ -400,30 +520,6 @@ bool _isDirectionalLinkBoundsShape(Object? value) =>
     _isFiniteNumber(value['width']) &&
     _isFiniteNumber(value['height']);
 
-bool _isIdMapShape(Object? value) {
-  if (value is! Map) {
-    return false;
-  }
-  for (final entry in value.entries) {
-    if (entry.key is! String || entry.value is! String) {
-      return false;
-    }
-  }
-  return true;
-}
-
-bool _isAnchorLookupShape(Object? value) {
-  if (value is! Map) {
-    return false;
-  }
-  for (final entry in value.entries) {
-    if (entry.key is! String || !_isStringArray(entry.value)) {
-      return false;
-    }
-  }
-  return true;
-}
-
 bool _isArrowEndpointEdgeValue(Object? value) =>
     value == arrowEndpointStart || value == arrowEndpointEnd;
 
@@ -441,6 +537,939 @@ bool _isDirectionValue(Object? value) =>
 
 bool _isArrowEndpointPositionValue(Object? value) =>
     value == arrowEndpointStart || value == arrowEndpointEnd;
+
+bool _isArrowheadValue(Object? value) =>
+    value is String && _arrowheadValues.contains(value);
+
+bool _isBindableShapeValue(Object? value) =>
+    value is String && _bindableShapeValues.contains(value);
+
+List<String> _validateStrictFixedPointBinding(
+  Object? value, {
+  required String path,
+  required bool allowNull,
+  required bool requireMode,
+}) {
+  if (value is FixedPointBinding) {
+    return _isBindModeValue(value.mode)
+        ? const <String>[]
+        : <String>['$path.mode must be "inside", "orbit", or "skip"'];
+  }
+  if (value == null) {
+    return allowNull ? const <String>[] : <String>['$path must be an object'];
+  }
+  if (value is! Map) {
+    return <String>['$path must be an object${allowNull ? ' or null' : ''}'];
+  }
+
+  final violations = <String>[];
+  if (value['elementId'] is! String) {
+    violations.add('$path.elementId must be a string');
+  }
+  if (!_isPointTuple(value['fixedPoint'])) {
+    violations.add('$path.fixedPoint must be a [number, number] tuple');
+  }
+  if (requireMode) {
+    if (!_isBindModeValue(value['mode'])) {
+      violations.add('$path.mode must be "inside", "orbit", or "skip"');
+    }
+  } else if (value.containsKey('mode') && !_isBindModeValue(value['mode'])) {
+    violations.add('$path.mode must be "inside", "orbit", or "skip"');
+  }
+  return violations;
+}
+
+List<String> _validateStrictFixedSegments(
+  Object? value, {
+  required String path,
+  required bool allowNull,
+}) {
+  if (value is List<FixedSegment>) {
+    final violations = <String>[];
+    for (var index = 0; index < value.length; index += 1) {
+      final segment = value[index];
+      final indexValue = segment.index;
+      final isPositiveInteger =
+          indexValue > 0 && indexValue.toDouble() == indexValue;
+      if (!isPositiveInteger) {
+        violations.add('$path[$index].index must be a positive integer');
+      }
+    }
+    return violations;
+  }
+  if (value == null) {
+    return allowNull ? const <String>[] : <String>['$path must be an array'];
+  }
+  if (value is! List) {
+    return <String>['$path must be an array of objects or null'];
+  }
+
+  final violations = <String>[];
+  for (var index = 0; index < value.length; index += 1) {
+    final segment = value[index];
+    if (segment is! Map) {
+      violations.add('$path[$index] must be an object');
+      continue;
+    }
+    final indexValue = segment['index'];
+    final isPositiveInteger =
+        indexValue is num &&
+        indexValue.isFinite &&
+        indexValue > 0 &&
+        indexValue.toInt() == indexValue;
+    if (!isPositiveInteger) {
+      violations.add('$path[$index].index must be a positive integer');
+    }
+    if (!_isPointTuple(segment['start'])) {
+      violations.add('$path[$index].start must be a [number, number] tuple');
+    }
+    if (!_isPointTuple(segment['end'])) {
+      violations.add('$path[$index].end must be a [number, number] tuple');
+    }
+  }
+  return violations;
+}
+
+List<String> _validateStrictBindableState(
+  Object? value, {
+  required String path,
+}) {
+  if (value is BindableState) {
+    return const <String>[];
+  }
+  if (value is! Map) {
+    return <String>['$path must be an object'];
+  }
+  final violations = <String>[];
+  if (value['id'] is! String) {
+    violations.add('$path.id must be a string');
+  }
+  if (!_isBindableShapeValue(value['shape'])) {
+    violations.add(
+      '$path.shape must be one of "rectangle", "ellipse", "diamond", "rect", "circle", or "rhombus"',
+    );
+  }
+  if (!_isFiniteNumber(value['x'])) {
+    violations.add('$path.x must be a finite number');
+  }
+  if (!_isFiniteNumber(value['y'])) {
+    violations.add('$path.y must be a finite number');
+  }
+  if (!_isFiniteNumber(value['width'])) {
+    violations.add('$path.width must be a finite number');
+  }
+  if (!_isFiniteNumber(value['height'])) {
+    violations.add('$path.height must be a finite number');
+  }
+  if (!_isFiniteNumber(value['angle'])) {
+    violations.add('$path.angle must be a finite number');
+  }
+  if (!_isFiniteNumber(value['strokeWidth'])) {
+    violations.add('$path.strokeWidth must be a finite number');
+  }
+  if (value.containsKey('zIndex') && !_isFiniteNumber(value['zIndex'])) {
+    violations.add('$path.zIndex must be a finite number when provided');
+  }
+  if (value.containsKey('backgroundOpaque') &&
+      value['backgroundOpaque'] is! bool) {
+    violations.add('$path.backgroundOpaque must be a boolean when provided');
+  }
+  if (value.containsKey('bindingEnabled') && value['bindingEnabled'] is! bool) {
+    violations.add('$path.bindingEnabled must be a boolean when provided');
+  }
+  if (value.containsKey('interiorHitEnabled') &&
+      value['interiorHitEnabled'] is! bool) {
+    violations.add('$path.interiorHitEnabled must be a boolean when provided');
+  }
+  if (value.containsKey('visibilityBounds') &&
+      value['visibilityBounds'] != null &&
+      !_isBoundsTuple(value['visibilityBounds'])) {
+    violations.add(
+      '$path.visibilityBounds must be a [number, number, number, number] tuple when provided',
+    );
+  }
+  return violations;
+}
+
+List<String> _validateStrictBindableStateArray(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! List) {
+    return <String>['$path must be an array of objects'];
+  }
+  final violations = <String>[];
+  for (var index = 0; index < value.length; index += 1) {
+    violations.addAll(
+      _validateStrictBindableState(value[index], path: '$path[$index]'),
+    );
+  }
+  return violations;
+}
+
+List<String> _validateStrictArrowState(Object? value, {required String path}) {
+  if (value is ArrowState) {
+    return const <String>[];
+  }
+  if (value is! Map) {
+    return <String>['$path must be an object'];
+  }
+  final violations = <String>[];
+  if (value['id'] is! String) {
+    violations.add('$path.id must be a string');
+  }
+  if (!_isFiniteNumber(value['x'])) {
+    violations.add('$path.x must be a finite number');
+  }
+  if (!_isFiniteNumber(value['y'])) {
+    violations.add('$path.y must be a finite number');
+  }
+  if (!_isFiniteNumber(value['width'])) {
+    violations.add('$path.width must be a finite number');
+  }
+  if (!_isFiniteNumber(value['height'])) {
+    violations.add('$path.height must be a finite number');
+  }
+  if (!_isPointTupleArray(value['points'])) {
+    violations.add('$path.points must be an array of points');
+  }
+  if (!value.containsKey('startArrowhead')) {
+    violations.add('$path.startArrowhead is required');
+  }
+  if (!value.containsKey('endArrowhead')) {
+    violations.add('$path.endArrowhead is required');
+  }
+  if (!value.containsKey('fixedSegments')) {
+    violations.add('$path.fixedSegments is required');
+  }
+  if (!value.containsKey('startIsSpecial')) {
+    violations.add('$path.startIsSpecial is required');
+  }
+  if (!value.containsKey('endIsSpecial')) {
+    violations.add('$path.endIsSpecial is required');
+  }
+  if (!value.containsKey('startBinding')) {
+    violations.add('$path.startBinding must be an object or null');
+  } else {
+    violations.addAll(
+      _validateStrictFixedPointBinding(
+        value['startBinding'],
+        path: '$path.startBinding',
+        allowNull: true,
+        requireMode: true,
+      ),
+    );
+  }
+  if (!value.containsKey('endBinding')) {
+    violations.add('$path.endBinding must be an object or null');
+  } else {
+    violations.addAll(
+      _validateStrictFixedPointBinding(
+        value['endBinding'],
+        path: '$path.endBinding',
+        allowNull: true,
+        requireMode: true,
+      ),
+    );
+  }
+  final startArrowhead = value['startArrowhead'];
+  if (startArrowhead != null && !_isArrowheadValue(startArrowhead)) {
+    violations.add('$path.startArrowhead must be a valid arrowhead or null');
+  }
+  final endArrowhead = value['endArrowhead'];
+  if (endArrowhead != null && !_isArrowheadValue(endArrowhead)) {
+    violations.add('$path.endArrowhead must be a valid arrowhead or null');
+  }
+  if (value['elbowed'] is! bool) {
+    violations.add('$path.elbowed must be a boolean');
+  }
+  violations.addAll(
+    _validateStrictFixedSegments(
+      value['fixedSegments'],
+      path: '$path.fixedSegments',
+      allowNull: true,
+    ),
+  );
+  if (value.containsKey('startIsSpecial') &&
+      value['startIsSpecial'] != null &&
+      value['startIsSpecial'] is! bool) {
+    violations.add('$path.startIsSpecial must be a boolean or null');
+  }
+  if (value.containsKey('endIsSpecial') &&
+      value['endIsSpecial'] != null &&
+      value['endIsSpecial'] is! bool) {
+    violations.add('$path.endIsSpecial must be a boolean or null');
+  }
+  return violations;
+}
+
+List<String> _validateStrictArrowStateArray(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! List) {
+    return <String>['$path must be an array of objects'];
+  }
+  final violations = <String>[];
+  for (var index = 0; index < value.length; index += 1) {
+    violations.addAll(
+      _validateStrictArrowState(value[index], path: '$path[$index]'),
+    );
+  }
+  return violations;
+}
+
+List<String> _validateStrictArrowBindingState(
+  Object? value, {
+  required String path,
+}) {
+  if (value is ArrowBindingState) {
+    return const <String>[];
+  }
+  if (value is! Map) {
+    return <String>['$path must be an object'];
+  }
+
+  final violations = <String>[];
+  if (value['id'] is! String) {
+    violations.add('$path.id must be a string');
+  }
+  if (!value.containsKey('startBinding')) {
+    violations.add('$path.startBinding is required');
+  }
+  if (!value.containsKey('endBinding')) {
+    violations.add('$path.endBinding is required');
+  }
+  violations.addAll(
+    _validateStrictFixedPointBinding(
+      value['startBinding'],
+      path: '$path.startBinding',
+      allowNull: true,
+      requireMode: true,
+    ),
+  );
+  violations.addAll(
+    _validateStrictFixedPointBinding(
+      value['endBinding'],
+      path: '$path.endBinding',
+      allowNull: true,
+      requireMode: true,
+    ),
+  );
+  return violations;
+}
+
+List<String> _validateStrictArrowBindingStateArray(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! List) {
+    return <String>['$path must be an array of objects'];
+  }
+  final violations = <String>[];
+  for (var index = 0; index < value.length; index += 1) {
+    violations.addAll(
+      _validateStrictArrowBindingState(value[index], path: '$path[$index]'),
+    );
+  }
+  return violations;
+}
+
+List<String> _validateStrictBindableRelationState(
+  Object? value, {
+  required String path,
+}) {
+  if (value is BindableRelationState) {
+    return const <String>[];
+  }
+  if (value is! Map) {
+    return <String>['$path must be an object'];
+  }
+
+  final violations = <String>[];
+  if (value['id'] is! String) {
+    violations.add('$path.id must be a string');
+  }
+  if (!_isStringArray(value['boundArrowIds'])) {
+    violations.add('$path.boundArrowIds must be an array of strings');
+  }
+  return violations;
+}
+
+List<String> _validateStrictBindableRelationStateArray(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! List) {
+    return <String>['$path must be an array of objects'];
+  }
+  final violations = <String>[];
+  for (var index = 0; index < value.length; index += 1) {
+    violations.addAll(
+      _validateStrictBindableRelationState(value[index], path: '$path[$index]'),
+    );
+  }
+  return violations;
+}
+
+List<String> _validateStrictBindablePatch(
+  Object? value, {
+  required String path,
+}) {
+  if (value is BindablePatch) {
+    return const <String>[];
+  }
+  if (value is! Map) {
+    return <String>['$path must be an object'];
+  }
+  final violations = <String>[];
+  if (value['id'] is! String) {
+    violations.add('$path.id must be a string');
+  }
+  if (value.containsKey('addBoundArrowId') &&
+      value['addBoundArrowId'] is! String) {
+    violations.add('$path.addBoundArrowId must be a string when provided');
+  }
+  if (value.containsKey('removeBoundArrowId') &&
+      value['removeBoundArrowId'] is! String) {
+    violations.add('$path.removeBoundArrowId must be a string when provided');
+  }
+  return violations;
+}
+
+List<String> _validateStrictBindablePatchArray(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! List) {
+    return <String>['$path must be an array of objects'];
+  }
+  final violations = <String>[];
+  for (var index = 0; index < value.length; index += 1) {
+    violations.addAll(
+      _validateStrictBindablePatch(value[index], path: '$path[$index]'),
+    );
+  }
+  return violations;
+}
+
+List<String> _validateStrictBindableRelationPatch(
+  Object? value, {
+  required String path,
+}) {
+  if (value is BindableRelationPatch) {
+    return const <String>[];
+  }
+  if (value is! Map) {
+    return <String>['$path must be an object'];
+  }
+  final violations = <String>[];
+  if (value['id'] is! String) {
+    violations.add('$path.id must be a string');
+  }
+  if (!_isStringArray(value['boundArrowIds'])) {
+    violations.add('$path.boundArrowIds must be an array of strings');
+  }
+  return violations;
+}
+
+List<String> _validateStrictBindableRelationPatchArray(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! List) {
+    return <String>['$path must be an array of objects'];
+  }
+  final violations = <String>[];
+  for (var index = 0; index < value.length; index += 1) {
+    violations.addAll(
+      _validateStrictBindableRelationPatch(value[index], path: '$path[$index]'),
+    );
+  }
+  return violations;
+}
+
+List<String> _validateStrictCurvePathOp(Object? value, {required String path}) {
+  if (value is CurvePathOp) {
+    return value.data.every(_isFiniteNumber)
+        ? const <String>[]
+        : <String>['$path.data must be an array of finite numbers'];
+  }
+  if (value is! Map) {
+    return <String>['$path must be an object'];
+  }
+  final violations = <String>[];
+  if (value['op'] is! String) {
+    violations.add('$path.op must be a string');
+  }
+  if (value['data'] is! List ||
+      !(value['data'] as List).every((entry) => _isFiniteNumber(entry))) {
+    violations.add('$path.data must be an array of finite numbers');
+  }
+  return violations;
+}
+
+List<String> _validateStrictCurvePathOpArray(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! List) {
+    return <String>['$path must be an array of objects'];
+  }
+  final violations = <String>[];
+  for (var index = 0; index < value.length; index += 1) {
+    violations.addAll(
+      _validateStrictCurvePathOp(value[index], path: '$path[$index]'),
+    );
+  }
+  return violations;
+}
+
+List<String> _validateArrowPatchShape(Object? value, {required String path}) {
+  if (value is! Map) {
+    return <String>['$path must be an object'];
+  }
+  final violations = <String>[];
+  if (value.containsKey('x') && !_isFiniteNumber(value['x'])) {
+    violations.add('$path.x must be a finite number when provided');
+  }
+  if (value.containsKey('y') && !_isFiniteNumber(value['y'])) {
+    violations.add('$path.y must be a finite number when provided');
+  }
+  if (value.containsKey('width') && !_isFiniteNumber(value['width'])) {
+    violations.add('$path.width must be a finite number when provided');
+  }
+  if (value.containsKey('height') && !_isFiniteNumber(value['height'])) {
+    violations.add('$path.height must be a finite number when provided');
+  }
+  if (value.containsKey('points') && !_isPointTupleArray(value['points'])) {
+    violations.add('$path.points must be an array of points when provided');
+  }
+  if (value.containsKey('startBinding')) {
+    violations.addAll(
+      _validateStrictFixedPointBinding(
+        value['startBinding'],
+        path: '$path.startBinding',
+        allowNull: true,
+        requireMode: true,
+      ),
+    );
+  }
+  if (value.containsKey('endBinding')) {
+    violations.addAll(
+      _validateStrictFixedPointBinding(
+        value['endBinding'],
+        path: '$path.endBinding',
+        allowNull: true,
+        requireMode: true,
+      ),
+    );
+  }
+  if (value.containsKey('fixedSegments')) {
+    violations.addAll(
+      _validateStrictFixedSegments(
+        value['fixedSegments'],
+        path: '$path.fixedSegments',
+        allowNull: true,
+      ),
+    );
+  }
+  if (value.containsKey('startIsSpecial') &&
+      value['startIsSpecial'] != null &&
+      value['startIsSpecial'] is! bool) {
+    violations.add('$path.startIsSpecial must be a boolean or null');
+  }
+  if (value.containsKey('endIsSpecial') &&
+      value['endIsSpecial'] != null &&
+      value['endIsSpecial'] is! bool) {
+    violations.add('$path.endIsSpecial must be a boolean or null');
+  }
+  return violations;
+}
+
+List<String> _validateArrowEngineEventsShape(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! List) {
+    return <String>['$path must be an array'];
+  }
+
+  final violations = <String>[];
+  for (var index = 0; index < value.length; index += 1) {
+    final entry = value[index];
+    final entryPath = '$path[$index]';
+    if (entry is ReorderArrowEvent) {
+      if (entry.arrowId.isEmpty) {
+        violations.add('$entryPath.arrowId must be a string');
+      }
+      if (entry.bindableId.isEmpty) {
+        violations.add('$entryPath.bindableId must be a string');
+      }
+      continue;
+    }
+    if (entry is BindingBrokenEvent) {
+      if (entry.arrowId.isEmpty) {
+        violations.add('$entryPath.arrowId must be a string');
+      }
+      if (!_isArrowEndpointEdgeValue(entry.edge)) {
+        violations.add('$entryPath.edge must be "start" or "end"');
+      }
+      continue;
+    }
+    if (entry is! Map) {
+      violations.add('$entryPath must be an object');
+      continue;
+    }
+
+    final type = entry['type'];
+    if (type == 'reorder-arrow') {
+      if (entry['arrowId'] is! String) {
+        violations.add('$entryPath.arrowId must be a string');
+      }
+      if (entry['bindableId'] is! String) {
+        violations.add('$entryPath.bindableId must be a string');
+      }
+      continue;
+    }
+    if (type == 'binding-broken') {
+      if (entry['arrowId'] is! String) {
+        violations.add('$entryPath.arrowId must be a string');
+      }
+      if (!_isArrowEndpointEdgeValue(entry['edge'])) {
+        violations.add('$entryPath.edge must be "start" or "end"');
+      }
+      continue;
+    }
+    violations.add(
+      '$entryPath.type must be "reorder-arrow" or "binding-broken"',
+    );
+  }
+  return violations;
+}
+
+List<String> _validateSuggestedBindingShape(
+  Object? value, {
+  required String path,
+}) {
+  if (value == null) {
+    return const <String>[];
+  }
+  if (value is SuggestedBinding) {
+    final violations = <String>[];
+    if (value.bindableId != null && value.bindableId is! String) {
+      violations.add('$path.bindableId must be a string when provided');
+    }
+    violations.addAll(
+      _validateStrictBindableState(value.element, path: '$path.element'),
+    );
+    if (value.midPoint != null && !_isPointTuple(value.midPoint)) {
+      violations.add(
+        '$path.midPoint must be a [number, number] tuple when provided',
+      );
+    }
+    return violations;
+  }
+  if (value is! Map) {
+    return <String>['$path must be an object or null'];
+  }
+
+  final violations = <String>[];
+  if (value.containsKey('bindableId') && value['bindableId'] is! String) {
+    violations.add('$path.bindableId must be a string when provided');
+  }
+  if (!value.containsKey('element')) {
+    violations.add('$path.element is required');
+  } else {
+    violations.addAll(
+      _validateStrictBindableState(value['element'], path: '$path.element'),
+    );
+  }
+  if (value.containsKey('midPoint') &&
+      value['midPoint'] != null &&
+      !_isPointTuple(value['midPoint'])) {
+    violations.add(
+      '$path.midPoint must be a [number, number] tuple when provided',
+    );
+  }
+  return violations;
+}
+
+List<String> _validateEngineResultShape(Object? value, {required String path}) {
+  if (value is EngineResult) {
+    final violations = <String>[];
+    violations.addAll(
+      _validateArrowPatchShape(value.arrowPatch, path: '$path.arrowPatch'),
+    );
+    violations.addAll(
+      _validateStrictBindablePatchArray(
+        value.bindablePatches,
+        path: '$path.bindablePatches',
+      ),
+    );
+    violations.addAll(
+      _validateSuggestedBindingShape(
+        value.suggestedBinding,
+        path: '$path.suggestedBinding',
+      ),
+    );
+    violations.addAll(
+      _validateArrowEngineEventsShape(value.events, path: '$path.events'),
+    );
+    return violations;
+  }
+  if (value is! Map) {
+    return <String>['$path must be an object'];
+  }
+  final violations = <String>[];
+  violations.addAll(
+    _validateArrowPatchShape(value['arrowPatch'], path: '$path.arrowPatch'),
+  );
+  violations.addAll(
+    _validateStrictBindablePatchArray(
+      value['bindablePatches'],
+      path: '$path.bindablePatches',
+    ),
+  );
+  violations.addAll(
+    _validateSuggestedBindingShape(
+      value['suggestedBinding'],
+      path: '$path.suggestedBinding',
+    ),
+  );
+  violations.addAll(
+    _validateArrowEngineEventsShape(value['events'], path: '$path.events'),
+  );
+  return violations;
+}
+
+List<String> _validateUpdateElbowPatchShape(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! Map) {
+    return <String>['$path must be an object'];
+  }
+  final violations = <String>[];
+  if (value.containsKey('points') && !_isPointTupleArray(value['points'])) {
+    violations.add('$path.points must be an array of points when provided');
+  }
+  if (value.containsKey('fixedSegments')) {
+    violations.addAll(
+      _validateStrictFixedSegments(
+        value['fixedSegments'],
+        path: '$path.fixedSegments',
+        allowNull: true,
+      ),
+    );
+  }
+  if (value.containsKey('startBinding')) {
+    violations.addAll(
+      _validateStrictFixedPointBinding(
+        value['startBinding'],
+        path: '$path.startBinding',
+        allowNull: true,
+        requireMode: true,
+      ),
+    );
+  }
+  if (value.containsKey('endBinding')) {
+    violations.addAll(
+      _validateStrictFixedPointBinding(
+        value['endBinding'],
+        path: '$path.endBinding',
+        allowNull: true,
+        requireMode: true,
+      ),
+    );
+  }
+  return violations;
+}
+
+List<String> _validateOptionalBooleanFields(
+  Map value, {
+  required String path,
+  required List<String> fields,
+}) {
+  final violations = <String>[];
+  for (final field in fields) {
+    if (value.containsKey(field) && value[field] is! bool) {
+      violations.add('$path.$field must be a boolean');
+    }
+  }
+  return violations;
+}
+
+List<String> _validateOptionsShape(
+  String operationType,
+  Object? value, {
+  required String path,
+}) {
+  const endpointDragOps = <String>{
+    'compute-endpoint-drag',
+    'get-endpoint-binding-strategy',
+    'compute-simple-binding-patch',
+    'finalize-endpoint-drag',
+  };
+  const recomputeOps = <String>{
+    'recompute-after-bindable-change',
+    'recompute-bindings-for-changed-bindables',
+    'recompute-bindings-after-bindable-change',
+  };
+  const pruneOps = <String>{
+    'prune-arrow-bindings',
+    'sync-bindings-after-bindable-prune',
+  };
+
+  if (endpointDragOps.contains(operationType)) {
+    if (value is! Map) {
+      return <String>['$path must be an object'];
+    }
+    final violations = <String>[];
+    violations.addAll(
+      _validateOptionalBooleanFields(
+        value,
+        path: path,
+        fields: const <String>[
+          'newArrow',
+          'altKey',
+          'angleLocked',
+          'finalize',
+          'complexBindings',
+          'initialBinding',
+          'preserveOppositeInsideBinding',
+        ],
+      ),
+    );
+    if (value.containsKey('oppositeOrbitFocusPoint') &&
+        !_isPointTuple(value['oppositeOrbitFocusPoint'])) {
+      violations.add(
+        '$path.oppositeOrbitFocusPoint must be a [number, number] tuple',
+      );
+    }
+    return violations;
+  }
+
+  if (operationType == 'compute-focus-point-drag') {
+    if (value is! Map) {
+      return <String>['$path must be an object'];
+    }
+    final violations = <String>[];
+    violations.addAll(
+      _validateOptionalBooleanFields(
+        value,
+        path: path,
+        fields: const <String>['switchToInsideBinding'],
+      ),
+    );
+    if (value.containsKey('gridSize') &&
+        value['gridSize'] != null &&
+        !_isFiniteNumber(value['gridSize'])) {
+      violations.add('$path.gridSize must be a finite number when provided');
+    }
+    return violations;
+  }
+
+  if (operationType == 'update-elbow-arrow') {
+    if (value is! Map) {
+      return <String>['$path must be an object'];
+    }
+    return _validateOptionalBooleanFields(
+      value,
+      path: path,
+      fields: const <String>['isDragging', 'validateInvariants'],
+    );
+  }
+
+  if (pruneOps.contains(operationType)) {
+    if (value is! Map) {
+      return <String>['$path must be an object'];
+    }
+    if (operationType == 'sync-bindings-after-bindable-prune') {
+      return _validateOptionalBooleanFields(
+        value,
+        path: path,
+        fields: const <String>['pruneStart', 'pruneEnd', 'recomputeElbows'],
+      );
+    }
+    return _validateOptionalBooleanFields(
+      value,
+      path: path,
+      fields: const <String>['pruneStart', 'pruneEnd'],
+    );
+  }
+
+  if (recomputeOps.contains(operationType)) {
+    if (value is! Map) {
+      return <String>['$path must be an object'];
+    }
+    if (value.containsKey('moveMidPointsWithElement') &&
+        value['moveMidPointsWithElement'] is! bool) {
+      return <String>[
+        '$path.moveMidPointsWithElement must be a boolean when provided',
+      ];
+    }
+    return const <String>[];
+  }
+
+  return const <String>[];
+}
+
+List<String> _validateIdMapShape(Object? value, {required String path}) {
+  if (value is Map) {
+    final violations = <String>[];
+    for (final entry in value.entries) {
+      if (entry.key is! String) {
+        violations.add('$path map keys must be strings');
+      }
+      if (entry.value is! String) {
+        violations.add('$path map values must be strings');
+      }
+    }
+    return violations;
+  }
+  if (value is List) {
+    final violations = <String>[];
+    for (var index = 0; index < value.length; index += 1) {
+      final entry = value[index];
+      final entryPath = '$path[$index]';
+      if (entry is! Map) {
+        violations.add('$entryPath must be an object');
+        continue;
+      }
+      if (entry['from'] is! String) {
+        violations.add('$entryPath.from must be a string');
+      }
+      if (entry['to'] is! String) {
+        violations.add('$entryPath.to must be a string');
+      }
+    }
+    return violations;
+  }
+  return <String>[
+    '$path must be a map of string-to-string, or an array of {from,to} entries',
+  ];
+}
+
+List<String> _validateAnchorElementIdsLookupShape(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! Map) {
+    return <String>['$path must be an object map'];
+  }
+  final violations = <String>[];
+  for (final entry in value.entries) {
+    if (entry.key is! String || (entry.key as String).trim().isEmpty) {
+      violations.add('$path keys must be non-empty strings');
+      continue;
+    }
+    if (!_isStringArray(entry.value)) {
+      violations.add('$path.${entry.key} must be an array of strings');
+    }
+  }
+  return violations;
+}
 
 List<String> _validateFixedPointBindingShape(
   Object? value, {
@@ -525,12 +1554,40 @@ List<String> _validateEngineContextShape(
   Object? value, {
   required String path,
   required bool allowNull,
+  bool requireBindMode = false,
+  bool requireMaxCoordinate = false,
 }) {
   if (value == null) {
     return allowNull ? const <String>[] : <String>['$path must be an object'];
   }
   if (value is! Map) {
     return <String>['$path must be an object${allowNull ? ' or null' : ''}'];
+  }
+  final violations = <String>[];
+  if (!_isFiniteNumber(value['zoom'])) {
+    violations.add('$path.zoom must be a finite number');
+  }
+  if (value['isBindingEnabled'] is! bool) {
+    violations.add('$path.isBindingEnabled must be a boolean');
+  }
+  if (requireBindMode && !_isBindModeValue(value['bindMode'])) {
+    violations.add('$path.bindMode must be "inside", "orbit", or "skip"');
+  }
+  if (requireMaxCoordinate && !_isFiniteNumber(value['maxCoordinate'])) {
+    violations.add('$path.maxCoordinate must be a finite number');
+  }
+  return violations;
+}
+
+List<String> _validateNormalizeEngineContextShape(
+  Object? value, {
+  required String path,
+}) {
+  if (value == null) {
+    return const <String>[];
+  }
+  if (value is! Map) {
+    return <String>['$path must be an object or null'];
   }
   final violations = <String>[];
   if (value.containsKey('zoom') && !_isFiniteNumber(value['zoom'])) {
@@ -588,66 +1645,86 @@ List<String> _validateOperationFieldShape(
   switch (field) {
     case 'arrow':
       if (_operationsWithArrowBindingStateArrowField.contains(operationType)) {
-        return _asArrowBindingState(value) == null
-            ? <String>[
-                '$path must be an ArrowBindingState for operation "$operationType"',
-              ]
-            : const <String>[];
+        return _validateStrictArrowBindingState(value, path: path);
       }
-      return _asArrowState(value) == null
-          ? <String>[
-              '$path must be an ArrowState for operation "$operationType"',
-            ]
-          : const <String>[];
+      if (_operationsWithArrowPointsOnlyField.contains(operationType)) {
+        if (value is! Map) {
+          return <String>['$path must be an object'];
+        }
+        return _isPointTupleArray(value['points'])
+            ? const <String>[]
+            : <String>['$path.points must be an array of points'];
+      }
+      if (_operationsWithArrowElbowOnlyField.contains(operationType)) {
+        if (value is! Map) {
+          return <String>['$path must be an object'];
+        }
+        return value['elbowed'] is bool
+            ? const <String>[]
+            : <String>['$path.elbowed must be a boolean'];
+      }
+      return _validateStrictArrowState(value, path: path);
     case 'arrows':
       if (_operationsWithArrowBindingStateArrowsField.contains(operationType)) {
-        return _isArrowBindingStateArray(value)
-            ? const <String>[]
-            : <String>[
-                '$path must be an array of ArrowBindingState for operation "$operationType"',
-              ];
+        return _validateStrictArrowBindingStateArray(value, path: path);
       }
-      return _isArrowStateArray(value)
-          ? const <String>[]
-          : <String>[
-              '$path must be an array of ArrowState for operation "$operationType"',
-            ];
+      return _validateStrictArrowStateArray(value, path: path);
     case 'bindable':
       if (value == null &&
           _operationsAllowNullBindableField.contains(operationType)) {
         return const <String>[];
       }
       if (_operationsWithRelationBindableField.contains(operationType)) {
-        return _asBindableRelationState(value) == null
-            ? <String>[
-                '$path must be a BindableRelationState for operation "$operationType"',
-              ]
-            : const <String>[];
+        return _validateStrictBindableRelationState(value, path: path);
       }
-      return _asBindableState(value) == null
-          ? <String>[
-              '$path must be a BindableState for operation "$operationType"',
-            ]
-          : const <String>[];
+      return _validateStrictBindableState(value, path: path);
     case 'bindables':
       if (_operationsWithRelationBindablesField.contains(operationType)) {
-        return _isBindableRelationStateArray(value)
-            ? const <String>[]
-            : <String>[
-                '$path must be an array of BindableRelationState for operation "$operationType"',
-              ];
+        return _validateStrictBindableRelationStateArray(value, path: path);
       }
-      return _isBindableStateArray(value)
-          ? const <String>[]
-          : <String>[
-              '$path must be an array of BindableState for operation "$operationType"',
-            ];
+      return _validateStrictBindableStateArray(value, path: path);
     case 'relations':
+      if (operationType == 'recompute-bindings-for-changed-bindables') {
+        return _validateStrictBindableRelationStateArray(value, path: path);
+      }
     case 'left':
     case 'right':
       return _validateBoundRelationEntriesShape(value, path: path);
     case 'previous':
     case 'next':
+      if (operationType == 'derive-bindable-patches-for-binding-change' ||
+          operationType ==
+              'derive-bindable-relation-patches-for-binding-change') {
+        if (value is! Map) {
+          return <String>['$path must be an object'];
+        }
+        final violations = <String>[];
+        if (!value.containsKey('startBinding')) {
+          violations.add('$path.startBinding is required');
+        } else {
+          violations.addAll(
+            _validateStrictFixedPointBinding(
+              value['startBinding'],
+              path: '$path.startBinding',
+              allowNull: true,
+              requireMode: true,
+            ),
+          );
+        }
+        if (!value.containsKey('endBinding')) {
+          violations.add('$path.endBinding is required');
+        } else {
+          violations.addAll(
+            _validateStrictFixedPointBinding(
+              value['endBinding'],
+              path: '$path.endBinding',
+              allowNull: true,
+              requireMode: true,
+            ),
+          );
+        }
+        return violations;
+      }
       return _asArrowBindingState(value) == null
           ? <String>[
               '$path must be an ArrowBindingState for operation "$operationType"',
@@ -671,11 +1748,19 @@ List<String> _validateOperationFieldShape(
       return _isArrowEndpointEdgeValue(value)
           ? const <String>[]
           : <String>['$path must be "start" or "end"'];
+    case 'draggedEdge':
+      return _isArrowEndpointEdgeValue(value)
+          ? const <String>[]
+          : <String>['$path must be "start" or "end"'];
+    case 'inner':
+    case 'outer':
+      return _validateStrictBindableState(value, path: path);
     case 'point':
     case 'pointer':
     case 'otherPoint':
     case 'delta':
     case 'originPoint':
+    case 'focusPoint':
       return _isPointTuple(value)
           ? const <String>[]
           : <String>['$path must be a [number, number] tuple'];
@@ -690,9 +1775,6 @@ List<String> _validateOperationFieldShape(
           ? const <String>[]
           : <String>['$path must be an array of points'];
     case 'customIntersector':
-      if (value == null) {
-        return const <String>[];
-      }
       return value is List &&
               value.length == 2 &&
               _isPointTuple(value[0]) &&
@@ -709,21 +1791,22 @@ List<String> _validateOperationFieldShape(
               '$path must be null or a [number, number, number, number] tuple',
             ];
     case 'context':
+      if (operationType == 'normalize-engine-context') {
+        return _validateNormalizeEngineContextShape(value, path: path);
+      }
       return _validateEngineContextShape(
         value,
         path: path,
-        allowNull: operationType == 'normalize-engine-context',
+        allowNull: false,
+        requireBindMode: _operationsContextRequireBindModeAndMaxCoordinate
+            .contains(operationType),
+        requireMaxCoordinate: _operationsContextRequireBindModeAndMaxCoordinate
+            .contains(operationType),
       );
     case 'result':
-      return _asEngineResult(value) == null
-          ? <String>[
-              '$path must be an EngineResult for operation "$operationType"',
-            ]
-          : const <String>[];
+      return _validateEngineResultShape(value, path: path);
     case 'events':
-      return _isArrowEngineEventArray(value)
-          ? const <String>[]
-          : <String>['$path must be an array of arrow engine events'];
+      return _validateArrowEngineEventsShape(value, path: path);
     case 'orderedElementIds':
     case 'anchorElementIds':
     case 'deletedBindableIds':
@@ -734,24 +1817,14 @@ List<String> _validateOperationFieldShape(
           ? const <String>[]
           : <String>['$path must be an array of strings'];
     case 'changedBindableIds':
-      if (value == null) {
-        return const <String>[];
-      }
       return _isStringArray(value)
           ? const <String>[]
-          : <String>['$path must be an array of strings or null'];
+          : <String>['$path must be an array of strings'];
     case 'bindableIdMap':
     case 'arrowIdMap':
-      return _isIdMapShape(value)
-          ? const <String>[]
-          : <String>['$path must be a map of string-to-string'];
+      return _validateIdMapShape(value, path: path);
     case 'anchorElementIdsByBindableId':
-      if (value == null) {
-        return const <String>[];
-      }
-      return _isAnchorLookupShape(value)
-          ? const <String>[]
-          : <String>['$path must be a map of string-to-string-array'];
+      return _validateAnchorElementIdsLookupShape(value, path: path);
     case 'zoom':
     case 'tolerance':
     case 'strokeWidth':
@@ -784,30 +1857,52 @@ List<String> _validateOperationFieldShape(
           ? const <String>[]
           : <String>['$path must be "inside", "orbit", or "skip"'];
     case 'transformHandleType':
-    case 'arrowhead':
-    case 'strokeStyle':
     case 'arrowId':
-    case 'hoveredBindableId':
       return value is String
           ? const <String>[]
           : <String>['$path must be a string'];
+    case 'hoveredBindableId':
+      return value == null || value is String
+          ? const <String>[]
+          : <String>['$path must be a string or null when provided'];
+    case 'arrowhead':
+      return _isArrowheadValue(value)
+          ? const <String>[]
+          : <String>['$path must be a valid arrowhead'];
+    case 'strokeStyle':
+      return value == 'solid' || value == 'dashed' || value == 'dotted'
+          ? const <String>[]
+          : <String>['$path must be "solid", "dashed", or "dotted"'];
     case 'segmentIndex':
       return _isFiniteNumber(value)
           ? const <String>[]
           : <String>['$path must be a finite number'];
     case 'draggedPoints':
-      if (value is! Map) {
-        return <String>['$path must be an object of point entries'];
+      if (value is! List) {
+        return <String>['$path must be an array'];
       }
       final violations = <String>[];
-      value.forEach((key, entryValue) {
-        if (key is! String && key is! int) {
-          violations.add('$path contains an invalid key');
+      for (var index = 0; index < value.length; index += 1) {
+        final entry = value[index];
+        if (entry is! Map) {
+          violations.add('$path[$index] must be an object');
+          continue;
         }
-        if (!_isPointTuple(entryValue)) {
-          violations.add('$path[$key] must be a [number, number] tuple');
+        final indexValue = entry['index'];
+        final isNonNegativeInteger =
+            indexValue is num &&
+            indexValue.isFinite &&
+            indexValue >= 0 &&
+            indexValue.toInt() == indexValue;
+        if (!isNonNegativeInteger) {
+          violations.add('$path[$index].index must be a non-negative integer');
         }
-      });
+        if (!_isPointTuple(entry['point'])) {
+          violations.add(
+            '$path[$index].point must be a [number, number] tuple',
+          );
+        }
+      }
       return violations;
     case 'startBounds':
     case 'endBounds':
@@ -815,80 +1910,46 @@ List<String> _validateOperationFieldShape(
           ? const <String>[]
           : <String>['$path must be a directional link bounds object'];
     case 'updates':
-    case 'options':
-      if (value == null) {
-        return const <String>[];
+      if (operationType == 'update-elbow-arrow') {
+        return _validateUpdateElbowPatchShape(value, path: path);
       }
-      return value is Map
-          ? const <String>[]
-          : <String>['$path must be an object'];
+      return const <String>[];
+    case 'options':
+      return _validateOptionsShape(operationType, value, path: path);
     case 'patch':
+      if (operationType == 'apply-arrow-patch') {
+        return _validateArrowPatchShape(value, path: path);
+      }
       if (operationType == 'apply-bindable-relation-patch') {
-        return _asBindableRelationPatch(value) == null
-            ? <String>[
-                '$path must be a BindableRelationPatch for operation "$operationType"',
-              ]
-            : const <String>[];
+        return _validateStrictBindableRelationPatch(value, path: path);
       }
       if (operationType == 'apply-arrow-binding-state-patch') {
         return _validateArrowBindingStatePatchShape(value, path: path);
       }
-      return value is Map
-          ? const <String>[]
-          : <String>['$path must be an object'];
+      return const <String>[];
     case 'patches':
       if (operationType == 'apply-arrow-binding-state-patches') {
         return _validateArrowBindingStatePatchArrayShape(value, path: path);
       }
       if (operationType == 'reduce-bindable-patches-to-relation-patches') {
-        return _isBindablePatchArray(value)
-            ? const <String>[]
-            : <String>[
-                '$path must be an array of BindablePatch for operation "$operationType"',
-              ];
+        return _validateStrictBindablePatchArray(value, path: path);
       }
       if (operationType == 'apply-bindable-relation-patches') {
-        return _isBindableRelationPatchArray(value)
-            ? const <String>[]
-            : <String>[
-                '$path must be an array of BindableRelationPatch for operation "$operationType"',
-              ];
+        return _validateStrictBindableRelationPatchArray(value, path: path);
       }
-      return value is List
-          ? const <String>[]
-          : <String>['$path must be an array'];
+      return const <String>[];
     case 'curveOps':
-      return _isCurvePathOpArray(value)
-          ? const <String>[]
-          : <String>['$path must be an array of curve path operations'];
+      return _validateStrictCurvePathOpArray(value, path: path);
     case 'fixedSegments':
-      if (value == null) {
-        return const <String>[];
-      }
-      return _isListWhere(value, (entry) => _asFixedSegment(entry) != null)
-          ? const <String>[]
-          : <String>['$path must be an array of fixed segments or null'];
+      return _validateStrictFixedSegments(value, path: path, allowNull: true);
     case 'arrowPatch':
-      if (value == null) {
-        return const <String>[];
-      }
-      return value is Map
-          ? const <String>[]
-          : <String>['$path must be an object or null'];
+      return _validateArrowPatchShape(value, path: path);
     case 'bindablePatches':
-      if (value == null) {
-        return const <String>[];
-      }
-      return _isBindablePatchArray(value)
-          ? const <String>[]
-          : <String>['$path must be an array of BindablePatch or null'];
+      return _validateStrictBindablePatchArray(value, path: path);
     case 'geometryBindables':
-      if (value == null) {
-        return const <String>[];
-      }
-      return _isBindableStateArray(value)
-          ? const <String>[]
-          : <String>['$path must be an array of BindableState'];
+      return _validateStrictBindableStateArray(value, path: path);
+    case 'existingBindables':
+      return _validateStrictBindableStateArray(value, path: path);
   }
 
   return const <String>[];
@@ -898,8 +1959,15 @@ List<String> _validateOperationInputShapeByHeuristics(
   Map<String, dynamic> input,
   String operationType,
 ) {
+  final validatedFields = _operationValidatedFields[operationType];
+  if (validatedFields == null || validatedFields.isEmpty) {
+    return const <String>[];
+  }
   final violations = <String>[];
   for (final entry in input.entries) {
+    if (!validatedFields.contains(entry.key)) {
+      continue;
+    }
     violations.addAll(
       _validateOperationFieldShape(operationType, entry.key, entry.value),
     );
@@ -2149,10 +3217,7 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
                 width: 0,
                 height: 0,
               );
-          final padding = _asDouble(
-            input['arrowheadSize'],
-            fallback: _asDouble(input['padding'], fallback: 6),
-          );
+          final padding = _asDouble(input['arrowheadSize'], fallback: 6);
           return <String, dynamic>{
             'type': 'directional-link-arrow',
             'value': binding_core.createDirectionalLinkArrow(
@@ -2166,10 +3231,7 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
       case 'offset-arrow-endpoints-for-binding-overlap':
         {
           final input = _requireInput(rawInput, operationType);
-          final delta = _asDouble(
-            input['minimumLength'],
-            fallback: _asDouble(input['delta'], fallback: 0.5),
-          );
+          final delta = _asDouble(input['minimumLength'], fallback: 0.5);
           return <String, dynamic>{
             'type': 'points',
             'points': binding_core.offsetArrowEndpointsForBindingOverlap(
@@ -2226,10 +3288,14 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
       case 'avoid-rectangular-corner':
         {
           final input = _requireInput(rawInput, operationType);
+          final arrowFromInput = _asArrowState(input['arrow']);
+          final elbowOnlyArrow = input['arrow'] is Map
+              ? _arrowForSnapToMid(_asBool((input['arrow'] as Map)['elbowed']))
+              : null;
           return <String, dynamic>{
             'type': 'point',
             'point': binding_core.avoidRectangularCorner(
-              _requireArrowState(input['arrow'], operationType),
+              arrowFromInput ?? elbowOnlyArrow ?? _arrowForSnapToMid(false),
               _requireBindableState(input['bindable'], operationType),
               _asPoint(input['point']),
             ),
@@ -2310,11 +3376,10 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
       case 'calculate-fixed-point-for-elbow-binding':
         {
           final input = _requireInput(rawInput, operationType);
-          final arrow = _asArrowState(input['arrow']);
           final binding = binding_core.calculateFixedPointForElbowBinding(
             point: _asPoint(input['point']),
             bindable: _requireBindableState(input['bindable'], operationType),
-            arrow: arrow,
+            arrow: _requireArrowState(input['arrow'], operationType),
             edge: normalizeArrowEndpointEdge(_asString(input['edge'])),
           );
           return <String, dynamic>{
@@ -2421,11 +3486,15 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
       case 'pick-hovered-bindable-for-focus':
         {
           final input = _requireInput(rawInput, operationType);
+          final arrowFromInput = _asArrowState(input['arrow']);
+          final elbowOnlyArrow = input['arrow'] is Map
+              ? _arrowForSnapToMid(_asBool((input['arrow'] as Map)['elbowed']))
+              : null;
           return <String, dynamic>{
             'type': 'bindable',
             'bindable': binding_core.pickHoveredBindableForFocus(
               _asPoint(input['point']),
-              _requireArrowState(input['arrow'], operationType),
+              arrowFromInput ?? elbowOnlyArrow ?? _arrowForSnapToMid(false),
               _asBindableStates(input['bindables']),
               tolerance: _asDouble(input['tolerance']),
             ),
