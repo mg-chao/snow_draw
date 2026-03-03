@@ -32,8 +32,8 @@ where
 
 /// Minimal element snapshot needed by render-task encoders.
 ///
-/// The canonical model translation is still in flight, so this local struct
-/// keeps encoder contracts usable and type-safe.
+/// This local struct keeps encoder contracts object-safe and independent from
+/// higher-level model containers.
 #[derive(Clone)]
 pub struct ElementState {
     pub id: String,

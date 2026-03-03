@@ -30,9 +30,8 @@ use crate::draw::utils::snapping_mode::{resolve_effective_snapping_mode_for_conf
 
 /// Additional state access needed by [`MoveOperation`].
 ///
-/// The translated engine currently has multiple in-progress `DrawState`
-/// compatibility layers, so move logic reads through this trait and stays
-/// compile-friendly even when a concrete state cannot expose full geometry.
+/// Move logic reads state through this trait to keep the operation reusable
+/// and testable across state containers.
 pub trait MoveOperationState {
     /// Returns selected ids captured at edit start.
     fn selected_ids_at_start(&self) -> HashSet<String>;

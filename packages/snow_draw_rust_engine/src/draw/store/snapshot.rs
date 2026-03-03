@@ -3,10 +3,10 @@
 use std::collections::BTreeMap;
 use std::fmt;
 
+use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::element_state::ElementState;
 use crate::draw::models::global_elements_state::GlobalElementsState;
 use crate::draw::models::selection_state::SelectionState;
-use crate::draw::store::history_delta::DrawState as StoreDrawState;
 
 /// Immutable snapshot of persisted draw state for history/delta operations.
 ///
@@ -53,19 +53,26 @@ impl PersistentSnapshot {
         }
     }
 
-    pub fn from_state(state: &StoreDrawState, include_selection: bool) -> Self {
+    pub fn from_state(state: &DrawState, include_selection: bool) -> Self {
         let selection = if include_selection {
             state.domain.selection.clone()
         } else {
             SelectionState::default()
         };
 
+        let element_map = state
+            .domain
+            .document
+            .element_map()
+            .into_iter()
+            .collect::<BTreeMap<_, _>>();
+
         Self::new(
             state.domain.document.elements.clone(),
             selection,
             include_selection,
             state.domain.document.global_elements.clone(),
-            Some(state.domain.document.element_map()),
+            Some(element_map),
             Some(state.domain.document.order()),
         )
     }

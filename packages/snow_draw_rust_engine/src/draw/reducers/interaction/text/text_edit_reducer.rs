@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::draw::config::draw_config::ElementStyleConfig;
@@ -8,11 +8,8 @@ use crate::draw::core::draw_context::DrawContext;
 use crate::draw::edit::apply::edit_apply::EditApply;
 use crate::draw::elements::core::element_data::ElementData;
 use crate::draw::elements::core::element_style_configurable_data::ElementStyleConfigurableData;
-use crate::draw::elements::types::arrow::arrow_data::{
-    ArrowData, ArrowDataPatch, NullableField as ArrowNullableField,
-};
-use crate::draw::elements::types::serial_number::serial_number_data::{
-    SerialNumberData, SerialNumberDataPatch,
+use crate::draw::elements::types::serial_number::serial_number_dependencies::{
+    clear_element_dependencies_for_ids, DependencyFilter,
 };
 use crate::draw::elements::types::text::text_data::{TextData, TextDataPatch};
 use crate::draw::elements::types::text::text_editing_geometry::{
@@ -113,9 +110,6 @@ pub trait TextEditReducerContext {
     fn text_style(&self) -> ElementStyleConfig;
 
     /// Optional text metrics adapter used by text-editing geometry.
-    ///
-    /// While the crate migration is in progress, callers can return `None`
-    /// and fall back to deterministic internal metrics.
     fn text_metrics_service(&self) -> Option<&dyn GeometryTextMetricsService> {
         None
     }
@@ -131,7 +125,7 @@ impl TextEditReducerContext for DrawContext {
     }
 
     fn text_metrics_service(&self) -> Option<&dyn GeometryTextMetricsService> {
-        None
+        self.text_metrics_service.as_text_editing_metrics_service()
     }
 }
 
@@ -454,6 +448,7 @@ impl TextEditReducer {
         elements: &[ElementState],
         deleted_text_id: &str,
     ) -> Option<Vec<ElementState>> {
+        let deleted_ids = HashSet::from([deleted_text_id.to_owned()]);
         let mut next_elements = Vec::<ElementState>::with_capacity(elements.len());
         let mut changed = false;
 
@@ -463,7 +458,8 @@ impl TextEditReducer {
                 continue;
             }
 
-            let updated = clear_element_dependencies_for_deleted_text_id(element, deleted_text_id);
+            let updated =
+                clear_element_dependencies_for_ids(element, &deleted_ids, DependencyFilter::all());
             if updated != *element {
                 changed = true;
             }
@@ -544,79 +540,9 @@ fn to_geometry_text_data(data: &TextData) -> GeometryTextData {
     }
 }
 
-fn clear_element_dependencies_for_deleted_text_id(
-    element: &ElementState,
-    deleted_text_id: &str,
-) -> ElementState {
-    if let Some(serial_data) = decode_serial_number_data(element.data.as_ref()) {
-        if serial_data.text_element_id.as_deref() == Some(deleted_text_id) {
-            let next_data = serial_data.copy_with(SerialNumberDataPatch {
-                text_element_id: Some(None),
-                ..SerialNumberDataPatch::default()
-            });
-            return element.copy_with(None, None, None, None, None, Some(Arc::new(next_data)));
-        }
-        return element.clone();
-    }
-
-    if let Some(arrow_data) = decode_arrow_data(element.data.as_ref()) {
-        let clear_start = arrow_data
-            .start_binding
-            .as_ref()
-            .is_some_and(|binding| binding.element_id == deleted_text_id);
-        let clear_end = arrow_data
-            .end_binding
-            .as_ref()
-            .is_some_and(|binding| binding.element_id == deleted_text_id);
-
-        if clear_start || clear_end {
-            let next_data = arrow_data.copy_with(ArrowDataPatch {
-                start_binding: if clear_start {
-                    ArrowNullableField::Null
-                } else {
-                    ArrowNullableField::Unset
-                },
-                end_binding: if clear_end {
-                    ArrowNullableField::Null
-                } else {
-                    ArrowNullableField::Unset
-                },
-                start_is_special: if clear_start {
-                    ArrowNullableField::Null
-                } else {
-                    ArrowNullableField::Unset
-                },
-                end_is_special: if clear_end {
-                    ArrowNullableField::Null
-                } else {
-                    ArrowNullableField::Unset
-                },
-                ..ArrowDataPatch::default()
-            });
-            return element.copy_with(None, None, None, None, None, Some(Arc::new(next_data)));
-        }
-    }
-
-    element.clone()
-}
-
 fn decode_text_data(data: &dyn ElementData) -> Option<TextData> {
     if data.type_id().as_str() != TextData::TYPE_ID_TOKEN {
         return None;
     }
     TextData::from_json(&data.to_json()).ok()
-}
-
-fn decode_serial_number_data(data: &dyn ElementData) -> Option<SerialNumberData> {
-    if data.type_id().as_str() != SerialNumberData::TYPE_ID_TOKEN {
-        return None;
-    }
-    SerialNumberData::from_json(&data.to_json()).ok()
-}
-
-fn decode_arrow_data(data: &dyn ElementData) -> Option<ArrowData> {
-    if data.type_id().as_str() != ArrowData::TYPE_ID_TOKEN {
-        return None;
-    }
-    ArrowData::from_json(&data.to_json()).ok()
 }

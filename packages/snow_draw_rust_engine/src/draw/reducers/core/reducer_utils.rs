@@ -10,8 +10,8 @@ use crate::draw::utils::selection_calculator::SelectionCalculator;
 
 /// Reads an element z-index.
 ///
-/// This keeps `resolve_next_z_index` reusable across compatibility element
-/// models while still supporting the primary `ElementState` type.
+/// This keeps `resolve_next_z_index` reusable across element containers while
+/// still supporting the primary `ElementState` type.
 pub trait ZIndexReadable {
     fn z_index(&self) -> i64;
 }

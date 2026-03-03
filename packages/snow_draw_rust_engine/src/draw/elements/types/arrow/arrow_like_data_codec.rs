@@ -8,11 +8,10 @@ use serde_json::{Map, Value};
 
 use super::arrow_binding::ArrowBinding;
 
-/// Temporary compatibility alias for elbow fixed segments.
+/// Elbow fixed-segment payload used by arrow-like codecs.
 ///
-/// The dedicated elbow segment module is still being translated in this
-/// workspace, so this codec reuses the translated segment payload type from
-/// `arrow_data`.
+/// This aliases the canonical segment payload used by [`ArrowData`] so
+/// `ArrowData` and `ArrowLikeDataCodec` share one JSON contract.
 pub type ElbowFixedSegment = super::arrow_data::ElbowFixedSegment;
 
 /// Update wrapper that mirrors Dart's `ArrowLikeData.unset` sentinel behavior.

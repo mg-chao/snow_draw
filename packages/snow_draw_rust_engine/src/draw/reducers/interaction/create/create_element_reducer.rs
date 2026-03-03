@@ -145,9 +145,8 @@ impl Default for CreateElementReducerAction {
 
 /// State contract required by [`CreateElementReducer`].
 ///
-/// The aggregate `DrawState` migration is still in flight. This trait keeps
-/// the reducer compile-friendly and testable while remaining close to the
-/// original Dart behavior.
+/// This trait keeps the reducer compile-friendly and testable while remaining
+/// close to the original Dart behavior.
 pub trait CreateElementReducerState: Clone {
     fn document_elements(&self) -> &[CreationElementState];
 

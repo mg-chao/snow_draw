@@ -40,6 +40,7 @@ use crate::draw::types::element_style::{ArrowType, ArrowheadStyle};
 use crate::draw::types::snap_guides::SnapGuide;
 use crate::draw::utils::camera_zoom::resolve_zoom_adjusted_distance;
 use crate::draw::utils::snapping_mode::SnappingMode;
+use crate::draw::utils::visible_elements::resolve_visible_elements;
 
 const LOOP_CLOSE_TOLERANCE_MULTIPLIER: f64 = 1.5;
 const OBJECT_POINT_ANCHORS: [ObjectSnapAxisAnchor; 1] = [ObjectSnapAxisAnchor::Center];
@@ -1279,14 +1280,7 @@ fn has_bindable_targets(state: &DrawState) -> bool {
 }
 
 fn resolve_reference_elements(state: &DrawState) -> Vec<DomainElementState> {
-    state
-        .domain
-        .document
-        .elements
-        .iter()
-        .filter(|element| element.opacity > 0.0)
-        .cloned()
-        .collect()
+    resolve_visible_elements(state.domain.document.elements.iter().cloned(), None)
 }
 
 fn resolve_creation_session_data(creating_state: &CreatingState) -> ArrowCreationSessionData {

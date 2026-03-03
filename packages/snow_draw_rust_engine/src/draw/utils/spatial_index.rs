@@ -9,8 +9,8 @@ use rstar::{RTree, RTreeObject, AABB};
 
 /// Minimal element model required by [`SpatialIndex`].
 ///
-/// This local compatibility shape keeps the module usable while the full
-/// `models::element_state` translation is still in progress.
+/// This local projection keeps index operations focused on geometry and z-order
+/// fields, while callers can adapt richer element models as needed.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ElementState {
     pub id: String,

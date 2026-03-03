@@ -30,9 +30,8 @@ impl CreateSerialNumberTextElements {
 /// Adapter trait for the state shape consumed by
 /// [`handle_create_serial_number_text_elements`].
 ///
-/// The aggregate `DrawState` translation is still in progress in this crate,
-/// so this trait keeps the reducer behavior available now while allowing the
-/// caller to bridge to whichever state model they currently use.
+/// This keeps reducer behavior reusable across state models while retaining the
+/// same serial-number/text binding workflow.
 pub trait SerialNumberTextReducerState: Clone {
     fn document_elements(&self) -> &[ElementState];
 

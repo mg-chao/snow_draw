@@ -54,8 +54,8 @@ impl DuplicateElements {
 
 /// State adapter required by delete/duplicate reducers.
 ///
-/// This keeps the reducer compile-friendly while aggregate draw-state
-/// translation is still in progress.
+/// This keeps delete/duplicate logic reusable across state containers that
+/// expose document elements and selection.
 pub trait ElementReducerState: Clone {
     type Element: ElementReducerElement;
 

@@ -1,7 +1,7 @@
 ﻿#![allow(dead_code)]
 
 use crate::draw::models::draw_state::DrawState;
-use crate::draw::store::history_manager::PersistentSnapshot;
+use crate::draw::store::snapshot::PersistentSnapshot;
 
 /// Builds immutable snapshots used by undo/redo history.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

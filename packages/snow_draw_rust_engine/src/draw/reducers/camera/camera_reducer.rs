@@ -55,8 +55,8 @@ impl From<ZoomCamera> for DrawAction {
 
 /// State adapter needed by [`camera_reducer`].
 ///
-/// This keeps the reducer compile-friendly while the aggregate `DrawState`
-/// translation is still in progress.
+/// This keeps camera logic reusable across any state shape that can expose and
+/// update camera state.
 pub trait CameraReducerState: Clone {
     /// Returns the current camera.
     fn camera_state(&self) -> CameraState;

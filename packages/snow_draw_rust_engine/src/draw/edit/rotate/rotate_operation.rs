@@ -28,9 +28,8 @@ use crate::draw::types::element_style::ArrowType;
 
 /// Additional state access needed by [`RotateOperation`].
 ///
-/// The translated engine currently has multiple in-progress `DrawState`
-/// compatibility layers, so rotate logic reads through this trait and stays
-/// compile-friendly even when a concrete state cannot expose full geometry.
+/// Rotate logic reads state through this trait to keep the operation reusable
+/// and testable across state containers.
 pub trait RotateOperationState {
     /// Returns selected ids captured at edit start.
     fn selected_ids_at_start(&self) -> HashSet<String>;

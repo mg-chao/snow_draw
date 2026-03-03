@@ -50,8 +50,7 @@ impl Default for SelectionReducerAction {
 
 /// State adapter required by [`selection_reducer_with`].
 ///
-/// This trait keeps the reducer reusable while aggregate state translation
-/// remains in progress.
+/// This trait keeps the reducer reusable across state containers.
 pub trait SelectionReducerState: Clone {
     /// Returns true when `element_id` can be selected.
     fn contains_element_id(&self, element_id: &str) -> bool;

@@ -1,5 +1,10 @@
 #![allow(dead_code)]
 
+use crate::draw::elements::types::text::text_editing_geometry::{
+    FallbackTextMetricsService as GeometryFallbackTextMetricsService,
+    TextLayoutRequest as GeometryTextLayoutRequest, TextMetrics as GeometryTextMetrics,
+    TextMetricsService as GeometryTextMetricsService,
+};
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_geometry::{
@@ -133,14 +138,29 @@ impl EditContextLike for MoveEditContext {
 
 /// Text metrics abstraction used by resize calculations.
 ///
-/// The full text service API is translated in a separate module; this local
-/// trait keeps `ResizeEditContext` usable before that translation lands.
-pub trait TextMetricsService: fmt::Debug + Send + Sync {}
+/// The same service is also consulted by text-editing reducers. Implementers
+/// can optionally expose a text-editing compatible view.
+pub trait TextMetricsService: fmt::Debug + Send + Sync {
+    fn as_text_editing_metrics_service(&self) -> Option<&dyn GeometryTextMetricsService> {
+        None
+    }
+}
 
 #[derive(Debug, Default)]
 pub struct DefaultTextMetricsService;
 
-impl TextMetricsService for DefaultTextMetricsService {}
+impl TextMetricsService for DefaultTextMetricsService {
+    fn as_text_editing_metrics_service(&self) -> Option<&dyn GeometryTextMetricsService> {
+        Some(self)
+    }
+}
+
+impl GeometryTextMetricsService for DefaultTextMetricsService {
+    fn measure(&self, request: &GeometryTextLayoutRequest<'_>) -> GeometryTextMetrics {
+        let fallback = GeometryFallbackTextMetricsService;
+        fallback.measure(request)
+    }
+}
 
 /// Returns the default text metrics implementation for resize sessions.
 pub fn default_text_metrics_service() -> Arc<dyn TextMetricsService> {

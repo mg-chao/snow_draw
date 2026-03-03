@@ -137,7 +137,7 @@ struct StyleUpdatedData {
 /// Reducer branch translated from Dart `handleUpdateElementsStyle`.
 ///
 /// The reducer is expressed through adapter traits so it can work with the
-/// incremental Rust model migration while preserving the Dart behavior:
+/// engine state abstractions while preserving the Dart behavior:
 /// - element style updates + optional opacity updates,
 /// - optional text-editing interaction updates,
 /// - conditional multi-select overlay refresh when geometry changes.

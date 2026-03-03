@@ -21,6 +21,7 @@ use crate::draw::types::edit_transform::{
 use crate::draw::types::element_geometry::{
     ElementMoveSnapshot, ElementResizeSnapshot, ElementRotateSnapshot,
 };
+use crate::draw::utils::visible_elements::resolve_visible_elements;
 
 /// Lightweight preview of selection geometry during an edit session.
 #[derive(Clone, Debug, PartialEq)]
@@ -279,14 +280,10 @@ pub fn resolve_reference_elements(
     state: &DrawState,
     selected_ids: &HashSet<String>,
 ) -> Vec<ElementState> {
-    state
-        .domain
-        .document
-        .elements
-        .iter()
-        .filter(|element| !selected_ids.contains(&element.id))
-        .cloned()
-        .collect()
+    resolve_visible_elements(
+        state.domain.document.elements.iter().cloned(),
+        Some(selected_ids),
+    )
 }
 
 /// Common context-creation payload shared by move/resize/rotate operations.

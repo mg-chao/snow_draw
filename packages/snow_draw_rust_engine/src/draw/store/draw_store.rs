@@ -31,13 +31,12 @@ use crate::draw::store::draw_store_interface::{
     DrawStateChange, DrawStore, EqualityFn, EventSubscriptionOptions, StateChangeListener,
     StateProvider, StateSelector,
 };
-use crate::draw::store::history_manager::{
-    HistoryManager, HistoryManagerSnapshot, PersistentSnapshot,
-};
+use crate::draw::store::history_manager::{HistoryManager, HistoryManagerSnapshot};
 use crate::draw::store::listener_registry::{ListenerErrorHandler, ListenerRegistry};
 use crate::draw::store::middleware::middleware_context::SharedHistoryManager;
 use crate::draw::store::middleware::middleware_pipeline::MiddlewarePipeline;
 use crate::draw::store::middleware::middleware_pipeline_factory::MiddlewarePipelineFactory;
+use crate::draw::store::snapshot::PersistentSnapshot;
 use crate::draw::store::snapshot_builder::SnapshotBuilder;
 
 /// Draw-store level failures.

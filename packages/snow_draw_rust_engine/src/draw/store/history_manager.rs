@@ -4,8 +4,10 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::{Duration, SystemTime};
 
 use crate::draw::history::history_metadata::HistoryMetadata;
-use crate::draw::models::draw_state::{DomainState, DrawState};
+use crate::draw::models::draw_state::DrawState;
 use crate::draw::services::log::log_service::{LogData, LogService, ModuleLogger};
+use crate::draw::store::history_delta::HistoryDelta;
+use crate::draw::store::snapshot::PersistentSnapshot;
 
 const DEFAULT_MAX_HISTORY_LENGTH: usize = 50;
 const DEFAULT_COALESCING_WINDOW: Duration = Duration::from_millis(220);
@@ -39,128 +41,6 @@ impl HistoryCoalescing {
     /// Maximum time gap allowed between adjacent actions in this group.
     pub fn window(&self) -> Duration {
         self.window
-    }
-}
-
-/// Persistent snapshot used for undo/redo history.
-#[derive(Clone, Debug, PartialEq)]
-pub struct PersistentSnapshot {
-    domain_snapshot: DomainState,
-    pub include_selection: bool,
-}
-
-impl PersistentSnapshot {
-    /// Captures the history-participating portion of draw state.
-    pub fn from_state(state: &DrawState, include_selection: bool) -> Self {
-        Self {
-            domain_snapshot: state.domain_snapshot(),
-            include_selection,
-        }
-    }
-
-    /// Returns the snapshotted domain state.
-    pub fn domain_snapshot(&self) -> &DomainState {
-        &self.domain_snapshot
-    }
-}
-
-/// Delta between two history snapshots.
-///
-/// This fallback representation keeps complete before/after snapshots because
-/// element-level delta modules are translated separately.
-#[derive(Clone, Debug, PartialEq)]
-pub struct HistoryDelta {
-    before_snapshot: PersistentSnapshot,
-    after_snapshot: PersistentSnapshot,
-    pub before_elements: usize,
-    pub after_elements: usize,
-    pub order_changed: bool,
-    pub selection_changed: bool,
-}
-
-impl HistoryDelta {
-    /// Builds a delta between two persistent snapshots.
-    pub fn from_snapshots(before: PersistentSnapshot, after: PersistentSnapshot) -> Self {
-        let before_document = &before.domain_snapshot.document;
-        let after_document = &after.domain_snapshot.document;
-        let document_changed = before_document != after_document;
-
-        let (before_elements, after_elements) = if document_changed {
-            let before_by_id = before_document.element_map();
-            let after_by_id = after_document.element_map();
-            let mut before_count = 0usize;
-            let mut after_count = 0usize;
-
-            for (id, before_element) in &before_by_id {
-                match after_by_id.get(id) {
-                    None => {
-                        before_count += 1;
-                    }
-                    Some(after_element) if after_element != before_element => {
-                        before_count += 1;
-                        after_count += 1;
-                    }
-                    Some(_) => {}
-                }
-            }
-
-            for id in after_by_id.keys() {
-                if !before_by_id.contains_key(id) {
-                    after_count += 1;
-                }
-            }
-
-            (before_count, after_count)
-        } else {
-            (0, 0)
-        };
-
-        let selection_changed = before.include_selection
-            && after.include_selection
-            && before.domain_snapshot.selection != after.domain_snapshot.selection;
-
-        let order_changed = before_document.order() != after_document.order();
-
-        Self {
-            before_snapshot: before,
-            after_snapshot: after,
-            before_elements,
-            after_elements,
-            order_changed,
-            selection_changed,
-        }
-    }
-
-    /// Returns true when the delta has any effective change.
-    pub fn has_changes(&self) -> bool {
-        let documents_changed = self.before_snapshot.domain_snapshot.document
-            != self.after_snapshot.domain_snapshot.document;
-        if documents_changed {
-            return true;
-        }
-
-        self.before_snapshot.include_selection
-            && self.after_snapshot.include_selection
-            && self.before_snapshot.domain_snapshot.selection
-                != self.after_snapshot.domain_snapshot.selection
-    }
-
-    /// Restores state to the delta's "before" side.
-    pub fn apply_backward(&self, state: &DrawState) -> DrawState {
-        let mut snapshot = self.before_snapshot.domain_snapshot.clone();
-        if !self.before_snapshot.include_selection {
-            snapshot.selection = state.domain.selection.clone();
-        }
-        state.restore_from_snapshot(snapshot)
-    }
-
-    /// Restores state to the delta's "after" side.
-    pub fn apply_forward(&self, state: &DrawState) -> DrawState {
-        let mut snapshot = self.after_snapshot.domain_snapshot.clone();
-        if !self.after_snapshot.include_selection {
-            snapshot.selection = state.domain.selection.clone();
-        }
-        state.restore_from_snapshot(snapshot)
     }
 }
 
@@ -328,7 +208,7 @@ impl HistoryManager {
             }
         }
 
-        let delta = HistoryDelta::from_snapshots(before, after);
+        let delta = HistoryDelta::from_snapshots(&before, &after);
         if !delta.has_changes() {
             if let Some(log) = self.log.as_ref() {
                 let mut data = LogData::new();
@@ -364,7 +244,7 @@ impl HistoryManager {
             );
             data.insert(
                 "changedElements".to_owned(),
-                (entry.delta.before_elements + entry.delta.after_elements).to_string(),
+                (entry.delta.before_elements.len() + entry.delta.after_elements.len()).to_string(),
             );
             data.insert(
                 "orderChanged".to_owned(),
@@ -372,7 +252,7 @@ impl HistoryManager {
             );
             data.insert(
                 "selectionChanged".to_owned(),
-                entry.delta.selection_changed.to_string(),
+                entry.delta.selection_changed().to_string(),
             );
             log.trace("History record", Some(&data));
         }
@@ -441,7 +321,7 @@ impl HistoryManager {
     ) -> HistoryDelta {
         let merged_before =
             self.snapshot_for_coalesced_state(parent_state, after_snapshot.include_selection);
-        HistoryDelta::from_snapshots(merged_before, after_snapshot.clone())
+        HistoryDelta::from_snapshots(&merged_before, after_snapshot)
     }
 
     fn snapshot_for_coalesced_state(
