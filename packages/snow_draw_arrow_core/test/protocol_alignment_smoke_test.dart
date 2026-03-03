@@ -91,6 +91,106 @@ void main() {
     expect(response['heading'], 'right');
   });
 
+  test(
+    'safe protocol rejects point tuples whose length is not exactly two',
+    () {
+      final response = executeArrowOperationSafe(<String, dynamic>{
+        'type': 'normalize-fixed-point',
+        'input': <String, dynamic>{
+          'point': const <double>[1, 2, 3],
+        },
+      });
+
+      expect(response['type'], 'error');
+      final error = response['error'] as Map<String, dynamic>;
+      expect(error['code'], 'invalid-request');
+      expect(
+        (error['message'] as String).contains(
+          'request.input.point must be a [number, number] tuple',
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test('safe protocol rejects aabb tuples whose length is not exactly four', () {
+    final response = executeArrowOperationSafe(<String, dynamic>{
+      'type': 'get-heading-for-elbow-snap',
+      'input': <String, dynamic>{
+        'point': const <double>[0, 0],
+        'otherPoint': const <double>[10, 0],
+        'bindable': null,
+        'aabb': const <double>[0, 0, 100, 100, 999],
+      },
+    });
+
+    expect(response['type'], 'error');
+    final error = response['error'] as Map<String, dynamic>;
+    expect(error['code'], 'invalid-request');
+    expect(
+      (error['message'] as String).contains(
+        'request.input.aabb must be null or a [number, number, number, number] tuple',
+      ),
+      isTrue,
+    );
+  });
+
+  test(
+    'safe protocol rejects apply-arrow-binding-state-patch without patch id',
+    () {
+      final response = executeArrowOperationSafe(<String, dynamic>{
+        'type': 'apply-arrow-binding-state-patch',
+        'input': <String, dynamic>{
+          'arrow': <String, dynamic>{
+            'id': 'arrow-patch-1',
+            'startBinding': null,
+            'endBinding': null,
+          },
+          'patch': <String, dynamic>{},
+        },
+      });
+
+      expect(response['type'], 'error');
+      final error = response['error'] as Map<String, dynamic>;
+      expect(error['code'], 'invalid-request');
+      expect(
+        (error['message'] as String).contains(
+          'request.input.patch.id must be a string',
+        ),
+        isTrue,
+      );
+    },
+  );
+
+  test(
+    'safe protocol rejects apply-arrow-binding-state-patches when patch id is missing',
+    () {
+      final response = executeArrowOperationSafe(<String, dynamic>{
+        'type': 'apply-arrow-binding-state-patches',
+        'input': <String, dynamic>{
+          'arrows': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'id': 'arrow-patches-1',
+              'startBinding': null,
+              'endBinding': null,
+            },
+          ],
+          'patches': <Map<String, dynamic>>[<String, dynamic>{}],
+        },
+      });
+
+      expect(response['type'], 'error');
+      final error = response['error'] as Map<String, dynamic>;
+      expect(error['code'], 'invalid-request');
+      expect(
+        (error['message'] as String).contains(
+          'request.input.patches[0].id must be a string',
+        ),
+        isTrue,
+      );
+    },
+  );
+
   test('protocol exports core constants and engine context as plain maps', () {
     final constantsResponse = executeArrowOperationSafe(<String, dynamic>{
       'type': 'get-core-constants',

@@ -348,7 +348,7 @@ bool _isFiniteNumber(Object? value) => value is num && value.isFinite;
 
 bool _isPointTuple(Object? value) =>
     value is List &&
-    value.length >= 2 &&
+    value.length == 2 &&
     _isFiniteNumber(value[0]) &&
     _isFiniteNumber(value[1]);
 
@@ -357,7 +357,7 @@ bool _isPointTupleArray(Object? value) =>
 
 bool _isBoundsTuple(Object? value) =>
     value is List &&
-    value.length >= 4 &&
+    value.length == 4 &&
     _isFiniteNumber(value[0]) &&
     _isFiniteNumber(value[1]) &&
     _isFiniteNumber(value[2]) &&
@@ -386,9 +386,6 @@ bool _isBindablePatchArray(Object? value) =>
 
 bool _isBindableRelationPatchArray(Object? value) =>
     _isListWhere(value, (entry) => _asBindableRelationPatch(entry) != null);
-
-bool _isArrowBindingStatePatchArray(Object? value) =>
-    value is List && value.every((entry) => entry is Map);
 
 bool _isArrowEngineEventArray(Object? value) =>
     _isListWhere(value, (entry) => _asArrowEngineEvent(entry) != null);
@@ -455,7 +452,7 @@ List<String> _validateFixedPointBindingShape(
     return allowNull ? const <String>[] : <String>['$path must be an object'];
   }
   if (value is! Map) {
-    return <String>['$path must be an object'];
+    return <String>['$path must be an object${allowNull ? ' or null' : ''}'];
   }
   final violations = <String>[];
   if (value['elementId'] is! String) {
@@ -470,6 +467,56 @@ List<String> _validateFixedPointBindingShape(
     }
   } else if (value.containsKey('mode') && !_isBindModeValue(value['mode'])) {
     violations.add('$path.mode must be "inside", "orbit", or "skip"');
+  }
+  return violations;
+}
+
+List<String> _validateArrowBindingStatePatchShape(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! Map) {
+    return <String>['$path must be an object'];
+  }
+  final violations = <String>[];
+  if (value['id'] is! String) {
+    violations.add('$path.id must be a string');
+  }
+  if (value.containsKey('startBinding')) {
+    violations.addAll(
+      _validateFixedPointBindingShape(
+        value['startBinding'],
+        path: '$path.startBinding',
+        allowNull: true,
+        requireMode: true,
+      ),
+    );
+  }
+  if (value.containsKey('endBinding')) {
+    violations.addAll(
+      _validateFixedPointBindingShape(
+        value['endBinding'],
+        path: '$path.endBinding',
+        allowNull: true,
+        requireMode: true,
+      ),
+    );
+  }
+  return violations;
+}
+
+List<String> _validateArrowBindingStatePatchArrayShape(
+  Object? value, {
+  required String path,
+}) {
+  if (value is! List) {
+    return <String>['$path must be an array of objects'];
+  }
+  final violations = <String>[];
+  for (var index = 0; index < value.length; index += 1) {
+    violations.addAll(
+      _validateArrowBindingStatePatchShape(value[index], path: '$path[$index]'),
+    );
   }
   return violations;
 }
@@ -658,7 +705,9 @@ List<String> _validateOperationFieldShape(
       }
       return _isBoundsTuple(value)
           ? const <String>[]
-          : <String>['$path must be a [number, number, number, number] tuple'];
+          : <String>[
+              '$path must be null or a [number, number, number, number] tuple',
+            ];
     case 'context':
       return _validateEngineContextShape(
         value,
@@ -781,16 +830,15 @@ List<String> _validateOperationFieldShape(
               ]
             : const <String>[];
       }
+      if (operationType == 'apply-arrow-binding-state-patch') {
+        return _validateArrowBindingStatePatchShape(value, path: path);
+      }
       return value is Map
           ? const <String>[]
           : <String>['$path must be an object'];
     case 'patches':
       if (operationType == 'apply-arrow-binding-state-patches') {
-        return _isArrowBindingStatePatchArray(value)
-            ? const <String>[]
-            : <String>[
-                '$path must be an array of ArrowBindingStatePatch for operation "$operationType"',
-              ];
+        return _validateArrowBindingStatePatchArrayShape(value, path: path);
       }
       if (operationType == 'reduce-bindable-patches-to-relation-patches') {
         return _isBindablePatchArray(value)
