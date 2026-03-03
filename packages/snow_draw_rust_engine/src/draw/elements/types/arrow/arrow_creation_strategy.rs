@@ -3,33 +3,36 @@
 #![allow(unused_variables)]
 
 use std::collections::HashMap;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::Arc;
 
-use crate::draw::config::draw_config::{DrawConfig, SnapConfig};
-use crate::draw::core::coordinates::element_space::ElementSpace;
+use crate::draw::config::draw_config::DrawConfig;
 use crate::draw::elements::core::creation_strategy::{
     snap_creation_point, CreatingState, CreationFinishResult, CreationMode, CreationStrategy,
-    CreationUpdateResult, DrawState, ElementData, ElementState as CreationElementState,
-    PointCreationMode, PointCreationStrategy,
+    CreationUpdateResult, DrawState, ElementData, PointCreationMode, PointCreationStrategy,
 };
 use crate::draw::elements::types::arrow::arrow_binding::{
-    ArrowBinding as DomainLineBinding, ArrowBindingMode as DomainLineBindingMode,
+    ArrowBinding, ArrowBindingResult, ArrowBindingUtils,
+};
+use crate::draw::elements::types::arrow::arrow_binding_snapper::{
+    ArrowBindingCachePolicy, ArrowBindingElement, ArrowBindingResolver as BindingResolver,
+    ArrowBindingSnapper, ArrowBindingState, ArrowBindingTargetCache,
 };
 use crate::draw::elements::types::arrow::arrow_data::{
     ArrowBinding as DomainArrowBinding, ArrowBindingMode as DomainArrowBindingMode,
     ArrowData as DomainArrowData, ArrowDataPatch as DomainArrowDataPatch,
     NullableField as DomainArrowNullableField,
 };
+use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField as DomainArrowLikeNullableField;
-use crate::draw::elements::types::arrow::elbow::elbow_fixed_segment::ElbowFixedSegment as DomainLineFixedSegment;
+use crate::draw::elements::types::arrow::arrow_two_point_layout::compute_arrow_two_point_layout;
 use crate::draw::elements::types::arrow::elbow::elbow_router;
 use crate::draw::elements::types::line::line_data::{
     LineData as DomainLineData, LineDataPatch as DomainLineDataPatch,
 };
-use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
-use crate::draw::elements::types::serial_number::serial_number_data::SerialNumberData;
-use crate::draw::elements::types::text::text_data::TextData;
 use crate::draw::models::element_state::ElementState as DomainElementState;
+use crate::draw::services::object_snap_service::{
+    ObjectSnapService, SnapAxisAnchor as ObjectSnapAxisAnchor,
+};
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_context::{default_text_metrics_service, TextMetricsService};
@@ -39,7 +42,8 @@ use crate::draw::utils::camera_zoom::resolve_zoom_adjusted_distance;
 use crate::draw::utils::snapping_mode::SnappingMode;
 
 const LOOP_CLOSE_TOLERANCE_MULTIPLIER: f64 = 1.5;
-const POINT_EPSILON: f64 = 1e-9;
+const OBJECT_POINT_ANCHORS: [ObjectSnapAxisAnchor; 1] = [ObjectSnapAxisAnchor::Center];
+const OBJECT_SNAP_SERVICE: ObjectSnapService = ObjectSnapService::new();
 
 /// Creation strategy for arrow-like elements (single and multi-point).
 ///
@@ -78,6 +82,7 @@ impl CreationStrategy for ArrowCreationStrategy {
             CreationMode::Point(PointCreationMode {
                 fixed_points: vec![start_position],
                 current_point: Some(start_position),
+                session_data: Some(Arc::new(ArrowCreationSessionData::default())),
             }),
             Vec::new(),
         )
@@ -99,107 +104,104 @@ impl CreationStrategy for ArrowCreationStrategy {
             creating_state.element_data_ref(),
             "ArrowCreationStrategy.update",
         );
-
-        with_creation_session_data(&creating_state.element.id, |session_data| {
-            if data_ref.is_line() {
-                return update_line(
-                    state,
-                    config,
-                    creating_state,
-                    current_position,
-                    snapping_mode,
-                    &data_ref,
-                    session_data,
-                );
-            }
-
-            let endpoints = resolve_creation_endpoints(
+        let mut session_data = resolve_creation_session_data(creating_state);
+        if data_ref.is_line() {
+            return update_line(
                 state,
                 config,
                 creating_state,
-                data_ref.arrow_type(),
-                data_ref.start_arrowhead(),
-                data_ref.start_binding(),
                 current_position,
                 snapping_mode,
-                session_data,
+                &data_ref,
+                &mut session_data,
             );
-            let mut adjusted_current = endpoints.current_position;
+        }
 
-            let binding_result = snap_binding_point(
-                state,
-                config,
-                adjusted_current,
-                snapping_mode,
-                data_ref.arrow_type(),
-                data_ref.end_arrowhead(),
-                data_ref.end_binding(),
-                Some(endpoints.segment_start),
-                Some(&mut session_data.end_target_cache),
-                ArrowBindingCachePolicy::DefaultPolicy,
-            );
-            adjusted_current = binding_result.position;
-            let mut end_binding = binding_result.binding;
+        let endpoints = resolve_creation_endpoints(
+            state,
+            config,
+            creating_state,
+            data_ref.arrow_type(),
+            data_ref.start_arrowhead(),
+            data_ref.start_binding(),
+            current_position,
+            snapping_mode,
+            &mut session_data,
+        );
+        let mut adjusted_current = endpoints.current_position;
 
-            let close_tolerance =
-                config.selection.interaction.handle_tolerance * LOOP_CLOSE_TOLERANCE_MULTIPLIER;
-            if data_ref.arrow_type() != ArrowType::Elbow && endpoints.fixed_points.len() >= 2 {
-                let start_point = endpoints.fixed_points[0];
-                if adjusted_current.distance_squared(start_point)
-                    <= close_tolerance * close_tolerance
-                {
-                    adjusted_current = start_point;
-                    end_binding = endpoints.start_binding.clone();
-                }
+        let binding_result = snap_binding_point(
+            state,
+            config,
+            adjusted_current,
+            snapping_mode,
+            data_ref.arrow_type(),
+            data_ref.end_arrowhead(),
+            data_ref.end_binding(),
+            Some(endpoints.segment_start),
+            Some(&mut session_data.end_target_cache),
+            ArrowBindingCachePolicy::default(),
+        );
+        adjusted_current = binding_result.position;
+        let mut end_binding = binding_result.binding;
+
+        let close_tolerance =
+            config.selection.interaction.handle_tolerance * LOOP_CLOSE_TOLERANCE_MULTIPLIER;
+        if data_ref.arrow_type() != ArrowType::Elbow && endpoints.fixed_points.len() >= 2 {
+            let start_point = endpoints.fixed_points[0];
+            if adjusted_current.distance_squared(start_point) <= close_tolerance * close_tolerance {
+                adjusted_current = start_point;
+                end_binding = endpoints.start_binding.clone();
             }
+        }
 
-            let all_points = append_current_point(&endpoints.fixed_points, adjusted_current);
-            let (arrow_rect, normalized_points) = if data_ref.arrow_type() == ArrowType::Elbow {
-                let routed_points = route_elbow_arrow(
-                    state,
-                    endpoints.start_position,
-                    adjusted_current,
-                    endpoints.start_binding.clone(),
-                    end_binding.clone(),
-                    data_ref.start_arrowhead(),
-                    data_ref.end_arrowhead(),
-                )
-                .points;
-                let rect = calculate_arrow_rect(&routed_points, data_ref.arrow_type());
-                let normalized = ArrowGeometry::normalize_points(&routed_points, rect);
-                (rect, normalized)
-            } else if endpoints.fixed_points.len() == 1 {
-                let layout =
-                    compute_arrow_two_point_layout(endpoints.fixed_points[0], adjusted_current);
-                (layout.rect, layout.normalized_points)
-            } else {
-                let rect = calculate_arrow_rect(&all_points, data_ref.arrow_type());
-                let normalized = ArrowGeometry::normalize_points(&all_points, rect);
-                (rect, normalized)
-            };
-
-            let updated_data = data_ref.copy_with(
-                Some(normalized_points),
-                Some(endpoints.start_binding.clone()),
-                Some(end_binding.clone()),
-            );
-
-            let fixed_points = if data_ref.arrow_type() == ArrowType::Elbow {
-                vec![endpoints.start_position]
-            } else {
-                endpoints.fixed_points
-            };
-
-            CreationUpdateResult::new(
-                updated_data,
-                arrow_rect,
-                CreationMode::Point(PointCreationMode {
-                    fixed_points,
-                    current_point: Some(adjusted_current),
-                }),
-                endpoints.snap_guides,
+        let all_points = append_current_point(&endpoints.fixed_points, adjusted_current);
+        let (arrow_rect, normalized_points) = if data_ref.arrow_type() == ArrowType::Elbow {
+            let routed_points = route_elbow_arrow(
+                state,
+                endpoints.start_position,
+                adjusted_current,
+                endpoints.start_binding.clone(),
+                end_binding.clone(),
+                data_ref.start_arrowhead(),
+                data_ref.end_arrowhead(),
             )
-        })
+            .points;
+            let rect = calculate_arrow_rect(&routed_points, data_ref.arrow_type());
+            let normalized = ArrowGeometry::normalize_points(&routed_points, rect);
+            (rect, normalized)
+        } else if endpoints.fixed_points.len() == 1 {
+            let layout =
+                compute_arrow_two_point_layout(endpoints.fixed_points[0], adjusted_current);
+            (layout.rect, layout.normalized_points)
+        } else {
+            let rect = calculate_arrow_rect(&all_points, data_ref.arrow_type());
+            let normalized = ArrowGeometry::normalize_points(&all_points, rect);
+            (rect, normalized)
+        };
+
+        let updated_data = data_ref.copy_with(
+            Some(normalized_points),
+            Some(endpoints.start_binding.clone()),
+            Some(end_binding.clone()),
+        );
+
+        let fixed_points = if data_ref.arrow_type() == ArrowType::Elbow {
+            vec![endpoints.start_position]
+        } else {
+            endpoints.fixed_points
+        };
+
+        CreationUpdateResult::new(
+            updated_data,
+            arrow_rect,
+            CreationMode::Point(PointCreationMode {
+                fixed_points,
+                current_point: Some(adjusted_current),
+                session_data: Some(Arc::new(session_data)),
+            }),
+            endpoints.snap_guides,
+        )
     }
 
     fn add_point(
@@ -224,65 +226,65 @@ impl CreationStrategy for ArrowCreationStrategy {
             return None;
         }
 
-        with_creation_session_data(&creating_state.element.id, |session_data| {
-            let endpoints = resolve_creation_endpoints(
-                state,
-                config,
-                creating_state,
-                data_ref.arrow_type(),
-                data_ref.start_arrowhead(),
-                data_ref.start_binding(),
-                position,
-                snapping_mode,
-                session_data,
-            );
-            let mut adjusted_position = endpoints.current_position;
+        let mut session_data = resolve_creation_session_data(creating_state);
+        let endpoints = resolve_creation_endpoints(
+            state,
+            config,
+            creating_state,
+            data_ref.arrow_type(),
+            data_ref.start_arrowhead(),
+            data_ref.start_binding(),
+            position,
+            snapping_mode,
+            &mut session_data,
+        );
+        let mut adjusted_position = endpoints.current_position;
 
-            let binding_result = snap_binding_point(
-                state,
-                config,
-                adjusted_position,
-                snapping_mode,
-                data_ref.arrow_type(),
-                data_ref.end_arrowhead(),
-                data_ref.end_binding(),
-                Some(endpoints.segment_start),
-                Some(&mut session_data.end_target_cache),
-                ArrowBindingCachePolicy::DefaultPolicy,
-            );
-            adjusted_position = binding_result.position;
+        let binding_result = snap_binding_point(
+            state,
+            config,
+            adjusted_position,
+            snapping_mode,
+            data_ref.arrow_type(),
+            data_ref.end_arrowhead(),
+            data_ref.end_binding(),
+            Some(endpoints.segment_start),
+            Some(&mut session_data.end_target_cache),
+            ArrowBindingCachePolicy::default(),
+        );
+        adjusted_position = binding_result.position;
 
-            let mut updated_fixed_points = endpoints.fixed_points;
-            if updated_fixed_points
-                .last()
-                .copied()
-                .map(|point| point != adjusted_position)
-                .unwrap_or(true)
-            {
-                updated_fixed_points.push(adjusted_position);
-            }
-            updated_fixed_points =
-                apply_bound_start_to_fixed_points(updated_fixed_points, endpoints.start_position);
+        let mut updated_fixed_points = endpoints.fixed_points;
+        if updated_fixed_points
+            .last()
+            .copied()
+            .map(|point| point != adjusted_position)
+            .unwrap_or(true)
+        {
+            updated_fixed_points.push(adjusted_position);
+        }
+        updated_fixed_points =
+            apply_bound_start_to_fixed_points(updated_fixed_points, endpoints.start_position);
 
-            let all_points = append_current_point(&updated_fixed_points, adjusted_position);
-            let arrow_rect = calculate_arrow_rect(&all_points, data_ref.arrow_type());
-            let normalized_points = ArrowGeometry::normalize_points(&all_points, arrow_rect);
-            let updated_data = data_ref.copy_with(
-                Some(normalized_points),
-                Some(endpoints.start_binding),
-                Some(binding_result.binding),
-            );
+        let all_points = append_current_point(&updated_fixed_points, adjusted_position);
+        let arrow_rect = calculate_arrow_rect(&all_points, data_ref.arrow_type());
+        let normalized_points = ArrowGeometry::normalize_points(&all_points, arrow_rect);
+        let updated_data = data_ref.copy_with(
+            Some(normalized_points),
+            Some(endpoints.start_binding),
+            Some(binding_result.binding),
+        );
 
-            Some(CreationUpdateResult::new(
-                updated_data,
-                arrow_rect,
-                CreationMode::Point(PointCreationMode {
-                    fixed_points: updated_fixed_points,
-                    current_point: Some(adjusted_position),
-                }),
-                endpoints.snap_guides,
-            ))
-        })
+        Some(CreationUpdateResult::new(
+            updated_data,
+            arrow_rect,
+            CreationMode::Point(PointCreationMode {
+                fixed_points: updated_fixed_points,
+                current_point: Some(adjusted_position),
+                session_data: Some(Arc::new(session_data)),
+            }),
+            endpoints.snap_guides,
+        ))
     }
 
     fn finish(
@@ -314,8 +316,6 @@ impl CreationStrategy for ArrowCreationStrategy {
             close_if_needed(final_points, close_tolerance)
         };
 
-        clear_creation_session_data(&creating_state.element.id);
-
         if closed_points.len() < 2 {
             return CreationFinishResult::new(
                 creating_state.element_data(),
@@ -327,8 +327,14 @@ impl CreationStrategy for ArrowCreationStrategy {
         let arrow_rect = calculate_arrow_rect(&closed_points, data_ref.arrow_type());
         let normalized_points = ArrowGeometry::normalize_points(&closed_points, arrow_rect);
         let updated_data = data_ref.copy_with(Some(normalized_points), None, None);
-
-        let length = ArrowGeometry::calculate_shaft_length(&closed_points, data_ref.arrow_type());
+        let updated_data_ref =
+            resolve_arrow_like_data(&updated_data, "ArrowCreationStrategy.finish.length");
+        let updated_world_points =
+            ArrowGeometry::resolve_world_points(arrow_rect, updated_data_ref.points());
+        let length = ArrowGeometry::calculate_shaft_length(
+            &updated_world_points,
+            updated_data_ref.arrow_type(),
+        );
         if !length.is_finite() || length < min_size {
             return CreationFinishResult::new(
                 creating_state.element_data(),
@@ -373,7 +379,7 @@ fn update_line(
         data_ref.end_binding(),
         Some(endpoints.segment_start),
         Some(&mut session_data.end_target_cache),
-        ArrowBindingCachePolicy::DefaultPolicy,
+        ArrowBindingCachePolicy::default(),
     );
     adjusted_current = binding_result.position;
     let mut end_binding = binding_result.binding;
@@ -410,6 +416,7 @@ fn update_line(
         CreationMode::Point(PointCreationMode {
             fixed_points: endpoints.fixed_points,
             current_point: Some(adjusted_current),
+            session_data: Some(Arc::new(session_data.clone())),
         }),
         endpoints.snap_guides,
     )
@@ -441,7 +448,7 @@ fn resolve_creation_endpoints(
         preferred_start_binding,
         adjusted_current,
         session_data,
-        ArrowBindingCachePolicy::DefaultPolicy,
+        ArrowBindingCachePolicy::default(),
     );
     start_position = start_binding_result.position;
 
@@ -565,10 +572,13 @@ fn snap_create_point(
         return PointSnapResult::new(position, Vec::new());
     }
 
-    let result = snap_point_against_reference_aabbs(
-        position,
-        &reference_aabbs,
+    let result = OBJECT_SNAP_SERVICE.snap_rect(
+        DrawRect::new(position.x, position.y, position.x, position.y),
+        &reference_elements,
         snap_distance,
+        &OBJECT_POINT_ANCHORS,
+        &OBJECT_POINT_ANCHORS,
+        Some(&reference_aabbs),
         snap_config.enable_point_snaps,
         snap_config.enable_gap_snaps,
     );
@@ -600,7 +610,7 @@ fn snap_binding_point(
     arrowhead_style: ArrowheadStyle,
     preferred_binding: Option<ArrowBinding>,
     reference_point: Option<DrawPoint>,
-    target_cache: Option<&mut ArrowBindingTargetCache>,
+    target_cache: Option<&mut ArrowBindingTargetCache<DomainElementState>>,
     cache_policy: ArrowBindingCachePolicy,
 ) -> BindingSnapResult {
     let snap_config = &config.snap;
@@ -627,11 +637,13 @@ fn snap_binding_point(
         should_lookup_bindings,
         binding_distance,
         true,
-        resolve_has_bindable_targets(state),
-        preferred_binding,
+        has_bindable_targets(state),
+        preferred_binding.as_ref(),
         reference_point,
         target_cache,
+        None,
         cache_policy,
+        &DOMAIN_CREATION_BINDING_RESOLVER,
     );
     let Some(candidate) = candidate else {
         return BindingSnapResult::new(position, None);
@@ -670,7 +682,13 @@ fn resolve_start_binding_point(
         binding_enabled,
         binding_distance,
     ) {
-        if let Some(cached) = session_data.resolve_cached_start_binding(start_position) {
+        if let Some(cached) = session_data.resolve_cached_start_binding(
+            state,
+            start_position,
+            arrow_type,
+            arrowhead_style,
+            reference_point,
+        ) {
             return cached;
         }
     }
@@ -701,8 +719,8 @@ fn resolve_start_binding_point(
 
 #[derive(Debug, Clone)]
 struct ArrowCreationSessionData {
-    start_target_cache: ArrowBindingTargetCache,
-    end_target_cache: ArrowBindingTargetCache,
+    start_target_cache: ArrowBindingTargetCache<DomainElementState>,
+    end_target_cache: ArrowBindingTargetCache<DomainElementState>,
     cached_start_position: Option<DrawPoint>,
     cached_start_preferred_binding: Option<ArrowBinding>,
     cached_start_binding: Option<ArrowBinding>,
@@ -711,9 +729,10 @@ struct ArrowCreationSessionData {
     cached_start_binding_distance: Option<f64>,
     cached_start_elements_version: i64,
     reference_elements_version: i64,
-    reference_elements: Vec<CreationElementState>,
+    reference_elements: Vec<DomainElementState>,
     reference_aabbs_version: i64,
     reference_element_aabbs: Vec<DrawRect>,
+    reference_aabbs_source: Vec<DomainElementState>,
 }
 
 impl Default for ArrowCreationSessionData {
@@ -732,6 +751,7 @@ impl Default for ArrowCreationSessionData {
             reference_elements: Vec::new(),
             reference_aabbs_version: -1,
             reference_element_aabbs: Vec::new(),
+            reference_aabbs_source: Vec::new(),
         }
     }
 }
@@ -754,11 +774,39 @@ impl ArrowCreationSessionData {
             && self.cached_start_elements_version == elements_version
     }
 
-    fn resolve_cached_start_binding(&self, start_position: DrawPoint) -> Option<BindingSnapResult> {
-        if let Some(binding) = self.cached_start_binding.clone() {
-            return Some(BindingSnapResult::new(start_position, Some(binding)));
+    fn resolve_cached_start_binding(
+        &self,
+        state: &DrawState,
+        start_position: DrawPoint,
+        arrow_type: ArrowType,
+        arrowhead_style: ArrowheadStyle,
+        reference_point: DrawPoint,
+    ) -> Option<BindingSnapResult> {
+        let Some(cached_binding) = self.cached_start_binding.as_ref() else {
+            return Some(BindingSnapResult::new(start_position, None));
+        };
+        let target = state
+            .domain
+            .document
+            .get_element_by_id(cached_binding.element_id.as_str())?;
+        if target.opacity <= 0.0 || !ArrowBindingUtils::is_bindable_target(target) {
+            return None;
         }
-        Some(BindingSnapResult::new(start_position, None))
+
+        let bound_point = if arrow_type == ArrowType::Elbow {
+            ArrowBindingUtils::resolve_elbow_bound_point(
+                cached_binding,
+                target,
+                arrowhead_style != ArrowheadStyle::None,
+            )?
+        } else {
+            ArrowBindingUtils::resolve_bound_point(cached_binding, target, Some(reference_point))?
+        };
+
+        Some(BindingSnapResult::new(
+            bound_point,
+            Some(cached_binding.clone()),
+        ))
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -781,7 +829,7 @@ impl ArrowCreationSessionData {
         self.cached_start_elements_version = elements_version;
     }
 
-    fn resolve_reference_elements(&mut self, state: &DrawState) -> Vec<CreationElementState> {
+    fn resolve_reference_elements(&mut self, state: &DrawState) -> Vec<DomainElementState> {
         let elements_version = resolve_elements_version(state);
         if self.reference_elements_version == elements_version {
             return self.reference_elements.clone();
@@ -794,19 +842,17 @@ impl ArrowCreationSessionData {
     fn resolve_reference_element_aabbs(
         &mut self,
         state: &DrawState,
-        reference_elements: &[CreationElementState],
+        reference_elements: &[DomainElementState],
     ) -> Vec<DrawRect> {
         let elements_version = resolve_elements_version(state);
         if self.reference_aabbs_version == elements_version
-            && self.reference_element_aabbs.len() == reference_elements.len()
+            && self.reference_aabbs_source.as_slice() == reference_elements
         {
             return self.reference_element_aabbs.clone();
         }
         self.reference_aabbs_version = elements_version;
-        self.reference_element_aabbs = reference_elements
-            .iter()
-            .map(|element| element.rect)
-            .collect();
+        self.reference_aabbs_source = reference_elements.to_vec();
+        self.reference_element_aabbs = ObjectSnapService::build_reference_aabbs(reference_elements);
         self.reference_element_aabbs.clone()
     }
 }
@@ -863,21 +909,17 @@ fn apply_bound_start_to_fixed_points(
 
 #[derive(Clone, Copy, Debug)]
 enum ArrowLikeDataRef<'a> {
-    Arrow(&'a ArrowLikeData),
-    Line(&'a LineData),
     DomainArrow(&'a DomainArrowData),
     DomainLine(&'a DomainLineData),
 }
 
 impl<'a> ArrowLikeDataRef<'a> {
     fn is_line(&self) -> bool {
-        matches!(self, Self::Line(_) | Self::DomainLine(_))
+        matches!(self, Self::DomainLine(_))
     }
 
     fn points(&self) -> &[DrawPoint] {
         match self {
-            Self::Arrow(data) => &data.points,
-            Self::Line(data) => &data.points,
             Self::DomainArrow(data) => &data.points,
             Self::DomainLine(data) => &data.points,
         }
@@ -885,8 +927,6 @@ impl<'a> ArrowLikeDataRef<'a> {
 
     fn arrow_type(&self) -> ArrowType {
         match self {
-            Self::Arrow(data) => data.arrow_type,
-            Self::Line(data) => data.arrow_type(),
             Self::DomainArrow(data) => data.arrow_type,
             Self::DomainLine(data) => data.arrow_type,
         }
@@ -894,8 +934,6 @@ impl<'a> ArrowLikeDataRef<'a> {
 
     fn start_arrowhead(&self) -> ArrowheadStyle {
         match self {
-            Self::Arrow(data) => data.start_arrowhead,
-            Self::Line(data) => data.start_arrowhead(),
             Self::DomainArrow(data) => data.start_arrowhead,
             Self::DomainLine(data) => data.start_arrowhead,
         }
@@ -903,8 +941,6 @@ impl<'a> ArrowLikeDataRef<'a> {
 
     fn end_arrowhead(&self) -> ArrowheadStyle {
         match self {
-            Self::Arrow(data) => data.end_arrowhead,
-            Self::Line(data) => data.end_arrowhead(),
             Self::DomainArrow(data) => data.end_arrowhead,
             Self::DomainLine(data) => data.end_arrowhead,
         }
@@ -912,25 +948,18 @@ impl<'a> ArrowLikeDataRef<'a> {
 
     fn start_binding(&self) -> Option<ArrowBinding> {
         match self {
-            Self::Arrow(data) => data.start_binding.clone(),
-            Self::Line(data) => data.start_binding.clone(),
             Self::DomainArrow(data) => data
                 .start_binding
                 .as_ref()
                 .map(domain_arrow_binding_to_local),
-            Self::DomainLine(data) => data
-                .start_binding
-                .as_ref()
-                .map(domain_line_binding_to_local),
+            Self::DomainLine(data) => data.start_binding.clone(),
         }
     }
 
     fn end_binding(&self) -> Option<ArrowBinding> {
         match self {
-            Self::Arrow(data) => data.end_binding.clone(),
-            Self::Line(data) => data.end_binding.clone(),
             Self::DomainArrow(data) => data.end_binding.as_ref().map(domain_arrow_binding_to_local),
-            Self::DomainLine(data) => data.end_binding.as_ref().map(domain_line_binding_to_local),
+            Self::DomainLine(data) => data.end_binding.clone(),
         }
     }
 
@@ -941,8 +970,6 @@ impl<'a> ArrowLikeDataRef<'a> {
         end_binding: Option<Option<ArrowBinding>>,
     ) -> Arc<dyn ElementData> {
         match self {
-            Self::Arrow(data) => Arc::new(data.copy_with(points, start_binding, end_binding)),
-            Self::Line(data) => Arc::new(data.copy_with(points, start_binding, end_binding)),
             Self::DomainArrow(data) => Arc::new(data.copy_with(DomainArrowDataPatch {
                 points,
                 start_binding: to_domain_arrow_nullable_binding(start_binding),
@@ -963,12 +990,6 @@ fn resolve_arrow_like_data<'a>(
     data: &'a Arc<dyn ElementData>,
     strategy_name: &str,
 ) -> ArrowLikeDataRef<'a> {
-    if let Some(arrow_data) = data.as_ref().as_any().downcast_ref::<ArrowLikeData>() {
-        return ArrowLikeDataRef::Arrow(arrow_data);
-    }
-    if let Some(line_data) = data.as_ref().as_any().downcast_ref::<LineData>() {
-        return ArrowLikeDataRef::Line(line_data);
-    }
     if let Some(arrow_data) = data.as_ref().as_any().downcast_ref::<DomainArrowData>() {
         return ArrowLikeDataRef::DomainArrow(arrow_data);
     }
@@ -976,153 +997,36 @@ fn resolve_arrow_like_data<'a>(
         return ArrowLikeDataRef::DomainLine(line_data);
     }
     panic!(
-        "{strategy_name} expects {}, {}, {} or {} but received {}.",
-        std::any::type_name::<ArrowLikeData>(),
-        std::any::type_name::<LineData>(),
+        "{strategy_name} expects {} or {} but received {}.",
         std::any::type_name::<DomainArrowData>(),
         std::any::type_name::<DomainLineData>(),
         data.as_ref().runtime_type_name()
     );
 }
 
-/// Minimal arrow-like element payload used by `ArrowCreationStrategy`.
-///
-/// Dedicated `arrow_data.rs` / `arrow_like_data.rs` modules are still being
-/// translated, so this local model preserves creation behavior in the interim.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ArrowLikeData {
-    pub points: Vec<DrawPoint>,
-    pub arrow_type: ArrowType,
-    pub start_arrowhead: ArrowheadStyle,
-    pub end_arrowhead: ArrowheadStyle,
-    pub start_binding: Option<ArrowBinding>,
-    pub end_binding: Option<ArrowBinding>,
-}
-
-impl Default for ArrowLikeData {
-    fn default() -> Self {
-        Self {
-            points: vec![DrawPoint::new(0.0, 0.0), DrawPoint::new(1.0, 1.0)],
-            arrow_type: ArrowType::Straight,
-            start_arrowhead: ArrowheadStyle::None,
-            end_arrowhead: ArrowheadStyle::Standard,
-            start_binding: None,
-            end_binding: None,
-        }
-    }
-}
-
-impl ArrowLikeData {
-    fn copy_with(
-        &self,
-        points: Option<Vec<DrawPoint>>,
-        start_binding: Option<Option<ArrowBinding>>,
-        end_binding: Option<Option<ArrowBinding>>,
-    ) -> Self {
-        Self {
-            points: points.unwrap_or_else(|| self.points.clone()),
-            arrow_type: self.arrow_type,
-            start_arrowhead: self.start_arrowhead,
-            end_arrowhead: self.end_arrowhead,
-            start_binding: start_binding.unwrap_or_else(|| self.start_binding.clone()),
-            end_binding: end_binding.unwrap_or_else(|| self.end_binding.clone()),
-        }
-    }
-}
-
-/// Minimal line payload implementing the arrow-like creation contract.
-#[derive(Clone, Debug, PartialEq)]
-pub struct LineData {
-    pub points: Vec<DrawPoint>,
-    pub start_binding: Option<ArrowBinding>,
-    pub end_binding: Option<ArrowBinding>,
-}
-
-impl Default for LineData {
-    fn default() -> Self {
-        Self {
-            points: vec![DrawPoint::new(0.0, 0.0), DrawPoint::new(1.0, 1.0)],
-            start_binding: None,
-            end_binding: None,
-        }
-    }
-}
-
-impl LineData {
-    fn arrow_type(&self) -> ArrowType {
-        ArrowType::Curved
-    }
-
-    fn start_arrowhead(&self) -> ArrowheadStyle {
-        ArrowheadStyle::None
-    }
-
-    fn end_arrowhead(&self) -> ArrowheadStyle {
-        ArrowheadStyle::None
-    }
-
-    fn copy_with(
-        &self,
-        points: Option<Vec<DrawPoint>>,
-        start_binding: Option<Option<ArrowBinding>>,
-        end_binding: Option<Option<ArrowBinding>>,
-    ) -> Self {
-        Self {
-            points: points.unwrap_or_else(|| self.points.clone()),
-            start_binding: start_binding.unwrap_or_else(|| self.start_binding.clone()),
-            end_binding: end_binding.unwrap_or_else(|| self.end_binding.clone()),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub struct ArrowBinding {
-    pub element_id: String,
-    pub anchor: DrawPoint,
-    pub mode: ArrowBindingMode,
-}
-
-impl ArrowBinding {
-    pub fn new(element_id: impl Into<String>, anchor: DrawPoint, mode: ArrowBindingMode) -> Self {
-        Self {
-            element_id: element_id.into(),
-            anchor,
-            mode,
-        }
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ArrowBindingMode {
-    Inside,
-    Orbit,
-}
-
-fn domain_arrow_binding_mode_to_local(mode: DomainArrowBindingMode) -> ArrowBindingMode {
+fn domain_arrow_binding_mode_to_local(
+    mode: DomainArrowBindingMode,
+) -> crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode {
     match mode {
-        DomainArrowBindingMode::Inside => ArrowBindingMode::Inside,
-        DomainArrowBindingMode::Orbit => ArrowBindingMode::Orbit,
+        DomainArrowBindingMode::Inside => {
+            crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode::Inside
+        }
+        DomainArrowBindingMode::Orbit => {
+            crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode::Orbit
+        }
     }
 }
 
-fn domain_line_binding_mode_to_local(mode: DomainLineBindingMode) -> ArrowBindingMode {
+fn local_binding_mode_to_domain_arrow(
+    mode: crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode,
+) -> DomainArrowBindingMode {
     match mode {
-        DomainLineBindingMode::Inside => ArrowBindingMode::Inside,
-        DomainLineBindingMode::Orbit => ArrowBindingMode::Orbit,
-    }
-}
-
-fn local_binding_mode_to_domain_arrow(mode: ArrowBindingMode) -> DomainArrowBindingMode {
-    match mode {
-        ArrowBindingMode::Inside => DomainArrowBindingMode::Inside,
-        ArrowBindingMode::Orbit => DomainArrowBindingMode::Orbit,
-    }
-}
-
-fn local_binding_mode_to_domain_line(mode: ArrowBindingMode) -> DomainLineBindingMode {
-    match mode {
-        ArrowBindingMode::Inside => DomainLineBindingMode::Inside,
-        ArrowBindingMode::Orbit => DomainLineBindingMode::Orbit,
+        crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode::Inside => {
+            DomainArrowBindingMode::Inside
+        }
+        crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode::Orbit => {
+            DomainArrowBindingMode::Orbit
+        }
     }
 }
 
@@ -1134,27 +1038,11 @@ fn domain_arrow_binding_to_local(binding: &DomainArrowBinding) -> ArrowBinding {
     )
 }
 
-fn domain_line_binding_to_local(binding: &DomainLineBinding) -> ArrowBinding {
-    ArrowBinding::new(
-        binding.element_id.clone(),
-        binding.anchor,
-        domain_line_binding_mode_to_local(binding.mode),
-    )
-}
-
 fn local_binding_to_domain_arrow(binding: &ArrowBinding) -> DomainArrowBinding {
     DomainArrowBinding::new(
         binding.element_id.clone(),
         binding.anchor,
         local_binding_mode_to_domain_arrow(binding.mode),
-    )
-}
-
-fn local_binding_to_domain_line(binding: &ArrowBinding) -> DomainLineBinding {
-    DomainLineBinding::new(
-        binding.element_id.clone(),
-        binding.anchor,
-        local_binding_mode_to_domain_line(binding.mode),
     )
 }
 
@@ -1172,173 +1060,142 @@ fn to_domain_arrow_nullable_binding(
 
 fn to_domain_line_nullable_binding(
     value: Option<Option<ArrowBinding>>,
-) -> DomainArrowLikeNullableField<DomainLineBinding> {
+) -> DomainArrowLikeNullableField<ArrowBinding> {
     match value {
         None => DomainArrowLikeNullableField::Unset,
         Some(None) => DomainArrowLikeNullableField::Null,
-        Some(Some(binding)) => {
-            DomainArrowLikeNullableField::Value(local_binding_to_domain_line(&binding))
-        }
+        Some(Some(binding)) => DomainArrowLikeNullableField::Value(binding),
     }
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
-struct ArrowBindingTargetCache;
+#[derive(Clone, Copy, Debug, Default)]
+struct DomainCreationBindingResolver;
 
-impl ArrowBindingTargetCache {
-    fn reset(&mut self) {}
-}
+const DOMAIN_CREATION_BINDING_RESOLVER: DomainCreationBindingResolver =
+    DomainCreationBindingResolver;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum ArrowBindingCachePolicy {
-    DefaultPolicy,
-}
-
-#[derive(Clone, Debug, PartialEq)]
-struct ArrowBindingCandidate {
-    snap_point: DrawPoint,
-    binding: ArrowBinding,
-}
-
-struct ArrowBindingSnapper;
-
-impl ArrowBindingSnapper {
-    fn should_attempt_binding(snap_config: &SnapConfig, snapping_mode: SnappingMode) -> bool {
-        snapping_mode == SnappingMode::Object
-            && snap_config.enabled
-            && snap_config.enable_arrow_binding
+impl BindingResolver<DomainElementState> for DomainCreationBindingResolver {
+    fn is_bindable_target(&self, target: &DomainElementState) -> bool {
+        ArrowBindingUtils::is_bindable_target(target)
     }
 
-    fn resolve_binding_distance(state: &DrawState, snap_config: &SnapConfig) -> f64 {
-        resolve_zoom_adjusted_distance(snap_config.arrow_binding_distance, resolve_view_zoom(state))
+    fn resolve_binding_search_distance(&self, snap_distance: f64) -> f64 {
+        ArrowBindingUtils::resolve_binding_search_distance(snap_distance)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    fn resolve_endpoint_binding_candidate(
-        state: &DrawState,
+    fn resolve_binding_candidate_for_target(
+        &self,
         world_point: DrawPoint,
-        arrow_type: ArrowType,
-        arrowhead_style: ArrowheadStyle,
-        should_lookup_bindings: bool,
+        target: &DomainElementState,
         snap_distance: f64,
-        allow_new_binding: bool,
-        has_bindable_targets: bool,
-        preferred_binding: Option<ArrowBinding>,
         reference_point: Option<DrawPoint>,
-        cache: Option<&mut ArrowBindingTargetCache>,
-        cache_policy: ArrowBindingCachePolicy,
-    ) -> Option<ArrowBindingCandidate> {
-        let _ = cache_policy;
+    ) -> Option<ArrowBindingResult> {
+        ArrowBindingUtils::resolve_binding_candidate_for_target(
+            world_point,
+            target,
+            snap_distance,
+            reference_point,
+        )
+    }
 
-        if !should_lookup_bindings || snap_distance <= 0.0 {
-            if let Some(cache) = cache {
-                cache.reset();
-            }
-            return None;
-        }
+    fn resolve_elbow_binding_candidate_for_target(
+        &self,
+        world_point: DrawPoint,
+        target: &DomainElementState,
+        snap_distance: f64,
+        has_arrowhead: bool,
+    ) -> Option<ArrowBindingResult> {
+        ArrowBindingUtils::resolve_elbow_binding_candidate_for_target(
+            world_point,
+            target,
+            snap_distance,
+            has_arrowhead,
+        )
+    }
 
-        if let Some(preferred) = preferred_binding.as_ref() {
-            if let Some(target) = state
-                .domain
-                .document
-                .get_element_by_id(preferred.element_id.as_str())
-            {
-                if target.opacity > 0.0 && is_bindable_target_element(target) {
-                    let preferred_point = resolve_bound_point_for_binding(
-                        target,
-                        preferred,
-                        arrow_type,
-                        arrowhead_style,
-                        reference_point,
-                    );
-                    let preferred_distance = preferred_point.distance(world_point);
-                    let sticky_distance = snap_distance * 1.3;
-                    if preferred_distance <= sticky_distance || !allow_new_binding {
-                        return Some(ArrowBindingCandidate {
-                            snap_point: preferred_point,
-                            binding: preferred.clone(),
-                        });
-                    }
-                }
-            }
-        }
+    fn resolve_binding_candidate(
+        &self,
+        world_point: DrawPoint,
+        targets: &[DomainElementState],
+        snap_distance: f64,
+        preferred_binding: Option<&ArrowBinding>,
+        allow_new_binding: bool,
+        reference_point: Option<DrawPoint>,
+    ) -> Option<ArrowBindingResult> {
+        ArrowBindingUtils::resolve_binding_candidate(
+            world_point,
+            targets.iter(),
+            snap_distance,
+            preferred_binding,
+            allow_new_binding,
+            reference_point,
+        )
+    }
 
-        if !allow_new_binding || !has_bindable_targets {
-            return None;
-        }
-
-        let mut best: Option<(f64, i64, ArrowBindingCandidate)> = None;
-        for candidate in &state.domain.document.elements {
-            if candidate.opacity <= 0.0 || !is_bindable_target_element(candidate) {
-                continue;
-            }
-
-            let snapped = DrawPoint::new(
-                world_point
-                    .x
-                    .clamp(candidate.rect.min_x, candidate.rect.max_x),
-                world_point
-                    .y
-                    .clamp(candidate.rect.min_y, candidate.rect.max_y),
-            );
-            let distance = snapped.distance(world_point);
-            if !distance.is_finite() || distance > snap_distance {
-                continue;
-            }
-
-            let width = candidate.rect.width();
-            let height = candidate.rect.height();
-            if width.abs() <= POINT_EPSILON || height.abs() <= POINT_EPSILON {
-                continue;
-            }
-
-            let local = if candidate.rotation.abs() <= POINT_EPSILON {
-                snapped
-            } else {
-                ElementSpace::new(candidate.rotation, candidate.rect.center()).from_world(snapped)
-            };
-            let anchor = DrawPoint::new(
-                ((local.x - candidate.rect.min_x) / width).clamp(0.0, 1.0),
-                ((local.y - candidate.rect.min_y) / height).clamp(0.0, 1.0),
-            );
-
-            let candidate_binding = ArrowBindingCandidate {
-                snap_point: snapped,
-                binding: ArrowBinding::new(candidate.id.clone(), anchor, ArrowBindingMode::Orbit),
-            };
-            let is_better = match best {
-                None => true,
-                Some((best_distance, best_z, _)) => {
-                    distance < best_distance
-                        || ((distance - best_distance).abs() <= POINT_EPSILON
-                            && candidate.z_index > best_z)
-                }
-            };
-            if is_better {
-                best = Some((distance, candidate.z_index, candidate_binding));
-            }
-        }
-
-        if let Some(cache) = cache {
-            cache.reset();
-        }
-
-        best.map(|(_, _, candidate)| candidate)
+    fn resolve_elbow_binding_candidate(
+        &self,
+        world_point: DrawPoint,
+        targets: &[DomainElementState],
+        snap_distance: f64,
+        preferred_binding: Option<&ArrowBinding>,
+        allow_new_binding: bool,
+        has_arrowhead: bool,
+    ) -> Option<ArrowBindingResult> {
+        ArrowBindingUtils::resolve_elbow_binding_candidate(
+            world_point,
+            targets.iter(),
+            snap_distance,
+            has_arrowhead,
+            preferred_binding,
+            allow_new_binding,
+        )
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
-struct ArrowTwoPointLayout {
-    rect: DrawRect,
-    normalized_points: Vec<DrawPoint>,
+impl ArrowBindingElement for DomainElementState {
+    fn id(&self) -> &str {
+        self.id.as_str()
+    }
+
+    fn opacity(&self) -> f64 {
+        self.opacity
+    }
 }
 
-fn compute_arrow_two_point_layout(first: DrawPoint, second: DrawPoint) -> ArrowTwoPointLayout {
-    let rect = calculate_arrow_rect(&[first, second], ArrowType::Straight);
-    let normalized_points = ArrowGeometry::normalize_points(&[first, second], rect);
-    ArrowTwoPointLayout {
-        rect,
-        normalized_points,
+impl ArrowBindingState<DomainElementState> for DrawState {
+    fn camera_zoom(&self) -> f64 {
+        self.application.view.camera.zoom
+    }
+
+    fn elements_version(&self) -> i64 {
+        self.domain.document.elements_version
+    }
+
+    fn get_element_by_id(&self, id: &str) -> Option<DomainElementState> {
+        self.domain.document.get_element_by_id(id).cloned()
+    }
+
+    fn visit_arrow_bindable_elements_at_point(
+        &self,
+        position: DrawPoint,
+        distance: f64,
+        excluded_element_id: Option<&str>,
+        visitor: &mut dyn FnMut(DomainElementState) -> bool,
+    ) {
+        for element in &self.domain.document.elements {
+            if excluded_element_id.is_some_and(|excluded| excluded == element.id) {
+                continue;
+            }
+            if !ArrowBindingUtils::is_bindable_target(element) {
+                continue;
+            }
+            if !is_within_point_query_tolerance(element, position, distance) {
+                continue;
+            }
+            if !visitor(element.clone()) {
+                break;
+            }
+        }
     }
 }
 
@@ -1374,167 +1231,16 @@ fn route_elbow_arrow(
     }
 }
 
-struct ArrowGeometry;
-
-impl ArrowGeometry {
-    fn normalize_points(world_points: &[DrawPoint], rect: DrawRect) -> Vec<DrawPoint> {
-        let width = rect.width();
-        let height = rect.height();
-        world_points
-            .iter()
-            .map(|point| {
-                let x = if width.abs() <= POINT_EPSILON {
-                    0.0
-                } else {
-                    (point.x - rect.min_x) / width
-                };
-                let y = if height.abs() <= POINT_EPSILON {
-                    0.0
-                } else {
-                    (point.y - rect.min_y) / height
-                };
-                point.copy_with(Some(x), Some(y), None, None)
-            })
-            .collect()
-    }
-
-    fn resolve_world_points(rect: DrawRect, normalized_points: &[DrawPoint]) -> Vec<DrawPoint> {
-        let width = rect.width();
-        let height = rect.height();
-        normalized_points
-            .iter()
-            .map(|point| {
-                let x = rect.min_x + point.x * width;
-                let y = rect.min_y + point.y * height;
-                point.copy_with(Some(x), Some(y), None, None)
-            })
-            .collect()
-    }
-
-    fn calculate_path_bounds(world_points: &[DrawPoint], _arrow_type: ArrowType) -> DrawRect {
-        DrawRect::from_point_cloud(world_points.iter().copied())
-    }
-
-    fn calculate_shaft_length(points: &[DrawPoint], _arrow_type: ArrowType) -> f64 {
-        if points.len() < 2 {
-            return 0.0;
-        }
-        points
-            .windows(2)
-            .map(|segment| segment[0].distance(segment[1]))
-            .sum()
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SnapAxis {
-    X,
-    Y,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SnapAxisAnchor {
-    Start,
-    Center,
-    End,
-}
-
-const REFERENCE_ANCHORS: [SnapAxisAnchor; 3] = [
-    SnapAxisAnchor::Start,
-    SnapAxisAnchor::Center,
-    SnapAxisAnchor::End,
-];
-
-#[derive(Clone, Debug, Default, PartialEq)]
-struct ObjectPointSnapResult {
-    dx: f64,
-    dy: f64,
-    guides: Vec<SnapGuide>,
-}
-
-impl ObjectPointSnapResult {
-    fn has_snap(&self) -> bool {
-        self.dx != 0.0 || self.dy != 0.0
-    }
-}
-
-fn snap_point_against_reference_aabbs(
+fn is_within_point_query_tolerance(
+    element: &DomainElementState,
     position: DrawPoint,
-    reference_aabbs: &[DrawRect],
-    snap_distance: f64,
-    enable_point_snaps: bool,
-    enable_gap_snaps: bool,
-) -> ObjectPointSnapResult {
-    if snap_distance <= 0.0
-        || reference_aabbs.is_empty()
-        || (!enable_point_snaps && !enable_gap_snaps)
-    {
-        return ObjectPointSnapResult::default();
-    }
-
-    // Gap snapping depends on nearest-neighbor topology that is still missing
-    // in the translated object snap service.
-    let _ = enable_gap_snaps;
-
-    let dx = if enable_point_snaps {
-        find_best_axis_offset(SnapAxis::X, position, reference_aabbs, snap_distance)
-    } else {
-        0.0
-    };
-    let dy = if enable_point_snaps {
-        find_best_axis_offset(SnapAxis::Y, position, reference_aabbs, snap_distance)
-    } else {
-        0.0
-    };
-
-    ObjectPointSnapResult {
-        dx,
-        dy,
-        guides: Vec::new(),
-    }
-}
-
-fn find_best_axis_offset(
-    axis: SnapAxis,
-    position: DrawPoint,
-    reference_aabbs: &[DrawRect],
-    snap_distance: f64,
-) -> f64 {
-    let mut best_offset = 0.0;
-    let mut best_distance = f64::INFINITY;
-    let target = match axis {
-        SnapAxis::X => position.x,
-        SnapAxis::Y => position.y,
-    };
-
-    for rect in reference_aabbs {
-        for anchor in REFERENCE_ANCHORS {
-            let reference = axis_anchor_position(*rect, axis, anchor);
-            let offset = reference - target;
-            let distance = offset.abs();
-            if distance <= snap_distance && distance < best_distance {
-                best_distance = distance;
-                best_offset = offset;
-            }
-        }
-    }
-
-    if best_distance.is_finite() {
-        best_offset
-    } else {
-        0.0
-    }
-}
-
-fn axis_anchor_position(rect: DrawRect, axis: SnapAxis, anchor: SnapAxisAnchor) -> f64 {
-    match (axis, anchor) {
-        (SnapAxis::X, SnapAxisAnchor::Start) => rect.min_x,
-        (SnapAxis::X, SnapAxisAnchor::Center) => rect.center_x(),
-        (SnapAxis::X, SnapAxisAnchor::End) => rect.max_x,
-        (SnapAxis::Y, SnapAxisAnchor::Start) => rect.min_y,
-        (SnapAxis::Y, SnapAxisAnchor::Center) => rect.center_y(),
-        (SnapAxis::Y, SnapAxisAnchor::End) => rect.max_y,
-    }
+    distance: f64,
+) -> bool {
+    let rect = element.rect;
+    position.x >= rect.min_x - distance
+        && position.x <= rect.max_x + distance
+        && position.y >= rect.min_y - distance
+        && position.y <= rect.max_y + distance
 }
 
 fn is_point_creation(creating_state: &CreatingState) -> bool {
@@ -1555,33 +1261,6 @@ fn resolve_current_point(creating_state: &CreatingState) -> Option<DrawPoint> {
     }
 }
 
-fn resolve_bound_point_for_binding(
-    target: &DomainElementState,
-    binding: &ArrowBinding,
-    arrow_type: ArrowType,
-    arrowhead_style: ArrowheadStyle,
-    reference_point: Option<DrawPoint>,
-) -> DrawPoint {
-    let _ = (arrow_type, arrowhead_style, reference_point);
-    let rect = target.rect;
-    let local = DrawPoint::new(
-        rect.min_x + rect.width() * binding.anchor.x,
-        rect.min_y + rect.height() * binding.anchor.y,
-    );
-    if target.rotation.abs() <= POINT_EPSILON {
-        local
-    } else {
-        ElementSpace::new(target.rotation, rect.center()).to_world(local)
-    }
-}
-
-fn is_bindable_target_element(element: &DomainElementState) -> bool {
-    matches!(
-        element.data.type_id().as_str(),
-        RectangleData::TYPE_ID_TOKEN | TextData::TYPE_ID_TOKEN | SerialNumberData::TYPE_ID_TOKEN
-    )
-}
-
 fn resolve_elements_version(state: &DrawState) -> i64 {
     state.domain.document.elements_version
 }
@@ -1590,53 +1269,39 @@ fn resolve_view_zoom(state: &DrawState) -> f64 {
     state.application.view.camera.zoom
 }
 
-fn resolve_has_bindable_targets(state: &DrawState) -> bool {
+fn has_bindable_targets(state: &DrawState) -> bool {
     state
         .domain
         .document
         .elements
         .iter()
-        .any(is_bindable_target_element)
+        .any(ArrowBindingUtils::is_bindable_target)
 }
 
-fn resolve_reference_elements(state: &DrawState) -> Vec<CreationElementState> {
+fn resolve_reference_elements(state: &DrawState) -> Vec<DomainElementState> {
     state
         .domain
         .document
         .elements
         .iter()
         .filter(|element| element.opacity > 0.0)
-        .map(|element| CreationElementState {
-            id: element.id.clone(),
-            type_id_value: element.type_id().as_str().to_owned(),
-            rect: element.rect,
-            rotation: element.rotation,
-            opacity: element.opacity,
-            z_index: element.z_index,
-            data: Arc::new(()),
-        })
+        .cloned()
         .collect()
 }
 
-fn session_store() -> &'static Mutex<HashMap<String, ArrowCreationSessionData>> {
-    static STORE: OnceLock<Mutex<HashMap<String, ArrowCreationSessionData>>> = OnceLock::new();
-    STORE.get_or_init(|| Mutex::new(HashMap::new()))
-}
+fn resolve_creation_session_data(creating_state: &CreatingState) -> ArrowCreationSessionData {
+    let CreationMode::Point(point_mode) = &creating_state.creation_mode else {
+        return ArrowCreationSessionData::default();
+    };
 
-fn with_creation_session_data<R>(
-    element_id: &str,
-    f: impl FnOnce(&mut ArrowCreationSessionData) -> R,
-) -> R {
-    let mut store = session_store()
-        .lock()
-        .expect("arrow creation session mutex poisoned");
-    let session = store.entry(element_id.to_owned()).or_default();
-    f(session)
-}
-
-fn clear_creation_session_data(element_id: &str) {
-    let mut store = session_store()
-        .lock()
-        .expect("arrow creation session mutex poisoned");
-    store.remove(element_id);
+    point_mode
+        .session_data
+        .as_ref()
+        .and_then(|payload| {
+            payload
+                .as_ref()
+                .downcast_ref::<ArrowCreationSessionData>()
+                .cloned()
+        })
+        .unwrap_or_default()
 }

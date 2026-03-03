@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::draw::core::coordinates::element_space::ElementSpace;
+pub use crate::draw::elements::types::arrow::arrow_binding::{ArrowBinding, ArrowBindingMode};
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::{ArrowType, ArrowheadStyle};
@@ -8,35 +9,6 @@ use crate::draw::utils::combined_element_lookup::CombinedElementLookup;
 use std::collections::{HashMap, HashSet};
 
 type FixedSegmentOf<E> = <<E as ElementStateLike>::ArrowData as ArrowLikeData>::FixedSegment;
-
-/// Binding mode for an arrow endpoint.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum ArrowBindingMode {
-    Inside,
-    #[default]
-    Orbit,
-}
-
-/// Arrow endpoint binding payload.
-///
-/// This mirrors the Dart domain model closely enough for binding-resolution
-/// logic while staying independent from untranslated modules.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ArrowBinding {
-    pub element_id: String,
-    pub anchor: DrawPoint,
-    pub mode: ArrowBindingMode,
-}
-
-impl ArrowBinding {
-    pub fn new(element_id: impl Into<String>, anchor: DrawPoint, mode: ArrowBindingMode) -> Self {
-        Self {
-            element_id: element_id.into(),
-            anchor,
-            mode,
-        }
-    }
-}
 
 /// Arrow-like payload shape required by binding resolution.
 pub trait ArrowLikeData: Clone + PartialEq {

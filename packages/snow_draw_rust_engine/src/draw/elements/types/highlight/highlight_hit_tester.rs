@@ -89,15 +89,25 @@ impl ElementHitTester for HighlightHitTester {
         position: DrawPoint,
         tolerance: f64,
     ) -> bool {
-        // The shared fallback `ElementState` currently exposes only `rect`,
-        // so this path performs tolerant axis-aligned bounds hit testing.
-        let expanded = DrawRect::new(
-            element.rect.min_x - tolerance,
-            element.rect.min_y - tolerance,
-            element.rect.max_x + tolerance,
-            element.rect.max_y + tolerance,
+        assert!(
+            element.type_id().as_str() == HighlightData::TYPE_ID_TOKEN,
+            "HighlightHitTester can only hit test HighlightData (got {})",
+            element.type_id().as_str()
         );
-        expanded.contains_point(position)
+
+        let data = HighlightData::from_json_value(&element.data.to_json_value())
+            .expect("HighlightHitTester received invalid HighlightData payload");
+
+        self.hit_test_highlight(
+            &HighlightHitTestElement {
+                rect: element.rect,
+                rotation: element.rotation,
+                data: &data,
+            },
+            position,
+            tolerance,
+        )
+        .unwrap_or(false)
     }
 
     fn get_bounds(&self, element: &ElementState) -> DrawRect {

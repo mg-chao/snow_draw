@@ -143,9 +143,6 @@ pub fn segment_is_horizontal(a: DrawPoint, b: DrawPoint) -> bool {
 }
 
 /// Returns structural equality for optional fixed-segment lists.
-///
-/// The current Rust `ElbowFixedSegment` type is still a placeholder in this
-/// crate, so this falls back to strict item equality for now.
 pub fn fixed_segment_structure_equals(
     a: Option<&[ElbowFixedSegment]>,
     b: Option<&[ElbowFixedSegment]>,
@@ -156,9 +153,6 @@ pub fn fixed_segment_structure_equals(
 }
 
 /// Returns structural equality for optional fixed-segment lists with tolerance.
-///
-/// The current Rust `ElbowFixedSegment` type is still a placeholder in this
-/// crate, so this falls back to strict item equality for now.
 pub fn fixed_segment_structure_equals_with_tolerance(
     a: Option<&[ElbowFixedSegment]>,
     b: Option<&[ElbowFixedSegment]>,
@@ -174,9 +168,30 @@ pub fn fixed_segment_structure_equals_with_tolerance(
 fn fixed_segment_structure_item_equals(
     a: &ElbowFixedSegment,
     b: &ElbowFixedSegment,
-    _tolerance: Option<f64>,
+    tolerance: Option<f64>,
 ) -> bool {
-    a == b
+    if a.index != b.index {
+        return false;
+    }
+
+    let a_is_horizontal = segment_is_horizontal(a.start, a.end);
+    if a_is_horizontal != segment_is_horizontal(b.start, b.end) {
+        return false;
+    }
+
+    let Some(tolerance) = tolerance else {
+        return true;
+    };
+
+    (segment_axis(a, a_is_horizontal) - segment_axis(b, a_is_horizontal)).abs() <= tolerance
+}
+
+fn segment_axis(segment: &ElbowFixedSegment, is_horizontal: bool) -> f64 {
+    if is_horizontal {
+        (segment.start.y + segment.end.y) / 2.0
+    } else {
+        (segment.start.x + segment.end.x) / 2.0
+    }
 }
 
 fn hash_value<T>(value: &T) -> u64

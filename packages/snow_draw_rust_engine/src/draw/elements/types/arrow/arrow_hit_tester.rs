@@ -2,17 +2,23 @@
 
 use std::collections::{HashMap, VecDeque};
 use std::sync::{LazyLock, Mutex};
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 
 use crate::draw::elements::core::element_hit_tester::{ElementHitTester, ElementState};
+use crate::draw::elements::types::line::line_data::LineData;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::{ArrowType, ArrowheadStyle};
 
+use super::arrow_data::ArrowData;
+
 /// Hit tester for arrow-like elements.
 ///
-/// The shared `ElementState` translation currently does not carry typed
-/// element payload data. Use [`Self::hit_test_arrow`] with `ArrowHitTestElement`
-/// for full-fidelity hit testing.
+/// Mirrors Dart `ArrowHitTester` behavior and accepts any arrow-like payload
+/// (`ArrowData` and `LineData`) via [`ArrowLikeData`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ArrowHitTester;
 
@@ -56,13 +62,50 @@ impl ArrowHitTester {
 impl ElementHitTester for ArrowHitTester {
     fn hit_test_with_tolerance(
         &self,
-        _element: &ElementState,
-        _position: DrawPoint,
-        _tolerance: f64,
+        element: &ElementState,
+        position: DrawPoint,
+        tolerance: f64,
     ) -> bool {
-        // Needs typed arrow data that is not available in the current fallback
-        // `ElementState` translation.
-        false
+        let type_id = element.type_id();
+        let type_value = type_id.as_str();
+        let payload = element.data.to_json_value();
+
+        if type_value == ArrowData::TYPE_ID_TOKEN {
+            let data = ArrowData::from_json_value(&payload)
+                .expect("ArrowHitTester received invalid ArrowData payload");
+
+            return self.hit_test_arrow(
+                &ArrowHitTestElement {
+                    id: &element.id,
+                    rect: element.rect,
+                    rotation: element.rotation,
+                    data: &data,
+                },
+                position,
+                tolerance,
+            );
+        }
+
+        if type_value == LineData::TYPE_ID_TOKEN {
+            let data = LineData::from_json_value(&payload)
+                .expect("ArrowHitTester received invalid LineData payload");
+
+            return self.hit_test_arrow(
+                &ArrowHitTestElement {
+                    id: &element.id,
+                    rect: element.rect,
+                    rotation: element.rotation,
+                    data: &data,
+                },
+                position,
+                tolerance,
+            );
+        }
+
+        panic!(
+            "ArrowHitTester can only hit test ArrowLikeData (got {})",
+            type_value
+        );
     }
 
     fn get_bounds(&self, element: &ElementState) -> DrawRect {
@@ -88,23 +131,67 @@ pub trait ArrowLikeData {
     fn end_arrowhead(&self) -> ArrowheadStyle;
 }
 
+impl ArrowLikeData for ArrowData {
+    fn points(&self) -> &[DrawPoint] {
+        &self.points
+    }
+
+    fn stroke_width(&self) -> f64 {
+        self.stroke_width
+    }
+
+    fn arrow_type(&self) -> ArrowType {
+        self.arrow_type
+    }
+
+    fn start_arrowhead(&self) -> ArrowheadStyle {
+        self.start_arrowhead
+    }
+
+    fn end_arrowhead(&self) -> ArrowheadStyle {
+        self.end_arrowhead
+    }
+}
+
+impl ArrowLikeData for LineData {
+    fn points(&self) -> &[DrawPoint] {
+        &self.points
+    }
+
+    fn stroke_width(&self) -> f64 {
+        self.stroke_width
+    }
+
+    fn arrow_type(&self) -> ArrowType {
+        self.arrow_type
+    }
+
+    fn start_arrowhead(&self) -> ArrowheadStyle {
+        self.start_arrowhead
+    }
+
+    fn end_arrowhead(&self) -> ArrowheadStyle {
+        self.end_arrowhead
+    }
+}
+
 #[derive(Clone, Debug)]
 struct ArrowHitTestCacheEntry {
     width: f64,
     height: f64,
-    data_identity: usize,
+    data_signature: u64,
     shaft_points: Vec<DrawPoint>,
     arrowhead_targets: Vec<ArrowheadHitTarget>,
 }
 
 impl ArrowHitTestCacheEntry {
-    fn matches(&self, width: f64, height: f64, data_identity: usize) -> bool {
-        self.width == width && self.height == height && self.data_identity == data_identity
+    fn matches(&self, width: f64, height: f64, data_signature: u64) -> bool {
+        self.width == width && self.height == height && self.data_signature == data_signature
     }
 
     fn build<D: ArrowLikeData + ?Sized>(
         element: &ArrowHitTestElement<'_, D>,
-        data_identity: usize,
+        data_signature: u64,
     ) -> Self {
         let geometry = ArrowGeometryDescriptor::new(element.data, element.rect);
         let points = geometry.local_draw_points.clone();
@@ -120,7 +207,7 @@ impl ArrowHitTestCacheEntry {
         Self {
             width: element.rect.width(),
             height: element.rect.height(),
-            data_identity,
+            data_signature,
             shaft_points,
             arrowhead_targets,
         }
@@ -179,21 +266,59 @@ fn resolve_cache<D: ArrowLikeData + ?Sized>(
     let rect = element.rect;
     let width = rect.width();
     let height = rect.height();
-    let data_identity = (element.data as *const D as *const ()) as usize;
+    let data_signature = arrow_data_signature(element.data);
 
     let mut cache = HIT_TEST_CACHE
         .lock()
         .unwrap_or_else(|poisoned| poisoned.into_inner());
 
     if let Some(cached) = cache.get(id) {
-        if cached.matches(width, height, data_identity) {
+        if cached.matches(width, height, data_signature) {
             return cached;
         }
     }
 
-    let next = ArrowHitTestCacheEntry::build(element, data_identity);
+    let next = ArrowHitTestCacheEntry::build(element, data_signature);
     cache.put(id.to_owned(), next.clone());
     next
+}
+
+fn arrow_data_signature<D: ArrowLikeData + ?Sized>(data: &D) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    data.stroke_width().to_bits().hash(&mut hasher);
+    match data.arrow_type() {
+        ArrowType::Straight => 0_u8.hash(&mut hasher),
+        ArrowType::Curved => 1_u8.hash(&mut hasher),
+        ArrowType::Elbow => 2_u8.hash(&mut hasher),
+    }
+    match data.start_arrowhead() {
+        ArrowheadStyle::None => 0_u8.hash(&mut hasher),
+        ArrowheadStyle::Standard => 1_u8.hash(&mut hasher),
+        ArrowheadStyle::Triangle => 2_u8.hash(&mut hasher),
+        ArrowheadStyle::Square => 3_u8.hash(&mut hasher),
+        ArrowheadStyle::Circle => 4_u8.hash(&mut hasher),
+        ArrowheadStyle::Diamond => 5_u8.hash(&mut hasher),
+        ArrowheadStyle::InvertedTriangle => 6_u8.hash(&mut hasher),
+        ArrowheadStyle::VerticalLine => 7_u8.hash(&mut hasher),
+    }
+    match data.end_arrowhead() {
+        ArrowheadStyle::None => 0_u8.hash(&mut hasher),
+        ArrowheadStyle::Standard => 1_u8.hash(&mut hasher),
+        ArrowheadStyle::Triangle => 2_u8.hash(&mut hasher),
+        ArrowheadStyle::Square => 3_u8.hash(&mut hasher),
+        ArrowheadStyle::Circle => 4_u8.hash(&mut hasher),
+        ArrowheadStyle::Diamond => 5_u8.hash(&mut hasher),
+        ArrowheadStyle::InvertedTriangle => 6_u8.hash(&mut hasher),
+        ArrowheadStyle::VerticalLine => 7_u8.hash(&mut hasher),
+    }
+    data.points().len().hash(&mut hasher);
+    for point in data.points() {
+        point.x.to_bits().hash(&mut hasher);
+        point.y.to_bits().hash(&mut hasher);
+        point.pressure.to_bits().hash(&mut hasher);
+        point.timestamp.hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 fn hit_test_segments(points: &[DrawPoint], position: DrawPoint, radius_sq: f64) -> bool {

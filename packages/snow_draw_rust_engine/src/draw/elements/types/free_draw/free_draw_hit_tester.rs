@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 
 use std::sync::{LazyLock, Mutex};
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 
 use crate::draw::config::draw_config::ConfigDefaults;
 use crate::draw::elements::core::element_hit_tester::{ElementHitTester, ElementState};
@@ -8,11 +12,12 @@ use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::utils::lru_cache::LruCache;
 
+use super::free_draw_data::FreeDrawData;
+
 /// Hit tester for free-draw elements.
 ///
-/// The fallback [`ElementState`] in this crate does not carry typed free-draw
-/// payload data yet. Use [`Self::hit_test_free_draw`] with
-/// [`FreeDrawHitTestElement`] for full-fidelity hit testing.
+/// Mirrors Dart `FreeDrawHitTester` behavior and uses typed free-draw payload
+/// data for stroke/fill hit-testing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FreeDrawHitTester;
 
@@ -86,14 +91,14 @@ impl FreeDrawHitTester {
         let rect = element.rect;
         let width = rect.width();
         let height = rect.height();
-        let data_identity = (element.data as *const D as *const ()) as usize;
+        let data_signature = free_draw_data_signature(element.data);
         let id = element.id;
 
         let mut cache = FREE_DRAW_HIT_GEOMETRY_CACHE
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         if let Some(cached) = cache.get(&id.to_owned()) {
-            if cached.matches(width, height, data_identity) {
+            if cached.matches(width, height, data_signature) {
                 return cached.clone();
             }
         }
@@ -111,7 +116,7 @@ impl FreeDrawHitTester {
         };
 
         let resolved = FreeDrawHitGeometry {
-            data_identity,
+            data_signature,
             width,
             height,
             stroke_points,
@@ -293,13 +298,30 @@ impl FreeDrawHitTester {
 impl ElementHitTester for FreeDrawHitTester {
     fn hit_test_with_tolerance(
         &self,
-        _element: &ElementState,
-        _position: DrawPoint,
-        _tolerance: f64,
+        element: &ElementState,
+        position: DrawPoint,
+        tolerance: f64,
     ) -> bool {
-        // Requires typed free-draw payload data that is not present in the
-        // current fallback `ElementState` translation.
-        false
+        assert!(
+            element.type_id().as_str() == FreeDrawData::TYPE_ID_TOKEN,
+            "FreeDrawHitTester can only hit test FreeDrawData (got {})",
+            element.type_id().as_str()
+        );
+
+        let data = FreeDrawData::from_json_value(&element.data.to_json_value())
+            .expect("FreeDrawHitTester received invalid FreeDrawData payload");
+
+        self.hit_test_free_draw(
+            &FreeDrawHitTestElement {
+                id: &element.id,
+                rect: element.rect,
+                rotation: element.rotation,
+                opacity: element.opacity,
+                data: &data,
+            },
+            position,
+            tolerance,
+        )
     }
 
     fn get_bounds(&self, element: &ElementState) -> DrawRect {
@@ -326,9 +348,23 @@ pub trait FreeDrawLikeData {
     fn fill_alpha(&self) -> f64;
 }
 
+impl FreeDrawLikeData for FreeDrawData {
+    fn points(&self) -> &[DrawPoint] {
+        &self.points
+    }
+
+    fn stroke_width(&self) -> f64 {
+        self.stroke_width
+    }
+
+    fn fill_alpha(&self) -> f64 {
+        self.fill_color.a()
+    }
+}
+
 #[derive(Clone, Debug)]
 struct FreeDrawHitGeometry {
-    data_identity: usize,
+    data_signature: u64,
     width: f64,
     height: f64,
     stroke_points: Vec<DrawPoint>,
@@ -337,9 +373,23 @@ struct FreeDrawHitGeometry {
 }
 
 impl FreeDrawHitGeometry {
-    fn matches(&self, width: f64, height: f64, data_identity: usize) -> bool {
-        self.width == width && self.height == height && self.data_identity == data_identity
+    fn matches(&self, width: f64, height: f64, data_signature: u64) -> bool {
+        self.width == width && self.height == height && self.data_signature == data_signature
     }
+}
+
+fn free_draw_data_signature<D: FreeDrawLikeData + ?Sized>(data: &D) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    data.stroke_width().to_bits().hash(&mut hasher);
+    data.fill_alpha().to_bits().hash(&mut hasher);
+    data.points().len().hash(&mut hasher);
+    for point in data.points() {
+        point.x.to_bits().hash(&mut hasher);
+        point.y.to_bits().hash(&mut hasher);
+        point.pressure.to_bits().hash(&mut hasher);
+        point.timestamp.hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 static FREE_DRAW_HIT_GEOMETRY_CACHE: LazyLock<Mutex<LruCache<String, FreeDrawHitGeometry>>> =

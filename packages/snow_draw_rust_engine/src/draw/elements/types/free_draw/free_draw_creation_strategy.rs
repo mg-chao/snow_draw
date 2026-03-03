@@ -697,6 +697,7 @@ fn creation_mode_from_world_points(world_points: &[DrawPoint]) -> CreationMode {
     CreationMode::Point(PointCreationMode {
         fixed_points: world_points.to_vec(),
         current_point: world_points.last().copied(),
+        session_data: None,
     })
 }
 

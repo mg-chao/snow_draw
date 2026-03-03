@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
-use std::any::Any;
-
+use crate::draw::elements::core::element_data::ElementData as CoreElementData;
 use crate::draw::elements::types::arrow::arrow_data::ArrowData;
 use crate::draw::elements::types::free_draw::free_draw_data::FreeDrawData;
 use crate::draw::elements::types::line::line_data::LineData;
@@ -53,7 +52,7 @@ pub fn resolve_next_stepped_value(current_value: f64, steps: &[f64], decrease: b
 pub trait StyleScrollAdjustmentState {
     fn selected_ids<'a>(&'a self) -> Box<dyn Iterator<Item = &'a str> + 'a>;
 
-    fn get_element_data<'a>(&'a self, id: &str) -> Option<&'a dyn Any>;
+    fn get_element_data<'a>(&'a self, id: &str) -> Option<&'a dyn CoreElementData>;
 }
 
 impl StyleScrollAdjustmentState for DrawState {
@@ -67,9 +66,11 @@ impl StyleScrollAdjustmentState for DrawState {
         )
     }
 
-    fn get_element_data<'a>(&'a self, _id: &str) -> Option<&'a dyn Any> {
-        // The current DrawState translation does not expose typed payload lookup.
-        None
+    fn get_element_data<'a>(&'a self, id: &str) -> Option<&'a dyn CoreElementData> {
+        self.domain
+            .document
+            .get_element_by_id(id)
+            .map(|element| element.data.as_ref())
     }
 }
 
@@ -77,7 +78,7 @@ impl StyleScrollAdjustmentState for DrawState {
 pub fn resolve_average_selected_metric<S, F>(state: &S, metric_resolver: F) -> Option<f64>
 where
     S: StyleScrollAdjustmentState,
-    F: Fn(&dyn Any) -> Option<f64>,
+    F: Fn(&dyn CoreElementData) -> Option<f64>,
 {
     let mut count = 0_usize;
     let mut total = 0.0_f64;
@@ -106,28 +107,28 @@ pub fn resolve_average_selected_rectangle_stroke_width<S>(state: &S) -> Option<f
 where
     S: StyleScrollAdjustmentState,
 {
-    resolve_average_selected_metric_for_type::<S, RectangleData, _>(state, |data| data.stroke_width)
+    resolve_average_selected_metric(state, resolve_rectangle_stroke_width_metric)
 }
 
 pub fn resolve_average_selected_arrow_stroke_width<S>(state: &S) -> Option<f64>
 where
     S: StyleScrollAdjustmentState,
 {
-    resolve_average_selected_metric_for_type::<S, ArrowData, _>(state, |data| data.stroke_width)
+    resolve_average_selected_metric(state, resolve_arrow_stroke_width_metric)
 }
 
 pub fn resolve_average_selected_line_stroke_width<S>(state: &S) -> Option<f64>
 where
     S: StyleScrollAdjustmentState,
 {
-    resolve_average_selected_metric_for_type::<S, LineData, _>(state, |data| data.stroke_width)
+    resolve_average_selected_metric(state, resolve_line_stroke_width_metric)
 }
 
 pub fn resolve_average_selected_free_draw_stroke_width<S>(state: &S) -> Option<f64>
 where
     S: StyleScrollAdjustmentState,
 {
-    resolve_average_selected_metric_for_type::<S, FreeDrawData, _>(state, |data| data.stroke_width)
+    resolve_average_selected_metric(state, resolve_free_draw_stroke_width_metric)
 }
 
 pub fn resolve_average_selected_font_size<S>(state: &S) -> Option<f64>
@@ -137,22 +138,53 @@ where
     resolve_average_selected_metric(state, resolve_font_size_metric)
 }
 
-fn resolve_average_selected_metric_for_type<S, T, F>(state: &S, metric_resolver: F) -> Option<f64>
-where
-    S: StyleScrollAdjustmentState,
-    T: 'static,
-    F: Fn(&T) -> f64,
-{
-    resolve_average_selected_metric(state, |data| data.downcast_ref::<T>().map(&metric_resolver))
+fn resolve_rectangle_stroke_width_metric(data: &dyn CoreElementData) -> Option<f64> {
+    if data.type_id().as_str() != RectangleData::TYPE_ID_TOKEN {
+        return None;
+    }
+    RectangleData::from_json_value(&data.to_json_value())
+        .ok()
+        .map(|decoded| decoded.stroke_width)
 }
 
-fn resolve_font_size_metric(data: &dyn Any) -> Option<f64> {
-    if let Some(text_data) = data.downcast_ref::<TextData>() {
-        return Some(text_data.font_size);
+fn resolve_arrow_stroke_width_metric(data: &dyn CoreElementData) -> Option<f64> {
+    if data.type_id().as_str() != ArrowData::TYPE_ID_TOKEN {
+        return None;
+    }
+    ArrowData::from_json_value(&data.to_json_value())
+        .ok()
+        .map(|decoded| decoded.stroke_width)
+}
+
+fn resolve_line_stroke_width_metric(data: &dyn CoreElementData) -> Option<f64> {
+    if data.type_id().as_str() != LineData::TYPE_ID_TOKEN {
+        return None;
+    }
+    LineData::from_json_value(&data.to_json_value())
+        .ok()
+        .map(|decoded| decoded.stroke_width)
+}
+
+fn resolve_free_draw_stroke_width_metric(data: &dyn CoreElementData) -> Option<f64> {
+    if data.type_id().as_str() != FreeDrawData::TYPE_ID_TOKEN {
+        return None;
+    }
+    FreeDrawData::from_json_value(&data.to_json_value())
+        .ok()
+        .map(|decoded| decoded.stroke_width)
+}
+
+fn resolve_font_size_metric(data: &dyn CoreElementData) -> Option<f64> {
+    if data.type_id().as_str() == TextData::TYPE_ID_TOKEN {
+        return TextData::from_json_value(&data.to_json_value())
+            .ok()
+            .map(|decoded| decoded.font_size);
     }
 
-    if let Some(serial_number_data) = data.downcast_ref::<SerialNumberData>() {
-        return Some(serial_number_data.font_size);
+    if data.type_id().as_str() == SerialNumberData::TYPE_ID_TOKEN {
+        return SerialNumberData::from_json_value(&data.to_json_value())
+            .ok()
+            .map(|decoded| decoded.font_size);
     }
 
     None
@@ -166,7 +198,7 @@ mod tests {
     #[derive(Default)]
     struct TestState {
         selected_ids: Vec<String>,
-        elements_by_id: HashMap<String, Box<dyn Any>>,
+        elements_by_id: HashMap<String, Box<dyn CoreElementData>>,
     }
 
     impl TestState {
@@ -175,7 +207,7 @@ mod tests {
             self
         }
 
-        fn with_element(mut self, id: &str, data: impl Any) -> Self {
+        fn with_element(mut self, id: &str, data: impl CoreElementData + 'static) -> Self {
             self.elements_by_id.insert(id.to_string(), Box::new(data));
             self
         }
@@ -186,7 +218,7 @@ mod tests {
             Box::new(self.selected_ids.iter().map(String::as_str))
         }
 
-        fn get_element_data<'a>(&'a self, id: &str) -> Option<&'a dyn Any> {
+        fn get_element_data<'a>(&'a self, id: &str) -> Option<&'a dyn CoreElementData> {
             self.elements_by_id.get(id).map(|value| value.as_ref())
         }
     }

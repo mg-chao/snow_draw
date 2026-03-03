@@ -82,7 +82,7 @@ impl ArrowGeometry {
                     Self::clamp01(x),
                     Self::clamp01(y),
                     point.pressure,
-                    point.timestamp,
+                    0,
                 )
             })
             .collect()

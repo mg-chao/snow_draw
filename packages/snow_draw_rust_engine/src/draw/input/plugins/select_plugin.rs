@@ -12,7 +12,7 @@ use crate::draw::actions::draw_actions::{
 use crate::draw::config::draw_config::{DrawConfig, SelectionConfig};
 use crate::draw::core::draw_context::DrawContext;
 use crate::draw::edit::core::edit_intent_to_operation_mapper::{
-    ArrowPointOperationParams as MapperArrowPointOperationParams, EditIntentToOperationMapper,
+    ArrowPointOperationParams as MapperArrowPointOperationParams,
     EditOperationParams as MapperEditOperationParams,
     MoveOperationParams as MapperMoveOperationParams,
     ResizeOperationParams as MapperResizeOperationParams,
@@ -23,6 +23,7 @@ use crate::draw::edit::core::edit_operation_params::{
     RotateOperationParams,
 };
 use crate::draw::elements::core::element_data::{DynElementData, ElementTypeId};
+use crate::draw::elements::core::element_registry::DefaultElementRegistry;
 use crate::draw::elements::types::arrow::arrow_data::ArrowData;
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_points::{
@@ -44,8 +45,8 @@ use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::interaction_state::{
     DragPendingState, InteractionState, PendingIntent, PendingMoveIntent, PendingSelectIntent,
 };
+use crate::draw::services::draw_state_view_builder::DrawStateViewBuilder;
 use crate::draw::services::element_hit_test_service::hit_test_element;
-use crate::draw::services::selection_data_computer::SelectionDataComputer;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::ArrowType;
@@ -250,10 +251,11 @@ impl<'a> SelectPluginHitTestService<'a> {
 
 impl HitTestService for SelectPluginHitTestService<'_> {
     fn test(&self, request: HitTestRequest<'_>) -> DetectorHitTestResult {
-        let hit = self.plugin.hit_test(
+        let hit = self.plugin.hit_test_with_registry(
             self.snapshot,
             request.position,
             request.filter_type_id.map(|type_id| type_id.as_str()),
+            Some(request.registry),
         );
 
         if hit.target == DetectorHitTestTarget::None {
@@ -273,7 +275,6 @@ pub struct SelectPlugin {
     base: InputPluginBase,
     arrow_handle_double_tap_tracker: DoubleTapTracker<ArrowPointHandle>,
     routing_policy: InputRoutingPolicy,
-    edit_intent_mapper: EditIntentToOperationMapper,
     state_adapter: Arc<dyn SelectPluginStateAdapter>,
     pub current_tool_type_id: Option<ElementTypeId<DynElementData>>,
     pub is_selection_tool_active: bool,
@@ -289,7 +290,6 @@ impl SelectPlugin {
             base: InputPluginBase::new("select", "Select Plugin", 20, supported_event_types()),
             arrow_handle_double_tap_tracker: DoubleTapTracker::default(),
             routing_policy: routing_policy.unwrap_or_default(),
-            edit_intent_mapper: EditIntentToOperationMapper::with_defaults(),
             state_adapter: Arc::new(DefaultSelectPluginStateAdapter),
             current_tool_type_id,
             is_selection_tool_active,
@@ -331,8 +331,8 @@ impl SelectPlugin {
         let modifiers = event.input.modifiers;
 
         let intent = {
-            let detector_state_view = build_detector_state_view(snapshot);
             let draw_context = self.draw_context();
+            let detector_state_view = build_detector_state_view(snapshot, &draw_context);
             let hit_test_service = SelectPluginHitTestService::new(self, snapshot);
             self.filter_intent_for_tool(
                 EDIT_INTENT_DETECTOR.detect_intent(
@@ -488,18 +488,43 @@ impl SelectPlugin {
         position: DrawPoint,
         filter_type_id: Option<&str>,
     ) -> HitResult {
+        self.hit_test_with_registry(snapshot, position, filter_type_id, None)
+    }
+
+    fn hit_test_with_registry(
+        &self,
+        snapshot: &SelectPluginStateSnapshot,
+        position: DrawPoint,
+        filter_type_id: Option<&str>,
+        registry: Option<&DefaultElementRegistry>,
+    ) -> HitResult {
         let tolerance = snapshot.selection_config.interaction.handle_tolerance;
-        let selection = SelectionDataComputer::compute(&snapshot.draw_state);
-        let single_selection = self.resolve_single_selection_profile(snapshot);
+        let state_view_builder = match self.base.try_context() {
+            Ok(plugin_context) => {
+                let draw_context = plugin_context.context();
+                DrawStateViewBuilder::new(draw_context.edit_operations.as_ref().clone(), None)
+            }
+            Err(_) => DrawStateViewBuilder::default(),
+        };
+        let state_view = state_view_builder.build(&snapshot.draw_state);
+        let effective_elements = state_view
+            .elements()
+            .iter()
+            .map(|element| state_view.effective_element(element))
+            .collect::<Vec<_>>();
+        let selection = state_view.effective_selection();
+        let single_selection =
+            self.resolve_single_selection_profile(snapshot, effective_elements.as_slice());
+        let bound_text_ids = &snapshot.bound_text_ids;
 
         let mut selection_context = None;
         let mut is_in_selection_padding = false;
 
-        if selection.has_selection() && !single_selection.is_two_point_arrow {
+        if selection.has_selection && !single_selection.is_two_point_arrow {
             selection_context = self.build_selection_context(
-                selection.overlay_bounds,
-                selection.overlay_rotation,
-                selection.overlay_center,
+                selection.bounds,
+                selection.rotation,
+                selection.center,
                 position,
                 &snapshot.selection_config,
                 single_selection.corner_handle_offset,
@@ -521,7 +546,7 @@ impl SelectPlugin {
             }
         }
 
-        let mut ordered = snapshot.elements.clone();
+        let mut ordered = effective_elements;
         ordered.sort_by(|left, right| {
             left.z_index
                 .cmp(&right.z_index)
@@ -529,22 +554,20 @@ impl SelectPlugin {
         });
 
         for element in ordered.into_iter().rev() {
-            if !self.matches_filter(snapshot, &element, filter_type_id) {
+            let is_text = element.data.type_id().as_str() == TextData::TYPE_ID_TOKEN;
+            if !self.matches_filter_for_effective_element(
+                element.id.as_str(),
+                element.data.type_id().as_str(),
+                is_text,
+                filter_type_id,
+                bound_text_ids,
+            ) {
                 continue;
             }
 
-            let Some(source_element) = snapshot
-                .draw_state
-                .domain
-                .document
-                .get_element_by_id(&element.id)
-            else {
-                continue;
-            };
-
-            if hit_test_element(source_element, position, tolerance) {
+            if self.hit_test_effective_element(&element, position, tolerance, registry) {
                 return HitResult {
-                    hit_element_id: Some(element.id),
+                    hit_element_id: Some(element.id.clone()),
                     handle_type: None,
                     target: DetectorHitTestTarget::Element,
                     is_in_selection_padding,
@@ -573,6 +596,7 @@ impl SelectPlugin {
     fn resolve_single_selection_profile(
         &self,
         snapshot: &SelectPluginStateSnapshot,
+        effective_elements: &[crate::draw::models::element_state::ElementState],
     ) -> SingleSelectionProfile {
         if snapshot.selected_ids.len() != 1 {
             return SingleSelectionProfile::default();
@@ -581,22 +605,39 @@ impl SelectPlugin {
         let Some(selected_id) = snapshot.selected_ids.iter().next() else {
             return SingleSelectionProfile::default();
         };
-        let Some(element) = snapshot.elements_by_id.get(selected_id.as_str()) else {
+        let effective_element = effective_elements
+            .iter()
+            .find(|element| element.id == selected_id.as_str())
+            .cloned();
+
+        let snapshot_element = snapshot.elements_by_id.get(selected_id.as_str());
+
+        if effective_element.is_none() && snapshot_element.is_none() {
             return SingleSelectionProfile::default();
+        }
+
+        let (is_two_point_arrow, is_elbow_arrow, corner_handle_offset) = if let Some(arrow_data) =
+            effective_element
+                .as_ref()
+                .and_then(arrow_data_snapshot_for_element)
+                .or_else(|| snapshot_element.and_then(|element| element.arrow_data.clone()))
+        {
+            (
+                arrow_data.points.len() == 2,
+                arrow_data.arrow_type == ArrowType::Elbow,
+                8.0,
+            )
+        } else {
+            (false, false, 0.0)
         };
 
-        let (is_two_point_arrow, is_elbow_arrow, corner_handle_offset) =
-            if let Some(arrow_data) = element.arrow_data.as_ref() {
-                (
-                    arrow_data.points.len() == 2,
-                    arrow_data.arrow_type == ArrowType::Elbow,
-                    8.0,
-                )
-            } else {
-                (false, false, 0.0)
-            };
-
-        let is_text = element.arrow_data.is_none() && element.is_text;
+        let is_text = effective_element
+            .as_ref()
+            .map(|element| element.data.type_id().as_str() == TextData::TYPE_ID_TOKEN)
+            .unwrap_or(false)
+            || snapshot_element
+                .map(|element| element.is_text)
+                .unwrap_or(false);
         SingleSelectionProfile {
             is_two_point_arrow,
             is_elbow_arrow,
@@ -924,7 +965,7 @@ impl SelectPlugin {
             return Ok(true);
         }
 
-        Ok(!was_editing)
+        Ok(!was_editing && self.state().application.is_editing())
     }
 
     fn map_to_start_edit(
@@ -933,9 +974,12 @@ impl SelectPlugin {
         position: DrawPoint,
         snapshot: &SelectPluginStateSnapshot,
     ) -> Option<StartEdit> {
-        let mapped =
-            self.edit_intent_mapper
-                .map_to_start_edit(intent, position, &snapshot.draw_config)?;
+        let draw_context = self.draw_context();
+        let mapped = draw_context.edit_intent_mapper.map_to_start_edit(
+            intent,
+            position,
+            &snapshot.draw_config,
+        )?;
         Some(convert_mapper_start_edit(mapped))
     }
 
@@ -1014,28 +1058,48 @@ impl SelectPlugin {
         false
     }
 
-    fn matches_filter(
+    fn matches_filter_for_effective_element(
         &self,
-        snapshot: &SelectPluginStateSnapshot,
-        element: &SelectableElementSnapshot,
+        element_id: &str,
+        element_type_id: &str,
+        is_text: bool,
         filter_type_id: Option<&str>,
+        bound_text_ids: &BTreeSet<String>,
     ) -> bool {
         let Some(filter_type_id) = filter_type_id else {
             return true;
         };
 
-        if element.type_id == filter_type_id {
+        if element_type_id == filter_type_id {
             return true;
         }
 
         if filter_type_id == SerialNumberData::TYPE_ID_TOKEN
-            && element.is_text
-            && snapshot.bound_text_ids.contains(&element.id)
+            && is_text
+            && bound_text_ids.contains(element_id)
         {
             return true;
         }
 
         false
+    }
+
+    fn hit_test_effective_element(
+        &self,
+        element: &crate::draw::models::element_state::ElementState,
+        position: DrawPoint,
+        tolerance: f64,
+        registry: Option<&DefaultElementRegistry>,
+    ) -> bool {
+        if let Some(registry) = registry {
+            if let Some(definition) = registry.get_definition_by_value(element.type_id().as_str()) {
+                if let Some(is_hit) = definition.hit_test(element, position, tolerance) {
+                    return is_hit;
+                }
+            }
+        }
+
+        hit_test_element(element, position, tolerance)
     }
 
     fn resolve_arrow_handle_for_intent(
@@ -1134,7 +1198,6 @@ impl InputPlugin for SelectPlugin {
     }
 
     fn on_unload(&mut self) -> PluginLifecycleResult {
-        self.arrow_handle_double_tap_tracker.clear();
         <InputPluginBase as InputPlugin>::on_unload(&mut self.base)
     }
 
@@ -1294,14 +1357,23 @@ fn collect_bound_text_ids(
     bound_text_ids
 }
 
-fn build_detector_state_view(snapshot: &SelectPluginStateSnapshot) -> DetectorDrawStateView {
-    let elements = snapshot
-        .elements
+fn build_detector_state_view(
+    snapshot: &SelectPluginStateSnapshot,
+    draw_context: &DrawContext,
+) -> DetectorDrawStateView {
+    let state_view = DrawStateViewBuilder::new(draw_context.edit_operations.as_ref().clone(), None)
+        .build(&snapshot.draw_state);
+    let effective_elements = state_view
+        .elements()
+        .iter()
+        .map(|element| state_view.effective_element(element))
+        .collect::<Vec<_>>();
+    let elements = effective_elements
         .iter()
         .map(|element| {
-            let data = if let Some(arrow_data) = element.arrow_data.as_ref() {
+            let data = if let Some(arrow_data) = arrow_data_snapshot_for_element(element) {
                 DetectorElementData::ArrowLike(DetectorArrowLikeData {
-                    points: arrow_data.points.clone(),
+                    points: arrow_data.points,
                 })
             } else {
                 DetectorElementData::Other

@@ -46,9 +46,25 @@ impl ElementHitTester for TextHitTester {
         position: DrawPoint,
         tolerance: f64,
     ) -> bool {
-        // The shared fallback `ElementState` currently exposes only `rect`,
-        // so this path performs axis-aligned hit testing without rotation.
-        hit_test_rotated_rect(element.rect, 0.0, position, tolerance)
+        assert!(
+            element.type_id().as_str() == TextData::TYPE_ID_TOKEN,
+            "TextHitTester can only hit test TextData (got {})",
+            element.type_id().as_str()
+        );
+
+        let data = TextData::from_json_value(&element.data.to_json_value())
+            .expect("TextHitTester received invalid TextData payload");
+
+        self.hit_test_text(
+            &TextHitTestElement {
+                rect: element.rect,
+                rotation: element.rotation,
+                data: &data,
+            },
+            position,
+            tolerance,
+        )
+        .unwrap_or(false)
     }
 
     fn get_bounds(&self, element: &ElementState) -> DrawRect {

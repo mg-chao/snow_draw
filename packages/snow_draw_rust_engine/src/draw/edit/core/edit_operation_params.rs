@@ -28,6 +28,38 @@ impl EditOperationParams {
             Self::ArrowPoint(params) => params.initial_selection_bounds,
         }
     }
+
+    /// Returns move params when this is a move operation.
+    pub fn as_move(&self) -> Option<&MoveOperationParams> {
+        let Self::Move(value) = self else {
+            return None;
+        };
+        Some(value)
+    }
+
+    /// Returns resize params when this is a resize operation.
+    pub fn as_resize(&self) -> Option<&ResizeOperationParams> {
+        let Self::Resize(value) = self else {
+            return None;
+        };
+        Some(value)
+    }
+
+    /// Returns rotate params when this is a rotate operation.
+    pub fn as_rotate(&self) -> Option<&RotateOperationParams> {
+        let Self::Rotate(value) = self else {
+            return None;
+        };
+        Some(value)
+    }
+
+    /// Returns arrow-point params when this is an arrow-point operation.
+    pub fn as_arrow_point(&self) -> Option<&ArrowPointOperationParams> {
+        let Self::ArrowPoint(value) = self else {
+            return None;
+        };
+        Some(value)
+    }
 }
 
 impl From<MoveOperationParams> for EditOperationParams {

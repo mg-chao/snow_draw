@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 
 use std::sync::{LazyLock, Mutex};
+use std::{
+    collections::hash_map::DefaultHasher,
+    hash::{Hash, Hasher},
+};
 
 use crate::draw::elements::core::element_hit_tester::{ElementHitTester, ElementState};
 use crate::draw::elements::types::arrow::arrow_hit_tester::{
@@ -11,11 +15,12 @@ use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::{ArrowType, ArrowheadStyle};
 use crate::draw::utils::lru_cache::LruCache;
 
+use super::line_data::LineData;
+
 /// Hit tester for line elements.
 ///
-/// The fallback [`ElementState`] used by this crate does not yet carry typed
-/// element payload data. Use [`Self::hit_test_line`] with
-/// [`LineHitTestElement`] for full-fidelity hit testing.
+/// Mirrors Dart `LineHitTester` behavior and uses typed line payload data for
+/// both stroke and fill hit-testing.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct LineHitTester;
 
@@ -104,14 +109,14 @@ impl LineHitTester {
         let width = rect.width();
         let height = rect.height();
         let id = element.id;
-        let data_identity = (element.data as *const D as *const ()) as usize;
+        let data_signature = line_data_signature(element.data);
 
         let mut cache = FILL_OUTLINE_CACHE
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let id_key = id.to_owned();
         if let Some(cached) = cache.get(&id_key).cloned() {
-            if cached.matches(width, height, data_identity) {
+            if cached.matches(width, height, data_signature) {
                 return cached.fill_outline;
             }
         }
@@ -134,7 +139,7 @@ impl LineHitTester {
             LineFillOutlineCacheEntry {
                 width,
                 height,
-                data_identity,
+                data_signature,
                 fill_outline: normalized_outline.clone(),
             },
         );
@@ -145,13 +150,30 @@ impl LineHitTester {
 impl ElementHitTester for LineHitTester {
     fn hit_test_with_tolerance(
         &self,
-        _element: &ElementState,
-        _position: DrawPoint,
-        _tolerance: f64,
+        element: &ElementState,
+        position: DrawPoint,
+        tolerance: f64,
     ) -> bool {
-        // Requires typed line payload data that is not present in the current
-        // fallback `ElementState` translation.
-        false
+        assert!(
+            element.type_id().as_str() == LineData::TYPE_ID_TOKEN,
+            "LineHitTester can only hit test LineData (got {})",
+            element.type_id().as_str()
+        );
+
+        let data = LineData::from_json_value(&element.data.to_json_value())
+            .expect("LineHitTester received invalid LineData payload");
+
+        self.hit_test_line(
+            &LineHitTestElement {
+                id: &element.id,
+                rect: element.rect,
+                rotation: element.rotation,
+                opacity: element.opacity,
+                data: &data,
+            },
+            position,
+            tolerance,
+        )
     }
 
     fn get_bounds(&self, element: &ElementState) -> DrawRect {
@@ -181,6 +203,24 @@ pub trait LineLikeData {
     /// Line elements are curved by default.
     fn arrow_type(&self) -> ArrowType {
         ArrowType::Curved
+    }
+}
+
+impl LineLikeData for LineData {
+    fn points(&self) -> &[DrawPoint] {
+        &self.points
+    }
+
+    fn stroke_width(&self) -> f64 {
+        self.stroke_width
+    }
+
+    fn fill_alpha(&self) -> f64 {
+        self.fill_color.a()
+    }
+
+    fn arrow_type(&self) -> ArrowType {
+        self.arrow_type
     }
 }
 
@@ -215,13 +255,13 @@ impl<D: LineLikeData + ?Sized> ArrowLikeData for LineAsArrowData<'_, D> {
 struct LineFillOutlineCacheEntry {
     width: f64,
     height: f64,
-    data_identity: usize,
+    data_signature: u64,
     fill_outline: Vec<DrawPoint>,
 }
 
 impl LineFillOutlineCacheEntry {
-    fn matches(&self, width: f64, height: f64, data_identity: usize) -> bool {
-        self.width == width && self.height == height && self.data_identity == data_identity
+    fn matches(&self, width: f64, height: f64, data_signature: u64) -> bool {
+        self.width == width && self.height == height && self.data_signature == data_signature
     }
 }
 
@@ -256,11 +296,15 @@ fn is_point_inside_rect(rect: DrawRect, position: DrawPoint, padding: f64) -> bo
 }
 
 fn is_closed(points: &[DrawPoint]) -> bool {
-    points.len() > 2 && same_location(points[0], points[points.len() - 1])
+    points.len() > 2 && same_point_value(points[0], points[points.len() - 1])
 }
 
 fn same_location(a: DrawPoint, b: DrawPoint) -> bool {
     a.x == b.x && a.y == b.y
+}
+
+fn same_point_value(a: DrawPoint, b: DrawPoint) -> bool {
+    a.x == b.x && a.y == b.y && a.pressure == b.pressure
 }
 
 fn hit_test_two_point_stroke_fast(
@@ -374,11 +418,30 @@ fn ensure_closed_outline(mut points: Vec<DrawPoint>) -> Vec<DrawPoint> {
     if points.is_empty() {
         return points;
     }
-    if same_location(points[0], points[points.len() - 1]) {
+    if same_point_value(points[0], points[points.len() - 1]) {
         return points;
     }
     points.push(points[0]);
     points
+}
+
+fn line_data_signature<D: LineLikeData + ?Sized>(data: &D) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    data.stroke_width().to_bits().hash(&mut hasher);
+    data.fill_alpha().to_bits().hash(&mut hasher);
+    match data.arrow_type() {
+        ArrowType::Straight => 0_u8.hash(&mut hasher),
+        ArrowType::Curved => 1_u8.hash(&mut hasher),
+        ArrowType::Elbow => 2_u8.hash(&mut hasher),
+    }
+    data.points().len().hash(&mut hasher);
+    for point in data.points() {
+        point.x.to_bits().hash(&mut hasher);
+        point.y.to_bits().hash(&mut hasher);
+        point.pressure.to_bits().hash(&mut hasher);
+        point.timestamp.hash(&mut hasher);
+    }
+    hasher.finish()
 }
 
 #[derive(Clone, Copy, Debug)]

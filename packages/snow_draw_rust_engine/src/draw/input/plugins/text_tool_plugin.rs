@@ -19,6 +19,7 @@ use crate::draw::input::plugin_engine::{
 };
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::interaction_state::InteractionState;
+use crate::draw::services::draw_state_view_builder::DrawStateViewBuilder;
 use crate::draw::services::element_hit_test_service::hit_test_element;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
@@ -220,6 +221,15 @@ impl TextToolPlugin {
         self
     }
 
+    fn build_state_view(
+        &self,
+        draw_state: &DrawState,
+    ) -> crate::draw::models::draw_state_view::DrawStateView {
+        let draw_context = self.draw_context();
+        DrawStateViewBuilder::new(draw_context.edit_operations.as_ref().clone(), None)
+            .build(draw_state)
+    }
+
     pub fn set_current_tool_type_id(
         &mut self,
         tool_type_id: Option<ElementTypeId<DynElementData>>,
@@ -359,7 +369,8 @@ impl TextToolPlugin {
             return Ok(self.base.handled(Some("Text edit finished".to_owned())));
         }
 
-        let Some(hit_id) = self.hit_text_element_id(snapshot, position, None) else {
+        let refreshed_snapshot = self.state_snapshot();
+        let Some(hit_id) = self.hit_text_element_id(&refreshed_snapshot, position, None) else {
             return Ok(self.base.handled(Some("Text edit finished".to_owned())));
         };
 
@@ -415,30 +426,38 @@ impl TextToolPlugin {
         snapshot: &TextToolPluginStateSnapshot,
         position: DrawPoint,
     ) -> bool {
-        if !snapshot.has_selection() {
+        let state_view = self.build_state_view(&snapshot.draw_state);
+        let selection = state_view.effective_selection();
+        if !selection.has_selection {
             return false;
         }
 
-        let selected_elements = snapshot
-            .elements
-            .iter()
-            .filter(|element| snapshot.selected_ids.contains(&element.id))
-            .collect::<Vec<_>>();
-        if selected_elements.is_empty() {
-            return false;
-        }
-
-        let padding = self.selection_config().padding;
-        if selected_elements.len() == 1 {
-            let element = selected_elements[0];
-            return is_inside_rect_with_padding(element.rect, element.rotation, position, padding);
-        }
-
-        let Some(bounds) = selection_bounds(&selected_elements) else {
+        let config = self.selection_config();
+        let Some(context) = build_selection_hit_context(
+            selection.bounds,
+            selection.rotation,
+            selection.center,
+            position,
+            config.padding,
+            0.0,
+        ) else {
             return false;
         };
-        let padded_bounds = expand_rect(bounds, padding);
-        padded_bounds.contains_point(position)
+
+        let is_in_selection_padding = context.contains_in_padded_area();
+        let prioritize_move_in_selection_padding =
+            snapshot.selected_ids.len() == 1 && self.has_selected_text_element(snapshot);
+        let handle_hit = selection_handles_hit(
+            &context,
+            position,
+            config.interaction.handle_tolerance,
+            config.padding,
+            config.rotate_handle_offset,
+            prioritize_move_in_selection_padding,
+            true,
+        );
+
+        handle_hit || is_in_selection_padding
     }
 
     fn should_defer_to_selection_box(
@@ -459,14 +478,12 @@ impl TextToolPlugin {
 
     fn has_selected_text_element(&self, snapshot: &TextToolPluginStateSnapshot) -> bool {
         snapshot.selected_ids.iter().any(|id| {
-            match snapshot
-                .elements
-                .iter()
-                .find(|element| element.id == id.as_str())
-            {
-                Some(element) => element.is_text_element(),
-                None => false,
-            }
+            snapshot
+                .draw_state
+                .domain
+                .document
+                .get_element_by_id(id.as_str())
+                .is_some_and(|element| element.data.type_id().as_str() == TextData::TYPE_ID_TOKEN)
         })
     }
 
@@ -475,14 +492,14 @@ impl TextToolPlugin {
             .selected_ids
             .iter()
             .filter(|id| {
-                match snapshot
-                    .elements
-                    .iter()
-                    .find(|element| element.id == id.as_str())
-                {
-                    Some(element) => element.is_text_element(),
-                    None => false,
-                }
+                snapshot
+                    .draw_state
+                    .domain
+                    .document
+                    .get_element_by_id(id.as_str())
+                    .is_some_and(|element| {
+                        element.data.type_id().as_str() == TextData::TYPE_ID_TOKEN
+                    })
             })
             .take(2)
             .count()
@@ -496,13 +513,15 @@ impl TextToolPlugin {
     ) -> bool {
         snapshot.selected_ids.iter().any(|id| {
             let Some(element) = snapshot
-                .elements
-                .iter()
-                .find(|element| element.id == id.as_str())
+                .draw_state
+                .domain
+                .document
+                .get_element_by_id(id.as_str())
             else {
                 return false;
             };
-            element.is_text_element()
+
+            element.data.type_id().as_str() == TextData::TYPE_ID_TOKEN
                 && is_inside_rect_with_padding(element.rect, element.rotation, position, 0.0)
         })
     }
@@ -534,7 +553,12 @@ impl TextToolPlugin {
         position: DrawPoint,
         allowed_ids: Option<&BTreeSet<String>>,
     ) -> Option<String> {
-        let mut elements = snapshot.elements.iter().collect::<Vec<_>>();
+        let state_view = self.build_state_view(&snapshot.draw_state);
+        let mut elements = state_view
+            .elements()
+            .iter()
+            .map(|element| state_view.effective_element(element))
+            .collect::<Vec<_>>();
         elements.sort_by(|left, right| {
             left.z_index
                 .cmp(&right.z_index)
@@ -548,24 +572,12 @@ impl TextToolPlugin {
                 }
             }
 
-            if !element.is_text_element() {
+            if element.data.type_id().as_str() != TextData::TYPE_ID_TOKEN {
                 continue;
             }
 
-            let Some(source_element) = snapshot
-                .draw_state
-                .domain
-                .document
-                .get_element_by_id(&element.id)
-            else {
-                continue;
-            };
-
-            if self
-                .hit_tester
-                .hit_test_text_element(source_element, position)
-            {
-                return Some(element.id.clone());
+            if self.hit_tester.hit_test_text_element(&element, position) {
+                return Some(element.id);
             }
         }
 
@@ -627,11 +639,6 @@ impl InputPlugin for TextToolPlugin {
 
         Ok(PluginResult::unhandled(None))
     }
-
-    fn reset(&mut self) {
-        self.current_tool_type_id = None;
-        self.is_selection_tool_active = true;
-    }
 }
 
 impl DrawInputPlugin for TextToolPlugin {
@@ -644,49 +651,186 @@ impl DrawInputPlugin for TextToolPlugin {
     }
 }
 
-fn selection_bounds(elements: &[&TextToolElementSnapshot]) -> Option<DrawRect> {
-    if elements.is_empty() {
-        return None;
-    }
-
-    let mut bounds = element_world_aabb(elements[0]);
-    for element in &elements[1..] {
-        bounds = merge_rect(bounds, element_world_aabb(element));
-    }
-    Some(bounds)
+#[derive(Clone, Copy, Debug)]
+struct SelectionHitContext {
+    bounds: DrawRect,
+    rotation: f64,
+    origin: DrawPoint,
+    cos: f64,
+    sin: f64,
+    padded_bounds: DrawRect,
+    handle_bounds: DrawRect,
+    test_position: DrawPoint,
 }
 
-fn merge_rect(a: DrawRect, b: DrawRect) -> DrawRect {
-    DrawRect::new(
-        a.min_x.min(b.min_x),
-        a.min_y.min(b.min_y),
-        a.max_x.max(b.max_x),
-        a.max_y.max(b.max_y),
-    )
+impl SelectionHitContext {
+    fn contains_in_padded_area(&self) -> bool {
+        let position = self.test_position;
+        let bounds = self.padded_bounds;
+        position.x >= bounds.min_x
+            && position.x <= bounds.max_x
+            && position.y >= bounds.min_y
+            && position.y <= bounds.max_y
+    }
 }
 
-fn expand_rect(rect: DrawRect, padding: f64) -> DrawRect {
-    DrawRect::new(
-        rect.min_x - padding,
-        rect.min_y - padding,
-        rect.max_x + padding,
-        rect.max_y + padding,
-    )
+fn build_selection_hit_context(
+    overlay_bounds: Option<DrawRect>,
+    overlay_rotation: Option<f64>,
+    overlay_center: Option<DrawPoint>,
+    position: DrawPoint,
+    padding: f64,
+    corner_handle_offset: f64,
+) -> Option<SelectionHitContext> {
+    let bounds = overlay_bounds?;
+    let rotation = overlay_rotation.unwrap_or(0.0);
+    let origin = overlay_center.unwrap_or(bounds.center());
+    let (cos, sin) = if rotation == 0.0 {
+        (1.0, 0.0)
+    } else {
+        (rotation.cos(), rotation.sin())
+    };
+
+    let padded_bounds = DrawRect::new(
+        bounds.min_x - padding,
+        bounds.min_y - padding,
+        bounds.max_x + padding,
+        bounds.max_y + padding,
+    );
+    let handle_bounds = DrawRect::new(
+        padded_bounds.min_x - corner_handle_offset,
+        padded_bounds.min_y - corner_handle_offset,
+        padded_bounds.max_x + corner_handle_offset,
+        padded_bounds.max_y + corner_handle_offset,
+    );
+    let test_position = if rotation == 0.0 {
+        position
+    } else {
+        let dx = position.x - origin.x;
+        let dy = position.y - origin.y;
+        DrawPoint::new(
+            origin.x + dx * cos + dy * sin,
+            origin.y - dx * sin + dy * cos,
+        )
+    };
+
+    Some(SelectionHitContext {
+        bounds,
+        rotation,
+        origin,
+        cos,
+        sin,
+        padded_bounds,
+        handle_bounds,
+        test_position,
+    })
 }
 
-fn element_world_aabb(element: &TextToolElementSnapshot) -> DrawRect {
-    if element.rotation == 0.0 {
-        return element.rect;
+#[allow(clippy::too_many_arguments)]
+fn selection_handles_hit(
+    context: &SelectionHitContext,
+    position: DrawPoint,
+    tolerance: f64,
+    padding: f64,
+    rotate_handle_offset: f64,
+    prioritize_move_in_selection_padding: bool,
+    allow_rotate_handle: bool,
+) -> bool {
+    if prioritize_move_in_selection_padding && context.contains_in_padded_area() {
+        return false;
     }
 
-    let space = ElementSpace::new(element.rotation, element.rect.center());
-    let corners = [
-        DrawPoint::new(element.rect.min_x, element.rect.min_y),
-        DrawPoint::new(element.rect.max_x, element.rect.min_y),
-        DrawPoint::new(element.rect.max_x, element.rect.max_y),
-        DrawPoint::new(element.rect.min_x, element.rect.max_y),
-    ];
-    DrawRect::from_point_cloud(corners.into_iter().map(|point| space.to_world(point)))
+    if allow_rotate_handle {
+        let rotate_handle_x = context.bounds.center_x();
+        let rotate_handle_y = context.bounds.min_y - padding - rotate_handle_offset;
+        if is_near_rotated_point(
+            position,
+            rotate_handle_x,
+            rotate_handle_y,
+            context,
+            tolerance,
+        ) {
+            return true;
+        }
+    }
+
+    if resolve_corner_handle_hit(context.handle_bounds, position, context, tolerance) {
+        return true;
+    }
+
+    resolve_edge_handle_hit(context.padded_bounds, context.test_position, tolerance)
+}
+
+fn resolve_corner_handle_hit(
+    handle_bounds: DrawRect,
+    position: DrawPoint,
+    context: &SelectionHitContext,
+    tolerance: f64,
+) -> bool {
+    let min_x = handle_bounds.min_x;
+    let min_y = handle_bounds.min_y;
+    let max_x = handle_bounds.max_x;
+    let max_y = handle_bounds.max_y;
+
+    is_near_rotated_point(position, min_x, min_y, context, tolerance)
+        || is_near_rotated_point(position, max_x, min_y, context, tolerance)
+        || is_near_rotated_point(position, max_x, max_y, context, tolerance)
+        || is_near_rotated_point(position, min_x, max_y, context, tolerance)
+}
+
+fn resolve_edge_handle_hit(padded_bounds: DrawRect, position: DrawPoint, tolerance: f64) -> bool {
+    test_horizontal_edge(padded_bounds, position, padded_bounds.min_y, tolerance)
+        || test_vertical_edge(padded_bounds, position, padded_bounds.max_x, tolerance)
+        || test_horizontal_edge(padded_bounds, position, padded_bounds.max_y, tolerance)
+        || test_vertical_edge(padded_bounds, position, padded_bounds.min_x, tolerance)
+}
+
+fn is_near_rotated_point(
+    position: DrawPoint,
+    local_x: f64,
+    local_y: f64,
+    context: &SelectionHitContext,
+    tolerance: f64,
+) -> bool {
+    if context.rotation == 0.0 {
+        return is_near_point_coordinates(position, local_x, local_y, tolerance);
+    }
+
+    let origin = context.origin;
+    let dx = local_x - origin.x;
+    let dy = local_y - origin.y;
+    let world_x = origin.x + dx * context.cos - dy * context.sin;
+    let world_y = origin.y + dx * context.sin + dy * context.cos;
+    is_near_point_coordinates(position, world_x, world_y, tolerance)
+}
+
+fn is_near_point_coordinates(point: DrawPoint, x: f64, y: f64, tolerance: f64) -> bool {
+    let dx = point.x - x;
+    let dy = point.y - y;
+    (dx * dx + dy * dy) <= tolerance * tolerance
+}
+
+fn test_horizontal_edge(
+    bounds: DrawRect,
+    position: DrawPoint,
+    edge_y: f64,
+    tolerance: f64,
+) -> bool {
+    is_near(position.y, edge_y, tolerance)
+        && is_inside_edge_span(position.x, bounds.min_x, bounds.max_x, tolerance)
+}
+
+fn test_vertical_edge(bounds: DrawRect, position: DrawPoint, edge_x: f64, tolerance: f64) -> bool {
+    is_near(position.x, edge_x, tolerance)
+        && is_inside_edge_span(position.y, bounds.min_y, bounds.max_y, tolerance)
+}
+
+fn is_inside_edge_span(value: f64, min: f64, max: f64, tolerance: f64) -> bool {
+    value > min + tolerance && value < max - tolerance
+}
+
+fn is_near(value: f64, target: f64, tolerance: f64) -> bool {
+    (value - target).abs() <= tolerance
 }
 
 fn is_inside_rect_with_padding(

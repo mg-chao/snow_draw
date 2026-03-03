@@ -1,26 +1,12 @@
 #![allow(dead_code)]
 
+pub use crate::draw::models::element_state::ElementState;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 
 /// Element snapshot used by element-specific hit testers.
 ///
-/// The canonical model translation (`draw/models/element_state.rs`) is still
-/// in flight, so this local fallback keeps the hit-tester contract usable.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct ElementState {
-    pub id: String,
-    pub rect: DrawRect,
-}
-
-impl ElementState {
-    pub fn new(id: impl Into<String>, rect: DrawRect) -> Self {
-        Self {
-            id: id.into(),
-            rect,
-        }
-    }
-}
+/// This mirrors Dart by using the canonical draw-model element state.
 
 /// Hit testing interface for a single element type.
 ///

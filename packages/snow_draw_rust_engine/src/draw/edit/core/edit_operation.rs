@@ -1,4 +1,4 @@
-﻿#![allow(dead_code)]
+#![allow(dead_code)]
 
 use std::collections::HashSet;
 
@@ -6,31 +6,17 @@ use crate::draw::config::draw_config::DrawConfig;
 use crate::draw::history::history_metadata::{HistoryMetadata, HistoryRecordType};
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::types::draw_point::DrawPoint;
-use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_context::EditContext;
 use crate::draw::types::edit_operation_id::EditOperationId;
 use crate::draw::types::edit_transform::EditTransform;
 use crate::draw::types::snap_guides::SnapGuide;
 
 use super::edit_modifiers::EditModifiers;
+pub use super::edit_operation_params::{
+    ArrowPointOperationParams, EditOperationParams, MoveOperationParams, ResizeOperationParams,
+    RotateOperationParams,
+};
 pub use crate::draw::edit::preview::edit_preview::EditPreview;
-
-/// Base parameters passed when creating a new edit operation context.
-///
-/// Concrete operation kinds can extend this concept in their own modules.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct EditOperationParams {
-    /// Optional selection bounds captured by the caller before edit start.
-    pub initial_selection_bounds: Option<DrawRect>,
-}
-
-impl EditOperationParams {
-    pub const fn new(initial_selection_bounds: Option<DrawRect>) -> Self {
-        Self {
-            initial_selection_bounds,
-        }
-    }
-}
 
 /// Result of a single edit update tick.
 #[derive(Clone, Debug, PartialEq)]

@@ -28,6 +28,18 @@ pub trait ElementDefinition: Send + Sync {
     /// Creates the creation strategy used by this element type.
     fn creation_strategy(&self) -> Option<Box<dyn CreationStrategy>>;
 
+    /// Optional element-specific hit test hook used by input hit detection.
+    ///
+    /// Returning `None` delegates to shared fallback hit testing.
+    fn hit_test(
+        &self,
+        _element: &crate::draw::models::element_state::ElementState,
+        _position: crate::draw::types::draw_point::DrawPoint,
+        _tolerance: f64,
+    ) -> Option<bool> {
+        None
+    }
+
     /// Type-erased access for optional downcasting on read.
     fn as_any(&self) -> &dyn Any;
 }

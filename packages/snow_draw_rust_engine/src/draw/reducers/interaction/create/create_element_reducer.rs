@@ -14,6 +14,7 @@ use crate::draw::elements::core::element_data::{
 use crate::draw::elements::core::element_registry::{
     DefaultElementRegistry, ElementDefinition as RuntimeElementDefinition,
 };
+use crate::draw::elements::core::rect_creation_strategy::RectCreationStrategy;
 use crate::draw::elements::types::arrow::arrow_data::ArrowData;
 use crate::draw::elements::types::filter::filter_data::FilterData;
 use crate::draw::elements::types::free_draw::free_draw_data::FreeDrawData;
@@ -565,12 +566,9 @@ fn require_registered_definition<'a>(
 fn resolve_creation_strategy_for_definition(
     definition: &dyn RuntimeElementDefinition,
 ) -> Box<dyn CreationStrategy> {
-    definition.creation_strategy().unwrap_or_else(|| {
-        panic!(
-            "Element type \"{}\" does not provide a creation strategy",
-            definition.type_id_value()
-        )
-    })
+    definition
+        .creation_strategy()
+        .unwrap_or_else(|| Box::new(RectCreationStrategy::new()))
 }
 
 fn resolve_creation_strategy_for_type(

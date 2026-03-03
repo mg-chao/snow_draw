@@ -4,6 +4,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::draw::config::draw_config::DrawConfig;
 use crate::draw::edit::apply::edit_apply::EditApply;
+use crate::draw::edit::core::edit_compute_pipeline::finalize_domain_result;
 use crate::draw::edit::core::edit_computed_result::EditComputedResult;
 use crate::draw::edit::core::edit_modifiers::EditModifiers;
 use crate::draw::edit::core::edit_operation_params::RotateOperationParams;
@@ -12,6 +13,7 @@ use crate::draw::edit::core::edit_validation::EditValidation;
 use crate::draw::edit::rotate::angle_calculator::{
     apply_discrete_snap, normalize_delta, raw_angle,
 };
+use crate::draw::elements::types::arrow::arrow_data::ArrowData;
 use crate::draw::history::history_metadata::HistoryMetadata;
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::element_state::ElementState;
@@ -22,6 +24,7 @@ use crate::draw::types::edit_context::{EditContext, RotateEditContext};
 use crate::draw::types::edit_operation_id::{EditOperationId, EditOperationIds};
 use crate::draw::types::edit_transform::{EditTransform, RotateTransform};
 use crate::draw::types::element_geometry::ElementRotateSnapshot;
+use crate::draw::types::element_style::ArrowType;
 
 /// Additional state access needed by [`RotateOperation`].
 ///
@@ -254,11 +257,14 @@ impl RotateOperation {
             return None;
         }
 
-        Some(EditComputedResult::new(
+        let selected_ids = context.base.selected_ids_at_start.clone();
+        finalize_domain_result(
+            current_elements_by_id,
             updated_by_id,
             None,
             Some(context.base_rotation + transform.applied_angle),
-        ))
+            Some(&|id, element| selected_ids.contains(id) && is_elbow_arrow_element(element)),
+        )
     }
 
     pub fn update_overlay(
@@ -351,4 +357,15 @@ fn element_world_aabb(element: &ElementState) -> DrawRect {
         center.x + x_extent,
         center.y + y_extent,
     )
+}
+
+fn is_elbow_arrow_element(element: &ElementState) -> bool {
+    if element.data.type_id().as_str() != ArrowData::TYPE_ID_TOKEN {
+        return false;
+    }
+
+    let payload = element.data.to_json_value();
+    ArrowData::from_json_value(&payload)
+        .map(|data| data.arrow_type == ArrowType::Elbow)
+        .unwrap_or(false)
 }

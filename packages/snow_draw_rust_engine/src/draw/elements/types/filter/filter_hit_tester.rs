@@ -46,9 +46,25 @@ impl ElementHitTester for FilterHitTester {
         position: DrawPoint,
         tolerance: f64,
     ) -> bool {
-        // The shared fallback `ElementState` currently exposes only `rect`,
-        // so this path performs axis-aligned hit testing without rotation.
-        hit_test_rotated_rect(element.rect, 0.0, position, tolerance)
+        assert!(
+            element.type_id().as_str() == FilterData::TYPE_ID_TOKEN,
+            "FilterHitTester can only hit test FilterData (got {})",
+            element.type_id().as_str()
+        );
+
+        let data = FilterData::from_json_value(&element.data.to_json_value())
+            .expect("FilterHitTester received invalid FilterData payload");
+
+        self.hit_test_filter(
+            &FilterHitTestElement {
+                rect: element.rect,
+                rotation: element.rotation,
+                data: &data,
+            },
+            position,
+            tolerance,
+        )
+        .unwrap_or(false)
     }
 
     fn get_bounds(&self, element: &ElementState) -> DrawRect {

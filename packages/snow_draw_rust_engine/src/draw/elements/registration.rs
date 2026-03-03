@@ -21,6 +21,7 @@ use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
 use crate::draw::elements::types::serial_number::serial_number_creation_strategy::SerialNumberCreationStrategy;
 use crate::draw::elements::types::serial_number::serial_number_data::SerialNumberData;
 use crate::draw::elements::types::text::text_data::TextData;
+use crate::draw::services::element_hit_test_service::hit_test_element;
 
 use super::core::element_registry::{
     DefaultElementRegistry, ElementDefinition, ElementRegistryError,
@@ -112,6 +113,15 @@ impl ElementDefinition for BuiltInElementDefinition {
 
     fn creation_strategy(&self) -> Option<Box<dyn CreationStrategy>> {
         Some((self.create_creation_strategy_fn)())
+    }
+
+    fn hit_test(
+        &self,
+        element: &crate::draw::models::element_state::ElementState,
+        position: crate::draw::types::draw_point::DrawPoint,
+        tolerance: f64,
+    ) -> Option<bool> {
+        Some(hit_test_element(element, position, tolerance))
     }
 
     fn as_any(&self) -> &dyn Any {

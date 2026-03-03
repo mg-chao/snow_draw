@@ -4,11 +4,10 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use crate::draw::core::coordinates::element_space::ElementSpace;
-use crate::draw::elements::core::element_hit_tester::{
-    ElementHitTester, ElementState as HitTesterElementState,
-};
+use crate::draw::elements::core::element_hit_tester::ElementHitTester;
 use crate::draw::models::draw_state_view::{DocumentState, DrawStateView, ElementState};
 use crate::draw::types::draw_point::DrawPoint;
+use crate::draw::utils::spatial_index::{ElementState as SpatialIndexElementState, SpatialIndex};
 
 /// Resolves the hit tester used for an element during eraser processing.
 pub type EraserHitTesterResolver =
@@ -17,15 +16,15 @@ pub type EraserHitTesterResolver =
 /// Converts pointer movement into eraser-hit candidates.
 ///
 /// The processor keeps per-pointer stroke continuity and samples each stroke
-/// segment against element candidates. The current `DrawStateView` translation
-/// does not expose a point-query spatial index yet, so this module performs a
-/// direct candidate scan and preserves the same hit semantics.
+/// segment against point-query candidates via a cached spatial index.
 #[derive(Clone)]
 pub struct EraserStrokeProcessor {
     hit_tester_resolver: Arc<EraserHitTesterResolver>,
     last_processed_positions: HashMap<i64, DrawPoint>,
     effective_element_cache: HashMap<String, ElementState>,
     cached_effective_state_view_ptr: Option<usize>,
+    point_query_index: Option<SpatialIndex>,
+    cached_document_version: Option<i64>,
 }
 
 impl EraserStrokeProcessor {
@@ -38,6 +37,8 @@ impl EraserStrokeProcessor {
             last_processed_positions: HashMap::new(),
             effective_element_cache: HashMap::new(),
             cached_effective_state_view_ptr: None,
+            point_query_index: None,
+            cached_document_version: None,
         }
     }
 
@@ -52,6 +53,7 @@ impl EraserStrokeProcessor {
     pub fn reset(&mut self) {
         self.last_processed_positions.clear();
         self.clear_effective_element_cache();
+        self.clear_point_query_index_cache();
     }
 
     /// Clears the cached last position for a pointer.
@@ -84,11 +86,14 @@ impl EraserStrokeProcessor {
         let document = &state_view.state.domain.document;
         if document.elements.is_empty() {
             self.clear_effective_element_cache();
+            self.clear_point_query_index_cache();
             return false;
         }
 
         let has_preview_overrides = !state_view.preview_elements_by_id().is_empty();
         self.sync_effective_element_cache(state_view, has_preview_overrides);
+        self.sync_point_query_index(document);
+        let element_by_id = document.element_map();
 
         let mut has_new_hits = false;
         Self::visit_stroke_samples(
@@ -98,7 +103,7 @@ impl EraserStrokeProcessor {
             include_start,
             |sample| {
                 if self.visit_sample_candidates(
-                    document,
+                    &element_by_id,
                     sample,
                     resolved_tolerance,
                     state_view,
@@ -116,7 +121,7 @@ impl EraserStrokeProcessor {
 
     fn visit_sample_candidates<FIsQueuedForPreview, FQueuePreview>(
         &mut self,
-        document: &DocumentState,
+        element_by_id: &HashMap<String, ElementState>,
         sample: DrawPoint,
         tolerance: f64,
         state_view: &DrawStateView,
@@ -130,10 +135,21 @@ impl EraserStrokeProcessor {
     {
         let mut has_new_hits = false;
 
-        for candidate in &document.elements {
-            if is_queued_for_preview(&candidate.id) {
+        let candidate_entries = self
+            .point_query_index
+            .as_ref()
+            .map(|index| index.search_point_entries_with_options(sample, tolerance, false, false))
+            .unwrap_or_default();
+
+        for entry in candidate_entries {
+            let candidate_id = entry.id.as_str();
+            if is_queued_for_preview(candidate_id) {
                 continue;
             }
+
+            let Some(candidate) = element_by_id.get(candidate_id) else {
+                continue;
+            };
 
             let element =
                 self.resolve_effective_element(candidate, state_view, has_preview_overrides);
@@ -147,6 +163,35 @@ impl EraserStrokeProcessor {
         }
 
         has_new_hits
+    }
+
+    fn clear_point_query_index_cache(&mut self) {
+        self.point_query_index = None;
+        self.cached_document_version = None;
+    }
+
+    fn sync_point_query_index(&mut self, document: &DocumentState) {
+        if self.cached_document_version == Some(document.elements_version)
+            && self.point_query_index.is_some()
+        {
+            return;
+        }
+
+        let spatial_elements = document
+            .elements
+            .iter()
+            .map(|element| {
+                SpatialIndexElementState::new(
+                    element.id.clone(),
+                    element.rect,
+                    element.rotation,
+                    element.z_index,
+                )
+            })
+            .collect::<Vec<_>>();
+
+        self.point_query_index = Some(SpatialIndex::from_elements(&spatial_elements));
+        self.cached_document_version = Some(document.elements_version);
     }
 
     fn clear_effective_element_cache(&mut self) {
@@ -205,8 +250,7 @@ impl EraserStrokeProcessor {
         tolerance: f64,
     ) -> bool {
         if let Some(hit_tester) = (self.hit_tester_resolver)(element) {
-            let tester_element = HitTesterElementState::new(element.id.clone(), element.rect);
-            return hit_tester.hit_test_with_tolerance(&tester_element, sample, tolerance);
+            return hit_tester.hit_test_with_tolerance(element, sample, tolerance);
         }
 
         self.is_inside_rect_with_tolerance(element, sample, tolerance)

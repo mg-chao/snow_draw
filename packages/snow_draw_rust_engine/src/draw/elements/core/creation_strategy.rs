@@ -42,10 +42,27 @@ where
 pub type DrawState = crate::draw::models::draw_state::DrawState;
 
 /// Point-based creation session details.
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Default)]
 pub struct PointCreationMode {
     pub fixed_points: Vec<DrawPoint>,
     pub current_point: Option<DrawPoint>,
+    pub session_data: Option<Arc<dyn Any + Send + Sync>>,
+}
+
+impl PartialEq for PointCreationMode {
+    fn eq(&self, other: &Self) -> bool {
+        self.fixed_points == other.fixed_points && self.current_point == other.current_point
+    }
+}
+
+impl fmt::Debug for PointCreationMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PointCreationMode")
+            .field("fixed_points_len", &self.fixed_points.len())
+            .field("current_point", &self.current_point)
+            .field("has_session_data", &self.session_data.is_some())
+            .finish()
+    }
 }
 
 /// Discriminator for creation mode within [`CreatingState`].

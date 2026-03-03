@@ -3,8 +3,11 @@
 use std::collections::BTreeSet;
 
 use crate::draw::core::draw_context::DrawContext;
+use crate::draw::events::error_events::ValidationFailedEvent;
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::reducers::core::reducer_utils::apply_selection_change;
+use crate::draw::services::log::log_service::LogData;
+use serde_json::Value;
 
 /// Action payload for selecting one element.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -93,15 +96,32 @@ impl SelectionReducerState for DrawState {
 /// Context hook used for validation side-effects.
 ///
 /// In Dart, missing-element selection logs a warning and emits
-/// `ValidationFailedEvent`. The default DrawContext adapter is currently a
-/// no-op because those context service surfaces are still being translated.
+/// `ValidationFailedEvent`.
 pub trait SelectionReducerContext {
     fn on_selection_validation_failed(&self, action: &str, element_id: &str);
 }
 
 impl SelectionReducerContext for DrawContext {
-    fn on_selection_validation_failed(&self, _action: &str, _element_id: &str) {
-        // No-op until DrawContext logging/event-bus adapters are wired.
+    fn on_selection_validation_failed(&self, action: &str, element_id: &str) {
+        let mut log_data = LogData::new();
+        log_data.insert("action".to_owned(), action.to_owned());
+        log_data.insert("elementId".to_owned(), element_id.to_owned());
+
+        self.log
+            .store()
+            .warning("Selection failed: element not found", Some(&log_data));
+
+        let Some(event_bus) = self.event_bus.as_ref() else {
+            return;
+        };
+
+        let action = action.to_owned();
+        let element_id = element_id.to_owned();
+        let _ = event_bus.emit_lazy::<ValidationFailedEvent, _>(move || {
+            let mut details = indexmap::IndexMap::new();
+            details.insert("elementId".to_owned(), Value::String(element_id));
+            ValidationFailedEvent::new(action, "Element not found", details)
+        });
     }
 }
 

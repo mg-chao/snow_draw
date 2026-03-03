@@ -48,15 +48,26 @@ impl ElementHitTester for RectangleHitTester {
         position: DrawPoint,
         tolerance: f64,
     ) -> bool {
-        // The shared fallback `ElementState` currently exposes only `rect`,
-        // so this path performs axis-aligned bounds hit testing.
-        let expanded = DrawRect::new(
-            element.rect.min_x - tolerance,
-            element.rect.min_y - tolerance,
-            element.rect.max_x + tolerance,
-            element.rect.max_y + tolerance,
+        assert!(
+            element.type_id().as_str() == RectangleData::TYPE_ID_TOKEN,
+            "RectangleHitTester can only hit test RectangleData (got {})",
+            element.type_id().as_str()
         );
-        expanded.contains_point(position)
+
+        let data = RectangleData::from_json_value(&element.data.to_json_value())
+            .expect("RectangleHitTester received invalid RectangleData payload");
+
+        self.hit_test_rectangle(
+            &RectangleHitTestElement {
+                rect: element.rect,
+                rotation: element.rotation,
+                opacity: element.opacity,
+                data: &data,
+            },
+            position,
+            tolerance,
+        )
+        .unwrap_or(false)
     }
 
     fn get_bounds(&self, element: &ElementState) -> DrawRect {

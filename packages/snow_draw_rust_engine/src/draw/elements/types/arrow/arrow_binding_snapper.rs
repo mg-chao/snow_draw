@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 
 use crate::draw::config::draw_config::SnapConfig;
+pub use crate::draw::elements::types::arrow::arrow_binding::{
+    ArrowBinding, ArrowBindingMode, ArrowBindingResult,
+};
+pub use crate::draw::elements::types::arrow::arrow_binding_target_cache::ArrowBindingTargetCache;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::element_style::{ArrowType, ArrowheadStyle};
 use crate::draw::utils::camera_zoom::resolve_zoom_adjusted_distance;
@@ -9,40 +13,6 @@ use crate::draw::utils::snapping_mode::SnappingMode;
 const PREFERRED_BINDING_STICKINESS_FACTOR: f64 = 0.3;
 const DEFAULT_TARGET_CACHE_THRESHOLD_FACTOR: f64 = 0.4;
 const DEFAULT_EMPTY_CACHE_THRESHOLD_FACTOR: f64 = 0.75;
-
-/// Binding mode retained for compatibility with binding snapshots.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum ArrowBindingMode {
-    Inside,
-    Orbit,
-}
-
-/// Endpoint binding descriptor.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ArrowBinding {
-    pub element_id: String,
-    pub anchor: DrawPoint,
-    pub mode: ArrowBindingMode,
-}
-
-impl ArrowBinding {
-    pub fn new(element_id: impl Into<String>, anchor: DrawPoint, mode: ArrowBindingMode) -> Self {
-        Self {
-            element_id: element_id.into(),
-            anchor,
-            mode,
-        }
-    }
-}
-
-/// Candidate produced by binding resolution.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ArrowBindingResult {
-    pub binding: ArrowBinding,
-    pub snap_point: DrawPoint,
-    pub distance: f64,
-    pub z_index: i64,
-}
 
 /// Cache policy controlling how aggressively nearby-target queries are reused.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -98,80 +68,6 @@ where
         excluded_element_id: Option<&str>,
         visitor: &mut dyn FnMut(E) -> bool,
     );
-}
-
-/// Reusable cache for nearby arrow-binding target queries.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ArrowBindingTargetCache<E>
-where
-    E: ArrowBindingElement + Clone,
-{
-    last_position: Option<DrawPoint>,
-    last_distance: f64,
-    elements_version: i64,
-    targets: Vec<E>,
-}
-
-impl<E> Default for ArrowBindingTargetCache<E>
-where
-    E: ArrowBindingElement + Clone,
-{
-    fn default() -> Self {
-        Self {
-            last_position: None,
-            last_distance: 0.0,
-            elements_version: -1,
-            targets: Vec::new(),
-        }
-    }
-}
-
-impl<E> ArrowBindingTargetCache<E>
-where
-    E: ArrowBindingElement + Clone,
-{
-    pub fn targets(&self) -> &[E] {
-        &self.targets
-    }
-
-    pub fn is_valid(
-        &self,
-        position: DrawPoint,
-        threshold: f64,
-        distance: f64,
-        elements_version: i64,
-    ) -> bool {
-        let Some(last_position) = self.last_position else {
-            return false;
-        };
-        if threshold <= 0.0 {
-            return false;
-        }
-        if self.elements_version != elements_version || self.last_distance != distance {
-            return false;
-        }
-        last_position.distance_squared(position) <= threshold * threshold
-    }
-
-    pub fn update(
-        &mut self,
-        position: DrawPoint,
-        distance: f64,
-        elements_version: i64,
-        targets: Vec<E>,
-    ) {
-        self.last_position = Some(position);
-        self.last_distance = distance;
-        self.elements_version = elements_version;
-        self.targets = targets;
-    }
-
-    pub fn reset(&mut self) {
-        self.last_position = None;
-        self.last_distance = 0.0;
-        self.elements_version = -1;
-        self.targets.clear();
-    }
 }
 
 /// Binding resolver integration for geometry/domain-specific logic.

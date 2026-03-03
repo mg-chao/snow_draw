@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use crate::draw::core::coordinates::element_space::ElementSpace;
+use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::ArrowType;
@@ -100,13 +101,7 @@ pub fn resolve_arrow_geometry_update(
 }
 
 fn calculate_path_bounds(points: &[DrawPoint], arrow_type: ArrowType) -> DrawRect {
-    // `arrow_type` is kept in the signature so this module remains API-compatible
-    // with the Dart version and can delegate to specialized geometry later.
-    let _ = arrow_type;
-    if points.is_empty() {
-        return DrawRect::default();
-    }
-    DrawRect::from_point_cloud(points.iter().copied())
+    ArrowGeometry::calculate_path_bounds(points, arrow_type)
 }
 
 fn normalize_points(world_points: &[DrawPoint], rect: DrawRect) -> Vec<DrawPoint> {
@@ -131,7 +126,7 @@ fn normalize_points(world_points: &[DrawPoint], rect: DrawRect) -> Vec<DrawPoint
                 x: clamp01(x),
                 y: clamp01(y),
                 pressure: point.pressure,
-                timestamp: point.timestamp,
+                timestamp: 0,
             }
         })
         .collect()

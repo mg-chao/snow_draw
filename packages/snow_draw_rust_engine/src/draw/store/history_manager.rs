@@ -4,7 +4,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::{Duration, SystemTime};
 
 use crate::draw::history::history_metadata::HistoryMetadata;
-use crate::draw::models::draw_state::{DomainSelectionState, DomainState, DrawState};
+use crate::draw::models::draw_state::{DomainState, DrawState};
 use crate::draw::services::log::log_service::{LogData, LogService, ModuleLogger};
 
 const DEFAULT_MAX_HISTORY_LENGTH: usize = 50;
@@ -52,13 +52,8 @@ pub struct PersistentSnapshot {
 impl PersistentSnapshot {
     /// Captures the history-participating portion of draw state.
     pub fn from_state(state: &DrawState, include_selection: bool) -> Self {
-        let mut domain_snapshot = state.domain_snapshot();
-        if !include_selection {
-            domain_snapshot.selection = DomainSelectionState::default();
-        }
-
         Self {
-            domain_snapshot,
+            domain_snapshot: state.domain_snapshot(),
             include_selection,
         }
     }
@@ -90,24 +85,41 @@ impl HistoryDelta {
         let after_document = &after.domain_snapshot.document;
         let document_changed = before_document != after_document;
 
-        let before_elements = if document_changed {
-            before_document.elements.len()
+        let (before_elements, after_elements) = if document_changed {
+            let before_by_id = before_document.element_map();
+            let after_by_id = after_document.element_map();
+            let mut before_count = 0usize;
+            let mut after_count = 0usize;
+
+            for (id, before_element) in &before_by_id {
+                match after_by_id.get(id) {
+                    None => {
+                        before_count += 1;
+                    }
+                    Some(after_element) if after_element != before_element => {
+                        before_count += 1;
+                        after_count += 1;
+                    }
+                    Some(_) => {}
+                }
+            }
+
+            for id in after_by_id.keys() {
+                if !before_by_id.contains_key(id) {
+                    after_count += 1;
+                }
+            }
+
+            (before_count, after_count)
         } else {
-            0
-        };
-        let after_elements = if document_changed {
-            after_document.elements.len()
-        } else {
-            0
+            (0, 0)
         };
 
         let selection_changed = before.include_selection
             && after.include_selection
             && before.domain_snapshot.selection != after.domain_snapshot.selection;
 
-        // The current translated DomainDocumentState does not expose element ids
-        // yet, so list-length difference is the best order-change approximation.
-        let order_changed = before_document.elements.len() != after_document.elements.len();
+        let order_changed = before_document.order() != after_document.order();
 
         Self {
             before_snapshot: before,
@@ -121,17 +133,34 @@ impl HistoryDelta {
 
     /// Returns true when the delta has any effective change.
     pub fn has_changes(&self) -> bool {
-        self.before_snapshot.domain_snapshot != self.after_snapshot.domain_snapshot
+        let documents_changed = self.before_snapshot.domain_snapshot.document
+            != self.after_snapshot.domain_snapshot.document;
+        if documents_changed {
+            return true;
+        }
+
+        self.before_snapshot.include_selection
+            && self.after_snapshot.include_selection
+            && self.before_snapshot.domain_snapshot.selection
+                != self.after_snapshot.domain_snapshot.selection
     }
 
     /// Restores state to the delta's "before" side.
     pub fn apply_backward(&self, state: &DrawState) -> DrawState {
-        state.restore_from_snapshot(self.before_snapshot.domain_snapshot.clone())
+        let mut snapshot = self.before_snapshot.domain_snapshot.clone();
+        if !self.before_snapshot.include_selection {
+            snapshot.selection = state.domain.selection.clone();
+        }
+        state.restore_from_snapshot(snapshot)
     }
 
     /// Restores state to the delta's "after" side.
     pub fn apply_forward(&self, state: &DrawState) -> DrawState {
-        state.restore_from_snapshot(self.after_snapshot.domain_snapshot.clone())
+        let mut snapshot = self.after_snapshot.domain_snapshot.clone();
+        if !self.after_snapshot.include_selection {
+            snapshot.selection = state.domain.selection.clone();
+        }
+        state.restore_from_snapshot(snapshot)
     }
 }
 

@@ -48,11 +48,24 @@ impl ElementHitTester for SerialNumberHitTester {
         position: DrawPoint,
         tolerance: f64,
     ) -> bool {
-        // The shared fallback `ElementState` currently exposes only `rect`,
-        // so this path uses the default serial-number style metrics.
-        let default_data = SerialNumberData::default();
-        let stroke_width = resolve_serial_number_stroke_width(&default_data, 0.0);
-        hit_test_serial_number_circle(element.rect, position, stroke_width, tolerance)
+        assert!(
+            element.type_id().as_str() == SerialNumberData::TYPE_ID_TOKEN,
+            "SerialNumberHitTester can only hit test SerialNumberData (got {})",
+            element.type_id().as_str()
+        );
+
+        let data = SerialNumberData::from_json_value(&element.data.to_json_value())
+            .expect("SerialNumberHitTester received invalid SerialNumberData payload");
+
+        self.hit_test_serial_number(
+            &SerialNumberHitTestElement {
+                rect: element.rect,
+                data: &data,
+            },
+            position,
+            tolerance,
+        )
+        .unwrap_or(false)
     }
 
     fn get_bounds(&self, element: &ElementState) -> DrawRect {

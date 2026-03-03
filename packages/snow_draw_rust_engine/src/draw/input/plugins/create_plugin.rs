@@ -7,7 +7,9 @@ use std::time::Instant;
 use crate::draw::actions::draw_actions::{
     AddArrowPoint, CancelCreateElement, CreateElement, FinishCreateElement, UpdateCreatingElement,
 };
+use crate::draw::core::draw_context::DrawContext;
 use crate::draw::elements::core::element_data::{DynElementData, ElementTypeId};
+use crate::draw::elements::core::element_registry::DefaultElementRegistry;
 use crate::draw::elements::types::arrow::arrow_data::ArrowData;
 use crate::draw::elements::types::free_draw::free_draw_data::FreeDrawData;
 use crate::draw::elements::types::line::line_data::LineData;
@@ -23,10 +25,12 @@ use crate::draw::input::plugin_engine::{
     PluginError, PluginHandleResult, PluginLifecycleResult, PluginResult, SupportedEventTypes,
 };
 use crate::draw::models::draw_state::DrawState;
+use crate::draw::models::element_state::ElementState as ModelElementState;
 use crate::draw::models::interaction_state::{
     CreationMode as DomainCreationMode, InteractionState,
 };
-use crate::draw::services::element_hit_test_service::query_elements_at_point_top_down;
+use crate::draw::services::draw_state_view_builder::DrawStateViewBuilder;
+use crate::draw::services::element_hit_test_service::hit_test_element;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::element_style::ArrowType;
 
@@ -118,6 +122,7 @@ pub trait CreateStartPolicy: Send + Sync {
     fn should_start_create(
         &self,
         state: &DrawState,
+        draw_context: &DrawContext,
         position: DrawPoint,
         tool_type_id: &ElementTypeId<DynElementData>,
         hit_tolerance: f64,
@@ -136,6 +141,7 @@ impl CreateStartPolicy for DefaultCreateStartPolicy {
     fn should_start_create(
         &self,
         state: &DrawState,
+        draw_context: &DrawContext,
         position: DrawPoint,
         tool_type_id: &ElementTypeId<DynElementData>,
         hit_tolerance: f64,
@@ -144,23 +150,39 @@ impl CreateStartPolicy for DefaultCreateStartPolicy {
             return false;
         }
 
-        let hits = query_elements_at_point_top_down(
-            state.domain.document.elements.as_slice(),
-            position,
-            hit_tolerance,
-        );
+        let state_view =
+            DrawStateViewBuilder::new(draw_context.edit_operations.as_ref().clone(), None)
+                .build(state);
+        let mut effective_elements = state_view
+            .elements()
+            .iter()
+            .map(|element| state_view.effective_element(element))
+            .collect::<Vec<_>>();
         let bound_text_ids = collect_bound_text_ids(state.domain.document.elements.as_slice());
 
-        for element in hits {
+        effective_elements.sort_by(|left, right| {
+            left.z_index
+                .cmp(&right.z_index)
+                .then_with(|| left.id.cmp(&right.id))
+        });
+
+        for element in effective_elements.into_iter().rev() {
             let element_type_id = element.data.type_id();
-            if element_type_id.as_str() == tool_type_id.as_str() {
-                return false;
+            let passes_filter = element_type_id.as_str() == tool_type_id.as_str()
+                || (tool_type_id.as_str() == SerialNumberData::TYPE_ID_TOKEN
+                    && element_type_id.as_str() == TextData::TYPE_ID_TOKEN
+                    && bound_text_ids.contains(&element.id));
+
+            if !passes_filter {
+                continue;
             }
 
-            if tool_type_id.as_str() == SerialNumberData::TYPE_ID_TOKEN
-                && element_type_id.as_str() == TextData::TYPE_ID_TOKEN
-                && bound_text_ids.contains(&element.id)
-            {
+            if hit_test_with_registry(
+                draw_context.element_registry.as_ref(),
+                &element,
+                position,
+                hit_tolerance,
+            ) {
                 return false;
             }
         }
@@ -250,8 +272,10 @@ impl CreatePlugin {
         position: DrawPoint,
         tool_type_id: &ElementTypeId<DynElementData>,
     ) -> bool {
+        let draw_context = self.draw_context();
         self.start_policy.should_start_create(
             state,
+            &draw_context,
             position,
             tool_type_id,
             self.selection_config().interaction.handle_tolerance,
@@ -540,9 +564,7 @@ impl InputPlugin for CreatePlugin {
     }
 
     fn on_unload(&mut self) -> PluginLifecycleResult {
-        <InputPluginBase as InputPlugin>::on_unload(&mut self.base)?;
-        self.reset_point_creation_state();
-        Ok(())
+        <InputPluginBase as InputPlugin>::on_unload(&mut self.base)
     }
 
     fn can_handle(&self, _event: &InputEvent, state: &DrawState) -> bool {
@@ -675,6 +697,21 @@ fn collect_bound_text_ids(
         }
     }
     bound_text_ids
+}
+
+fn hit_test_with_registry(
+    registry: &DefaultElementRegistry,
+    element: &ModelElementState,
+    position: DrawPoint,
+    tolerance: f64,
+) -> bool {
+    if let Some(definition) = registry.get_definition_by_value(element.type_id().as_str()) {
+        if let Some(is_hit) = definition.hit_test(element, position, tolerance) {
+            return is_hit;
+        }
+    }
+
+    hit_test_element(element, position, tolerance)
 }
 
 fn resolve_creating_element_kind(

@@ -5,6 +5,7 @@ use std::collections::{HashMap, HashSet};
 use crate::draw::config::draw_config::DrawConfig;
 use crate::draw::core::geometry::move_geometry::MoveGeometry;
 use crate::draw::edit::apply::edit_apply::EditApply;
+use crate::draw::edit::core::edit_compute_pipeline::finalize_domain_result;
 use crate::draw::edit::core::edit_computed_result::EditComputedResult;
 use crate::draw::edit::core::edit_modifiers::EditModifiers;
 use crate::draw::edit::core::edit_operation_params::MoveOperationParams;
@@ -14,6 +15,7 @@ use crate::draw::history::history_metadata::HistoryMetadata;
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::element_state::ElementState;
 use crate::draw::models::multi_select_lifecycle::{MultiSelectLifecycle, SelectionOverlayState};
+use crate::draw::services::object_snap_service::OBJECT_SNAP_SERVICE;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_context::{
@@ -277,11 +279,13 @@ impl MoveOperation {
             .translate(DrawPoint::new(transform.dx, transform.dy));
         let multi_select_bounds = context.base.is_multi_select().then_some(translated_bounds);
 
-        Some(EditComputedResult::new(
+        finalize_domain_result(
+            current_elements_by_id,
             updated_by_id,
             multi_select_bounds,
             None,
-        ))
+            None,
+        )
     }
 
     pub fn update_overlay(
@@ -331,17 +335,23 @@ impl MoveOperation {
 
                 let snap_distance =
                     resolve_zoom_adjusted_distance(snap_config.distance, state.view_zoom());
-                let snap_result = snap_to_reference_aabbs(
+                let snap_result = OBJECT_SNAP_SERVICE.snap_move(
                     target_rect,
-                    &context.reference_element_aabbs,
+                    &context.reference_elements,
                     snap_distance,
-                    snap_config.show_guides,
+                    Some(context.reference_element_aabbs.as_slice()),
+                    snap_config.enable_point_snaps,
+                    snap_config.enable_gap_snaps,
                 );
 
                 MoveSnappedDisplacement {
                     dx: base_dx + snap_result.dx,
                     dy: base_dy + snap_result.dy,
-                    guides: snap_result.guides,
+                    guides: if snap_config.show_guides {
+                        snap_result.guides
+                    } else {
+                        Vec::new()
+                    },
                 }
             }
             SnappingMode::None => MoveSnappedDisplacement::new(base_dx, base_dy),

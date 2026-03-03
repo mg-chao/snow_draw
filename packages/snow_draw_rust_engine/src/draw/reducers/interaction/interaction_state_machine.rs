@@ -6,7 +6,6 @@ use std::sync::Arc;
 
 use crate::draw::actions::draw_actions as actions;
 use crate::draw::core::draw_context::DrawContext;
-use crate::draw::edit::core::edit_operation::EditOperationParams as ReducerEditOperationParams;
 use crate::draw::edit::core::edit_session_id_generator::EditSessionIdGenerator;
 use crate::draw::edit::core::edit_session_service::EditSessionService;
 use crate::draw::elements::core::creation_strategy::{
@@ -143,11 +142,10 @@ pub fn interaction_state_machine() -> InteractionStateMachine {
 
 fn map_edit_action(action: &DispatchAction) -> edit_state_reducer::DrawAction {
     if let Some(action) = action.as_any().downcast_ref::<actions::StartEdit>() {
-        let params = ReducerEditOperationParams::new(action.params.initial_selection_bounds());
         return edit_state_reducer::DrawAction::StartEdit(edit_state_reducer::StartEdit::new(
             action.operation_id,
             action.position,
-            params,
+            action.params.clone(),
         ));
     }
     if let Some(action) = action.as_any().downcast_ref::<actions::UpdateEdit>() {
@@ -765,6 +763,7 @@ fn model_creation_mode_to_strategy(mode: &ModelCreationMode) -> StrategyCreation
             StrategyCreationMode::Point(StrategyPointCreationMode {
                 fixed_points: point_mode.fixed_points.clone(),
                 current_point: point_mode.current_point,
+                session_data: point_mode.session_data.clone(),
             })
         }
     }
@@ -777,7 +776,7 @@ fn strategy_creation_mode_to_model(mode: &StrategyCreationMode) -> ModelCreation
             ModelCreationMode::Point(ModelPointCreationMode::new(
                 point_mode.fixed_points.clone(),
                 point_mode.current_point,
-                None,
+                point_mode.session_data.clone(),
             ))
         }
     }

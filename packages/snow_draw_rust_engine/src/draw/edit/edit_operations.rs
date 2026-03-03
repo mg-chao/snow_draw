@@ -13,6 +13,7 @@ use crate::draw::edit::arrow::arrow_point_operation::{
 };
 use crate::draw::edit::core::edit_computed_result::EditComputedResult;
 use crate::draw::edit::core::edit_operation_params::{
+    ArrowPointOperationParams as TypedArrowPointOperationParams,
     MoveOperationParams as TypedMoveOperationParams,
     RotateOperationParams as TypedRotateOperationParams,
 };
@@ -23,6 +24,11 @@ use crate::draw::edit::rotate::rotate_operation::RotateOperation;
 use crate::draw::elements::core::element_data::ElementData as CoreElementData;
 use crate::draw::elements::types::arrow::arrow_binding::{
     ArrowBinding as CompatArrowBinding, ArrowBindingMode as CompatArrowBindingMode,
+    ArrowBindingUtils,
+};
+use crate::draw::elements::types::arrow::arrow_binding_snapper::{
+    ArrowBindingCachePolicy, ArrowBindingResolver as SnapperBindingResolver, ArrowBindingSnapper,
+    ArrowBindingTargetCache as SnapperTargetCache,
 };
 use crate::draw::elements::types::arrow::arrow_data::{
     ArrowBinding as ArrowDataBinding, ArrowBindingMode as ArrowDataBindingMode, ArrowData,
@@ -30,12 +36,14 @@ use crate::draw::elements::types::arrow::arrow_data::{
     NullableField as ArrowDataNullableField,
 };
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
+use crate::draw::elements::types::arrow::arrow_layout::resolve_arrow_geometry_update;
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField as ArrowLikeNullableField;
+use crate::draw::elements::types::arrow::arrow_two_point_layout::compute_arrow_two_point_layout;
+use crate::draw::elements::types::arrow::elbow::elbow_editing::{
+    compute_elbow_edit, transform_fixed_segments, BindingOverride as ElbowBindingOverride,
+};
 use crate::draw::elements::types::arrow::elbow::elbow_fixed_segment::ElbowFixedSegment as CompatElbowFixedSegment;
 use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
-use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
-use crate::draw::elements::types::serial_number::serial_number_data::SerialNumberData;
-use crate::draw::elements::types::text::text_data::TextData;
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::element_state::ElementState as DomainElementState;
 use crate::draw::models::multi_select_lifecycle::MultiSelectOverlayState;
@@ -45,6 +53,8 @@ use crate::draw::types::edit_context::{EditContext, MoveEditContext, RotateEditC
 use crate::draw::types::edit_operation_id::{EditOperationId, EditOperationIds};
 use crate::draw::types::edit_transform::{ArrowPointTransform, EditTransform};
 use crate::draw::types::element_style::{ArrowType, ArrowheadStyle};
+use crate::draw::utils::combined_element_lookup::CombinedElementLookup;
+use crate::draw::utils::snapping_mode::{resolve_effective_snapping_mode_for_config, SnappingMode};
 
 use super::core::edit_modifiers::EditModifiers;
 use super::core::edit_operation::{
@@ -60,6 +70,7 @@ pub type SharedEditOperation = Arc<dyn EditOperation>;
 #[derive(Clone)]
 pub struct DefaultEditOperationRegistry {
     operations: HashMap<EditOperationId, SharedEditOperation>,
+    operation_order: Vec<EditOperationId>,
 }
 
 impl DefaultEditOperationRegistry {
@@ -71,8 +82,14 @@ impl DefaultEditOperationRegistry {
         EditOperationIds::ROTATE,
     ];
 
-    fn from_operations_map(operations: HashMap<EditOperationId, SharedEditOperation>) -> Self {
-        Self { operations }
+    fn from_ordered_parts(
+        operations: HashMap<EditOperationId, SharedEditOperation>,
+        operation_order: Vec<EditOperationId>,
+    ) -> Self {
+        Self {
+            operations,
+            operation_order,
+        }
     }
 
     /// Creates a registry with the built-in operation set.
@@ -88,15 +105,22 @@ impl DefaultEditOperationRegistry {
         I: IntoIterator<Item = SharedEditOperation>,
     {
         let mut map = HashMap::new();
+        let mut order = Vec::new();
         for operation in operations {
-            map.insert(operation.id(), operation);
+            let operation_id = operation.id();
+            if map.insert(operation_id, operation).is_some() {
+                if let Some(index) = order.iter().position(|value| *value == operation_id) {
+                    order.remove(index);
+                }
+            }
+            order.push(operation_id);
         }
-        Self::from_operations_map(map)
+        Self::from_ordered_parts(map, order)
     }
 
     /// Creates an empty registry.
     pub fn empty() -> Self {
-        Self::from_operations_map(HashMap::new())
+        Self::from_ordered_parts(HashMap::new(), Vec::new())
     }
 
     /// Default operation set (reused by tests and extension points).
@@ -110,15 +134,17 @@ impl DefaultEditOperationRegistry {
     }
 
     pub fn get_operation(&self, operation_id: EditOperationId) -> Option<&SharedEditOperation> {
-        self.operations.get(operation_id)
+        self.operations.get(&operation_id)
     }
 
     pub fn all_operations(&self) -> impl Iterator<Item = &SharedEditOperation> {
-        self.operations.values()
+        self.operation_order
+            .iter()
+            .filter_map(|operation_id| self.operations.get(operation_id))
     }
 
     pub fn all_operation_ids(&self) -> impl Iterator<Item = EditOperationId> + '_ {
-        self.operations.keys().copied()
+        self.operation_order.iter().copied()
     }
 
     pub fn has_operation(&self, operation_id: EditOperationId) -> bool {
@@ -138,7 +164,7 @@ impl Default for DefaultEditOperationRegistry {
 
 impl fmt::Debug for DefaultEditOperationRegistry {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let operation_ids: Vec<EditOperationId> = self.operations.keys().copied().collect();
+        let operation_ids = self.operation_order.clone();
         f.debug_struct("DefaultEditOperationRegistry")
             .field("operation_ids", &operation_ids)
             .finish()
@@ -221,7 +247,7 @@ impl EditOperation for MoveEditOperationAdapter {
         let typed_context = self.operation.create_context(
             state,
             position,
-            TypedMoveOperationParams::new(params.initial_selection_bounds),
+            TypedMoveOperationParams::new(params.initial_selection_bounds()),
         );
         let base = typed_context.base.clone();
         self.replace_session(Some((
@@ -373,15 +399,16 @@ impl EditOperation for RotateEditOperationAdapter {
         position: DrawPoint,
         params: &EditOperationParams,
     ) -> EditContext {
-        let typed_context = self.operation.create_context(
-            state,
-            position,
+        let rotate_params = params.as_rotate().copied().unwrap_or_else(|| {
             TypedRotateOperationParams::with_options(
                 None,
                 config_rotation_snap_angle_default(),
-                params.initial_selection_bounds,
-            ),
-        );
+                params.initial_selection_bounds(),
+            )
+        });
+        let typed_context = self
+            .operation
+            .create_context(state, position, rotate_params);
         let base = typed_context.base.clone();
         self.replace_session(Some((
             EditContextFingerprint::from_context(&base),
@@ -524,11 +551,99 @@ impl ArrowPointEditOperationAdapter {
 
 struct DocumentArrowPointBindingLookup<'a> {
     state: &'a DrawState,
+    target_cache: SnapperTargetCache<DomainElementState>,
 }
 
 impl<'a> DocumentArrowPointBindingLookup<'a> {
     fn new(state: &'a DrawState) -> Self {
-        Self { state }
+        Self {
+            state,
+            target_cache: SnapperTargetCache::default(),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Default)]
+struct DocumentArrowPointBindingResolver;
+
+const DOCUMENT_ARROW_POINT_BINDING_RESOLVER: DocumentArrowPointBindingResolver =
+    DocumentArrowPointBindingResolver;
+
+impl SnapperBindingResolver<DomainElementState> for DocumentArrowPointBindingResolver {
+    fn is_bindable_target(&self, target: &DomainElementState) -> bool {
+        ArrowBindingUtils::is_bindable_target(target)
+    }
+
+    fn resolve_binding_search_distance(&self, snap_distance: f64) -> f64 {
+        ArrowBindingUtils::resolve_binding_search_distance(snap_distance)
+    }
+
+    fn resolve_binding_candidate_for_target(
+        &self,
+        world_point: DrawPoint,
+        target: &DomainElementState,
+        snap_distance: f64,
+        reference_point: Option<DrawPoint>,
+    ) -> Option<crate::draw::elements::types::arrow::arrow_binding::ArrowBindingResult> {
+        ArrowBindingUtils::resolve_binding_candidate_for_target(
+            world_point,
+            target,
+            snap_distance,
+            reference_point,
+        )
+    }
+
+    fn resolve_elbow_binding_candidate_for_target(
+        &self,
+        world_point: DrawPoint,
+        target: &DomainElementState,
+        snap_distance: f64,
+        has_arrowhead: bool,
+    ) -> Option<crate::draw::elements::types::arrow::arrow_binding::ArrowBindingResult> {
+        ArrowBindingUtils::resolve_elbow_binding_candidate_for_target(
+            world_point,
+            target,
+            snap_distance,
+            has_arrowhead,
+        )
+    }
+
+    fn resolve_binding_candidate(
+        &self,
+        world_point: DrawPoint,
+        targets: &[DomainElementState],
+        snap_distance: f64,
+        preferred_binding: Option<&CompatArrowBinding>,
+        allow_new_binding: bool,
+        reference_point: Option<DrawPoint>,
+    ) -> Option<crate::draw::elements::types::arrow::arrow_binding::ArrowBindingResult> {
+        ArrowBindingUtils::resolve_binding_candidate(
+            world_point,
+            targets.iter(),
+            snap_distance,
+            preferred_binding,
+            allow_new_binding,
+            reference_point,
+        )
+    }
+
+    fn resolve_elbow_binding_candidate(
+        &self,
+        world_point: DrawPoint,
+        targets: &[DomainElementState],
+        snap_distance: f64,
+        preferred_binding: Option<&CompatArrowBinding>,
+        allow_new_binding: bool,
+        has_arrowhead: bool,
+    ) -> Option<crate::draw::elements::types::arrow::arrow_binding::ArrowBindingResult> {
+        ArrowBindingUtils::resolve_elbow_binding_candidate(
+            world_point,
+            targets.iter(),
+            snap_distance,
+            has_arrowhead,
+            preferred_binding,
+            allow_new_binding,
+        )
     }
 }
 
@@ -538,80 +653,39 @@ impl ArrowPointBindingLookup for DocumentArrowPointBindingLookup<'_> {
         request: &ArrowPointBindingRequest,
     ) -> Option<ArrowBindingCandidate> {
         if !request.should_lookup_bindings || request.snap_distance <= 0.0 {
+            self.target_cache.reset();
             return None;
         }
 
-        if let Some(existing) = request.existing_binding.as_ref() {
-            if self
-                .state
-                .domain
-                .document
-                .get_element_by_id(existing.element_id.as_str())
-                .is_some()
-            {
-                return Some(ArrowBindingCandidate {
-                    binding: existing.clone(),
-                    snap_point: request.world_target,
-                });
-            }
-        }
-
-        if !request.allow_new_binding || !request.has_bindable_targets {
-            return None;
-        }
-
-        let mut best: Option<(f64, i64, &DomainElementState)> = None;
-        for candidate in &self.state.domain.document.elements {
-            if candidate.id == request.element_id || candidate.opacity <= 0.0 {
-                continue;
-            }
-            if !is_bindable_target(candidate) {
-                continue;
-            }
-
-            let distance = candidate.rect.center().distance(request.world_target);
-            let max_distance = request.snap_distance * 2.0;
-            if distance > max_distance {
-                continue;
-            }
-
-            let is_better = match best {
-                None => true,
-                Some((best_distance, best_z, _)) => {
-                    distance < best_distance
-                        || ((distance - best_distance).abs() <= 1e-6 && candidate.z_index > best_z)
-                }
-            };
-            if is_better {
-                best = Some((distance, candidate.z_index, candidate));
-            }
-        }
-
-        let (_, _, target) = best?;
-        let snapped = DrawPoint::new(
-            request
-                .world_target
-                .x
-                .clamp(target.rect.min_x, target.rect.max_x),
-            request
-                .world_target
-                .y
-                .clamp(target.rect.min_y, target.rect.max_y),
+        let preferred_binding = request
+            .existing_binding
+            .as_ref()
+            .map(internal_binding_to_compat);
+        let candidate = ArrowBindingSnapper::resolve_endpoint_binding_candidate(
+            self.state,
+            request.world_target,
+            request.arrow_type,
+            if request.has_arrowhead {
+                ArrowheadStyle::Standard
+            } else {
+                ArrowheadStyle::None
+            },
+            request.should_lookup_bindings,
+            request.snap_distance,
+            request.allow_new_binding,
+            request.has_bindable_targets,
+            preferred_binding.as_ref(),
+            request.reference_point,
+            Some(&mut self.target_cache),
+            Some(request.element_id.as_str()),
+            ArrowBindingCachePolicy::default(),
+            &DOCUMENT_ARROW_POINT_BINDING_RESOLVER,
         );
-        let width = target.rect.width();
-        let height = target.rect.height();
-        if width == 0.0 || height == 0.0 {
-            return None;
-        }
-
-        let anchor = DrawPoint::new(
-            ((snapped.x - target.rect.min_x) / width).clamp(0.0, 1.0),
-            ((snapped.y - target.rect.min_y) / height).clamp(0.0, 1.0),
-        );
+        let candidate = candidate?;
 
         Some(ArrowBindingCandidate {
-            binding: ArrowDataBinding::new(target.id.clone(), anchor, ArrowDataBindingMode::Orbit),
-            snap_point: snapped,
+            binding: compat_binding_to_internal(&candidate.binding),
+            snap_point: candidate.snap_point,
         })
     }
 }
@@ -631,6 +705,18 @@ impl EditOperation for ArrowPointEditOperationAdapter {
         position: DrawPoint,
         params: &EditOperationParams,
     ) -> EditContext {
+        let arrow_params = params.as_arrow_point();
+        let target = params
+            .as_arrow_point()
+            .and_then(|details| {
+                state
+                    .domain
+                    .document
+                    .get_element_by_id(details.element_id.as_str())
+                    .cloned()
+            })
+            .and_then(resolve_arrow_target_for_element)
+            .or_else(|| resolve_single_selected_arrow_target(state));
         let selected_ids_at_start = state
             .domain
             .selection
@@ -638,9 +724,8 @@ impl EditOperation for ArrowPointEditOperationAdapter {
             .iter()
             .cloned()
             .collect::<HashSet<_>>();
-        let target = resolve_single_selected_arrow_target(state);
         let start_bounds = params
-            .initial_selection_bounds
+            .initial_selection_bounds()
             .or_else(|| target.as_ref().map(|value| value.element.rect))
             .unwrap_or_else(|| DrawRect::from_point(position));
         let base = EditContext::new(
@@ -651,7 +736,7 @@ impl EditOperation for ArrowPointEditOperationAdapter {
             state.domain.document.elements_version,
         );
         if let Some(target) = target.as_ref() {
-            let typed_context = build_arrow_context_from_target(state, &base, target);
+            let typed_context = build_arrow_context_from_target(state, &base, target, arrow_params);
             self.replace_session(Some((
                 EditContextFingerprint::from_context(&base),
                 typed_context,
@@ -679,11 +764,11 @@ impl EditOperation for ArrowPointEditOperationAdapter {
 
     fn update(
         &self,
-        _state: &DrawState,
+        state: &DrawState,
         context: &EditContext,
         transform: &EditTransform,
         current_position: DrawPoint,
-        _modifiers: EditModifiers,
+        modifiers: EditModifiers,
         config: &DrawConfig,
     ) -> EditUpdateResult<EditTransform> {
         let EditTransform::ArrowPoint(typed_transform) = transform else {
@@ -693,18 +778,30 @@ impl EditOperation for ArrowPointEditOperationAdapter {
         let Some(typed_context) = self.resolve_context(context) else {
             return EditUpdateResult::new(transform.clone());
         };
-        let mut binding_lookup = DocumentArrowPointBindingLookup::new(_state);
+        let snapping_mode =
+            resolve_effective_snapping_mode_for_config(config, modifiers.snap_override);
+        let mut binding_lookup = DocumentArrowPointBindingLookup::new(state);
+        let should_lookup_bindings = config.snap.enable_arrow_binding
+            || typed_transform.start_binding.is_some()
+            || typed_transform.end_binding.is_some();
         let updated = self.operation.update(
             &typed_context,
             &into_internal_arrow_transform(typed_transform),
             current_position,
             ArrowPointUpdateOptions {
                 handle_tolerance: config.selection.interaction.handle_tolerance,
-                snap_to_grid: config.grid.enabled,
+                view_zoom: state.application.view.camera.zoom,
+                snap_to_grid: snapping_mode == SnappingMode::Grid,
                 grid_size: config.grid.size,
-                should_lookup_bindings: config.snap.enable_arrow_binding,
-                binding_distance: config.snap.arrow_binding_distance,
-                allow_new_binding: true,
+                should_lookup_bindings,
+                binding_distance: if should_lookup_bindings {
+                    ArrowBindingSnapper::resolve_binding_distance(state, &config.snap)
+                } else {
+                    0.0
+                },
+                allow_new_binding: config.snap.enable_arrow_binding
+                    && !modifiers.snap_override
+                    && snapping_mode != SnappingMode::Grid,
             },
             &mut binding_lookup,
         );
@@ -735,6 +832,8 @@ impl EditOperation for ArrowPointEditOperationAdapter {
             state,
             &typed_context,
             &internal_transform,
+            true,
+            true,
         ) else {
             self.replace_session(None);
             return to_idle_state(state);
@@ -782,6 +881,8 @@ impl EditOperation for ArrowPointEditOperationAdapter {
             state,
             &typed_context,
             &internal_transform,
+            false,
+            false,
         ) else {
             return EditPreview::none();
         };
@@ -963,18 +1064,34 @@ fn build_arrow_context_from_target(
     state: &DrawState,
     base: &EditContext,
     target: &ArrowEditTarget,
+    details: Option<&TypedArrowPointOperationParams>,
 ) -> ArrowPointEditContext {
     let initial_points = ArrowGeometry::resolve_world_points(target.element.rect, target.points());
-    let (point_kind, point_index) =
-        resolve_closest_arrow_point(base.start_position, &initial_points, target.arrow_type());
+    let (point_kind, point_index, is_double_click) = if let Some(details) = details {
+        (
+            map_operation_arrow_point_kind(details.point_kind),
+            details.point_index,
+            details.is_double_click,
+        )
+    } else {
+        let (point_kind, point_index) =
+            resolve_closest_arrow_point(base.start_position, &initial_points, target.arrow_type());
+        (point_kind, point_index, false)
+    };
     let fixed_segments = target.fixed_segments();
-    let release_fixed_segment = point_kind == OperationArrowPointKind::Addable
+    let release_fixed_segment = is_double_click
+        && point_kind == OperationArrowPointKind::Addable
         && target.arrow_type() == ArrowType::Elbow
         && fixed_segments
             .iter()
             .any(|segment| segment.index == point_index.saturating_add(1));
+    let delete_point_on_start = is_double_click
+        && !release_fixed_segment
+        && point_kind == OperationArrowPointKind::Turning
+        && point_index > 0
+        && point_index < initial_points.len().saturating_sub(1);
 
-    ArrowPointEditContext::from_start_position(
+    let mut context = ArrowPointEditContext::from_start_position(
         target.element.id.clone(),
         target.element.rect,
         target.element.rotation,
@@ -985,13 +1102,70 @@ fn build_arrow_context_from_target(
         point_kind,
         point_index,
         release_fixed_segment,
-        false,
+        delete_point_on_start,
         target.start_arrowhead(),
         target.end_arrowhead(),
         target.start_binding(),
         target.end_binding(),
         has_bindable_targets(state, target.element.id.as_str()),
-    )
+    );
+
+    if release_fixed_segment && target.arrow_type() == ArrowType::Elbow {
+        if let ArrowEditPayload::Arrow(arrow_data) = &target.payload {
+            let segment_index = point_index + 1;
+            let updated_fixed =
+                fixed_segments_without_index(&context.initial_fixed_segments, segment_index);
+            let element_map = state.domain.document.element_map();
+            let updates = HashMap::new();
+            let lookup = CombinedElementLookup::new(&element_map, &updates);
+            let released = compute_elbow_edit(
+                &target.element,
+                arrow_data,
+                &lookup,
+                Some(context.initial_points.clone()),
+                Some(updated_fixed),
+                ElbowBindingOverride::Unset,
+                ElbowBindingOverride::Unset,
+                false,
+            );
+            context = context.with_released_state(
+                Some(released.local_points),
+                Some(released.fixed_segments.unwrap_or_default()),
+            );
+        }
+    }
+
+    context
+}
+
+fn map_operation_arrow_point_kind(
+    kind: crate::draw::elements::types::arrow::arrow_points::ArrowPointKind,
+) -> OperationArrowPointKind {
+    match kind {
+        crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::Turning => {
+            OperationArrowPointKind::Turning
+        }
+        crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::Addable => {
+            OperationArrowPointKind::Addable
+        }
+        crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::LoopStart => {
+            OperationArrowPointKind::LoopStart
+        }
+        crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::LoopEnd => {
+            OperationArrowPointKind::LoopEnd
+        }
+    }
+}
+
+fn fixed_segments_without_index(
+    segments: &[ArrowDataElbowFixedSegment],
+    segment_index: usize,
+) -> Vec<ArrowDataElbowFixedSegment> {
+    segments
+        .iter()
+        .filter(|segment| segment.index != segment_index)
+        .cloned()
+        .collect()
 }
 
 fn resolve_closest_arrow_point(
@@ -1051,10 +1225,7 @@ fn has_bindable_targets(state: &DrawState, excluded_element_id: &str) -> bool {
 }
 
 fn is_bindable_target(element: &DomainElementState) -> bool {
-    matches!(
-        element.data.type_id().as_str(),
-        RectangleData::TYPE_ID_TOKEN | TextData::TYPE_ID_TOKEN | SerialNumberData::TYPE_ID_TOKEN
-    )
+    ArrowBindingUtils::is_bindable_target(element)
 }
 
 fn compute_updated_arrow_element(
@@ -1062,6 +1233,8 @@ fn compute_updated_arrow_element(
     state: &DrawState,
     context: &ArrowPointEditContext,
     transform: &InternalArrowPointTransform,
+    apply_deletion: bool,
+    finalize: bool,
 ) -> Option<DomainElementState> {
     let current_element = state
         .domain
@@ -1070,58 +1243,140 @@ fn compute_updated_arrow_element(
         .clone();
     let target = resolve_arrow_target_for_element(current_element.clone())?;
 
-    let next_world_points = operation.compute_points_for_result(transform, true);
+    let next_world_points = operation.compute_points_for_result(transform, apply_deletion);
     if next_world_points.len() < 2 {
         return None;
     }
 
-    let next_rect = ArrowGeometry::calculate_path_bounds(&next_world_points, target.arrow_type());
-    let next_points = ArrowGeometry::normalize_points(&next_world_points, next_rect);
-    let next_data: Arc<dyn CoreElementData> = match target.payload {
-        ArrowEditPayload::Arrow(data) => Arc::new(data.copy_with(ArrowDataPatch {
-            points: Some(next_points),
-            start_binding: match transform.start_binding.clone() {
-                Some(binding) => ArrowDataNullableField::Value(binding),
-                None => ArrowDataNullableField::Null,
-            },
-            end_binding: match transform.end_binding.clone() {
-                Some(binding) => ArrowDataNullableField::Value(binding),
-                None => ArrowDataNullableField::Null,
-            },
-            fixed_segments: match transform.fixed_segments.clone() {
-                Some(segments) => ArrowDataNullableField::Value(segments),
-                None => ArrowDataNullableField::Null,
-            },
-            ..ArrowDataPatch::default()
-        })),
-        ArrowEditPayload::Line(data) => Arc::new(
-            data.copy_with(LineDataPatch {
-                points: Some(next_points),
+    let next_data_and_rect: Option<(Arc<dyn CoreElementData>, DrawRect)> = match target.payload {
+        ArrowEditPayload::Arrow(data) => {
+            let data_with_bindings = data.copy_with(ArrowDataPatch {
                 start_binding: match transform.start_binding.clone() {
-                    Some(binding) => {
-                        ArrowLikeNullableField::Value(internal_binding_to_compat(&binding))
-                    }
-                    None => ArrowLikeNullableField::Null,
+                    Some(binding) => ArrowDataNullableField::Value(binding),
+                    None => ArrowDataNullableField::Null,
                 },
                 end_binding: match transform.end_binding.clone() {
+                    Some(binding) => ArrowDataNullableField::Value(binding),
+                    None => ArrowDataNullableField::Null,
+                },
+                ..ArrowDataPatch::default()
+            });
+
+            if data.arrow_type != ArrowType::Elbow
+                && context.rotation == 0.0
+                && next_world_points.len() == 2
+            {
+                let layout = compute_arrow_two_point_layout(
+                    next_world_points[0],
+                    next_world_points[next_world_points.len() - 1],
+                );
+                let updated_data = data_with_bindings.copy_with(ArrowDataPatch {
+                    points: Some(layout.normalized_points),
+                    ..ArrowDataPatch::default()
+                });
+                Some((Arc::new(updated_data), layout.rect))
+            } else if data.arrow_type == ArrowType::Elbow {
+                let fixed_segments = transform.fixed_segments.clone().unwrap_or_default();
+                let element_map = state.domain.document.element_map();
+                let updates = HashMap::new();
+                let lookup = CombinedElementLookup::new(&element_map, &updates);
+                let updated = compute_elbow_edit(
+                    &current_element,
+                    &data_with_bindings,
+                    &lookup,
+                    Some(next_world_points.clone()),
+                    Some(fixed_segments),
+                    ElbowBindingOverride::Unset,
+                    ElbowBindingOverride::Unset,
+                    finalize,
+                );
+
+                let geometry = resolve_arrow_geometry_update(
+                    &updated.local_points,
+                    context.element_rect,
+                    context.rotation,
+                    data.arrow_type,
+                );
+                let transformed_fixed_segments = transform_fixed_segments(
+                    updated.fixed_segments.as_deref(),
+                    context.element_rect,
+                    geometry.rect,
+                    context.rotation,
+                );
+                let updated_data = data_with_bindings.copy_with(ArrowDataPatch {
+                    points: Some(geometry.normalized_points),
+                    fixed_segments: match transformed_fixed_segments {
+                        Some(segments) => ArrowDataNullableField::Value(segments),
+                        None => ArrowDataNullableField::Null,
+                    },
+                    start_is_special: match updated.start_is_special {
+                        Some(value) => ArrowDataNullableField::Value(value),
+                        None => ArrowDataNullableField::Null,
+                    },
+                    end_is_special: match updated.end_is_special {
+                        Some(value) => ArrowDataNullableField::Value(value),
+                        None => ArrowDataNullableField::Null,
+                    },
+                    ..ArrowDataPatch::default()
+                });
+                Some((Arc::new(updated_data), geometry.rect))
+            } else {
+                let geometry = resolve_arrow_geometry_update(
+                    &next_world_points,
+                    context.element_rect,
+                    context.rotation,
+                    data.arrow_type,
+                );
+                let updated_data = data_with_bindings.copy_with(ArrowDataPatch {
+                    points: Some(geometry.normalized_points),
+                    ..ArrowDataPatch::default()
+                });
+                Some((Arc::new(updated_data), geometry.rect))
+            }
+        }
+        ArrowEditPayload::Line(data) => {
+            let data_with_bindings = data.copy_with(LineDataPatch {
+                start_binding: match transform.start_binding.as_ref() {
                     Some(binding) => {
-                        ArrowLikeNullableField::Value(internal_binding_to_compat(&binding))
+                        ArrowLikeNullableField::Value(internal_binding_to_compat(binding))
                     }
                     None => ArrowLikeNullableField::Null,
                 },
-                fixed_segments: match transform.fixed_segments.clone() {
-                    Some(segments) => ArrowLikeNullableField::Value(
-                        segments
-                            .iter()
-                            .map(internal_fixed_segment_to_compat)
-                            .collect(),
-                    ),
+                end_binding: match transform.end_binding.as_ref() {
+                    Some(binding) => {
+                        ArrowLikeNullableField::Value(internal_binding_to_compat(binding))
+                    }
                     None => ArrowLikeNullableField::Null,
                 },
                 ..LineDataPatch::default()
-            }),
-        ),
+            });
+
+            if context.rotation == 0.0 && next_world_points.len() == 2 {
+                let layout = compute_arrow_two_point_layout(
+                    next_world_points[0],
+                    next_world_points[next_world_points.len() - 1],
+                );
+                let updated_data = data_with_bindings.copy_with(LineDataPatch {
+                    points: Some(layout.normalized_points),
+                    ..LineDataPatch::default()
+                });
+                Some((Arc::new(updated_data), layout.rect))
+            } else {
+                let geometry = resolve_arrow_geometry_update(
+                    &next_world_points,
+                    context.element_rect,
+                    context.rotation,
+                    data.arrow_type,
+                );
+                let updated_data = data_with_bindings.copy_with(LineDataPatch {
+                    points: Some(geometry.normalized_points),
+                    ..LineDataPatch::default()
+                });
+                Some((Arc::new(updated_data), geometry.rect))
+            }
+        }
     };
+    let (next_data, next_rect) = next_data_and_rect?;
 
     let updated =
         current_element.copy_with(None, Some(next_rect), None, None, None, Some(next_data));

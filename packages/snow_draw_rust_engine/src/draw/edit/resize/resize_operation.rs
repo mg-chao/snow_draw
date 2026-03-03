@@ -7,6 +7,7 @@ use crate::draw::config::draw_config::DrawConfig;
 use crate::draw::core::coordinates::overlay_space::OverlaySpace;
 use crate::draw::core::geometry::resize_geometry::ResizeGeometry;
 use crate::draw::edit::apply::edit_apply::EditApply;
+use crate::draw::edit::core::edit_compute_pipeline::finalize_domain_result;
 use crate::draw::edit::core::edit_computed_result::EditComputedResult;
 use crate::draw::edit::core::edit_modifiers::EditModifiers;
 use crate::draw::edit::core::edit_operation::{
@@ -41,7 +42,6 @@ use crate::draw::utils::transforms::edit_transform_context::EditTransformContext
 use crate::draw::utils::transforms::resize_anchor_point::opposite_bound_point_local;
 
 const DEFAULT_SELECTION_PADDING: f64 = 0.0;
-const HANDLE_HIT_TEST_TOLERANCE: f64 = 24.0;
 
 /// Compatibility params for `ResizeOperation`.
 ///
@@ -57,11 +57,20 @@ pub struct ResizeOperationParams {
 
 impl ResizeOperationParams {
     pub fn from_base(params: &EditOperationParams) -> Self {
+        if let Some(value) = params.as_resize() {
+            return Self {
+                resize_mode: value.resize_mode,
+                handle_offset: value.handle_offset,
+                selection_padding: value.selection_padding,
+                initial_selection_bounds: value.initial_selection_bounds,
+            };
+        }
+
         Self {
             resize_mode: ResizeMode::BottomRight,
             handle_offset: None,
             selection_padding: DEFAULT_SELECTION_PADDING,
-            initial_selection_bounds: params.initial_selection_bounds,
+            initial_selection_bounds: params.initial_selection_bounds(),
         }
     }
 }
@@ -217,21 +226,6 @@ impl ResizeOperation {
         params
             .initial_selection_bounds
             .unwrap_or_else(|| DrawRect::from_point(pointer_position))
-    }
-
-    fn infer_resize_mode(
-        &self,
-        pointer_position: DrawPoint,
-        start_bounds: DrawRect,
-        selection_padding: f64,
-    ) -> ResizeMode {
-        HandleCalculator::hit_test_resize_handles(
-            pointer_position,
-            start_bounds,
-            HANDLE_HIT_TEST_TOLERANCE,
-            selection_padding,
-        )
-        .unwrap_or(ResizeMode::BottomRight)
     }
 
     fn resolve_handle_offset(
@@ -445,7 +439,7 @@ impl EditOperation for ResizeOperation {
         position: DrawPoint,
         params: &EditOperationParams,
     ) -> EditContext {
-        let mut typed_params = ResizeOperationParams::from_base(params);
+        let typed_params = ResizeOperationParams::from_base(params);
         let selection_data = SelectionDataComputer::compute(state);
         let selected_ids_at_start = state
             .domain
@@ -459,8 +453,6 @@ impl EditOperation for ResizeOperation {
             .or(selection_data.overlay_bounds)
             .or(selection_data.selection_bounds)
             .unwrap_or_else(|| self.resolve_start_bounds(typed_params, position));
-        typed_params.resize_mode =
-            self.infer_resize_mode(position, start_bounds, typed_params.selection_padding);
 
         let rotation = selection_data.overlay_rotation.unwrap_or(0.0);
         let rotation_center = selection_data
@@ -656,11 +648,13 @@ impl StandardFinishMixin for ResizeOperation {
             None
         };
 
-        Some(EditComputedResult::new(
+        finalize_domain_result(
+            &current_elements_by_id,
             updated_by_id,
             multi_select_bounds,
             None,
-        ))
+            None,
+        )
     }
 
     fn update_overlay(

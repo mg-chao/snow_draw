@@ -4,6 +4,8 @@ use std::collections::{HashMap, HashSet};
 
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::element_state::ElementState;
+use crate::draw::models::selection_overlay_state::SelectionOverlayState;
+use crate::draw::services::selection_geometry_resolver::SelectionGeometryResolver;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_context::EditContext;
@@ -61,11 +63,8 @@ impl Default for EditPreview {
 
 /// Builds the effective selection preview for the current edit session.
 ///
-/// This mirrors Dart's `buildSelectionPreview`. The translated `DrawState`
-/// model is still incremental and does not expose a document element map yet,
-/// so this function currently resolves selected elements from
-/// `preview_elements_by_id` first, then falls back to state-backed lookup when
-/// available.
+/// This mirrors Dart's `buildSelectionPreview` by resolving selected elements
+/// first, then delegating geometry derivation to `SelectionGeometryResolver`.
 pub fn build_selection_preview(
     state: &DrawState,
     context: &EditContext,
@@ -86,9 +85,9 @@ pub fn build_selection_preview(
     }
 
     build_selection_preview_from_selected_elements(
-        context,
         selected_elements,
-        multi_select_bounds,
+        state.application.selection_overlay,
+        multi_select_bounds.unwrap_or(context.start_bounds),
         multi_select_rotation,
     )
 }
@@ -108,9 +107,9 @@ pub fn build_selection_preview_with_base_elements(
     );
 
     build_selection_preview_from_selected_elements(
-        context,
         selected_elements,
-        multi_select_bounds,
+        SelectionOverlayState::EMPTY,
+        multi_select_bounds.unwrap_or(context.start_bounds),
         multi_select_rotation,
     )
 }
@@ -137,41 +136,25 @@ fn selected_elements_from_maps(
 }
 
 fn build_selection_preview_from_selected_elements(
-    context: &EditContext,
     selected_elements: Vec<ElementState>,
-    multi_select_bounds: Option<DrawRect>,
-    multi_select_rotation: Option<f64>,
+    selection_overlay: SelectionOverlayState,
+    overlay_bounds_override: DrawRect,
+    overlay_rotation_override: Option<f64>,
 ) -> Option<SelectionPreview> {
     if selected_elements.is_empty() {
         return None;
     }
 
-    if selected_elements.len() == 1 {
-        let element = &selected_elements[0];
-        let bounds = element.rect;
-
-        return Some(SelectionPreview::new(
-            bounds,
-            bounds.center(),
-            normalize_rotation(Some(element.rotation)),
-        ));
-    }
-
-    let bounds = multi_select_bounds.unwrap_or(context.start_bounds);
-    Some(SelectionPreview::new(
-        bounds,
-        bounds.center(),
-        normalize_rotation(multi_select_rotation),
-    ))
-}
-
-fn normalize_rotation(rotation: Option<f64>) -> Option<f64> {
-    let value = rotation.unwrap_or(0.0);
-    if value == 0.0 {
-        None
-    } else {
-        Some(value)
-    }
+    let geometry = SelectionGeometryResolver::resolve(
+        selected_elements.as_slice(),
+        selection_overlay,
+        None,
+        Some(overlay_bounds_override),
+        overlay_rotation_override,
+    );
+    let bounds = geometry.bounds?;
+    let center = geometry.center?;
+    Some(SelectionPreview::new(bounds, center, geometry.rotation))
 }
 
 fn lookup_base_element(_state: &DrawState, _id: &str) -> Option<ElementState> {
