@@ -283,18 +283,24 @@ FixedPointBinding _resolveManualBinding({
   final targetPoint = focusPoint ?? getPointAtIndexGlobal(arrow, edgeIndex);
 
   if (arrow.elbowed) {
-    return binding_core.calculateFixedPointForElbowBinding(
-      point: targetPoint,
-      bindable: bindable,
-      arrow: arrow,
-      edge: normalizedEdge,
+    return FixedPointBinding(
+      elementId: bindable.id,
+      mode: bindModeOrbit,
+      fixedPoint: binding_core.calculateFixedPointForElbowBinding(
+        arrow: arrow,
+        bindable: bindable,
+        edge: normalizedEdge,
+      ),
     );
   }
 
-  return binding_core.calculateFixedPointForBinding(
-    point: targetPoint,
-    bindable: bindable,
+  return FixedPointBinding(
+    elementId: bindable.id,
     mode: mode ?? bindModeOrbit,
+    fixedPoint: binding_core.calculateFixedPointForBinding(
+      point: targetPoint,
+      bindable: bindable,
+    ),
   );
 }
 
@@ -901,7 +907,7 @@ LifecycleSyncResult _applyLifecycleBindingAndRelationPatches({
             : arrow;
         final shouldRecomputeElbow =
             arrow.elbowed && (recomputeAllElbows || basePatch != null);
-        if (!shouldRecomputeElbow || withBindings.points.isEmpty) {
+        if (!shouldRecomputeElbow) {
           return withBindings;
         }
 
@@ -994,10 +1000,7 @@ LifecycleSyncResult syncBindingsAfterBindablePrune(
             ? applyArrowPatch(arrow, patch)
             : arrow;
 
-        if (recomputeElbows &&
-            arrow.elbowed &&
-            _hasArrowPatchChanges(patch) &&
-            nextArrow.points.isNotEmpty) {
+        if (recomputeElbows && arrow.elbowed && _hasArrowPatchChanges(patch)) {
           final elbowPatch = updateElbowArrowPatch(<String, dynamic>{
             'arrow': nextArrow,
             'updates': <String, dynamic>{

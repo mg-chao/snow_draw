@@ -34,7 +34,16 @@ ArrowState applyArrowPatch(ArrowState arrow, ArrowPatch patch) {
         : null,
     points: hasPoints && patch['points'] is List
         ? (patch['points'] as List)
-              .map((point) => (point as List).cast<double>())
+              .map((point) {
+                if (point is List && point.length >= 2) {
+                  final x = point[0];
+                  final y = point[1];
+                  if (x is num && y is num && x.isFinite && y.isFinite) {
+                    return <double>[x.toDouble(), y.toDouble()];
+                  }
+                }
+                return <double>[0, 0];
+              })
               .toList(growable: false)
         : null,
     startBinding: hasStartBinding
@@ -71,7 +80,6 @@ void forwardAdapterEvents(
       adapter.onBindingBroken(event.arrowId, event.edge);
       continue;
     }
-    throw StateError('Unsupported ArrowEngineEvent: ${event.runtimeType}');
   }
 }
 

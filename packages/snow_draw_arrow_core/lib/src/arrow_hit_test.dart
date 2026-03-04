@@ -107,7 +107,9 @@ List<BindableState> sortBindablesByZIndex(List<BindableState> bindables) {
             (entry) => _ZIndexedBindable(
               bindable: entry.value,
               index: entry.key,
-              zIndex: entry.value.zIndex ?? entry.key.toDouble(),
+              zIndex: _hasFiniteZIndex(entry.value)
+                  ? entry.value.zIndex!
+                  : entry.key.toDouble(),
             ),
           )
           .toList()
@@ -121,21 +123,18 @@ List<BindableState> sortBindablesByZIndex(List<BindableState> bindables) {
   return indexed.map((item) => item.bindable).toList(growable: false);
 }
 
-int _resolveRoundnessType(BindableRoundnessType type) {
+num _resolveRoundnessType(BindableRoundnessType type) {
   if (type is num) {
-    return type.toInt();
+    return type;
   }
 
   if (type is String) {
     switch (type) {
       case 'legacy':
-      case 'LEGACY':
         return _bindableRoundnessLegacy;
       case 'proportional':
-      case 'PROPORTIONAL':
         return _bindableRoundnessProportional;
       case 'adaptive':
-      case 'ADAPTIVE':
         return _bindableRoundnessAdaptive;
     }
   }
@@ -297,7 +296,7 @@ double distanceToBindableOutline(Point point, BindableState bindable) {
     case 'diamond':
       return _distanceToDiamondOutline(point, bindable);
   }
-  throw StateError('Unsupported bindable shape: ${bindable.shape}');
+  return double.nan;
 }
 
 double _resolveBindingHitThreshold(BindableState bindable, double tolerance) =>

@@ -564,10 +564,13 @@ FixedPointBinding? repairBindingOnRestore(RepairBindingOnRestoreInput input) {
             ) ??
             edgePoint);
 
-  return calculateFixedPointForBinding(
-    point: focusPoint,
-    bindable: bindable,
+  return FixedPointBinding(
+    elementId: bindable.id,
     mode: mode,
+    fixedPoint: calculateFixedPointForBinding(
+      bindable: bindable,
+      point: focusPoint,
+    ),
   );
 }
 

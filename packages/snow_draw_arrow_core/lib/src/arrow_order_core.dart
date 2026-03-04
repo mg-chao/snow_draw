@@ -31,13 +31,9 @@ Map<String, List<String>> _toAnchorLookup(AnchorElementIdsLookupInput? input) {
     return input;
   }
   if (input is Map) {
-    final result = <String, List<String>>{};
-    input.forEach((key, value) {
-      if (key is String && value is List) {
-        result[key] = value.cast<String>();
-      }
-    });
-    return result;
+    return input.map<String, List<String>>(
+      (key, value) => MapEntry(key as String, (value as List).cast<String>()),
+    );
   }
   return <String, List<String>>{};
 }

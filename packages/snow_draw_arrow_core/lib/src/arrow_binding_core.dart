@@ -2055,29 +2055,16 @@ Point _calculateFixedPointForElbowBindingRatio(
   bindPointToOutline(arrow: arrow, bindable: bindable, edge: edge),
 );
 
-FixedPointBinding calculateFixedPointForBinding({
-  required Point point,
+Point calculateFixedPointForBinding({
   required BindableState bindable,
-  BindMode mode = bindModeOrbit,
-}) => FixedPointBinding(
-  elementId: bindable.id,
-  fixedPoint: _calculateFixedPointForBindingRatio(bindable, point),
-  mode: mode,
-);
+  required Point point,
+}) => _calculateFixedPointForBindingRatio(bindable, point);
 
-FixedPointBinding calculateFixedPointForElbowBinding({
-  required Point point,
+Point calculateFixedPointForElbowBinding({
+  required ArrowState arrow,
   required BindableState bindable,
-  BindMode mode = bindModeOrbit,
-  ArrowState? arrow,
-  ArrowEndpointEdge edge = arrowEndpointStart,
-}) => FixedPointBinding(
-  elementId: bindable.id,
-  fixedPoint: arrow == null
-      ? _calculateFixedPointForBindingRatio(bindable, point)
-      : _calculateFixedPointForElbowBindingRatio(arrow, bindable, edge),
-  mode: mode,
-);
+  required ArrowEndpointEdge edge,
+}) => _calculateFixedPointForElbowBindingRatio(arrow, bindable, edge);
 
 Point? _updateBoundPointInternal({
   required ArrowState arrow,
@@ -2178,11 +2165,14 @@ Point? _updateBoundPointInternal({
 Point? updateBoundPoint({
   required ArrowState arrow,
   ArrowEndpointSelector edge = arrowEndpointStart,
-  required FixedPointBinding binding,
+  FixedPointBinding? binding,
   required BindableState bindable,
   required BindableLookupInput bindablesById,
   bool dragging = false,
 }) {
+  if (binding == null) {
+    return null;
+  }
   return _updateBoundPointInternal(
     arrow: arrow,
     edge: edge,
@@ -2651,9 +2641,6 @@ EngineResult computeSimpleBindingPatch(ComputeEndpointDragInput input) {
   final context = _readContext(input['context']);
 
   final draggedPoints = _normalizePointUpdates(input['draggedPoints']);
-  if (draggedPoints.isEmpty) {
-    return _emptyEngineResult();
-  }
 
   final startIndex = 0;
   final endIndex = arrow.points.length - 1;
@@ -3140,26 +3127,20 @@ Point bindPointToSnapToElementOutline({
   customIntersector: customIntersector,
 );
 
-FixedPointBinding calculateFixedPointForElbowArrowBinding({
-  required Point point,
+Point calculateFixedPointForElbowArrowBinding({
+  required ArrowState arrow,
   required BindableState bindable,
-  BindMode mode = bindModeOrbit,
-  ArrowState? arrow,
   ArrowEndpointEdge edge = arrowEndpointStart,
 }) => calculateFixedPointForElbowBinding(
-  point: point,
-  bindable: bindable,
-  mode: mode,
   arrow: arrow,
+  bindable: bindable,
   edge: edge,
 );
 
-FixedPointBinding calculateFixedPointForNonElbowArrowBinding({
+Point calculateFixedPointForNonElbowArrowBinding({
   required Point point,
   required BindableState bindable,
-  BindMode mode = bindModeOrbit,
-}) =>
-    calculateFixedPointForBinding(point: point, bindable: bindable, mode: mode);
+}) => calculateFixedPointForBinding(point: point, bindable: bindable);
 
 String getHeadingForElbowArrowSnap({
   required Point point,

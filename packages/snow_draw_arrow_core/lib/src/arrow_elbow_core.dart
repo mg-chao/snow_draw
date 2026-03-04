@@ -78,6 +78,8 @@ class _ResizeArrowData {
 
 const double _dedupThreshold = 1;
 const double basePadding = 40;
+// ignore: constant_identifier_names
+const double BASE_PADDING = basePadding;
 
 _Bounds _obstacleForBindable(BindableState bindable, double gap) {
   final bindableCenter = center(
@@ -113,9 +115,53 @@ bool _pointInBounds(Point point, _Bounds bounds) =>
     point[1] <= bounds[3];
 
 bool _segmentIntersectsBounds(Point a, Point b, _Bounds bounds) {
-  final midpoint = <double>[(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
-  return _pointInBounds(midpoint, bounds);
+  const epsilon = 1e-9;
+  final inner = <double>[
+    bounds[0] + epsilon,
+    bounds[1] + epsilon,
+    bounds[2] - epsilon,
+    bounds[3] - epsilon,
+  ];
+
+  if (inner[0] >= inner[2] || inner[1] >= inner[3]) {
+    return false;
+  }
+
+  final vertical = (a[0] - b[0]).abs() <= _dedupThreshold;
+  if (vertical) {
+    final x = (a[0] + b[0]) / 2;
+    if (x < inner[0] || x > inner[2]) {
+      return false;
+    }
+    return _overlapLength(
+          math.min(a[1], b[1]),
+          math.max(a[1], b[1]),
+          inner[1],
+          inner[3],
+        ) >
+        epsilon;
+  }
+
+  final horizontal = (a[1] - b[1]).abs() <= _dedupThreshold;
+  if (!horizontal) {
+    return false;
+  }
+
+  final y = (a[1] + b[1]) / 2;
+  if (y < inner[1] || y > inner[3]) {
+    return false;
+  }
+  return _overlapLength(
+        math.min(a[0], b[0]),
+        math.max(a[0], b[0]),
+        inner[0],
+        inner[2],
+      ) >
+      epsilon;
 }
+
+double _overlapLength(double minA, double maxA, double minB, double maxB) =>
+    math.min(maxA, maxB) - math.max(minA, minB);
 
 _Bounds _commonBounds(List<Point> points, double padding) {
   final xs = points.map((point) => point[0]);
@@ -128,21 +174,281 @@ _Bounds _commonBounds(List<Point> points, double padding) {
   ];
 }
 
-_Grid _makeGrid(List<_Bounds> obstacles, Point start, Point end) {
-  final xs = <double>{start[0], end[0]};
-  final ys = <double>{start[1], end[1]};
+_Bounds _commonAabb(List<_Bounds> aabbs) => <double>[
+  aabbs.map((aabb) => aabb[0]).reduce(math.min),
+  aabbs.map((aabb) => aabb[1]).reduce(math.min),
+  aabbs.map((aabb) => aabb[2]).reduce(math.max),
+  aabbs.map((aabb) => aabb[3]).reduce(math.max),
+];
+
+_Bounds _aabbForBindableWithOffset(
+  BindableState bindable, [
+  List<double>? offset,
+]) {
+  final bindableCenter = center(
+    bindable.x,
+    bindable.y,
+    bindable.width,
+    bindable.height,
+  );
+  final corners = <Point>[
+    <double>[bindable.x, bindable.y],
+    <double>[bindable.x + bindable.width, bindable.y],
+    <double>[bindable.x + bindable.width, bindable.y + bindable.height],
+    <double>[bindable.x, bindable.y + bindable.height],
+  ];
+  final rotated = corners
+      .map((corner) => rotatePoint(corner, bindableCenter, bindable.angle))
+      .toList(growable: false);
+
+  final bounds = <double>[
+    rotated.map((point) => point[0]).reduce(math.min),
+    rotated.map((point) => point[1]).reduce(math.min),
+    rotated.map((point) => point[0]).reduce(math.max),
+    rotated.map((point) => point[1]).reduce(math.max),
+  ];
+
+  if (offset == null || offset.length < 4) {
+    return bounds;
+  }
+  final topOffset = offset[0];
+  final rightOffset = offset[1];
+  final downOffset = offset[2];
+  final leftOffset = offset[3];
+  return <double>[
+    bounds[0] - leftOffset,
+    bounds[1] - topOffset,
+    bounds[2] + rightOffset,
+    bounds[3] + downOffset,
+  ];
+}
+
+List<double> _offsetFromHeading(Heading heading, double head, double side) {
+  switch (heading) {
+    case 'up':
+      return <double>[head, side, side, side];
+    case 'right':
+      return <double>[side, head, side, side];
+    case 'down':
+      return <double>[side, side, head, side];
+    case 'left':
+      return <double>[side, side, side, head];
+  }
+  return <double>[side, side, side, side];
+}
+
+double _vectorCross(Point a, Point b) => a[0] * b[1] - a[1] * b[0];
+
+List<_Bounds> _generateDynamicAABBs({
+  required _Bounds a,
+  required _Bounds b,
+  required _Bounds common,
+  List<double>? startDifference,
+  List<double>? endDifference,
+  bool disableSideHack = false,
+  _Bounds? startElementBounds,
+  _Bounds? endElementBounds,
+}) {
+  final startEl = startElementBounds ?? a;
+  final endEl = endElementBounds ?? b;
+  final start = startDifference ?? const <double>[0, 0, 0, 0];
+  final end = endDifference ?? const <double>[0, 0, 0, 0];
+  final startUp = start[0];
+  final startRight = start[1];
+  final startDown = start[2];
+  final startLeft = start[3];
+  final endUp = end[0];
+  final endRight = end[1];
+  final endDown = end[2];
+  final endLeft = end[3];
+
+  final first = <double>[
+    a[0] > b[2]
+        ? (a[1] > b[3] || a[3] < b[1]
+              ? math.min((startEl[0] + endEl[2]) / 2, a[0] - startLeft)
+              : (startEl[0] + endEl[2]) / 2)
+        : (a[0] > b[0] ? a[0] - startLeft : common[0] - startLeft),
+    a[1] > b[3]
+        ? (a[0] > b[2] || a[2] < b[0]
+              ? math.min((startEl[1] + endEl[3]) / 2, a[1] - startUp)
+              : (startEl[1] + endEl[3]) / 2)
+        : (a[1] > b[1] ? a[1] - startUp : common[1] - startUp),
+    a[2] < b[0]
+        ? (a[1] > b[3] || a[3] < b[1]
+              ? math.max((startEl[2] + endEl[0]) / 2, a[2] + startRight)
+              : (startEl[2] + endEl[0]) / 2)
+        : (a[2] < b[2] ? a[2] + startRight : common[2] + startRight),
+    a[3] < b[1]
+        ? (a[0] > b[2] || a[2] < b[0]
+              ? math.max((startEl[3] + endEl[1]) / 2, a[3] + startDown)
+              : (startEl[3] + endEl[1]) / 2)
+        : (a[3] < b[3] ? a[3] + startDown : common[3] + startDown),
+  ];
+
+  final second = <double>[
+    b[0] > a[2]
+        ? (b[1] > a[3] || b[3] < a[1]
+              ? math.min((endEl[0] + startEl[2]) / 2, b[0] - endLeft)
+              : (endEl[0] + startEl[2]) / 2)
+        : (b[0] > a[0] ? b[0] - endLeft : common[0] - endLeft),
+    b[1] > a[3]
+        ? (b[0] > a[2] || b[2] < a[0]
+              ? math.min((endEl[1] + startEl[3]) / 2, b[1] - endUp)
+              : (endEl[1] + startEl[3]) / 2)
+        : (b[1] > a[1] ? b[1] - endUp : common[1] - endUp),
+    b[2] < a[0]
+        ? (b[1] > a[3] || b[3] < a[1]
+              ? math.max((endEl[2] + startEl[0]) / 2, b[2] + endRight)
+              : (endEl[2] + startEl[0]) / 2)
+        : (b[2] < a[2] ? b[2] + endRight : common[2] + endRight),
+    b[3] < a[1]
+        ? (b[0] > a[2] || b[2] < a[0]
+              ? math.max((endEl[3] + startEl[1]) / 2, b[3] + endDown)
+              : (endEl[3] + startEl[1]) / 2)
+        : (b[3] < a[3] ? b[3] + endDown : common[3] + endDown),
+  ];
+
+  final c = _commonAabb(<_Bounds>[first, second]);
+  if (!disableSideHack &&
+      first[2] - first[0] + second[2] - second[0] > c[2] - c[0] + 1e-11 &&
+      first[3] - first[1] + second[3] - second[1] > c[3] - c[1] + 1e-11) {
+    final endCenterX = (second[0] + second[2]) / 2;
+    final endCenterY = (second[1] + second[3]) / 2;
+    if (b[0] > a[2] && a[1] > b[3]) {
+      final cX = first[2] + (second[0] - first[2]) / 2;
+      final cY = second[3] + (first[1] - second[3]) / 2;
+      if (_vectorCross(
+            <double>[a[2] - endCenterX, a[1] - endCenterY],
+            <double>[a[0] - endCenterX, a[3] - endCenterY],
+          ) >
+          0) {
+        return <_Bounds>[
+          <double>[first[0], first[1], cX, first[3]],
+          <double>[cX, second[1], second[2], second[3]],
+        ];
+      }
+      return <_Bounds>[
+        <double>[first[0], cY, first[2], first[3]],
+        <double>[second[0], second[1], second[2], cY],
+      ];
+    }
+
+    if (a[2] < b[0] && a[3] < b[1]) {
+      final cX = first[2] + (second[0] - first[2]) / 2;
+      final cY = first[3] + (second[1] - first[3]) / 2;
+      if (_vectorCross(
+            <double>[a[0] - endCenterX, a[1] - endCenterY],
+            <double>[a[2] - endCenterX, a[3] - endCenterY],
+          ) >
+          0) {
+        return <_Bounds>[
+          <double>[first[0], first[1], first[2], cY],
+          <double>[second[0], cY, second[2], second[3]],
+        ];
+      }
+      return <_Bounds>[
+        <double>[first[0], first[1], cX, first[3]],
+        <double>[cX, second[1], second[2], second[3]],
+      ];
+    }
+
+    if (a[0] > b[2] && a[3] < b[1]) {
+      final cX = second[2] + (first[0] - second[2]) / 2;
+      final cY = first[3] + (second[1] - first[3]) / 2;
+      if (_vectorCross(
+            <double>[a[2] - endCenterX, a[1] - endCenterY],
+            <double>[a[0] - endCenterX, a[3] - endCenterY],
+          ) >
+          0) {
+        return <_Bounds>[
+          <double>[cX, first[1], first[2], first[3]],
+          <double>[second[0], second[1], cX, second[3]],
+        ];
+      }
+      return <_Bounds>[
+        <double>[first[0], first[1], first[2], cY],
+        <double>[second[0], cY, second[2], second[3]],
+      ];
+    }
+
+    if (a[0] > b[2] && a[1] > b[3]) {
+      final cX = second[2] + (first[0] - second[2]) / 2;
+      final cY = second[3] + (first[1] - second[3]) / 2;
+      if (_vectorCross(
+            <double>[a[0] - endCenterX, a[1] - endCenterY],
+            <double>[a[2] - endCenterX, a[3] - endCenterY],
+          ) >
+          0) {
+        return <_Bounds>[
+          <double>[cX, first[1], first[2], first[3]],
+          <double>[second[0], second[1], cX, second[3]],
+        ];
+      }
+      return <_Bounds>[
+        <double>[first[0], cY, first[2], first[3]],
+        <double>[second[0], second[1], second[2], cY],
+      ];
+    }
+  }
+
+  return <_Bounds>[first, second];
+}
+
+Point _getDonglePosition(_Bounds bounds, Heading heading, Point point) {
+  switch (heading) {
+    case 'up':
+      return <double>[point[0], bounds[1]];
+    case 'right':
+      return <double>[bounds[2], point[1]];
+    case 'down':
+      return <double>[point[0], bounds[3]];
+    case 'left':
+      return <double>[bounds[0], point[1]];
+  }
+  return <double>[point[0], point[1]];
+}
+
+_Grid _makeGrid(
+  List<_Bounds> obstacles,
+  Point start,
+  Heading startHeading,
+  Point end,
+  Heading endHeading,
+  _Bounds common,
+) {
+  final horizontal = <double>{};
+  final vertical = <double>{};
+
+  if (startHeading == 'left' || startHeading == 'right') {
+    vertical.add(start[1]);
+  } else {
+    horizontal.add(start[0]);
+  }
+
+  if (endHeading == 'left' || endHeading == 'right') {
+    vertical.add(end[1]);
+  } else {
+    horizontal.add(end[0]);
+  }
 
   for (final obstacle in obstacles) {
-    xs
+    horizontal
       ..add(obstacle[0])
       ..add(obstacle[2]);
-    ys
+    vertical
       ..add(obstacle[1])
       ..add(obstacle[3]);
   }
 
-  final sortedX = xs.toList(growable: false)..sort();
-  final sortedY = ys.toList(growable: false)..sort();
+  horizontal
+    ..add(common[0])
+    ..add(common[2]);
+  vertical
+    ..add(common[1])
+    ..add(common[3]);
+
+  final sortedX = horizontal.toList(growable: false)..sort();
+  final sortedY = vertical.toList(growable: false)..sort();
   final nodes = <_GridNode>[];
   final byCoord = <String, _GridNode>{};
 
@@ -197,6 +503,135 @@ List<_GridNode> _neighborsOf(_GridNode node, _Grid grid) {
   return neighbors;
 }
 
+_GridNode? _pointToGridNode(Point point, _Grid grid) =>
+    grid.byCoord['${point[0]}:${point[1]}'];
+
+Heading _neighborIndexToHeading(int index) {
+  switch (index) {
+    case 0:
+      return 'up';
+    case 1:
+      return 'right';
+    case 2:
+      return 'down';
+  }
+  return 'left';
+}
+
+int _estimateSegmentCount(
+  _GridNode start,
+  _GridNode end,
+  Heading startHeading,
+  Heading endHeading,
+) {
+  if (endHeading == 'right') {
+    switch (startHeading) {
+      case 'right':
+        if (start.x >= end.x) {
+          return 4;
+        }
+        if (start.y == end.y) {
+          return 0;
+        }
+        return 2;
+      case 'up':
+        if (start.y > end.y && start.x < end.x) {
+          return 1;
+        }
+        return 3;
+      case 'down':
+        if (start.y < end.y && start.x < end.x) {
+          return 1;
+        }
+        return 3;
+      case 'left':
+        if (start.y == end.y) {
+          return 4;
+        }
+        return 2;
+    }
+  } else if (endHeading == 'left') {
+    switch (startHeading) {
+      case 'right':
+        if (start.y == end.y) {
+          return 4;
+        }
+        return 2;
+      case 'up':
+        if (start.y > end.y && start.x > end.x) {
+          return 1;
+        }
+        return 3;
+      case 'down':
+        if (start.y < end.y && start.x > end.x) {
+          return 1;
+        }
+        return 3;
+      case 'left':
+        if (start.x <= end.x) {
+          return 4;
+        }
+        if (start.y == end.y) {
+          return 0;
+        }
+        return 2;
+    }
+  } else if (endHeading == 'up') {
+    switch (startHeading) {
+      case 'right':
+        if (start.y > end.y && start.x < end.x) {
+          return 1;
+        }
+        return 3;
+      case 'up':
+        if (start.y >= end.y) {
+          return 4;
+        }
+        if (start.x == end.x) {
+          return 0;
+        }
+        return 2;
+      case 'down':
+        if (start.x == end.x) {
+          return 4;
+        }
+        return 2;
+      case 'left':
+        if (start.y > end.y && start.x > end.x) {
+          return 1;
+        }
+        return 3;
+    }
+  } else if (endHeading == 'down') {
+    switch (startHeading) {
+      case 'right':
+        if (start.y < end.y && start.x < end.x) {
+          return 1;
+        }
+        return 3;
+      case 'up':
+        if (start.x == end.x) {
+          return 4;
+        }
+        return 2;
+      case 'down':
+        if (start.y <= end.y) {
+          return 4;
+        }
+        if (start.x == end.x) {
+          return 0;
+        }
+        return 2;
+      case 'left':
+        if (start.y < end.y && start.x > end.x) {
+          return 1;
+        }
+        return 3;
+    }
+  }
+  return 0;
+}
+
 Heading _headingBetween(_GridNode from, _GridNode to) {
   if (to.x > from.x) {
     return 'right';
@@ -234,6 +669,7 @@ List<Point>? _routeAStar(
   Heading endHeading,
   _Grid grid,
   List<_Bounds> obstacles,
+  Set<String> closedNodeCoords,
 ) {
   final open = <_QueueNode>[];
   final visited = <String, _QueueNode>{};
@@ -250,9 +686,11 @@ List<Point>? _routeAStar(
   visited[startState.key] = startState;
 
   final bendMultiplier = math.max(
-    1,
+    1.0,
     manhattan(<double>[start.x, start.y], <double>[end.x, end.y]),
   );
+  final bendPenaltySquared = math.pow(bendMultiplier, 2).toDouble();
+  final bendPenaltyCubed = math.pow(bendMultiplier, 3).toDouble();
 
   while (open.isNotEmpty) {
     open.sort((left, right) => left.f.compareTo(right.f));
@@ -263,48 +701,62 @@ List<Point>? _routeAStar(
     }
 
     final candidates = _neighborsOf(current.node, grid);
-    for (final candidate in candidates) {
-      final nextHeading = _headingBetween(current.node, candidate);
-      if (nextHeading == reverseHeading(current.heading)) {
+    for (var index = 0; index < candidates.length; index += 1) {
+      final candidate = candidates[index];
+      final candidateCoord = '${candidate.x}:${candidate.y}';
+      if (closedNodeCoords.contains(candidateCoord) &&
+          !(candidate.col == end.col && candidate.row == end.row)) {
         continue;
       }
 
-      if (candidate.x == end.x &&
-          candidate.y == end.y &&
-          nextHeading == reverseHeading(endHeading)) {
+      final neighborHeading = _neighborIndexToHeading(index);
+      final reverse = reverseHeading(current.heading);
+      final neighborIsReverseRoute =
+          neighborHeading == reverse ||
+          (candidate.col == start.col &&
+              candidate.row == start.row &&
+              neighborHeading == startHeading) ||
+          (candidate.col == end.col &&
+              candidate.row == end.row &&
+              neighborHeading == endHeading);
+      if (neighborIsReverseRoute) {
         continue;
       }
 
+      final neighborHalfPoint = <double>[
+        (candidate.x + current.node.x) / 2,
+        (candidate.y + current.node.y) / 2,
+      ];
       final blocked = obstacles.any(
-        (obstacle) => _segmentIntersectsBounds(
-          <double>[current.node.x, current.node.y],
-          <double>[candidate.x, candidate.y],
-          obstacle,
-        ),
+        (obstacle) => _pointInBounds(neighborHalfPoint, obstacle),
       );
       if (blocked) {
         continue;
       }
 
-      final bendPenalty = current.heading == nextHeading
-          ? 0.0
-          : math.pow(bendMultiplier, 2).toDouble();
+      final directionChanged = current.heading != neighborHeading;
       final g =
           current.g +
           manhattan(
             <double>[current.node.x, current.node.y],
             <double>[candidate.x, candidate.y],
           ) +
-          bendPenalty;
+          (directionChanged ? bendPenaltyCubed : 0);
+      final estBendCount = _estimateSegmentCount(
+        candidate,
+        end,
+        neighborHeading,
+        endHeading,
+      );
       final h =
           manhattan(
             <double>[candidate.x, candidate.y],
             <double>[end.x, end.y],
           ) +
-          (nextHeading == endHeading ? 0 : bendMultiplier);
+          estBendCount * bendPenaltySquared;
       final f = g + h;
 
-      final key = _keyForState(candidate, nextHeading);
+      final key = _keyForState(candidate, neighborHeading);
       final existing = visited[key];
       if (existing != null && existing.g <= g) {
         continue;
@@ -313,7 +765,7 @@ List<Point>? _routeAStar(
       final nextState = _QueueNode(
         key: key,
         node: candidate,
-        heading: nextHeading,
+        heading: neighborHeading,
         g: g,
         f: f,
         parentKey: current.key,
@@ -348,6 +800,36 @@ List<Point> _removeShortSegments(List<Point> points) {
   final last = points[points.length - 1];
   out.add(<double>[last[0], last[1]]);
   return out;
+}
+
+List<Point> _getElbowArrowCornerPoints(List<Point> points) {
+  if (points.length <= 1) {
+    return points
+        .map((point) => <double>[point[0], point[1]])
+        .toList(growable: false);
+  }
+
+  var previousHorizontal =
+      (points[0][1] - points[1][1]).abs() < (points[0][0] - points[1][0]).abs();
+  final cornerPoints = <Point>[];
+  for (var index = 0; index < points.length; index += 1) {
+    final point = points[index];
+    if (index == 0 || index == points.length - 1) {
+      cornerPoints.add(<double>[point[0], point[1]]);
+      continue;
+    }
+
+    final next = points[index + 1];
+    final nextHorizontal =
+        (point[1] - next[1]).abs() < (point[0] - next[0]).abs();
+    if (previousHorizontal == nextHorizontal) {
+      previousHorizontal = nextHorizontal;
+      continue;
+    }
+    previousHorizontal = nextHorizontal;
+    cornerPoints.add(<double>[point[0], point[1]]);
+  }
+  return cornerPoints;
 }
 
 List<Point> _applyFixedSegments(List<Point> points, ArrowState arrow) {
@@ -674,68 +1156,240 @@ ArrowPatch _routeAndNormalizeElbowPatch({
     fixedSegments: fixedSegments,
     setFixedSegments: true,
   );
-  final start = _computeEndpointAndHeading(
-    routeArrow,
-    bindablesById,
-    'start',
+  final startBinding = routeArrow.startBinding;
+  final endBinding = routeArrow.endBinding;
+  final hoveredStartElement = startBinding == null
+      ? null
+      : bindablesById[startBinding.elementId];
+  final hoveredEndElement = endBinding == null
+      ? null
+      : bindablesById[endBinding.elementId];
+
+  final origStartGlobalPoint = getPointAtIndexGlobal(routeArrow, 0);
+  final origEndGlobalPoint = getPointAtIndexGlobal(routeArrow, -1);
+  final startGlobalPoint = hoveredStartElement == null || startBinding == null
+      ? origStartGlobalPoint
+      : getGlobalFixedPoint(startBinding, hoveredStartElement);
+  final endGlobalPoint = hoveredEndElement == null || endBinding == null
+      ? origEndGlobalPoint
+      : getGlobalFixedPoint(endBinding, hoveredEndElement);
+
+  final startHeading = getHeadingForElbowSnap(
+    point: startGlobalPoint,
+    otherPoint: endGlobalPoint,
+    bindable: hoveredStartElement,
+    originPoint: origStartGlobalPoint,
     zoom: zoom,
   );
-  final end = _computeEndpointAndHeading(
-    routeArrow,
-    bindablesById,
-    'end',
+  final endHeading = getHeadingForElbowSnap(
+    point: endGlobalPoint,
+    otherPoint: startGlobalPoint,
+    bindable: hoveredEndElement,
+    originPoint: origEndGlobalPoint,
     zoom: zoom,
   );
 
-  final obstacles =
-      <_Bounds>[
-            for (final bindable in bindablesById.values)
-              _obstacleForBindable(bindable, getBindingGap(bindable, true)),
-          ]
-          .where((obstacle) {
-            final startIsInside = _pointInBounds(start.point, obstacle);
-            final endIsInside = _pointInBounds(end.point, obstacle);
-            return !startIsInside && !endIsInside;
-          })
-          .toList(growable: false);
+  final startPointBounds = <double>[
+    startGlobalPoint[0] - 2,
+    startGlobalPoint[1] - 2,
+    startGlobalPoint[0] + 2,
+    startGlobalPoint[1] + 2,
+  ];
+  final endPointBounds = <double>[
+    endGlobalPoint[0] - 2,
+    endGlobalPoint[1] - 2,
+    endGlobalPoint[0] + 2,
+    endGlobalPoint[1] + 2,
+  ];
 
-  final bounds = _commonBounds(<Point>[
-    ..._toGlobalPoints(routeArrow, routeArrow.points),
-    start.point,
-    end.point,
-  ], basePadding);
+  final startElementBounds = hoveredStartElement == null
+      ? startPointBounds
+      : _aabbForBindableWithOffset(
+          hoveredStartElement,
+          _offsetFromHeading(
+            startHeading,
+            (routeArrow.startArrowhead == null
+                    ? getBindingGap(hoveredStartElement, true) * 2
+                    : getBindingGap(hoveredStartElement, true) * 6)
+                .toDouble(),
+            1,
+          ),
+        );
+  final endElementBounds = hoveredEndElement == null
+      ? endPointBounds
+      : _aabbForBindableWithOffset(
+          hoveredEndElement,
+          _offsetFromHeading(
+            endHeading,
+            (routeArrow.endArrowhead == null
+                    ? getBindingGap(hoveredEndElement, true) * 2
+                    : getBindingGap(hoveredEndElement, true) * 6)
+                .toDouble(),
+            1,
+          ),
+        );
+
+  final boundsOverlap =
+      _pointInBounds(
+        startGlobalPoint,
+        hoveredEndElement == null
+            ? endPointBounds
+            : _aabbForBindableWithOffset(
+                hoveredEndElement,
+                _offsetFromHeading(endHeading, BASE_PADDING, BASE_PADDING),
+              ),
+      ) ||
+      _pointInBounds(
+        endGlobalPoint,
+        hoveredStartElement == null
+            ? startPointBounds
+            : _aabbForBindableWithOffset(
+                hoveredStartElement,
+                _offsetFromHeading(startHeading, BASE_PADDING, BASE_PADDING),
+              ),
+      );
+
+  final commonBounds = _commonAabb(
+    boundsOverlap
+        ? <_Bounds>[startPointBounds, endPointBounds]
+        : <_Bounds>[startElementBounds, endElementBounds],
+  );
+  final hasBoundElements =
+      hoveredStartElement != null || hoveredEndElement != null;
+  final dynamicAABBs = _generateDynamicAABBs(
+    a: boundsOverlap ? startPointBounds : startElementBounds,
+    b: boundsOverlap ? endPointBounds : endElementBounds,
+    common: commonBounds,
+    startDifference: boundsOverlap
+        ? _offsetFromHeading(
+            startHeading,
+            hasBoundElements ? BASE_PADDING : 0,
+            0,
+          )
+        : _offsetFromHeading(
+            startHeading,
+            hasBoundElements
+                ? BASE_PADDING -
+                      (routeArrow.startArrowhead == null
+                          ? baseBindingGapElbow * 2
+                          : baseBindingGapElbow * 6)
+                : 0,
+            BASE_PADDING,
+          ),
+    endDifference: boundsOverlap
+        ? _offsetFromHeading(endHeading, hasBoundElements ? BASE_PADDING : 0, 0)
+        : _offsetFromHeading(
+            endHeading,
+            hasBoundElements
+                ? BASE_PADDING -
+                      (routeArrow.endArrowhead == null
+                          ? baseBindingGapElbow * 2
+                          : baseBindingGapElbow * 6)
+                : 0,
+            BASE_PADDING,
+          ),
+    disableSideHack: boundsOverlap,
+    startElementBounds: hoveredStartElement == null
+        ? null
+        : _aabbForBindableWithOffset(hoveredStartElement),
+    endElementBounds: hoveredEndElement == null
+        ? null
+        : _aabbForBindableWithOffset(hoveredEndElement),
+  );
+
+  final startDonglePosition = _getDonglePosition(
+    dynamicAABBs[0],
+    startHeading,
+    startGlobalPoint,
+  );
+  final endDonglePosition = _getDonglePosition(
+    dynamicAABBs[1],
+    endHeading,
+    endGlobalPoint,
+  );
+
   final grid = _makeGrid(
-    <_Bounds>[...obstacles, bounds],
-    start.point,
-    end.point,
+    dynamicAABBs,
+    startDonglePosition,
+    startHeading,
+    endDonglePosition,
+    endHeading,
+    commonBounds,
   );
-  final startNode = grid.byCoord['${start.point[0]}:${start.point[1]}'];
-  final endNode = grid.byCoord['${end.point[0]}:${end.point[1]}'];
+
+  final startDongle = _pointToGridNode(startDonglePosition, grid);
+  final endDongle = _pointToGridNode(endDonglePosition, grid);
+  final endNode = _pointToGridNode(endGlobalPoint, grid);
+  final startNode = _pointToGridNode(startGlobalPoint, grid);
+  final closedNodeCoords = <String>{
+    if (endNode != null && hoveredEndElement != null)
+      '${endNode.x}:${endNode.y}',
+    if (startNode != null && routeArrow.startBinding != null)
+      '${startNode.x}:${startNode.y}',
+  };
+
+  final dongleOverlap =
+      startDongle != null &&
+      endDongle != null &&
+      (_pointInBounds(startDonglePosition, dynamicAABBs[1]) ||
+          _pointInBounds(endDonglePosition, dynamicAABBs[0]));
 
   List<Point>? route;
-  if (startNode != null && endNode != null) {
+  final routeStart = startDongle ?? startNode;
+  final routeEnd = endDongle ?? endNode;
+  if (routeStart != null && routeEnd != null) {
     route = _routeAStar(
-      startNode,
-      endNode,
-      start.heading,
-      end.heading,
+      routeStart,
+      routeEnd,
+      startHeading,
+      endHeading,
       grid,
-      obstacles,
+      dongleOverlap ? const <_Bounds>[] : dynamicAABBs,
+      closedNodeCoords,
     );
   }
 
-  final orthogonalRoute = route == null || route.isEmpty
-      ? _ensureOrthogonal(<Point>[start.point, end.point])
-      : _ensureOrthogonal(route);
-  final dedupedRoute = _removeShortSegments(orthogonalRoute);
-  final withFixedSegments = _applyFixedSegments(dedupedRoute, routeArrow);
-  final orthogonal = _ensureOrthogonal(withFixedSegments);
+  List<Point> routedPoints;
+  if (route == null) {
+    routedPoints = <Point>[
+      <double>[startGlobalPoint[0], startGlobalPoint[1]],
+      <double>[endGlobalPoint[0], endGlobalPoint[1]],
+    ];
+  } else {
+    routedPoints = route
+        .map((point) => <double>[point[0], point[1]])
+        .toList(growable: true);
+    if (startDongle != null) {
+      routedPoints.insert(0, <double>[
+        startGlobalPoint[0],
+        startGlobalPoint[1],
+      ]);
+    }
+    if (endDongle != null) {
+      routedPoints.add(<double>[endGlobalPoint[0], endGlobalPoint[1]]);
+    }
+  }
 
-  final fallbackPoints = _ensureOrthogonal(<Point>[start.point, end.point]);
-  final effectiveGlobalPoints =
-      validateInvariants && !validateElbowPoints(orthogonal)
-      ? fallbackPoints
-      : orthogonal;
+  var effectiveGlobalPoints = _getElbowArrowCornerPoints(
+    _removeShortSegments(routedPoints),
+  );
+
+  if (fixedSegments != null && fixedSegments.isNotEmpty) {
+    final fixedApplied = _applyFixedSegments(
+      effectiveGlobalPoints,
+      routeArrow.copyWith(fixedSegments: fixedSegments, setFixedSegments: true),
+    );
+    effectiveGlobalPoints = _getElbowArrowCornerPoints(
+      _removeShortSegments(fixedApplied),
+    );
+  }
+
+  if (validateInvariants && !validateElbowPoints(effectiveGlobalPoints)) {
+    effectiveGlobalPoints = _ensureOrthogonal(<Point>[
+      <double>[startGlobalPoint[0], startGlobalPoint[1]],
+      <double>[endGlobalPoint[0], endGlobalPoint[1]],
+    ]);
+  }
 
   final normalized = normalizeArrowFromGlobalPoints(
     effectiveGlobalPoints,
@@ -1118,6 +1772,448 @@ ArrowPatch _handleEndpointDrag({
   );
 }
 
+int? _deletedFixedSegmentIndex(
+  List<FixedSegment>? previous,
+  List<FixedSegment> next,
+) {
+  final previousIndices =
+      previous?.map((segment) => segment.index).toSet() ?? <int>{};
+  final nextIndices = next.map((segment) => segment.index).toSet();
+  for (final index in previousIndices) {
+    if (!nextIndices.contains(index)) {
+      return index;
+    }
+  }
+  return null;
+}
+
+int? _activelyModifiedFixedSegmentPosition(
+  List<FixedSegment>? previous,
+  List<FixedSegment> next,
+) {
+  if (previous == null || previous.isEmpty) {
+    return null;
+  }
+  for (var index = 0; index < next.length; index += 1) {
+    final current = next[index];
+    final prevIndex = previous.indexWhere(
+      (segment) => segment.index == current.index,
+    );
+    if (prevIndex == -1) {
+      return index;
+    }
+    final previousSegment = previous[prevIndex];
+    final movedOnXAxis =
+        current.start[0] != previousSegment.start[0] &&
+        current.end[0] != previousSegment.end[0];
+    final movedOnYAxis =
+        current.start[1] != previousSegment.start[1] &&
+        current.end[1] != previousSegment.end[1];
+    if (movedOnXAxis != movedOnYAxis) {
+      return index;
+    }
+  }
+  return null;
+}
+
+bool _headingForPointIsHorizontal(Point point, Point origin) =>
+    isHorizontalHeading(vectorToHeading(point, origin));
+
+ArrowPatch _handleSegmentReleasePort({
+  required ArrowState arrow,
+  required Map<String, BindableState> bindablesById,
+  required List<FixedSegment> fixedSegments,
+  required double zoom,
+  required double maxCoordinate,
+  required bool validateInvariants,
+}) {
+  final previousFixedSegments = arrow.fixedSegments;
+  if (previousFixedSegments == null || previousFixedSegments.isEmpty) {
+    return <String, dynamic>{'points': arrow.points};
+  }
+
+  final nextFixedSegmentIndices = fixedSegments
+      .map((segment) => segment.index)
+      .toSet();
+  final deletedSegmentPosition = previousFixedSegments.indexWhere(
+    (segment) => !nextFixedSegmentIndices.contains(segment.index),
+  );
+
+  if (deletedSegmentPosition == -1 ||
+      deletedSegmentPosition >= previousFixedSegments.length) {
+    return <String, dynamic>{'points': arrow.points};
+  }
+
+  final deletedIdx = previousFixedSegments[deletedSegmentPosition].index;
+  final prevSegment = deletedSegmentPosition > 0
+      ? previousFixedSegments[deletedSegmentPosition - 1]
+      : null;
+  final nextSegment = deletedSegmentPosition + 1 < previousFixedSegments.length
+      ? previousFixedSegments[deletedSegmentPosition + 1]
+      : null;
+
+  final subPathX = arrow.x + (prevSegment?.end[0] ?? 0);
+  final subPathY = arrow.y + (prevSegment?.end[1] ?? 0);
+  final subPathTargetGlobal = <double>[
+    arrow.x + (nextSegment?.start[0] ?? arrow.points.last[0]),
+    arrow.y + (nextSegment?.start[1] ?? arrow.points.last[1]),
+  ];
+
+  final subPathArrow = arrow.copyWith(
+    x: subPathX,
+    y: subPathY,
+    points: <Point>[
+      <double>[0, 0],
+      <double>[
+        subPathTargetGlobal[0] - subPathX,
+        subPathTargetGlobal[1] - subPathY,
+      ],
+    ],
+    startBinding: prevSegment == null ? arrow.startBinding : null,
+    setStartBinding: true,
+    endBinding: nextSegment == null ? arrow.endBinding : null,
+    setEndBinding: true,
+    startArrowhead: null,
+    setStartArrowhead: true,
+    endArrowhead: null,
+    setEndArrowhead: true,
+    fixedSegments: null,
+    setFixedSegments: true,
+  );
+
+  final restoredPatch = _routeAndNormalizeElbowPatch(
+    arrow: subPathArrow,
+    bindablesById: bindablesById,
+    fixedSegments: null,
+    zoom: zoom,
+    maxCoordinate: maxCoordinate,
+    validateInvariants: validateInvariants,
+    startIsSpecial: null,
+    endIsSpecial: null,
+  );
+  final restoredPoints = _asPointListOrNull(restoredPatch['points']);
+  final restoredX = restoredPatch['x'] is num
+      ? (restoredPatch['x'] as num).toDouble()
+      : subPathX;
+  final restoredY = restoredPatch['y'] is num
+      ? (restoredPatch['y'] as num).toDouble()
+      : subPathY;
+
+  if (restoredPoints == null || restoredPoints.length < 2) {
+    throw StateError(
+      "Property 'points' is required in the update returned by normalizeArrowElementUpdate()",
+    );
+  }
+
+  final nextPoints = <Point>[];
+
+  if (prevSegment != null) {
+    for (var index = 0; index < prevSegment.index; index += 1) {
+      nextPoints.add(<double>[
+        arrow.x + arrow.points[index][0],
+        arrow.y + arrow.points[index][1],
+      ]);
+    }
+  }
+
+  for (final point in restoredPoints) {
+    nextPoints.add(<double>[restoredX + point[0], restoredY + point[1]]);
+  }
+
+  if (nextSegment != null) {
+    for (
+      var index = nextSegment.index;
+      index < arrow.points.length;
+      index += 1
+    ) {
+      nextPoints.add(<double>[
+        arrow.x + arrow.points[index][0],
+        arrow.y + arrow.points[index][1],
+      ]);
+    }
+  }
+
+  final originalSegmentCountDiff =
+      (nextSegment?.index ?? arrow.points.length) -
+      (prevSegment?.index ?? 0) -
+      1;
+  final nextFixedSegments = fixedSegments
+      .map((segment) {
+        if (segment.index > deletedIdx) {
+          return segment.copyWith(
+            index:
+                segment.index -
+                originalSegmentCountDiff +
+                (restoredPoints.length - 1),
+          );
+        }
+        return segment.copyWith(
+          start: <double>[segment.start[0], segment.start[1]],
+          end: <double>[segment.end[0], segment.end[1]],
+        );
+      })
+      .toList(growable: true);
+
+  final simplifiedPoints = <Point>[];
+  for (var index = 0; index < nextPoints.length; index += 1) {
+    final point = nextPoints[index];
+    final prev = index > 0 ? nextPoints[index - 1] : null;
+    final next = index + 1 < nextPoints.length ? nextPoints[index + 1] : null;
+
+    if (prev != null && next != null) {
+      final prevHeading = vectorToHeading(prev, point);
+      final nextHeading = vectorToHeading(point, next);
+
+      if (prevHeading == nextHeading) {
+        for (
+          var segmentIndex = 0;
+          segmentIndex < nextFixedSegments.length;
+          segmentIndex += 1
+        ) {
+          final segment = nextFixedSegments[segmentIndex];
+          if (segment.index > index) {
+            nextFixedSegments[segmentIndex] = segment.copyWith(
+              index: segment.index - 1,
+            );
+          }
+        }
+        continue;
+      } else if (prevHeading == reverseHeading(nextHeading)) {
+        for (
+          var segmentIndex = 0;
+          segmentIndex < nextFixedSegments.length;
+          segmentIndex += 1
+        ) {
+          final segment = nextFixedSegments[segmentIndex];
+          if (segment.index > index) {
+            nextFixedSegments[segmentIndex] = segment.copyWith(
+              index: segment.index + 1,
+            );
+          }
+        }
+        simplifiedPoints.add(<double>[point[0], point[1]]);
+        simplifiedPoints.add(<double>[point[0], point[1]]);
+        continue;
+      }
+    }
+
+    simplifiedPoints.add(<double>[point[0], point[1]]);
+  }
+
+  return _normalizePatchWithMetaFromGlobalPoints(
+    simplifiedPoints,
+    maxCoordinate,
+    fixedSegments: nextFixedSegments,
+    startIsSpecial: false,
+    endIsSpecial: false,
+  );
+}
+
+ArrowPatch _handleSegmentMovePort({
+  required ArrowState arrow,
+  required List<FixedSegment> fixedSegments,
+  required Heading startHeading,
+  required Heading endHeading,
+  required BindableState? hoveredStartElement,
+  required BindableState? hoveredEndElement,
+  required double maxCoordinate,
+}) {
+  final activelyModifiedSegmentIdx = _activelyModifiedFixedSegmentPosition(
+    arrow.fixedSegments,
+    fixedSegments,
+  );
+  if (activelyModifiedSegmentIdx == null) {
+    return <String, dynamic>{'points': arrow.points};
+  }
+
+  final firstSegmentIdx =
+      arrow.fixedSegments?.indexWhere((segment) => segment.index == 1) ?? -1;
+  final lastSegmentIdx =
+      arrow.fixedSegments?.indexWhere(
+        (segment) => segment.index == arrow.points.length - 1,
+      ) ??
+      -1;
+
+  final movedSegment = fixedSegments[activelyModifiedSegmentIdx];
+  final segmentLength = distance(movedSegment.start, movedSegment.end);
+  final segmentIsTooShort = segmentLength < BASE_PADDING + 5;
+
+  if (firstSegmentIdx == -1 &&
+      movedSegment.index == 1 &&
+      hoveredStartElement != null) {
+    final startIsHorizontal = isHorizontalHeading(startHeading);
+    final startIsPositive = startIsHorizontal
+        ? startHeading == 'right'
+        : startHeading == 'down';
+    final padding = startIsPositive
+        ? (segmentIsTooShort ? segmentLength / 2 : BASE_PADDING)
+        : (segmentIsTooShort ? -segmentLength / 2 : -BASE_PADDING);
+    fixedSegments[activelyModifiedSegmentIdx] = movedSegment.copyWith(
+      start: <double>[
+        movedSegment.start[0] + (startIsHorizontal ? padding : 0),
+        movedSegment.start[1] + (!startIsHorizontal ? padding : 0),
+      ],
+    );
+  }
+
+  if (lastSegmentIdx == -1 &&
+      movedSegment.index == arrow.points.length - 1 &&
+      hoveredEndElement != null) {
+    final endIsHorizontal = isHorizontalHeading(endHeading);
+    final endIsPositive = endIsHorizontal
+        ? endHeading == 'right'
+        : endHeading == 'down';
+    final padding = endIsPositive
+        ? (segmentIsTooShort ? segmentLength / 2 : BASE_PADDING)
+        : (segmentIsTooShort ? -segmentLength / 2 : -BASE_PADDING);
+    final current = fixedSegments[activelyModifiedSegmentIdx];
+    fixedSegments[activelyModifiedSegmentIdx] = current.copyWith(
+      end: <double>[
+        current.end[0] + (endIsHorizontal ? padding : 0),
+        current.end[1] + (!endIsHorizontal ? padding : 0),
+      ],
+    );
+  }
+
+  final nextFixedSegments = fixedSegments
+      .map(
+        (segment) => segment.copyWith(
+          start: <double>[
+            arrow.x + segment.start[0],
+            arrow.y + segment.start[1],
+          ],
+          end: <double>[arrow.x + segment.end[0], arrow.y + segment.end[1]],
+        ),
+      )
+      .toList(growable: false);
+
+  final newPoints = arrow.points
+      .map((point) => <double>[arrow.x + point[0], arrow.y + point[1]])
+      .toList(growable: true);
+
+  final activeSegment = nextFixedSegments[activelyModifiedSegmentIdx];
+  final startIdx = activeSegment.index - 1;
+  final endIdx = activeSegment.index;
+  final start = activeSegment.start;
+  final end = activeSegment.end;
+
+  final prevSegmentIsHorizontal =
+      startIdx - 1 >= 0 &&
+          startIdx < newPoints.length &&
+          !pointsEqual(newPoints[startIdx], newPoints[startIdx - 1])
+      ? _headingForPointIsHorizontal(
+          newPoints[startIdx - 1],
+          newPoints[startIdx],
+        )
+      : null;
+  final nextSegmentIsHorizontal =
+      endIdx + 1 < newPoints.length &&
+          !pointsEqual(newPoints[endIdx], newPoints[endIdx + 1])
+      ? _headingForPointIsHorizontal(newPoints[endIdx + 1], newPoints[endIdx])
+      : null;
+
+  if (prevSegmentIsHorizontal != null) {
+    final dir = prevSegmentIsHorizontal ? 1 : 0;
+    newPoints[startIdx - 1][dir] = start[dir];
+  }
+  newPoints[startIdx] = <double>[start[0], start[1]];
+  newPoints[endIdx] = <double>[end[0], end[1]];
+  if (nextSegmentIsHorizontal != null) {
+    final dir = nextSegmentIsHorizontal ? 1 : 0;
+    newPoints[endIdx + 1][dir] = end[dir];
+  }
+
+  final previousSegmentIdx = nextFixedSegments.indexWhere(
+    (segment) => segment.index == startIdx,
+  );
+  if (previousSegmentIdx != -1) {
+    final prevSegment = nextFixedSegments[previousSegmentIdx];
+    final dir = _headingForPointIsHorizontal(prevSegment.end, prevSegment.start)
+        ? 1
+        : 0;
+    nextFixedSegments[previousSegmentIdx] = prevSegment.copyWith(
+      start: <double>[
+        dir == 0 ? start[0] : prevSegment.start[0],
+        dir == 1 ? start[1] : prevSegment.start[1],
+      ],
+      end: <double>[start[0], start[1]],
+    );
+  }
+
+  final followingSegmentIdx = nextFixedSegments.indexWhere(
+    (segment) => segment.index == endIdx + 1,
+  );
+  if (followingSegmentIdx != -1) {
+    final nextSegment = nextFixedSegments[followingSegmentIdx];
+    final dir = _headingForPointIsHorizontal(nextSegment.end, nextSegment.start)
+        ? 1
+        : 0;
+    nextFixedSegments[followingSegmentIdx] = nextSegment.copyWith(
+      end: <double>[
+        dir == 0 ? end[0] : nextSegment.end[0],
+        dir == 1 ? end[1] : nextSegment.end[1],
+      ],
+      start: <double>[end[0], end[1]],
+    );
+  }
+
+  if (firstSegmentIdx == -1 && startIdx == 0) {
+    final startIsHorizontal = hoveredStartElement != null
+        ? isHorizontalHeading(startHeading)
+        : _headingForPointIsHorizontal(newPoints[1], newPoints[0]);
+    newPoints.insert(0, <double>[
+      startIsHorizontal ? start[0] : arrow.x + arrow.points[0][0],
+      !startIsHorizontal ? start[1] : arrow.y + arrow.points[0][1],
+    ]);
+
+    if (hoveredStartElement != null) {
+      newPoints.insert(0, <double>[
+        arrow.x + arrow.points[0][0],
+        arrow.y + arrow.points[0][1],
+      ]);
+    }
+
+    for (var index = 0; index < nextFixedSegments.length; index += 1) {
+      final segment = nextFixedSegments[index];
+      nextFixedSegments[index] = segment.copyWith(
+        index: segment.index + (hoveredStartElement != null ? 2 : 1),
+      );
+    }
+  }
+
+  if (lastSegmentIdx == -1 && endIdx == arrow.points.length - 1) {
+    final endIsHorizontal = isHorizontalHeading(endHeading);
+    newPoints.add(<double>[
+      endIsHorizontal ? end[0] : arrow.x + arrow.points.last[0],
+      !endIsHorizontal ? end[1] : arrow.y + arrow.points.last[1],
+    ]);
+    if (hoveredEndElement != null) {
+      newPoints.add(<double>[
+        arrow.x + arrow.points.last[0],
+        arrow.y + arrow.points.last[1],
+      ]);
+    }
+  }
+
+  return _normalizePatchWithMetaFromGlobalPoints(
+    newPoints,
+    maxCoordinate,
+    fixedSegments: nextFixedSegments
+        .map(
+          (segment) => segment.copyWith(
+            start: <double>[
+              segment.start[0] - arrow.x,
+              segment.start[1] - arrow.y,
+            ],
+            end: <double>[segment.end[0] - arrow.x, segment.end[1] - arrow.y],
+          ),
+        )
+        .toList(growable: false),
+    startIsSpecial: false,
+    endIsSpecial: false,
+  );
+}
+
 bool _hasElbowUpdates(ElbowUpdatePatch updates) =>
     updates.containsKey('points') ||
     updates.containsKey('fixedSegments') ||
@@ -1361,6 +2457,32 @@ ArrowPatch _updateElbowArrowPointsPort(
   final endElement = endBinding == null
       ? null
       : bindablesById[endBinding.elementId];
+  var hoveredStartElement = startElement;
+  var hoveredEndElement = endElement;
+  if (isDragging) {
+    final bindables = bindablesById.values.toList(growable: false);
+    final startGlobal = <double>[
+      nextArrow.x + updatedPoints.first[0],
+      nextArrow.y + updatedPoints.first[1],
+    ];
+    final endGlobal = <double>[
+      nextArrow.x + updatedPoints.last[0],
+      nextArrow.y + updatedPoints.last[1],
+    ];
+    final tolerance = maxBindingDistance(zoom);
+    hoveredStartElement = pickHoveredBindableForFocus(
+      startGlobal,
+      nextArrow,
+      bindables,
+      tolerance: tolerance,
+    );
+    hoveredEndElement = pickHoveredBindableForFocus(
+      endGlobal,
+      nextArrow,
+      bindables,
+      tolerance: tolerance,
+    );
+  }
   final areUpdatedPointsValid = validateElbowPoints(updatedPoints);
 
   final hasRestUpdates = hasPointsUpdate || hasFixedSegmentsUpdate;
@@ -1425,17 +2547,6 @@ ArrowPatch _updateElbowArrowPointsPort(
     return <String, dynamic>{...updates};
   }
 
-  if (isDragging && hasPointsUpdate) {
-    return _normalizePatchWithMetaFromLocalPoints(
-      nextArrow,
-      nextArrow.points,
-      maxCoordinate,
-      fixedSegments: nextArrow.fixedSegments,
-      startIsSpecial: nextArrow.startIsSpecial,
-      endIsSpecial: nextArrow.endIsSpecial,
-    );
-  }
-
   final fixedSegments = nextArrow.fixedSegments;
   if (fixedSegments == null || fixedSegments.isEmpty) {
     return _routeAndNormalizeElbowPatch(
@@ -1451,28 +2562,44 @@ ArrowPatch _updateElbowArrowPointsPort(
   }
 
   if ((arrow.fixedSegments?.length ?? 0) > fixedSegments.length) {
-    return _routeAndNormalizeElbowPatch(
+    return _handleSegmentReleasePort(
       arrow: nextArrow,
       bindablesById: bindablesById,
       fixedSegments: fixedSegments,
       zoom: zoom,
       maxCoordinate: maxCoordinate,
       validateInvariants: validateInvariants,
-      startIsSpecial: false,
-      endIsSpecial: false,
     );
   }
 
   if (!hasPointsUpdate) {
-    return _routeAndNormalizeElbowPatch(
-      arrow: nextArrow,
-      bindablesById: bindablesById,
-      fixedSegments: fixedSegments,
+    final startEndpoint = _computeEndpointAndHeading(
+      nextArrow,
+      bindablesById,
+      'start',
       zoom: zoom,
+    );
+    final endEndpoint = _computeEndpointAndHeading(
+      nextArrow,
+      bindablesById,
+      'end',
+      zoom: zoom,
+    );
+    return _handleSegmentMovePort(
+      arrow: nextArrow,
+      fixedSegments: fixedSegments
+          .map(
+            (segment) => segment.copyWith(
+              start: <double>[segment.start[0], segment.start[1]],
+              end: <double>[segment.end[0], segment.end[1]],
+            ),
+          )
+          .toList(growable: true),
+      startHeading: startEndpoint.heading,
+      endHeading: endEndpoint.heading,
+      hoveredStartElement: hoveredStartElement,
+      hoveredEndElement: hoveredEndElement,
       maxCoordinate: maxCoordinate,
-      validateInvariants: validateInvariants,
-      startIsSpecial: false,
-      endIsSpecial: false,
     );
   }
 
@@ -1496,8 +2623,8 @@ ArrowPatch _updateElbowArrowPointsPort(
     endHeading: endEndpoint.heading,
     startGlobalPoint: startEndpoint.point,
     endGlobalPoint: endEndpoint.point,
-    hoveredStartElement: startElement,
-    hoveredEndElement: endElement,
+    hoveredStartElement: hoveredStartElement,
+    hoveredEndElement: hoveredEndElement,
     maxCoordinate: maxCoordinate,
   );
 }

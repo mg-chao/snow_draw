@@ -202,9 +202,8 @@ Point headingToDelta(Heading heading) {
       return [0, 1];
     case 'left':
       return [-1, 0];
-    default:
-      throw ArgumentError.value(heading, 'heading', 'Unknown heading');
   }
+  return [0, 0];
 }
 
 Heading reverseHeading(Heading heading) {
@@ -217,14 +216,13 @@ Heading reverseHeading(Heading heading) {
       return 'up';
     case 'left':
       return 'right';
-    default:
-      throw ArgumentError.value(heading, 'heading', 'Unknown heading');
   }
+  return heading;
 }
 
 Heading headingFromBindable(Point point, BindableState bindable) {
   final shape = canonicalizeBindableShape(bindable.shape);
-  final isDiamondShape = shape == 'diamond' || '$shape'.endsWith('diamond');
+  final isDiamondShape = shape == 'diamond';
   const searchConeMultiplier = 2.0;
   final bindableCenter = center(
     bindable.x,

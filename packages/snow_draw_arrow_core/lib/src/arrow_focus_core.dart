@@ -50,13 +50,37 @@ Point? _readPoint(Object? value) {
   return <double>[x.toDouble(), y.toDouble()];
 }
 
-Point _readPointOrZero(Object? value) => _readPoint(value) ?? <double>[0, 0];
-
 double? _readFiniteDouble(Object? value) {
   if (value is num && value.isFinite) {
     return value.toDouble();
   }
   return null;
+}
+
+Point _requirePoint(Object? value, String path) {
+  final point = _readPoint(value);
+  if (point == null) {
+    throw StateError('$path must be a [number, number] tuple');
+  }
+  return point;
+}
+
+ArrowState _requireArrow(Object? value, String path) {
+  final arrow = _readArrow(value);
+  if (arrow == null) {
+    throw StateError('$path must be an ArrowState');
+  }
+  return arrow;
+}
+
+EngineContext _requireContext(Object? value, String path) {
+  if (value is EngineContext) {
+    return value;
+  }
+  if (value is Map) {
+    return normalizeEngineContext(value);
+  }
+  throw StateError('$path must be an EngineContext-compatible object');
 }
 
 EngineContext _readContext(Object? value) {
@@ -77,6 +101,16 @@ ArrowEndpointEdge _readEdge(
     return arrowEndpointEnd;
   }
   return fallback;
+}
+
+ArrowEndpointEdge _requireEdge(Object? value, String path) {
+  if (value == arrowEndpointStart || value == 'start') {
+    return arrowEndpointStart;
+  }
+  if (value == arrowEndpointEnd || value == 'end') {
+    return arrowEndpointEnd;
+  }
+  throw StateError('$path must be "start" or "end"');
 }
 
 Point _unrotateToLocal(Point point, BindableState bindable) {
@@ -427,8 +461,8 @@ List<FocusPointDescriptor> listVisibleFocusPoints(
 }
 
 ArrowEndpointEdge? pickFocusPoint(PickFocusPointInput input) {
-  final pointer = _readPointOrZero(input['pointer']);
-  final context = _readContext(input['context']);
+  final pointer = _requirePoint(input['pointer'], 'input.pointer');
+  final context = _requireContext(input['context'], 'input.context');
   final focusPoints = listVisibleFocusPoints(<String, dynamic>{
     'arrow': input['arrow'],
     'bindables': input['bindables'],
@@ -445,8 +479,8 @@ ArrowEndpointEdge? pickFocusPoint(PickFocusPointInput input) {
 }
 
 FocusPointHit pickFocusPointWithOffset(PickFocusPointWithOffsetInput input) {
-  final pointer = _readPointOrZero(input['pointer']);
-  final context = _readContext(input['context']);
+  final pointer = _requirePoint(input['pointer'], 'input.pointer');
+  final context = _requireContext(input['context'], 'input.context');
   final focusPoints = listVisibleFocusPoints(<String, dynamic>{
     'arrow': input['arrow'],
     'bindables': input['bindables'],
@@ -469,19 +503,11 @@ FocusPointHit pickFocusPointWithOffset(PickFocusPointWithOffsetInput input) {
 }
 
 EngineResult computeFocusPointDrag(ComputeFocusPointDragInput input) {
-  final arrow = _readArrow(input['arrow']);
-  final pointer = _readPoint(input['pointer']);
-  if (arrow == null || pointer == null) {
-    return const EngineResult(
-      arrowPatch: <String, dynamic>{},
-      bindablePatches: <BindablePatch>[],
-      suggestedBinding: null,
-      events: <ArrowEngineEvent>[],
-    );
-  }
+  final arrow = _requireArrow(input['arrow'], 'input.arrow');
+  final pointer = _requirePoint(input['pointer'], 'input.pointer');
 
   final bindables = _readBindables(input['bindables']);
-  final context = _readContext(input['context']);
+  final context = _requireContext(input['context'], 'input.context');
   if (arrow.elbowed || arrow.points.length < 2) {
     return const EngineResult(
       arrowPatch: <String, dynamic>{},
@@ -495,7 +521,7 @@ EngineResult computeFocusPointDrag(ComputeFocusPointDragInput input) {
   final switchToInsideBinding = options?['switchToInsideBinding'] == true;
   final gridSize = _readFiniteDouble(options?['gridSize']);
 
-  final draggedEdge = _readEdge(input['draggedEdge']);
+  final draggedEdge = _requireEdge(input['draggedEdge'], 'input.draggedEdge');
   final otherEdge = draggedEdge == arrowEndpointStart
       ? arrowEndpointEnd
       : arrowEndpointStart;
@@ -552,10 +578,13 @@ EngineResult computeFocusPointDrag(ComputeFocusPointDragInput input) {
     }
     setBinding(
       draggedEdge,
-      calculateFixedPointForBinding(
-        point: pointer,
-        bindable: hovered,
+      FixedPointBinding(
+        elementId: hovered.id,
         mode: mode,
+        fixedPoint: calculateFixedPointForBinding(
+          bindable: hovered,
+          point: pointer,
+        ),
       ),
     );
   } else {

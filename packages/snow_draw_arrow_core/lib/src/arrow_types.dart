@@ -571,7 +571,7 @@ class FocusPointHit {
   final Point pointerOffset;
 }
 
-typedef ResizeHandleDirection = Object;
+typedef ResizeHandleDirection = Object?;
 typedef ResizeArrowDirection = String;
 
 typedef ComputeFocusPointDragInput = Map<String, dynamic>;
@@ -645,11 +645,27 @@ const EngineContext defaultEngineContext = EngineContext(
   maxCoordinate: 1e6,
 );
 
-EngineContext normalizeEngineContext(Map<String, dynamic>? context) {
-  final zoom = context?['zoom'];
-  final isBindingEnabled = context?['isBindingEnabled'];
-  final bindMode = context?['bindMode'];
-  final maxCoordinate = context?['maxCoordinate'];
+EngineContext normalizeEngineContext(Object? context) {
+  Map<String, dynamic>? normalizedContext;
+  if (context is Map<String, dynamic>) {
+    normalizedContext = context;
+  } else if (context is Map) {
+    final projected = <String, dynamic>{};
+    for (final entry in context.entries) {
+      final key = entry.key;
+      if (key is String) {
+        projected[key] = entry.value;
+      }
+    }
+    normalizedContext = projected;
+  } else {
+    normalizedContext = null;
+  }
+
+  final zoom = normalizedContext?['zoom'];
+  final isBindingEnabled = normalizedContext?['isBindingEnabled'];
+  final bindMode = normalizedContext?['bindMode'];
+  final maxCoordinate = normalizedContext?['maxCoordinate'];
 
   final normalizedZoom = zoom is num && zoom.isFinite
       ? zoom.toDouble()

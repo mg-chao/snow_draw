@@ -466,6 +466,9 @@ const Set<String> _bindableShapeValues = <String>{
 
 bool _isFiniteNumber(Object? value) => value is num && value.isFinite;
 
+bool _isPositiveInteger(Object? value) =>
+    value is num && value.isFinite && value > 0 && value.toInt() == value;
+
 bool _isPointTuple(Object? value) =>
     value is List &&
     value.length == 2 &&
@@ -543,6 +546,27 @@ bool _isArrowheadValue(Object? value) =>
 
 bool _isBindableShapeValue(Object? value) =>
     value is String && _bindableShapeValues.contains(value);
+
+bool _isBindableRoundnessTypeValue(Object? value) =>
+    value == 1 ||
+    value == 2 ||
+    value == 3 ||
+    value == 'legacy' ||
+    value == 'proportional' ||
+    value == 'adaptive';
+
+bool _isResizeHandleDirectionValue(Object? value) =>
+    value == 'n' ||
+    value == 's' ||
+    value == 'e' ||
+    value == 'w' ||
+    value == 'nw' ||
+    value == 'ne' ||
+    value == 'sw' ||
+    value == 'se' ||
+    value == 'rotation' ||
+    value == false ||
+    value == null;
 
 List<String> _validateStrictFixedPointBinding(
   Object? value, {
@@ -666,6 +690,25 @@ List<String> _validateStrictBindableState(
   }
   if (!_isFiniteNumber(value['strokeWidth'])) {
     violations.add('$path.strokeWidth must be a finite number');
+  }
+  final roundness = value['roundness'];
+  if (roundness != null) {
+    if (roundness is! Map) {
+      violations.add('$path.roundness must be an object or null');
+    } else {
+      if (!_isBindableRoundnessTypeValue(roundness['type'])) {
+        violations.add(
+          '$path.roundness.type must be one of 1, 2, 3, "legacy", "proportional", or "adaptive"',
+        );
+      }
+      if (roundness.containsKey('value') &&
+          roundness['value'] != null &&
+          !_isFiniteNumber(roundness['value'])) {
+        violations.add(
+          '$path.roundness.value must be a finite number when provided',
+        );
+      }
+    }
   }
   if (value.containsKey('zIndex') && !_isFiniteNumber(value['zIndex'])) {
     violations.add('$path.zIndex must be a finite number when provided');
@@ -1421,6 +1464,8 @@ List<String> _validateIdMapShape(Object? value, {required String path}) {
     for (final entry in value.entries) {
       if (entry.key is! String) {
         violations.add('$path map keys must be strings');
+      } else if ((entry.key as String).trim().isEmpty) {
+        violations.add('$path keys must be non-empty strings');
       }
       if (entry.value is! String) {
         violations.add('$path map values must be strings');
@@ -1857,6 +1902,11 @@ List<String> _validateOperationFieldShape(
           ? const <String>[]
           : <String>['$path must be "inside", "orbit", or "skip"'];
     case 'transformHandleType':
+      return _isResizeHandleDirectionValue(value)
+          ? const <String>[]
+          : <String>[
+              '$path must be one of "n", "s", "e", "w", "nw", "ne", "sw", "se", "rotation", false, null, or undefined',
+            ];
     case 'arrowId':
       return value is String
           ? const <String>[]
@@ -1874,9 +1924,9 @@ List<String> _validateOperationFieldShape(
           ? const <String>[]
           : <String>['$path must be "solid", "dashed", or "dotted"'];
     case 'segmentIndex':
-      return _isFiniteNumber(value)
+      return _isPositiveInteger(value)
           ? const <String>[]
-          : <String>['$path must be a finite number'];
+          : <String>['$path must be a positive integer'];
     case 'draggedPoints':
       if (value is! List) {
         return <String>['$path must be an array'];
@@ -2210,6 +2260,13 @@ int _asInt(Object? value, {int fallback = 0}) {
     return value.toInt();
   }
   return fallback;
+}
+
+int _requirePositiveInt(Object? value, String path) {
+  if (_isPositiveInteger(value)) {
+    return (value as num).toInt();
+  }
+  throw StateError('$path must be a positive integer');
 }
 
 bool _asBool(Object? value, {bool fallback = false}) =>
@@ -3074,18 +3131,28 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
             'type': 'arrow-patch',
             'patch': moveFixedSegment(
               arrow: _requireArrowState(input['arrow'], operationType),
-              segmentIndex: _asInt(input['segmentIndex']),
+              segmentIndex: _requirePositiveInt(
+                input['segmentIndex'],
+                'request.input.segmentIndex',
+              ),
               delta: _asPoint(input['delta']),
             ),
           };
         }
       case 'move-fixed-segment-to-point':
-        return <String, dynamic>{
-          'type': 'fixed-segment-drag',
-          'value': moveFixedSegmentToPoint(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'fixed-segment-drag',
+            'value': moveFixedSegmentToPoint(<String, dynamic>{
+              ...input,
+              'segmentIndex': _requirePositiveInt(
+                input['segmentIndex'],
+                'request.input.segmentIndex',
+              ),
+            }),
+          };
+        }
       case 'release-fixed-segment':
         {
           final input = _requireInput(rawInput, operationType);
@@ -3093,7 +3160,10 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
             'type': 'arrow-patch',
             'patch': releaseFixedSegment(
               arrow: _requireArrowState(input['arrow'], operationType),
-              segmentIndex: _asInt(input['segmentIndex']),
+              segmentIndex: _requirePositiveInt(
+                input['segmentIndex'],
+                'request.input.segmentIndex',
+              ),
             ),
           };
         }
@@ -3173,7 +3243,7 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
           return <String, dynamic>{
             'type': 'arrow-resize-direction',
             'value': getResizeArrowDirection(
-              input['transformHandleType'] as Object,
+              input['transformHandleType'],
               arrow?.points ??
                   _asPoints(_asStringDynamicMap(input['arrow'])?['points']),
             ),
@@ -3364,28 +3434,21 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
       case 'calculate-fixed-point-for-binding':
         {
           final input = _requireInput(rawInput, operationType);
-          final binding = binding_core.calculateFixedPointForBinding(
+          final point = binding_core.calculateFixedPointForBinding(
             point: _asPoint(input['point']),
             bindable: _requireBindableState(input['bindable'], operationType),
           );
-          return <String, dynamic>{
-            'type': 'point',
-            'point': binding.fixedPoint,
-          };
+          return <String, dynamic>{'type': 'point', 'point': point};
         }
       case 'calculate-fixed-point-for-elbow-binding':
         {
           final input = _requireInput(rawInput, operationType);
-          final binding = binding_core.calculateFixedPointForElbowBinding(
-            point: _asPoint(input['point']),
-            bindable: _requireBindableState(input['bindable'], operationType),
+          final point = binding_core.calculateFixedPointForElbowBinding(
             arrow: _requireArrowState(input['arrow'], operationType),
+            bindable: _requireBindableState(input['bindable'], operationType),
             edge: normalizeArrowEndpointEdge(_asString(input['edge'])),
           );
-          return <String, dynamic>{
-            'type': 'point',
-            'point': binding.fixedPoint,
-          };
+          return <String, dynamic>{'type': 'point', 'point': point};
         }
       case 'update-bound-point':
         {
@@ -3393,24 +3456,15 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
           final binding = _asFixedPointBinding(input['binding']);
           return <String, dynamic>{
             'type': 'optional-point',
-            'point': binding == null
-                ? null
-                : binding_core.updateBoundPoint(
-                    arrow: _requireArrowState(input['arrow'], operationType),
-                    edge: _asString(
-                      input['edge'],
-                      fallback: arrowEndpointStart,
-                    ),
-                    binding: binding,
-                    bindable: _requireBindableState(
-                      input['bindable'],
-                      operationType,
-                    ),
-                    bindablesById:
-                        (input['bindables'] ?? const <String, dynamic>{})
-                            as Object,
-                    dragging: _asBool(input['dragging']),
-                  ),
+            'point': binding_core.updateBoundPoint(
+              arrow: _requireArrowState(input['arrow'], operationType),
+              edge: _asString(input['edge'], fallback: arrowEndpointStart),
+              binding: binding,
+              bindable: _requireBindableState(input['bindable'], operationType),
+              bindablesById:
+                  (input['bindables'] ?? const <String, dynamic>{}) as Object,
+              dragging: _asBool(input['dragging']),
+            ),
           };
         }
       case 'distance-to-bindable-outline':

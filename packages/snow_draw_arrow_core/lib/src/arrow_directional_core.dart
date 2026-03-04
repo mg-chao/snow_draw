@@ -72,6 +72,22 @@ class ResolveDirectionalNodeRelationsInput {
   final ResolveDirectionalNodeRelationsOptions? options;
 }
 
+class DirectionalNodeRelationLookupInput {
+  const DirectionalNodeRelationLookupInput({
+    required this.nodeId,
+    required this.direction,
+    required this.nodes,
+    required this.arrows,
+    this.options,
+  });
+
+  final String nodeId;
+  final DirectionalGraphDirection direction;
+  final List<DirectionalFlowNodeState> nodes;
+  final List<DirectionalFlowArrowState> arrows;
+  final ResolveDirectionalNodeRelationsOptions? options;
+}
+
 class ResolveDirectionalNodeRelationsOptions {
   const ResolveDirectionalNodeRelationsOptions({this.elbowOnly});
 
@@ -152,7 +168,7 @@ List<String> _resolveDirectionalNodeRelativeIds(
 }
 
 List<String> getDirectionalSuccessorIds(
-  ResolveDirectionalNodeRelationsInput input,
+  DirectionalNodeRelationLookupInput input,
 ) => _resolveDirectionalNodeRelativeIds(
   ResolveDirectionalNodeRelationsInput(
     type: 'successors',
@@ -165,7 +181,7 @@ List<String> getDirectionalSuccessorIds(
 );
 
 List<String> getDirectionalPredecessorIds(
-  ResolveDirectionalNodeRelationsInput input,
+  DirectionalNodeRelationLookupInput input,
 ) => _resolveDirectionalNodeRelativeIds(
   ResolveDirectionalNodeRelationsInput(
     type: 'predecessors',
@@ -381,8 +397,7 @@ class DirectionalArrowNavigator {
 
     final directionalNodeIds = <String>[
       ...getDirectionalSuccessorIds(
-        ResolveDirectionalNodeRelationsInput(
-          type: 'successors',
+        DirectionalNodeRelationLookupInput(
           nodeId: input.nodeId,
           direction: input.direction,
           nodes: input.nodes,
@@ -391,8 +406,7 @@ class DirectionalArrowNavigator {
         ),
       ),
       ...getDirectionalPredecessorIds(
-        ResolveDirectionalNodeRelationsInput(
-          type: 'predecessors',
+        DirectionalNodeRelationLookupInput(
           nodeId: input.nodeId,
           direction: input.direction,
           nodes: input.nodes,
@@ -424,8 +438,7 @@ class DirectionalArrowNavigator {
           .expand(
             (direction) => <String>[
               ...getDirectionalSuccessorIds(
-                ResolveDirectionalNodeRelationsInput(
-                  type: 'successors',
+                DirectionalNodeRelationLookupInput(
                   nodeId: input.nodeId,
                   direction: direction,
                   nodes: input.nodes,
@@ -434,8 +447,7 @@ class DirectionalArrowNavigator {
                 ),
               ),
               ...getDirectionalPredecessorIds(
-                ResolveDirectionalNodeRelationsInput(
-                  type: 'predecessors',
+                DirectionalNodeRelationLookupInput(
                   nodeId: input.nodeId,
                   direction: direction,
                   nodes: input.nodes,

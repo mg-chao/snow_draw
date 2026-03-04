@@ -29,6 +29,17 @@ class _ResolvedArrowLabelLayoutOptions {
   final double paddingMultiplier;
 }
 
+const ArrowLabelLayoutOptions arrowLabelLayoutDefaults =
+    ArrowLabelLayoutOptions(
+      textPadding: 5,
+      widthFraction: 0.7,
+      fontSizeToMinWidthRatio: 11,
+      paddingMultiplier: 8,
+    );
+// ignore: constant_identifier_names
+const ArrowLabelLayoutOptions ARROW_LABEL_LAYOUT_DEFAULTS =
+    arrowLabelLayoutDefaults;
+
 const _resolvedDefaults = _ResolvedArrowLabelLayoutOptions(
   textPadding: 5,
   widthFraction: 0.7,
