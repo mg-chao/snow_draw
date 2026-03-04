@@ -1,9 +1,6 @@
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
-
 import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
-import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../types/draw_rect.dart';
@@ -89,22 +86,11 @@ Map<String, ElementState> _pruneTransformedArrowBindings({
 
   final merged = Map<String, ElementState>.of(transformedElements);
   final lookup = CombinedElementLookup(base: baseElements, overlay: merged);
-  final transformedArrows = <core.ArrowState>[];
-  final arrowSourcesById = <String, (ElementState, ArrowLikeData)>{};
-
-  for (final element in transformedElements.values) {
-    final data = element.data;
-    if (data is! ArrowLikeData) {
-      continue;
-    }
-    if (data.startBinding == null && data.endBinding == null) {
-      continue;
-    }
-    transformedArrows.add(toCoreArrowState(element: element, data: data));
-    arrowSourcesById[element.id] = (element, data);
-  }
-
-  if (transformedArrows.isEmpty) {
+  final transformedArrows = collectCoreArrowStatesWithSources(
+    transformedElements.values,
+    onlyBoundArrows: true,
+  );
+  if (transformedArrows.arrows.isEmpty) {
     return merged;
   }
 
@@ -114,7 +100,7 @@ Map<String, ElementState> _pruneTransformedArrowBindings({
         id,
   ];
   final syncResult = syncCoreBindingsAfterBindablePrune(
-    arrows: transformedArrows,
+    arrows: transformedArrows.arrows,
     bindables: collectCoreBindableRelations(lookup.values),
     geometryBindables: collectCoreBindables(lookup.values),
     retainedBindableIds: retainedBindableIds,
@@ -128,20 +114,12 @@ Map<String, ElementState> _pruneTransformedArrowBindings({
     return merged;
   }
 
-  for (final arrowPatch in syncResult.arrowPatches) {
-    final source = arrowSourcesById[arrowPatch.id];
-    if (source == null) {
-      continue;
-    }
-    final (element, data) = source;
-    final patched = applyCoreArrowPatchToElement(
-      element: element,
-      data: data,
-      patch: arrowPatch.patch,
-    );
-    if (patched != element) {
-      merged[patched.id] = patched;
-    }
+  final patchedById = applyCoreArrowPatchesToSources(
+    patches: syncResult.arrowPatches,
+    sources: transformedArrows.sources,
+  );
+  for (final entry in patchedById.entries) {
+    merged[entry.key] = entry.value;
   }
   return merged;
 }

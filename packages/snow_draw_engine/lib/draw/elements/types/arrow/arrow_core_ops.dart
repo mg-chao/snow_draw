@@ -277,3 +277,120 @@ core.EngineResult finalizeCoreFocusPointDrag({
   },
   'bindables': bindables,
 });
+
+/// Typed wrapper around endpoint binding refresh.
+core.EngineResult refreshCoreEndpointBinding({
+  required core.ArrowState arrow,
+  required core.ArrowEndpointEdge edge,
+  required List<core.BindableState> bindables,
+  required core.EngineContext context,
+}) => core.refreshEndpointBinding(<String, dynamic>{
+  'arrow': arrow,
+  'edge': edge,
+  'bindables': bindables,
+  'context': context,
+});
+
+/// Typed wrapper around endpoint-binding pruning.
+core.EngineResult pruneCoreArrowBindings({
+  required core.ArrowState arrow,
+  required List<String> retainedBindableIds,
+  Map<String, dynamic>? options,
+}) => core.pruneArrowBindings(<String, dynamic>{
+  'arrow': arrow,
+  'retainedBindableIds': retainedBindableIds,
+  ...?(options == null ? null : <String, dynamic>{'options': options}),
+});
+
+/// Typed wrapper around relation patch resolution from binding transitions.
+core.ResolvedBindableRelationPatches resolveCoreBindableRelationPatches({
+  required core.ArrowBindingState arrow,
+  required List<core.BindableRelationState> bindables,
+  core.ArrowPatch? arrowPatch,
+  List<core.BindablePatch>? bindablePatches,
+}) => core.resolveBindableRelationPatches(
+  core.ResolveBindableRelationPatchesInput(
+    arrow: arrow,
+    bindables: bindables,
+    arrowPatch: arrowPatch,
+    bindablePatches: bindablePatches,
+  ),
+);
+
+/// Typed wrapper around engine-result application/reduction.
+core.ApplyEngineResultValue applyCoreEngineResult({
+  required core.ArrowState arrow,
+  required List<core.BindableRelationState> bindables,
+  required core.EngineResult result,
+  List<String>? orderedElementIds,
+  Map<String, List<String>>? anchorElementIdsByBindableId,
+}) => core.applyEngineResult(
+  core.ApplyEngineResultInput(
+    arrow: arrow,
+    bindables: bindables,
+    result: result,
+    orderedElementIds: orderedElementIds,
+    anchorElementIdsByBindableId: anchorElementIdsByBindableId,
+  ),
+);
+
+/// Typed wrapper around restore-time binding repair.
+core.FixedPointBinding? repairCoreBindingOnRestore({
+  required core.FixedPointBinding? binding,
+  required List<core.BindableState> bindables,
+  core.ArrowState? arrow,
+  core.ArrowEndpointEdge? edge,
+  List<core.BindableState>? existingBindables,
+}) => core.repairBindingOnRestore(<String, dynamic>{
+  'binding': binding,
+  'bindables': bindables,
+  ...?(arrow == null ? null : <String, dynamic>{'arrow': arrow}),
+  ...?(edge == null ? null : <String, dynamic>{'edge': edge}),
+  ...?(existingBindables == null
+      ? null
+      : <String, dynamic>{'existingBindables': existingBindables}),
+});
+
+/// Typed wrapper around invalid unbound elbow restore repair.
+core.ArrowPatch? repairCoreInvalidUnboundElbowArrowOnRestore({
+  required core.ArrowState arrow,
+  required List<core.BindableState> bindables,
+  required core.EngineContext context,
+}) => core.repairInvalidUnboundElbowArrowOnRestore(<String, dynamic>{
+  'arrow': arrow,
+  'bindables': bindables,
+  'context': context,
+});
+
+/// Typed wrapper around extreme self-bound elbow restore repair.
+core.ArrowPatch? repairCoreSelfBoundExtremeElbowArrowOnRestore({
+  required core.ArrowState arrow,
+  required core.BindableState bindable,
+  double? maxCoordinate,
+}) => core.repairSelfBoundExtremeElbowArrowOnRestore(<String, dynamic>{
+  'arrow': arrow,
+  'bindable': bindable,
+  ...?(maxCoordinate == null
+      ? null
+      : <String, dynamic>{'maxCoordinate': maxCoordinate}),
+});
+
+/// Typed wrapper around directional link-arrow creation.
+core.DirectionalLinkArrow createCoreDirectionalLinkArrow({
+  required core.DirectionalLinkBounds start,
+  required core.DirectionalLinkBounds end,
+  required core.DirectionalLinkDirection direction,
+  double padding = 6,
+}) => core.createDirectionalLinkArrow(start, end, direction, padding: padding);
+
+/// Typed wrapper around endpoint overlap offsetting for short arrows.
+List<core.Point> offsetCoreArrowEndpointsForBindingOverlap({
+  required List<core.Point> points,
+  double delta = 0.5,
+}) => core.offsetArrowEndpointsForBindingOverlap(points, delta: delta);
+
+/// Typed wrapper around resize-handle directional resolution.
+core.ResizeArrowDirection getCoreResizeArrowDirection({
+  required core.ResizeHandleDirection transformHandleType,
+  required List<core.Point> points,
+}) => core.getResizeArrowDirection(transformHandleType, points);

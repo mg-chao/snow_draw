@@ -6,6 +6,7 @@ import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
+import '../../elements/types/arrow/arrow_restore.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 
@@ -89,20 +90,11 @@ List<ElementState> syncArrowBindingsAfterDeletion({
     return elements;
   }
 
-  final arrows = <core.ArrowState>[];
-  final elementByArrowId = <String, (ElementState, ArrowLikeData)>{};
-  for (final element in elements) {
-    final data = element.data;
-    if (data is! ArrowLikeData) {
-      continue;
-    }
-    if (data.startBinding == null && data.endBinding == null) {
-      continue;
-    }
-    arrows.add(toCoreArrowState(element: element, data: data));
-    elementByArrowId[element.id] = (element, data);
-  }
-  if (arrows.isEmpty) {
+  final coreArrows = collectCoreArrowStatesWithSources(
+    elements,
+    onlyBoundArrows: true,
+  );
+  if (coreArrows.arrows.isEmpty) {
     return elements;
   }
 
@@ -116,7 +108,7 @@ List<ElementState> syncArrowBindingsAfterDeletion({
   ];
 
   final syncResult = syncCoreBindingsAfterDeletion(
-    arrows: arrows,
+    arrows: coreArrows.arrows,
     bindables: collectCoreBindableRelations(elements),
     geometryBindables: collectCoreBindables(elements),
     deletedArrowIds: deletedArrowIds,
@@ -127,29 +119,21 @@ List<ElementState> syncArrowBindingsAfterDeletion({
     return elements;
   }
 
-  final patchedById = <String, ElementState>{};
-  for (final arrowPatch in syncResult.arrowPatches) {
-    final source = elementByArrowId[arrowPatch.id];
-    if (source == null) {
-      continue;
-    }
-    final (element, data) = source;
-    final patched = applyCoreArrowPatchToElement(
-      element: element,
-      data: data,
-      patch: arrowPatch.patch,
-    );
-    if (patched != element) {
-      patchedById[patched.id] = patched;
-    }
-  }
+  final patchedById = applyCoreArrowPatchesToSources(
+    patches: syncResult.arrowPatches,
+    sources: coreArrows.sources,
+  );
   if (patchedById.isEmpty) {
     return elements;
   }
 
-  return <ElementState>[
+  final synced = <ElementState>[
     for (final element in elements) patchedById[element.id] ?? element,
   ];
+  return repairArrowElementsOnRestore(
+    elements: synced,
+    engineContext: engineContext,
+  );
 }
 
 /// Synchronizes arrow bindings for duplicated element snapshots.
@@ -180,22 +164,13 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     }
   }
 
-  final arrows = <core.ArrowState>[];
-  final elementByArrowId = <String, (ElementState, ArrowLikeData)>{};
-  for (final element in elements) {
-    final data = element.data;
-    if (data is! ArrowLikeData) {
-      continue;
-    }
-    arrows.add(toCoreArrowState(element: element, data: data));
-    elementByArrowId[element.id] = (element, data);
-  }
-  if (arrows.isEmpty) {
+  final coreArrows = collectCoreArrowStatesWithSources(elements);
+  if (coreArrows.arrows.isEmpty) {
     return elements;
   }
 
   final syncResult = syncCoreBindingsAfterDuplication(
-    arrows: arrows,
+    arrows: coreArrows.arrows,
     bindables: collectCoreBindableRelations(elements),
     bindableIdMap: bindableIdMap,
     arrowIdMap: arrowIdMap,
@@ -206,27 +181,19 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     return elements;
   }
 
-  final patchedById = <String, ElementState>{};
-  for (final arrowPatch in syncResult.arrowPatches) {
-    final source = elementByArrowId[arrowPatch.id];
-    if (source == null) {
-      continue;
-    }
-    final (element, data) = source;
-    final patched = applyCoreArrowPatchToElement(
-      element: element,
-      data: data,
-      patch: arrowPatch.patch,
-    );
-    if (patched != element) {
-      patchedById[patched.id] = patched;
-    }
-  }
+  final patchedById = applyCoreArrowPatchesToSources(
+    patches: syncResult.arrowPatches,
+    sources: coreArrows.sources,
+  );
   if (patchedById.isEmpty) {
     return elements;
   }
 
-  return <ElementState>[
+  final synced = <ElementState>[
     for (final element in elements) patchedById[element.id] ?? element,
   ];
+  return repairArrowElementsOnRestore(
+    elements: synced,
+    engineContext: engineContext,
+  );
 }

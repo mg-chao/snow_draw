@@ -6,7 +6,6 @@ import '../../../utils/combined_element_lookup.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
 import 'arrow_engine_events.dart';
-import 'arrow_like_data.dart';
 
 /// Resolves arrow bindings when bindable elements change position.
 ///
@@ -47,50 +46,26 @@ final class ArrowBindingResolver {
     );
     final bindables = collectCoreBindables(lookup.values);
     final relations = collectCoreBindableRelations(lookup.values);
-    final arrows = <core.ArrowState>[];
-    final elementsByArrowId = <String, (ElementState, ArrowLikeData)>{};
-
-    for (final element in lookup.values) {
-      final data = element.data;
-      if (data is! ArrowLikeData) {
-        continue;
-      }
-      if (data.startBinding == null && data.endBinding == null) {
-        continue;
-      }
-
-      arrows.add(toCoreArrowState(element: element, data: data));
-      elementsByArrowId[element.id] = (element, data);
-    }
-
-    if (arrows.isEmpty) {
+    final coreArrows = collectCoreArrowStatesWithSources(
+      lookup.values,
+      onlyBoundArrows: true,
+    );
+    if (coreArrows.arrows.isEmpty) {
       return ArrowBindingResolutionResult.empty;
     }
 
     final result = recomputeCoreBindingsForChangedBindables(
-      arrows: arrows,
+      arrows: coreArrows.arrows,
       bindables: bindables,
       relations: relations,
       changedBindableIds: changedElementIds.toList(growable: false),
       context: engineContext ?? core.defaultEngineContext,
     );
 
-    final updates = <String, ElementState>{};
-    for (final arrowPatch in result.arrowPatches) {
-      final source = elementsByArrowId[arrowPatch.id];
-      if (source == null) {
-        continue;
-      }
-      final (element, data) = source;
-      final nextElement = applyCoreArrowPatchToElement(
-        element: element,
-        data: data,
-        patch: arrowPatch.patch,
-      );
-      if (nextElement != element) {
-        updates[nextElement.id] = nextElement;
-      }
-    }
+    final updates = applyCoreArrowPatchesToSources(
+      patches: result.arrowPatches,
+      sources: coreArrows.sources,
+    );
 
     final reorderedElementIds = reduceArrowEngineEventsToOrderedIds(
       orderedElementIds: orderedElementIds,

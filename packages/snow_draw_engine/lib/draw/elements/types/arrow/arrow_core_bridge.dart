@@ -210,6 +210,42 @@ List<core.BindableRelationState> collectCoreBindableRelations(
       .toList(growable: false);
 }
 
+/// Collects arrow-like elements projected into arrow-core state plus source
+/// engine elements for patch application.
+///
+/// When [onlyBoundArrows] is true, arrows with neither endpoint binding are
+/// skipped.
+({
+  List<core.ArrowState> arrows,
+  Map<String, (ElementState, ArrowLikeData)> sources,
+})
+collectCoreArrowStatesWithSources(
+  Iterable<ElementState> elements, {
+  bool onlyBoundArrows = false,
+}) {
+  final arrows = <core.ArrowState>[];
+  final sources = <String, (ElementState, ArrowLikeData)>{};
+
+  for (final element in elements) {
+    final data = element.data;
+    if (data is! ArrowLikeData) {
+      continue;
+    }
+    if (onlyBoundArrows &&
+        data.startBinding == null &&
+        data.endBinding == null) {
+      continue;
+    }
+    arrows.add(toCoreArrowState(element: element, data: data));
+    sources[element.id] = (element, data);
+  }
+
+  return (
+    arrows: List<core.ArrowState>.unmodifiable(arrows),
+    sources: Map<String, (ElementState, ArrowLikeData)>.unmodifiable(sources),
+  );
+}
+
 List<DrawPoint> resolveArrowLocalPoints(
   ElementState element,
   ArrowLikeData data, [
@@ -435,6 +471,30 @@ ElementState applyCoreArrowPatchToElement({
     data: data,
     nextArrow: nextArrow,
   );
+}
+
+/// Applies arrow-core patches onto [sources], returning only changed elements.
+Map<String, ElementState> applyCoreArrowPatchesToSources({
+  required Iterable<core.ArrowStatePatchWithId> patches,
+  required Map<String, (ElementState, ArrowLikeData)> sources,
+}) {
+  final patchedById = <String, ElementState>{};
+  for (final arrowPatch in patches) {
+    final source = sources[arrowPatch.id];
+    if (source == null) {
+      continue;
+    }
+    final (element, data) = source;
+    final patched = applyCoreArrowPatchToElement(
+      element: element,
+      data: data,
+      patch: arrowPatch.patch,
+    );
+    if (patched != element) {
+      patchedById[patched.id] = patched;
+    }
+  }
+  return Map<String, ElementState>.unmodifiable(patchedById);
 }
 
 List<ElbowFixedSegment>? _transformFixedSegments({
