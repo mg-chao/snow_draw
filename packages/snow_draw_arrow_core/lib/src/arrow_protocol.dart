@@ -3135,36 +3135,71 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
           'context': _toEngineContextValue(defaultEngineContext),
         };
       case 'compute-endpoint-drag':
-        return <String, dynamic>{
-          'type': 'engine-result',
-          'result': computeEndpointDrag(_requireInput(rawInput, operationType)),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'engine-result',
+            'result': computeEndpointDrag(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
+              'bindables': _asBindableStates(input['bindables']),
+              'context': _asEngineContext(input['context']),
+            }),
+          };
+        }
       case 'get-endpoint-binding-strategy':
-        return <String, dynamic>{
-          'type': 'endpoint-binding-strategies',
-          'strategies': binding_core.getEndpointBindingStrategy(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'endpoint-binding-strategies',
+            'strategies': binding_core
+                .getEndpointBindingStrategy(<String, dynamic>{
+                  ...input,
+                  'arrow': _requireArrowState(input['arrow'], operationType),
+                  'bindables': _asBindableStates(input['bindables']),
+                  'context': _asEngineContext(input['context']),
+                }),
+          };
+        }
       case 'compute-simple-binding-patch':
-        return <String, dynamic>{
-          'type': 'engine-result',
-          'result': binding_core.computeSimpleBindingPatch(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'engine-result',
+            'result': binding_core.computeSimpleBindingPatch(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
+              'bindables': _asBindableStates(input['bindables']),
+              'context': _asEngineContext(input['context']),
+            }),
+          };
+        }
       case 'finalize-endpoint-drag':
-        return <String, dynamic>{
-          'type': 'engine-result',
-          'result': finalizeEndpointDrag(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'engine-result',
+            'result': finalizeEndpointDrag(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
+              'bindables': _asBindableStates(input['bindables']),
+              'context': _asEngineContext(input['context']),
+            }),
+          };
+        }
       case 'compute-focus-point-drag':
-        return <String, dynamic>{
-          'type': 'engine-result',
-          'result': computeFocusDrag(_requireInput(rawInput, operationType)),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'engine-result',
+            'result': computeFocusDrag(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
+              'bindables': _asBindableStates(input['bindables']),
+              'context': _asEngineContext(input['context']),
+            }),
+          };
+        }
       case 'finalize-focus-point-drag':
         {
           final input = _requireInput(rawInput, operationType);
@@ -3178,52 +3213,111 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
           };
         }
       case 'resolve-visible-focus-points':
-        return <String, dynamic>{
-          'type': 'focus-points',
-          'points': resolveVisibleFocusPoints(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'focus-points',
+            'points': resolveVisibleFocusPoints(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
+              'bindables': _asBindableStates(input['bindables']),
+              'context': _asEngineContext(input['context']),
+            }),
+          };
+        }
       case 'resolve-focus-point-hit':
-        return <String, dynamic>{
-          'type': 'focus-point-edge',
-          'edge': resolveFocusPointHit(_requireInput(rawInput, operationType)),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'focus-point-edge',
+            'edge': resolveFocusPointHit(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
+              'bindables': _asBindableStates(input['bindables']),
+              'context': _asEngineContext(input['context']),
+            }),
+          };
+        }
       case 'resolve-focus-point-hit-with-offset':
-        return <String, dynamic>{
-          'type': 'focus-point-hit',
-          'hit': resolveFocusPointHitWithOffset(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'focus-point-hit',
+            'hit': resolveFocusPointHitWithOffset(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
+              'bindables': _asBindableStates(input['bindables']),
+              'context': _asEngineContext(input['context']),
+            }),
+          };
+        }
       case 'recompute-after-bindable-change':
-        return <String, dynamic>{
-          'type': 'engine-result',
-          'result': recomputeAfterBindableChange(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'engine-result',
+            'result': recomputeAfterBindableChange(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
+              'bindables': _asBindableStates(input['bindables']),
+              'context': _asEngineContext(input['context']),
+              if (input.containsKey('changedBindableIds'))
+                'changedBindableIds': _asNullableStringList(
+                  input['changedBindableIds'],
+                ),
+              if (input.containsKey('options'))
+                'options': _asStringDynamicMap(input['options']),
+            }),
+          };
+        }
       case 'recompute-bindings-for-changed-bindables':
-        return <String, dynamic>{
-          'type': 'binding-lifecycle-sync',
-          'value': recomputeBindingsForChangedBindables(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'binding-lifecycle-sync',
+            'value': recomputeBindingsForChangedBindables(<String, dynamic>{
+              ...input,
+              'arrows': _asArrowStates(input['arrows']),
+              'bindables': _asBindableStates(input['bindables']),
+              'relations': _asBindableRelationStates(input['relations']),
+              'context': _asEngineContext(input['context']),
+              if (input.containsKey('changedBindableIds'))
+                'changedBindableIds': _asNullableStringList(
+                  input['changedBindableIds'],
+                ),
+              if (input.containsKey('options'))
+                'options': _asStringDynamicMap(input['options']),
+            }),
+          };
+        }
       case 'refresh-endpoint-binding':
-        return <String, dynamic>{
-          'type': 'engine-result',
-          'result': binding_lifecycle.refreshEndpointBinding(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'engine-result',
+            'result': binding_lifecycle
+                .refreshEndpointBinding(<String, dynamic>{
+                  ...input,
+                  'arrow': _requireArrowState(input['arrow'], operationType),
+                  'bindables': _asBindableStates(input['bindables']),
+                  'context': _asEngineContext(input['context']),
+                }),
+          };
+        }
       case 'prune-arrow-bindings':
-        return <String, dynamic>{
-          'type': 'engine-result',
-          'result': binding_lifecycle.pruneArrowBindings(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'engine-result',
+            'result': binding_lifecycle.pruneArrowBindings(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
+              'retainedBindableIds': _asStringList(
+                input['retainedBindableIds'],
+              ),
+            }),
+          };
+        }
       case 'recompute-bindings-after-bindable-change':
         {
           final input = _requireInput(rawInput, operationType);
@@ -3239,17 +3333,33 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
           };
         }
       case 'recompute-elbow':
-        return <String, dynamic>{
-          'type': 'arrow-patch',
-          'patch': recomputeElbow(_requireInput(rawInput, operationType)),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'arrow-patch',
+            'patch': recomputeElbow(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
+              'bindables': _asBindableStates(input['bindables']),
+              'context': _asEngineContext(input['context']),
+            }),
+          };
+        }
       case 'update-elbow-arrow':
-        return <String, dynamic>{
-          'type': 'arrow-patch',
-          'patch': updateElbowArrowPatch(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'arrow-patch',
+            'patch': updateElbowArrowPatch(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
+              'bindables': _asBindableStates(input['bindables']),
+              'context': _asEngineContext(input['context']),
+              if (input.containsKey('options'))
+                'options': _asStringDynamicMap(input['options']),
+            }),
+          };
+        }
       case 'compute-elbow-resize-patch':
         return <String, dynamic>{
           'type': 'arrow-patch',

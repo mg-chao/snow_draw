@@ -109,10 +109,10 @@ _Bounds _obstacleForBindable(BindableState bindable, double gap) {
 }
 
 bool _pointInBounds(Point point, _Bounds bounds) =>
-    point[0] >= bounds[0] &&
-    point[0] <= bounds[2] &&
-    point[1] >= bounds[1] &&
-    point[1] <= bounds[3];
+    point[0] > bounds[0] &&
+    point[0] < bounds[2] &&
+    point[1] > bounds[1] &&
+    point[1] < bounds[3];
 
 bool _segmentIntersectsBounds(Point a, Point b, _Bounds bounds) {
   const epsilon = 1e-9;
@@ -1427,8 +1427,6 @@ ArrowPatch _handleSegmentRenormalization(
       'fixedSegments': null,
       'startIsSpecial': arrow.startIsSpecial,
       'endIsSpecial': arrow.endIsSpecial,
-      'width': arrow.width,
-      'height': arrow.height,
     };
   }
 
