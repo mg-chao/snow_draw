@@ -1679,6 +1679,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
 
     final stateView = _buildStateView(state);
     final selectionConfig = _resolveSelectionConfigForInput(state);
+    final snapConfig = widget.store.config.snap;
     final hitRadius = selectionConfig.interaction.handleTolerance;
     // Apply multiplier for arrow point handles to make them larger
     final handleSize =
@@ -1691,6 +1692,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       hitRadius: hitRadius,
       loopThreshold: loopThreshold,
       handleSize: handleSize,
+      elements: stateView.elements,
+      zoom: state.application.view.camera.zoom,
+      isBindingEnabled: snapConfig.enableArrowBinding,
     );
   }
 

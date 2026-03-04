@@ -208,11 +208,15 @@ class FrameRenderPlanBuilder {
         element: singleSelectedElement!,
         loopThreshold: loopThreshold,
         handleSize: handleSize,
+        elements: view.elements,
+        zoom: view.state.application.view.camera.zoom,
+        isBindingEnabled: transientState.snapConfig?.enableArrowBinding ?? true,
       );
       final handles = <ArrowPointHandle>[
         ...overlay.addablePoints,
         ...overlay.turningPoints,
         ...overlay.loopPoints,
+        ...overlay.focusPoints,
       ];
       if (handles.isNotEmpty) {
         tasks.add(

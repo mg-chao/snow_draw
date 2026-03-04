@@ -116,10 +116,11 @@ void main() {
         selectedIds: <String>{arrow.id},
       );
 
-      final session = _dragArrowEndpointSession(
+      final session = _dragArrowHandleSession(
         state: state,
         elementId: arrow.id,
-        endpointIndex: 1,
+        pointKind: ArrowPointKind.turning,
+        pointIndex: 1,
         startPosition: const DrawPoint(x: 160, y: 60),
         currentPosition: const DrawPoint(x: 240, y: 60),
       );
@@ -136,6 +137,56 @@ void main() {
           .toList(growable: false);
       expect(orderedIds, <String>[bindTarget.id, arrow.id]);
     });
+
+    test('dragging focus handle routes through core focus drag '
+        'and can switch to inside', () {
+      final bindTarget = _rectangleElement(
+        id: 'rect-focus-target',
+        rect: const DrawRect(maxX: 100, maxY: 100),
+        zIndex: 1,
+      );
+      const arrow = ElementState(
+        id: 'arrow-focus-1',
+        rect: DrawRect(minX: 120, minY: 20, maxX: 320, maxY: 21),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 2,
+        data: ArrowData(
+          points: <DrawPoint>[DrawPoint(x: 0, y: 0.5), DrawPoint(x: 1, y: 0.5)],
+          startBinding: ArrowBinding(
+            elementId: 'rect-focus-target',
+            anchor: DrawPoint(x: 1, y: 0.5),
+          ),
+        ),
+      );
+      final state = _stateWithElements(
+        <ElementState>[bindTarget, arrow],
+        selectedIds: <String>{arrow.id},
+      );
+      final overlay = ArrowPointUtils.buildOverlay(
+        element: arrow,
+        loopThreshold: 16,
+        handleSize: 10,
+        elements: state.domain.document.elements,
+      );
+      final focusHandle = overlay.focusPoints.singleWhere(
+        (handle) => handle.kind == ArrowPointKind.focusStart,
+      );
+
+      final session = _dragArrowHandleSession(
+        state: state,
+        elementId: arrow.id,
+        pointKind: ArrowPointKind.focusStart,
+        pointIndex: focusHandle.index,
+        startPosition: focusHandle.position,
+        currentPosition: const DrawPoint(x: 40, y: 40),
+        modifiers: const EditModifiers(fromCenter: true),
+      );
+
+      expect(session.transform.hasChanges, isTrue);
+      expect(session.transform.startBinding, isNotNull);
+      expect(session.transform.startBinding!.mode, ArrowBindingMode.inside);
+    });
   });
 }
 
@@ -147,10 +198,11 @@ ArrowPointTransform _dragArrowEndpoint({
   required DrawPoint currentPosition,
   EditModifiers modifiers = const EditModifiers(),
 }) {
-  final session = _dragArrowEndpointSession(
+  final session = _dragArrowHandleSession(
     state: state,
     elementId: elementId,
-    endpointIndex: endpointIndex,
+    pointKind: ArrowPointKind.turning,
+    pointIndex: endpointIndex,
     startPosition: startPosition,
     currentPosition: currentPosition,
     modifiers: modifiers,
@@ -158,11 +210,11 @@ ArrowPointTransform _dragArrowEndpoint({
   return session.transform;
 }
 
-({EditContext context, ArrowPointTransform transform})
-_dragArrowEndpointSession({
+({EditContext context, ArrowPointTransform transform}) _dragArrowHandleSession({
   required DrawState state,
   required String elementId,
-  required int endpointIndex,
+  required ArrowPointKind pointKind,
+  required int pointIndex,
   required DrawPoint startPosition,
   required DrawPoint currentPosition,
   EditModifiers modifiers = const EditModifiers(),
@@ -173,8 +225,8 @@ _dragArrowEndpointSession({
     position: startPosition,
     params: ArrowPointOperationParams(
       elementId: elementId,
-      pointKind: ArrowPointKind.turning,
-      pointIndex: endpointIndex,
+      pointKind: pointKind,
+      pointIndex: pointIndex,
     ),
   );
   final initial = operation.initialTransform(

@@ -4,11 +4,20 @@ import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
+import 'arrow_core_bridge.dart';
+import 'arrow_focus.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
 import 'elbow/elbow_fixed_segment.dart';
 
-enum ArrowPointKind { turning, addable, loopStart, loopEnd }
+enum ArrowPointKind {
+  turning,
+  addable,
+  loopStart,
+  loopEnd,
+  focusStart,
+  focusEnd,
+}
 
 @immutable
 class ArrowPointHandle {
@@ -59,13 +68,16 @@ class ArrowPointOverlay {
     required this.turningPoints,
     required this.addablePoints,
     required this.loopPoints,
+    required this.focusPoints,
   });
 
   final List<ArrowPointHandle> turningPoints;
   final List<ArrowPointHandle> addablePoints;
   final List<ArrowPointHandle> loopPoints;
+  final List<ArrowPointHandle> focusPoints;
 
   bool get hasLoop => loopPoints.isNotEmpty;
+  bool get hasFocus => focusPoints.isNotEmpty;
 }
 
 class ArrowPointUtils {
@@ -75,6 +87,7 @@ class ArrowPointUtils {
     turningPoints: [],
     addablePoints: [],
     loopPoints: [],
+    focusPoints: [],
   );
   static const _turningHitRadiusFactor = 1.11;
   static const _addableHitRadiusFactor = 1.43;
@@ -85,6 +98,9 @@ class ArrowPointUtils {
     required ElementState element,
     required double loopThreshold,
     double? handleSize,
+    Iterable<ElementState> elements = const <ElementState>[],
+    double zoom = 1,
+    bool isBindingEnabled = true,
   }) {
     final data = element.data;
     if (data is! ArrowLikeData) {
@@ -105,11 +121,49 @@ class ArrowPointUtils {
       );
     }
 
-    return _buildPathOverlay(
+    final overlay = _buildPathOverlay(
       elementId: element.id,
       points: points,
       arrowType: data.arrowType,
       loopThreshold: loopThreshold,
+    );
+    final focusPoints = _buildFocusPoints(
+      element: element,
+      data: data,
+      elements: elements,
+      zoom: zoom,
+      isBindingEnabled: isBindingEnabled,
+    );
+    if (focusPoints.isEmpty) {
+      return overlay;
+    }
+
+    final hasStartFocus = focusPoints.any(
+      (handle) => handle.kind == ArrowPointKind.focusStart,
+    );
+    final hasEndFocus = focusPoints.any(
+      (handle) => handle.kind == ArrowPointKind.focusEnd,
+    );
+    final filteredTurningPoints = overlay.turningPoints
+        .where((handle) {
+          if (handle.kind != ArrowPointKind.turning) {
+            return true;
+          }
+          if (hasStartFocus && handle.index == 0) {
+            return false;
+          }
+          if (hasEndFocus && handle.index == points.length - 1) {
+            return false;
+          }
+          return true;
+        })
+        .toList(growable: false);
+
+    return ArrowPointOverlay(
+      turningPoints: List<ArrowPointHandle>.unmodifiable(filteredTurningPoints),
+      addablePoints: overlay.addablePoints,
+      loopPoints: overlay.loopPoints,
+      focusPoints: focusPoints,
     );
   }
 
@@ -119,6 +173,9 @@ class ArrowPointUtils {
     required double hitRadius,
     required double loopThreshold,
     double? handleSize,
+    Iterable<ElementState> elements = const <ElementState>[],
+    double zoom = 1,
+    bool isBindingEnabled = true,
   }) {
     final data = element.data;
     if (data is! ArrowLikeData) {
@@ -132,6 +189,15 @@ class ArrowPointUtils {
     final localPosition = _toLocalPosition(element, position);
     final visualPointRadius = _resolveVisualRadius(handleSize, 0.5);
     final loopActive = _isLoopActive(points, loopThreshold);
+    final focusPoints = data.arrowType == ArrowType.elbow
+        ? const <ArrowPointHandle>[]
+        : _buildFocusPoints(
+            element: element,
+            data: data,
+            elements: elements,
+            zoom: zoom,
+            isBindingEnabled: isBindingEnabled,
+          );
 
     if (data.arrowType == ArrowType.elbow) {
       return _hitTestElbow(
@@ -143,6 +209,18 @@ class ArrowPointUtils {
         handleSize: handleSize,
         fixedSegments: data.fixedSegments,
       );
+    }
+
+    final focusHit = _hitTestFocusPoints(
+      focusPoints: focusPoints,
+      localPosition: localPosition,
+      hitRadius: _maxRadius(
+        hitRadius * _turningHitRadiusFactor,
+        visualPointRadius,
+      ),
+    );
+    if (focusHit != null) {
+      return focusHit;
     }
 
     final loopHit = _hitTestLoop(
@@ -239,6 +317,7 @@ class ArrowPointUtils {
       turningPoints: turningPoints,
       addablePoints: List<ArrowPointHandle>.unmodifiable(addablePoints),
       loopPoints: const [],
+      focusPoints: const [],
     );
   }
 
@@ -302,6 +381,7 @@ class ArrowPointUtils {
       turningPoints: List<ArrowPointHandle>.unmodifiable(turningPoints),
       addablePoints: List<ArrowPointHandle>.unmodifiable(addablePoints),
       loopPoints: List<ArrowPointHandle>.unmodifiable(loopPoints),
+      focusPoints: const [],
     );
   }
 
@@ -452,6 +532,28 @@ class ArrowPointUtils {
     return nearest;
   }
 
+  static ArrowPointHandle? _hitTestFocusPoints({
+    required List<ArrowPointHandle> focusPoints,
+    required DrawPoint localPosition,
+    required double hitRadius,
+  }) {
+    if (focusPoints.isEmpty) {
+      return null;
+    }
+    final hitRadiusSq = hitRadius * hitRadius;
+    ArrowPointHandle? nearest;
+    var nearestDistanceSq = double.infinity;
+    for (final handle in focusPoints) {
+      final distanceSq = localPosition.distanceSquared(handle.position);
+      if (distanceSq > hitRadiusSq || distanceSq >= nearestDistanceSq) {
+        continue;
+      }
+      nearestDistanceSq = distanceSq;
+      nearest = handle;
+    }
+    return nearest;
+  }
+
   static List<DrawPoint> _resolveWorldPoints(
     ElementState element,
     ArrowLikeData data,
@@ -469,6 +571,51 @@ class ArrowPointUtils {
       origin: element.rect.center,
     );
     return space.fromWorld(position);
+  }
+
+  static List<ArrowPointHandle> _buildFocusPoints({
+    required ElementState element,
+    required ArrowLikeData data,
+    required Iterable<ElementState> elements,
+    required double zoom,
+    required bool isBindingEnabled,
+  }) {
+    if (data.arrowType == ArrowType.elbow || elements.isEmpty) {
+      return const <ArrowPointHandle>[];
+    }
+
+    final focusPoints = listVisibleArrowFocusPoints(
+      element: element,
+      data: data,
+      elements: elements,
+      engineContext: buildCoreEngineContext(
+        zoom: zoom,
+        isBindingEnabled: isBindingEnabled,
+      ),
+    );
+    if (focusPoints.isEmpty) {
+      return const <ArrowPointHandle>[];
+    }
+
+    final pointCount = data.points.length;
+    final handles = <ArrowPointHandle>[];
+    for (final focusPoint in focusPoints) {
+      final kind = switch (focusPoint.endpoint) {
+        ArrowFocusEndpoint.start => ArrowPointKind.focusStart,
+        ArrowFocusEndpoint.end => ArrowPointKind.focusEnd,
+      };
+      final index = kind == ArrowPointKind.focusStart ? 0 : pointCount - 1;
+      final localPosition = _toLocalPosition(element, focusPoint.position);
+      handles.add(
+        ArrowPointHandle(
+          elementId: element.id,
+          kind: kind,
+          index: index,
+          position: localPosition,
+        ),
+      );
+    }
+    return List<ArrowPointHandle>.unmodifiable(handles);
   }
 
   static DrawPoint _segmentMidpoint({

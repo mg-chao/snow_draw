@@ -7,6 +7,7 @@ import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_data.dart';
+import '../../elements/types/arrow/arrow_focus.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
@@ -117,6 +118,9 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
 
     final localStartPosition = elementSpace?.fromWorld(position) ?? position;
     final pointPosition = _resolvePointPosition(
+      state: state,
+      element: element,
+      data: data,
       points: points,
       kind: typedParams.pointKind,
       index: typedParams.pointIndex,
@@ -295,6 +299,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       context: typedContext,
       currentPosition: localPosition,
       didInsert: typedTransform.didInsert,
+      modifiers: modifiers,
       config: config,
       startBinding: startBinding,
       endBinding: endBinding,
@@ -601,6 +606,7 @@ _ArrowPointComputation _compute({
   required ArrowPointEditContext context,
   required DrawPoint currentPosition,
   required bool didInsert,
+  required EditModifiers modifiers,
   required DrawConfig config,
   required ArrowBinding? startBinding,
   required ArrowBinding? endBinding,
@@ -629,6 +635,22 @@ _ArrowPointComputation _compute({
   final nextStartBinding = startBinding;
   final nextEndBinding = endBinding;
   late final int activeIndex;
+
+  final focusEndpoint = _resolveFocusEndpoint(context.pointKind);
+  if (focusEndpoint != null) {
+    return _computeFocusComputation(
+      state: state,
+      context: context,
+      basePoints: basePoints,
+      baseFixedSegments: baseFixedSegmentsResult,
+      target: target,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      endpoint: focusEndpoint,
+      switchToInsideBinding: modifiers.fromCenter,
+      coreEngineContext: coreEngineContext,
+    );
+  }
 
   if (context.pointKind == ArrowPointKind.addable) {
     final hasValidPointIndex = _isValidAddablePointIndex(
@@ -752,6 +774,103 @@ _ArrowPointComputation _compute({
     endBinding: endBinding,
     fixedSegments: baseFixedSegmentsResult,
     orderedElementIds: null,
+  );
+}
+
+_ArrowPointComputation _computeFocusComputation({
+  required DrawState state,
+  required ArrowPointEditContext context,
+  required List<DrawPoint> basePoints,
+  required List<ElbowFixedSegment>? baseFixedSegments,
+  required DrawPoint target,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required ArrowFocusEndpoint endpoint,
+  required bool switchToInsideBinding,
+  required core.EngineContext coreEngineContext,
+}) {
+  final data = context.baseElement.data as ArrowLikeData;
+  if (data.arrowType == ArrowType.elbow) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+
+  final dragSourceData = data.copyWith(
+    startBinding: startBinding,
+    endBinding: endBinding,
+  );
+  final dragSourceElement = context.baseElement.copyWith(data: dragSourceData);
+  final dragResult = dragArrowFocusPoint(
+    element: dragSourceElement,
+    data: dragSourceData,
+    elementsById: state.domain.document.elementMap,
+    draggedEndpoint: endpoint,
+    pointer: context.toWorld(target),
+    engineContext: coreEngineContext,
+    switchToInsideBinding: switchToInsideBinding,
+    orderedElementIds: state.domain.document.elements
+        .map((element) => element.id)
+        .toList(growable: false),
+  );
+  final nextData = dragResult.element.data;
+  if (nextData is! ArrowLikeData) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+
+  final worldPoints = ArrowGeometry.resolveWorldPoints(
+    rect: dragResult.element.rect,
+    normalizedPoints: nextData.points,
+  );
+  if (worldPoints.length < 2) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+  final localPoints = worldToLocalPoints(context.baseElement, worldPoints);
+
+  final nextStartBinding = nextData.startBinding;
+  final nextEndBinding = nextData.endBinding;
+  final nextFixedSegments = nextData.fixedSegments;
+  final pointsChanged = !pointListEquals(basePoints, localPoints);
+  final bindingsChanged =
+      nextStartBinding != startBinding || nextEndBinding != endBinding;
+  final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
+    baseFixedSegments,
+    nextFixedSegments,
+  );
+  final activeIndex = endpoint == ArrowFocusEndpoint.start
+      ? 0
+      : localPoints.length - 1;
+
+  return _ArrowPointComputation(
+    points: List<DrawPoint>.unmodifiable(localPoints),
+    didInsert: false,
+    shouldDelete: false,
+    activeIndex: activeIndex,
+    hasChanges:
+        dragResult.hasChanges ||
+        pointsChanged ||
+        bindingsChanged ||
+        segmentsChanged,
+    startBinding: nextStartBinding,
+    endBinding: nextEndBinding,
+    fixedSegments: nextFixedSegments,
+    orderedElementIds: dragResult.orderedElementIds,
   );
 }
 
@@ -1028,6 +1147,8 @@ int? _resolveDraggedPointIndex({
   final resolvedIndex = switch (pointKind) {
     ArrowPointKind.loopStart => 0,
     ArrowPointKind.loopEnd => pointCount - 1,
+    ArrowPointKind.focusStart => 0,
+    ArrowPointKind.focusEnd => pointCount - 1,
     _ => pointIndex,
   };
   if (resolvedIndex < 0 || resolvedIndex >= pointCount) {
@@ -1043,6 +1164,8 @@ bool _requiresBindingLookup(ArrowPointEditContext context) =>
     switch (context.pointKind) {
       ArrowPointKind.loopStart => true,
       ArrowPointKind.loopEnd => true,
+      ArrowPointKind.focusStart => false,
+      ArrowPointKind.focusEnd => false,
       ArrowPointKind.turning =>
         context.pointIndex == 0 ||
             context.pointIndex == context.initialPoints.length - 1,
@@ -1050,6 +1173,9 @@ bool _requiresBindingLookup(ArrowPointEditContext context) =>
     };
 
 DrawPoint _resolvePointPosition({
+  required DrawState state,
+  required ElementState element,
+  required ArrowLikeData data,
   required List<DrawPoint> points,
   required ArrowPointKind kind,
   required int index,
@@ -1077,12 +1203,62 @@ DrawPoint _resolvePointPosition({
     final end = points[index + 1];
     return DrawPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2);
   }
+  final focusEndpoint = _resolveFocusEndpoint(kind);
+  if (focusEndpoint != null) {
+    return _resolveFocusPointPosition(
+      state: state,
+      element: element,
+      data: data,
+      fallbackPoints: points,
+      endpoint: focusEndpoint,
+    );
+  }
   final resolvedIndex = switch (kind) {
     ArrowPointKind.loopStart => 0,
     ArrowPointKind.loopEnd => points.length - 1,
     _ => index,
   };
   return points[resolvedIndex.clamp(0, points.length - 1)];
+}
+
+ArrowFocusEndpoint? _resolveFocusEndpoint(ArrowPointKind kind) =>
+    switch (kind) {
+      ArrowPointKind.focusStart => ArrowFocusEndpoint.start,
+      ArrowPointKind.focusEnd => ArrowFocusEndpoint.end,
+      _ => null,
+    };
+
+DrawPoint _resolveFocusPointPosition({
+  required DrawState state,
+  required ElementState element,
+  required ArrowLikeData data,
+  required List<DrawPoint> fallbackPoints,
+  required ArrowFocusEndpoint endpoint,
+}) {
+  final focusPoints = listVisibleArrowFocusPoints(
+    element: element,
+    data: data,
+    elements: state.domain.document.elements,
+    engineContext: buildCoreEngineContext(
+      zoom: state.application.view.camera.zoom,
+    ),
+  );
+  for (final focusPoint in focusPoints) {
+    if (focusPoint.endpoint != endpoint) {
+      continue;
+    }
+    return element.rotation == 0
+        ? focusPoint.position
+        : ElementSpace(
+            rotation: element.rotation,
+            origin: element.rect.center,
+          ).fromWorld(focusPoint.position);
+  }
+
+  final fallbackIndex = endpoint == ArrowFocusEndpoint.start
+      ? 0
+      : fallbackPoints.length - 1;
+  return fallbackPoints[fallbackIndex.clamp(0, fallbackPoints.length - 1)];
 }
 
 DrawPoint _snapTargetToGrid({

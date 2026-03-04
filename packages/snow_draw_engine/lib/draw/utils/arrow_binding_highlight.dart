@@ -27,6 +27,8 @@ _ArrowEndpoint? _resolveEndpointForContext(ArrowPointEditContext context) =>
     switch (context.pointKind) {
       ArrowPointKind.loopStart => _ArrowEndpoint.start,
       ArrowPointKind.loopEnd => _ArrowEndpoint.end,
+      ArrowPointKind.focusStart => _ArrowEndpoint.start,
+      ArrowPointKind.focusEnd => _ArrowEndpoint.end,
       ArrowPointKind.turning =>
         context.pointIndex == 0
             ? _ArrowEndpoint.start

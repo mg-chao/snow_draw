@@ -1305,6 +1305,8 @@ class SceneCanvasPainter extends CustomPainter {
     for (final handle in handles) {
       switch (handle.kind) {
         case ArrowPointKind.turning:
+        case ArrowPointKind.focusStart:
+        case ArrowPointKind.focusEnd:
           turningPoints.add(handle);
         case ArrowPointKind.addable:
           addablePoints.add(handle);

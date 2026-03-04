@@ -169,6 +169,8 @@ class EditIntentDetector {
       hitRadius: hitRadius,
       loopThreshold: loopThreshold,
       handleSize: handleSize,
+      elements: stateView.elements,
+      zoom: stateView.state.application.view.camera.zoom,
     );
     if (handle == null) {
       return null;
