@@ -138,6 +138,8 @@ class ArrowBindingUtils {
     ArrowBinding? preferredBinding,
     bool allowNewBinding = true,
     DrawPoint? referencePoint,
+    bool angleLocked = false,
+    bool altKey = false,
   }) => _resolveBindingCandidateViaCore(
     worldPoint: worldPoint,
     targets: targets,
@@ -146,6 +148,8 @@ class ArrowBindingUtils {
     allowNewBinding: allowNewBinding,
     referencePoint: referencePoint,
     elbowed: false,
+    angleLocked: angleLocked,
+    altKey: altKey,
   );
 
   static ArrowBindingResult? resolveElbowBindingCandidate({
@@ -155,6 +159,8 @@ class ArrowBindingUtils {
     required bool hasArrowhead,
     ArrowBinding? preferredBinding,
     bool allowNewBinding = true,
+    bool angleLocked = false,
+    bool altKey = false,
   }) => _resolveBindingCandidateViaCore(
     worldPoint: worldPoint,
     targets: targets,
@@ -164,6 +170,8 @@ class ArrowBindingUtils {
     referencePoint: null,
     elbowed: true,
     hasArrowhead: hasArrowhead,
+    angleLocked: angleLocked,
+    altKey: altKey,
   );
 
   /// Resolves a single-target binding candidate without list iteration.
@@ -174,6 +182,8 @@ class ArrowBindingUtils {
     required ElementState target,
     required double snapDistance,
     DrawPoint? referencePoint,
+    bool angleLocked = false,
+    bool altKey = false,
   }) {
     if (snapDistance <= 0 || target.opacity <= 0) {
       return null;
@@ -186,6 +196,8 @@ class ArrowBindingUtils {
       allowNewBinding: true,
       referencePoint: referencePoint,
       elbowed: false,
+      angleLocked: angleLocked,
+      altKey: altKey,
     );
   }
 
@@ -197,6 +209,8 @@ class ArrowBindingUtils {
     required ElementState target,
     required double snapDistance,
     required bool hasArrowhead,
+    bool angleLocked = false,
+    bool altKey = false,
   }) {
     if (snapDistance <= 0 || target.opacity <= 0) {
       return null;
@@ -210,6 +224,8 @@ class ArrowBindingUtils {
       referencePoint: null,
       elbowed: true,
       hasArrowhead: hasArrowhead,
+      angleLocked: angleLocked,
+      altKey: altKey,
     );
   }
 
@@ -285,6 +301,8 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
   required DrawPoint? referencePoint,
   required bool elbowed,
   bool hasArrowhead = false,
+  bool angleLocked = false,
+  bool altKey = false,
 }) {
   if (snapDistance <= 0) {
     return null;
@@ -377,6 +395,8 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     options: <String, dynamic>{
       'complexBindings': true,
       if (referencePoint == null) 'newArrow': true,
+      if (angleLocked) 'angleLocked': true,
+      if (altKey) 'altKey': true,
     },
   );
 

@@ -760,6 +760,8 @@ _ArrowPointComputation _compute({
         allowNewBinding: allowNewBinding,
         bindingDistance: bindingDistance,
         coreEngineContext: coreEngineContext,
+        angleLocked: modifiers.maintainAspectRatio,
+        altKey: modifiers.fromCenter,
       );
       return endpointComputation;
     }
@@ -917,6 +919,8 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
   required bool allowNewBinding,
   required double bindingDistance,
   required core.EngineContext coreEngineContext,
+  required bool angleLocked,
+  required bool altKey,
 }) {
   final data = context.baseElement.data as ArrowLikeData;
   final fixedSegmentsForCore = data.arrowType == ArrowType.elbow
@@ -955,7 +959,11 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
     pointer: toCorePoint(worldTarget),
     bindables: bindables,
     context: dragContext,
-    options: const <String, dynamic>{'complexBindings': true},
+    options: <String, dynamic>{
+      'complexBindings': true,
+      if (angleLocked) 'angleLocked': true,
+      if (altKey) 'altKey': true,
+    },
   );
   final session = ArrowCoreSession.fromElements(state.domain.document.elements);
   final applied = session.applyEngineResult(arrow: arrow, result: dragResult);
@@ -1072,6 +1080,7 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   final worldTarget = context.toWorld(localPoints[activeIndex]);
   final activeBinding = activeIndex == 0 ? startBinding : endBinding;
   final oppositeBinding = activeIndex == 0 ? endBinding : startBinding;
+  final preserveInsideBinding = activeBinding?.mode == ArrowBindingMode.inside;
   final bindables = _resolveCoreEndpointBindables(
     state: state,
     worldTarget: worldTarget,
@@ -1090,7 +1099,10 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
     pointer: toCorePoint(worldTarget),
     bindables: bindables,
     context: coreEngineContext,
-    options: const <String, dynamic>{'complexBindings': true},
+    options: <String, dynamic>{
+      'complexBindings': true,
+      if (preserveInsideBinding) 'altKey': true,
+    },
   );
   if (dragResult.arrowPatch.isEmpty && dragResult.events.isEmpty) {
     return null;

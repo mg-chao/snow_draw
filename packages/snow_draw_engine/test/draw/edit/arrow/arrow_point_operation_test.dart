@@ -80,6 +80,40 @@ void main() {
       expect(transform.points.last.x, greaterThan(160));
     });
 
+    test('dragging endpoint with fromCenter requests inside binding mode', () {
+      final bindTarget = _rectangleElement(
+        id: 'rect-target',
+        rect: const DrawRect(minX: 220, maxX: 320, maxY: 120),
+        zIndex: 1,
+      );
+      final arrow = _arrowElement(
+        id: 'arrow-inside',
+        points: const <DrawPoint>[
+          DrawPoint(x: 60, y: 60),
+          DrawPoint(x: 160, y: 60),
+        ],
+        zIndex: 2,
+      );
+      final state = _stateWithElements(
+        <ElementState>[bindTarget, arrow],
+        selectedIds: <String>{arrow.id},
+      );
+
+      final transform = _dragArrowEndpoint(
+        state: state,
+        elementId: arrow.id,
+        endpointIndex: 1,
+        startPosition: const DrawPoint(x: 160, y: 60),
+        currentPosition: const DrawPoint(x: 240, y: 60),
+        modifiers: const EditModifiers(fromCenter: true),
+      );
+
+      expect(transform.hasChanges, isTrue);
+      expect(transform.endBinding, isNotNull);
+      expect(transform.endBinding!.elementId, bindTarget.id);
+      expect(transform.endBinding!.mode, ArrowBindingMode.inside);
+    });
+
     test(
       'snap override prevents rebinding endpoint to a different element',
       () {

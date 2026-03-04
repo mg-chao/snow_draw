@@ -90,6 +90,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
         creatingState: creatingState,
         currentPosition: currentPosition,
         snappingMode: snappingMode,
+        maintainAspectRatio: maintainAspectRatio,
+        createFromCenter: createFromCenter,
         data: elementData,
       );
     }
@@ -103,6 +105,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       currentPosition: currentPosition,
       snappingMode: snappingMode,
       sessionData: sessionData,
+      maintainAspectRatio: maintainAspectRatio,
+      createFromCenter: createFromCenter,
     );
     var adjustedCurrent = endpoints.currentPosition;
 
@@ -118,6 +122,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       preferredBinding: elementData.endBinding,
       oppositeBinding: endpoints.startBinding,
       oppositePoint: endpoints.segmentStart,
+      angleLocked: maintainAspectRatio,
+      altKey: createFromCenter,
     );
     adjustedCurrent = bindingResult.position;
     var endBinding = bindingResult.binding;
@@ -242,6 +248,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       currentPosition: position,
       snappingMode: snappingMode,
       sessionData: sessionData,
+      maintainAspectRatio: false,
+      createFromCenter: false,
     );
     var adjustedPosition = endpoints.currentPosition;
 
@@ -257,6 +265,8 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       preferredBinding: elementData.endBinding,
       oppositeBinding: endpoints.startBinding,
       oppositePoint: endpoints.segmentStart,
+      angleLocked: false,
+      altKey: false,
     );
     adjustedPosition = bindingResult.position;
 
@@ -435,6 +445,8 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
   final dragIndex = arrow.points.length - 1;
   final pointer = worldPoints.last;
   final dragPoint = <double>[pointer.x - arrow.x, pointer.y - arrow.y];
+  final preserveInsideBinding =
+      result.data.endBinding?.mode == ArrowBindingMode.inside;
 
   final finalized = finalizeCoreEndpointDrag(
     arrow: arrow,
@@ -445,7 +457,11 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
       zoom: state.application.view.camera.zoom,
       isBindingEnabled: config.snap.enableArrowBinding,
     ),
-    options: const <String, dynamic>{'newArrow': true, 'complexBindings': true},
+    options: <String, dynamic>{
+      'newArrow': true,
+      'complexBindings': true,
+      if (preserveInsideBinding) 'altKey': true,
+    },
   );
   final orderedElementIds = <String>[
     ...state.domain.document.elements.map((element) => element.id),
@@ -484,6 +500,8 @@ CreationUpdateResult _updateLine({
   required CreatingState creatingState,
   required DrawPoint currentPosition,
   required SnappingMode snappingMode,
+  required bool maintainAspectRatio,
+  required bool createFromCenter,
   required LineData data,
 }) {
   final sessionData = _resolveSessionData(creatingState.creationMode);
@@ -495,6 +513,8 @@ CreationUpdateResult _updateLine({
     currentPosition: currentPosition,
     snappingMode: snappingMode,
     sessionData: sessionData,
+    maintainAspectRatio: maintainAspectRatio,
+    createFromCenter: createFromCenter,
   );
   var adjustedCurrent = endpoints.currentPosition;
 
@@ -510,6 +530,8 @@ CreationUpdateResult _updateLine({
     preferredBinding: data.endBinding,
     oppositeBinding: endpoints.startBinding,
     oppositePoint: endpoints.segmentStart,
+    angleLocked: maintainAspectRatio,
+    altKey: createFromCenter,
   );
   adjustedCurrent = bindingResult.position;
   var endBinding = bindingResult.binding;
@@ -577,6 +599,8 @@ _CreationEndpointResolution _resolveCreationEndpoints({
   required DrawPoint currentPosition,
   required SnappingMode snappingMode,
   required _ArrowCreationSessionData sessionData,
+  required bool maintainAspectRatio,
+  required bool createFromCenter,
 }) {
   var startPosition = _snapPointToGridIfNeeded(
     point: creatingState.startPosition,
@@ -601,6 +625,8 @@ _CreationEndpointResolution _resolveCreationEndpoints({
     oppositeBinding: data.endBinding,
     oppositePoint: adjustedCurrent,
     sessionData: sessionData,
+    angleLocked: maintainAspectRatio,
+    altKey: createFromCenter,
   );
   startPosition = startBindingResult.position;
 
@@ -774,6 +800,8 @@ _BindingSnapResult _snapBindingPoint({
   required ArrowBinding? preferredBinding,
   required ArrowBinding? oppositeBinding,
   required DrawPoint oppositePoint,
+  required bool angleLocked,
+  required bool altKey,
 }) {
   final snapConfig = config.snap;
   final shouldLookupBindings = _shouldAttemptBinding(
@@ -812,6 +840,8 @@ _BindingSnapResult _snapBindingPoint({
           hasArrowhead: hasArrowhead,
           preferredBinding: preferredBinding,
           allowNewBinding: shouldLookupBindings,
+          angleLocked: angleLocked,
+          altKey: altKey,
         )
       : ArrowBindingUtils.resolveBindingCandidate(
           worldPoint: position,
@@ -820,6 +850,8 @@ _BindingSnapResult _snapBindingPoint({
           preferredBinding: preferredBinding,
           allowNewBinding: shouldLookupBindings,
           referencePoint: oppositePoint,
+          angleLocked: angleLocked,
+          altKey: altKey,
         );
   if (bindingCandidate == null) {
     return _BindingSnapResult(position: position);
@@ -843,6 +875,8 @@ _BindingSnapResult _resolveStartBindingPoint({
   required ArrowBinding? oppositeBinding,
   required DrawPoint oppositePoint,
   required _ArrowCreationSessionData sessionData,
+  required bool angleLocked,
+  required bool altKey,
 }) {
   final snapConfig = config.snap;
   final bindingEnabled = _shouldAttemptBinding(
@@ -863,6 +897,8 @@ _BindingSnapResult _resolveStartBindingPoint({
     elementsVersion: elementsVersion,
     bindingEnabled: bindingEnabled,
     bindingDistance: bindingDistance,
+    angleLocked: angleLocked,
+    altKey: altKey,
   )) {
     final cached = sessionData.resolveCachedStartBinding(
       state: state,
@@ -888,6 +924,8 @@ _BindingSnapResult _resolveStartBindingPoint({
     preferredBinding: preferredBinding,
     oppositeBinding: oppositeBinding,
     oppositePoint: oppositePoint,
+    angleLocked: angleLocked,
+    altKey: altKey,
   );
   sessionData.cacheStartBinding(
     startPosition: startPosition,
@@ -896,6 +934,8 @@ _BindingSnapResult _resolveStartBindingPoint({
     elementsVersion: elementsVersion,
     bindingEnabled: bindingEnabled,
     bindingDistance: bindingDistance,
+    angleLocked: angleLocked,
+    altKey: altKey,
     result: resolved,
   );
   return resolved;
@@ -945,6 +985,8 @@ class _ArrowCreationSessionData {
   SnappingMode? _cachedStartSnappingMode;
   bool? _cachedStartBindingEnabled;
   double? _cachedStartBindingDistance;
+  bool? _cachedStartAngleLocked;
+  bool? _cachedStartAltKey;
   var _cachedStartElementsVersion = -1;
 
   var _referenceElementsVersion = -1;
@@ -960,12 +1002,16 @@ class _ArrowCreationSessionData {
     required int elementsVersion,
     required bool bindingEnabled,
     required double bindingDistance,
+    required bool angleLocked,
+    required bool altKey,
   }) =>
       _cachedStartPosition == startPosition &&
       _cachedStartPreferredBinding == preferredBinding &&
       _cachedStartSnappingMode == snappingMode &&
       _cachedStartBindingEnabled == bindingEnabled &&
       _cachedStartBindingDistance == bindingDistance &&
+      _cachedStartAngleLocked == angleLocked &&
+      _cachedStartAltKey == altKey &&
       _cachedStartElementsVersion == elementsVersion;
 
   _BindingSnapResult? resolveCachedStartBinding({
@@ -1013,6 +1059,8 @@ class _ArrowCreationSessionData {
     required int elementsVersion,
     required bool bindingEnabled,
     required double bindingDistance,
+    required bool angleLocked,
+    required bool altKey,
     required _BindingSnapResult result,
   }) {
     _cachedStartPosition = startPosition;
@@ -1021,6 +1069,8 @@ class _ArrowCreationSessionData {
     _cachedStartSnappingMode = snappingMode;
     _cachedStartBindingEnabled = bindingEnabled;
     _cachedStartBindingDistance = bindingDistance;
+    _cachedStartAngleLocked = angleLocked;
+    _cachedStartAltKey = altKey;
     _cachedStartElementsVersion = elementsVersion;
   }
 

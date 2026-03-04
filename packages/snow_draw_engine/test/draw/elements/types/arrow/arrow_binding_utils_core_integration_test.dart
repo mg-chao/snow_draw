@@ -27,6 +27,31 @@ void main() {
       expect(result.zIndex, target.zIndex);
     });
 
+    test('resolveBindingCandidate supports alt-key inside mode via core', () {
+      final target = _rectangleElement(
+        id: 'rect-1',
+        rect: const DrawRect(minX: 100, minY: 100, maxX: 220, maxY: 220),
+        zIndex: 3,
+      );
+
+      final orbit = ArrowBindingUtils.resolveBindingCandidate(
+        worldPoint: const DrawPoint(x: 160, y: 160),
+        targets: <ElementState>[target],
+        snapDistance: 48,
+      );
+      final inside = ArrowBindingUtils.resolveBindingCandidate(
+        worldPoint: const DrawPoint(x: 160, y: 160),
+        targets: <ElementState>[target],
+        snapDistance: 48,
+        altKey: true,
+      );
+
+      expect(orbit, isNotNull);
+      expect(inside, isNotNull);
+      expect(orbit!.binding.mode, ArrowBindingMode.orbit);
+      expect(inside!.binding.mode, ArrowBindingMode.inside);
+    });
+
     test('resolveBindingCandidate respects allowNewBinding=false '
         'with preferred target', () {
       final target = _rectangleElement(
