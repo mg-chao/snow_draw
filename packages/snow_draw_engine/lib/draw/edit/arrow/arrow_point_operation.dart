@@ -927,15 +927,13 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
     context: dragContext,
     options: const <String, dynamic>{'complexBindings': true},
   );
+  final projection = projectCoreDocument(state.domain.document.elements);
   final applied = applyCoreEngineResult(
     arrow: arrow,
-    bindables: collectCoreBindableRelations(
-      state.domain.document.elementMap.values,
-    ),
+    bindables: projection.bindableRelations,
     result: dragResult,
-    orderedElementIds: state.domain.document.elements
-        .map((element) => element.id)
-        .toList(growable: false),
+    orderedElementIds: projection.orderedElementIds,
+    anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
   );
   final draggedArrow = applied.arrow;
   final worldPoints = coreArrowWorldPoints(draggedArrow);

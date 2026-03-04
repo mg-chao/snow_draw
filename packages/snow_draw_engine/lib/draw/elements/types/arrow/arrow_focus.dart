@@ -77,7 +77,8 @@ List<ArrowFocusPoint> listVisibleArrowFocusPoints({
   bool ignoreOverlap = false,
 }) {
   final arrow = toCoreArrowState(element: element, data: data);
-  final bindables = collectCoreBindables(elements);
+  final projection = projectCoreDocument(elements);
+  final bindables = projection.bindables;
   if (bindables.isEmpty) {
     return const <ArrowFocusPoint>[];
   }
@@ -120,7 +121,8 @@ ArrowFocusEndpoint? pickArrowFocusPoint({
   bool ignoreOverlap = false,
 }) {
   final arrow = toCoreArrowState(element: element, data: data);
-  final bindables = collectCoreBindables(elements);
+  final projection = projectCoreDocument(elements);
+  final bindables = projection.bindables;
   if (bindables.isEmpty) {
     return null;
   }
@@ -149,7 +151,8 @@ ArrowFocusHit pickArrowFocusPointWithOffset({
   bool ignoreOverlap = false,
 }) {
   final arrow = toCoreArrowState(element: element, data: data);
-  final bindables = collectCoreBindables(elements);
+  final projection = projectCoreDocument(elements);
+  final bindables = projection.bindables;
   if (bindables.isEmpty) {
     return const ArrowFocusHit(endpoint: null, pointerOffset: DrawPoint.zero);
   }
@@ -180,7 +183,11 @@ ArrowFocusDragResult dragArrowFocusPoint({
   List<String>? orderedElementIds,
 }) {
   final arrow = toCoreArrowState(element: element, data: data);
-  final bindables = collectCoreBindables(elementsById.values);
+  final projection = projectCoreDocument(
+    elementsById.values,
+    orderedElementIds: orderedElementIds,
+  );
+  final bindables = projection.bindables;
   final result = computeCoreFocusPointDrag(
     arrow: arrow,
     draggedEdge: _endpointToCore(draggedEndpoint),
@@ -193,9 +200,10 @@ ArrowFocusDragResult dragArrowFocusPoint({
 
   final applied = applyCoreEngineResult(
     arrow: arrow,
-    bindables: collectCoreBindableRelations(elementsById.values),
+    bindables: projection.bindableRelations,
     result: result,
     orderedElementIds: orderedElementIds,
+    anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
   );
   final reorderedElementIds = reorderedElementIdsFromCoreResult(applied);
   final patchedElement = applied.arrow == arrow

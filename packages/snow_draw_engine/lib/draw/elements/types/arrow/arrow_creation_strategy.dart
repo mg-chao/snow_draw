@@ -444,14 +444,16 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
     ),
     options: const <String, dynamic>{'newArrow': true, 'complexBindings': true},
   );
+  final projection = projectCoreDocument(state.domain.document.elements);
   final applied = applyCoreEngineResult(
     arrow: arrow,
-    bindables: collectCoreBindableRelations(state.domain.document.elements),
+    bindables: projection.bindableRelations,
     result: finalized,
     orderedElementIds: <String>[
       ...state.domain.document.elements.map((element) => element.id),
       elementId,
     ],
+    anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
   );
   final patchedElement = applied.arrow == arrow
       ? previewElement

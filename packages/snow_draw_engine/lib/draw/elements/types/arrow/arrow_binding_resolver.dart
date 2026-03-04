@@ -44,32 +44,32 @@ final class ArrowBindingResolver {
       base: baseElements,
       overlay: updatedElements,
     );
-    final bindables = collectCoreBindables(lookup.values);
-    final relations = collectCoreBindableRelations(lookup.values);
-    final coreArrows = collectCoreArrowStatesWithSources(
+    final projection = projectCoreDocument(
       lookup.values,
       onlyBoundArrows: true,
+      orderedElementIds: orderedElementIds,
     );
-    if (coreArrows.arrows.isEmpty) {
+    if (projection.arrows.isEmpty) {
       return ArrowBindingResolutionResult.empty;
     }
 
     final result = recomputeCoreBindingsForChangedBindables(
-      arrows: coreArrows.arrows,
-      bindables: bindables,
-      relations: relations,
+      arrows: projection.arrows,
+      bindables: projection.bindables,
+      relations: projection.bindableRelations,
       changedBindableIds: changedElementIds.toList(growable: false),
       context: engineContext ?? core.defaultEngineContext,
     );
 
     final updates = applyCoreArrowPatchesToSources(
       patches: result.arrowPatches,
-      sources: coreArrows.sources,
+      sources: projection.arrowSources,
     );
 
     final reorderedElementIds = reduceArrowEngineEventsToOrderedIds(
-      orderedElementIds: orderedElementIds,
+      orderedElementIds: projection.orderedElementIds,
       events: result.events,
+      anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
     );
 
     return ArrowBindingResolutionResult(

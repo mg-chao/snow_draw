@@ -1,3 +1,4 @@
+import 'package:meta/meta.dart';
 import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../core/coordinates/element_space.dart';
@@ -14,6 +15,25 @@ import 'arrow_geometry.dart';
 import 'arrow_layout.dart';
 import 'arrow_like_data.dart';
 import 'elbow/elbow_fixed_segment.dart';
+
+@immutable
+final class ArrowCoreDocumentProjection {
+  const ArrowCoreDocumentProjection({
+    required this.bindables,
+    required this.bindableRelations,
+    required this.arrows,
+    required this.arrowSources,
+    required this.orderedElementIds,
+    required this.anchorElementIdsByBindableId,
+  });
+
+  final List<core.BindableState> bindables;
+  final List<core.BindableRelationState> bindableRelations;
+  final List<core.ArrowState> arrows;
+  final Map<String, (ElementState, ArrowLikeData)> arrowSources;
+  final List<String> orderedElementIds;
+  final Map<String, List<String>> anchorElementIdsByBindableId;
+}
 
 const _defaultMaxCoordinate = 1e6;
 
@@ -210,6 +230,45 @@ List<core.BindableRelationState> collectCoreBindableRelations(
       .toList(growable: false);
 }
 
+/// Returns bindable id -> ordered anchor element ids for order reductions.
+///
+/// The first id is always the bindable itself. Additional ids represent
+/// element-local anchors that should remain below a bound arrow when reorder
+/// events are reduced (for example serial-number bound text).
+Map<String, List<String>> collectCoreAnchorElementIdsByBindableId(
+  Iterable<ElementState> elements,
+) {
+  final elementById = <String, ElementState>{
+    for (final element in elements) element.id: element,
+  };
+  if (elementById.isEmpty) {
+    return const <String, List<String>>{};
+  }
+
+  final anchorIdsByBindableId = <String, List<String>>{};
+  for (final element in elementById.values) {
+    if (!isArrowBindableElement(element)) {
+      continue;
+    }
+
+    final anchorIds = <String>[element.id];
+    final data = element.data;
+    if (data is SerialNumberData) {
+      final textElementId = data.textElementId;
+      if (textElementId != null &&
+          textElementId.isNotEmpty &&
+          elementById.containsKey(textElementId) &&
+          !anchorIds.contains(textElementId)) {
+        anchorIds.add(textElementId);
+      }
+    }
+
+    anchorIdsByBindableId[element.id] = List<String>.unmodifiable(anchorIds);
+  }
+
+  return Map<String, List<String>>.unmodifiable(anchorIdsByBindableId);
+}
+
 /// Collects arrow-like elements projected into arrow-core state plus source
 /// engine elements for patch application.
 ///
@@ -243,6 +302,39 @@ collectCoreArrowStatesWithSources(
   return (
     arrows: List<core.ArrowState>.unmodifiable(arrows),
     sources: Map<String, (ElementState, ArrowLikeData)>.unmodifiable(sources),
+  );
+}
+
+/// Builds a consistent arrow-core projection from engine element snapshots.
+ArrowCoreDocumentProjection projectCoreDocument(
+  Iterable<ElementState> elements, {
+  bool onlyBoundArrows = false,
+  List<String>? orderedElementIds,
+}) {
+  final materialized = List<ElementState>.unmodifiable(
+    elements.toList(growable: false),
+  );
+  final arrowsWithSources = collectCoreArrowStatesWithSources(
+    materialized,
+    onlyBoundArrows: onlyBoundArrows,
+  );
+
+  return ArrowCoreDocumentProjection(
+    bindables: List<core.BindableState>.unmodifiable(
+      collectCoreBindables(materialized),
+    ),
+    bindableRelations: List<core.BindableRelationState>.unmodifiable(
+      collectCoreBindableRelations(materialized),
+    ),
+    arrows: arrowsWithSources.arrows,
+    arrowSources: arrowsWithSources.sources,
+    orderedElementIds: List<String>.unmodifiable(
+      orderedElementIds ??
+          materialized.map((element) => element.id).toList(growable: false),
+    ),
+    anchorElementIdsByBindableId: collectCoreAnchorElementIdsByBindableId(
+      materialized,
+    ),
   );
 }
 

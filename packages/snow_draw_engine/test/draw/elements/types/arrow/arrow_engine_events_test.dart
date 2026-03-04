@@ -19,6 +19,24 @@ void main() {
       },
     );
 
+    test(
+      'reduceArrowEngineEventsToOrderedIds supports anchor ids for bindables',
+      () {
+        final ordered = reduceArrowEngineEventsToOrderedIds(
+          orderedElementIds: const <String>['arrow-1', 'rect-1', 'text-1'],
+          events: const <core.ArrowEngineEvent>[
+            core.ReorderArrowEvent(arrowId: 'arrow-1', bindableId: 'rect-1'),
+          ],
+          anchorElementIdsByBindableId: const <String, List<String>>{
+            'rect-1': <String>['rect-1', 'text-1'],
+          },
+        );
+
+        expect(ordered, isNotNull);
+        expect(ordered, <String>['rect-1', 'arrow-1', 'text-1']);
+      },
+    );
+
     test('reduceArrowEngineEventsToOrderedIds ignores non-order events', () {
       final ordered = reduceArrowEngineEventsToOrderedIds(
         orderedElementIds: const <String>['arrow-1', 'rect-1'],

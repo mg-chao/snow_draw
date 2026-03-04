@@ -90,11 +90,8 @@ List<ElementState> syncArrowBindingsAfterDeletion({
     return elements;
   }
 
-  final coreArrows = collectCoreArrowStatesWithSources(
-    elements,
-    onlyBoundArrows: true,
-  );
-  if (coreArrows.arrows.isEmpty) {
+  final projection = projectCoreDocument(elements, onlyBoundArrows: true);
+  if (projection.arrows.isEmpty) {
     return elements;
   }
 
@@ -108,9 +105,9 @@ List<ElementState> syncArrowBindingsAfterDeletion({
   ];
 
   final syncResult = syncCoreBindingsAfterDeletion(
-    arrows: coreArrows.arrows,
-    bindables: collectCoreBindableRelations(elements),
-    geometryBindables: collectCoreBindables(elements),
+    arrows: projection.arrows,
+    bindables: projection.bindableRelations,
+    geometryBindables: projection.bindables,
     deletedArrowIds: deletedArrowIds,
     deletedBindableIds: deletedBindableIds,
     context: engineContext,
@@ -121,7 +118,7 @@ List<ElementState> syncArrowBindingsAfterDeletion({
 
   final patchedById = applyCoreArrowPatchesToSources(
     patches: syncResult.arrowPatches,
-    sources: coreArrows.sources,
+    sources: projection.arrowSources,
   );
   if (patchedById.isEmpty) {
     return elements;
@@ -164,17 +161,17 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     }
   }
 
-  final coreArrows = collectCoreArrowStatesWithSources(elements);
-  if (coreArrows.arrows.isEmpty) {
+  final projection = projectCoreDocument(elements);
+  if (projection.arrows.isEmpty) {
     return elements;
   }
 
   final syncResult = syncCoreBindingsAfterDuplication(
-    arrows: coreArrows.arrows,
-    bindables: collectCoreBindableRelations(elements),
+    arrows: projection.arrows,
+    bindables: projection.bindableRelations,
     bindableIdMap: bindableIdMap,
     arrowIdMap: arrowIdMap,
-    geometryBindables: collectCoreBindables(elements),
+    geometryBindables: projection.bindables,
     context: engineContext,
   );
   if (syncResult.arrowPatches.isEmpty) {
@@ -183,7 +180,7 @@ List<ElementState> syncArrowBindingsAfterDuplication({
 
   final patchedById = applyCoreArrowPatchesToSources(
     patches: syncResult.arrowPatches,
-    sources: coreArrows.sources,
+    sources: projection.arrowSources,
   );
   if (patchedById.isEmpty) {
     return elements;
