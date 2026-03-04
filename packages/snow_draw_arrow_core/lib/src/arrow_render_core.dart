@@ -116,8 +116,10 @@ double _toRadians(double degrees) => (degrees * math.pi) / 180;
 
 bool _isCurveOp(CurvePathOp? op) => op != null;
 
-Point _getCurvePoint(CurvePathOp op, int xIndex, int yIndex) =>
-    <double>[op.data[xIndex], op.data[yIndex]];
+Point _getCurvePoint(CurvePathOp op, int xIndex, int yIndex) => <double>[
+  op.data[xIndex],
+  op.data[yIndex],
+];
 
 Point? _getCurveStartPoint(CurvePathOp? previousOp) {
   if (previousOp == null) {
@@ -286,22 +288,12 @@ ArrowheadPoints? getArrowheadPoints(ArrowheadPointsInput input) {
     final oppositeAngle = position == arrowEndpointPositionStart
         ? math.atan2(previousPoint[1] - y2, previousPoint[0] - x2)
         : math.atan2(y2 - previousPoint[1], x2 - previousPoint[0]);
-    final oppositePoint = rotatePoint(
-      oppositeSeed,
-      <double>[x2, y2],
-      oppositeAngle,
-    );
-
-    return <double>[
+    final oppositePoint = rotatePoint(oppositeSeed, <double>[
       x2,
       y2,
-      x3,
-      y3,
-      oppositePoint[0],
-      oppositePoint[1],
-      x4,
-      y4,
-    ];
+    ], oppositeAngle);
+
+    return <double>[x2, y2, x3, y3, oppositePoint[0], oppositePoint[1], x4, y4];
   }
 
   return <double>[x2, y2, x3, y3, x4, y4];
@@ -470,12 +462,20 @@ List<ArrowheadRenderPrimitive> getArrowheadRenderPrimitives(
 bool _isHorizontal(Point a, Point b) =>
     (a[0] - b[0]).abs() > (a[1] - b[1]).abs();
 
+String _formatPathNumber(double value) {
+  if (value == value.truncateToDouble()) {
+    return value.toInt().toString();
+  }
+  return value.toString();
+}
+
 String generateElbowArrowPath(List<Point> points, double radius) {
   if (points.isEmpty) {
     return '';
   }
   if (points.length == 1) {
-    return 'M ${points[0][0]} ${points[0][1]}';
+    return 'M ${_formatPathNumber(points[0][0])} '
+        '${_formatPathNumber(points[0][1])}';
   }
 
   final subpoints = <Point>[];
@@ -494,52 +494,51 @@ String generateElbowArrowPath(List<Point> points, double radius) {
     );
 
     if (prevIsHorizontal) {
-      subpoints.add(
-        <double>[
-          if (previous[0] < point[0]) point[0] - corner else point[0] + corner,
-          point[1],
-        ],
-      );
+      subpoints.add(<double>[
+        if (previous[0] < point[0]) point[0] - corner else point[0] + corner,
+        point[1],
+      ]);
     } else {
-      subpoints.add(
-        <double>[
-          point[0],
-          if (previous[1] < point[1]) point[1] - corner else point[1] + corner,
-        ],
-      );
+      subpoints.add(<double>[
+        point[0],
+        if (previous[1] < point[1]) point[1] - corner else point[1] + corner,
+      ]);
     }
 
     subpoints.add(point);
 
     if (nextIsHorizontal) {
-      subpoints.add(
-        <double>[
-          if (next[0] < point[0]) point[0] - corner else point[0] + corner,
-          point[1],
-        ],
-      );
+      subpoints.add(<double>[
+        if (next[0] < point[0]) point[0] - corner else point[0] + corner,
+        point[1],
+      ]);
     } else {
-      subpoints.add(
-        <double>[
-          point[0],
-          if (next[1] < point[1]) point[1] - corner else point[1] + corner,
-        ],
-      );
+      subpoints.add(<double>[
+        point[0],
+        if (next[1] < point[1]) point[1] - corner else point[1] + corner,
+      ]);
     }
   }
 
-  final path = <String>['M ${points[0][0]} ${points[0][1]}'];
+  final path = <String>[
+    'M ${_formatPathNumber(points[0][0])} ${_formatPathNumber(points[0][1])}',
+  ];
   for (var i = 0; i < subpoints.length; i += 3) {
     path
-      ..add('L ${subpoints[i][0]} ${subpoints[i][1]}')
       ..add(
-        'Q ${subpoints[i + 1][0]} ${subpoints[i + 1][1]}, '
-        '${subpoints[i + 2][0]} ${subpoints[i + 2][1]}',
+        'L ${_formatPathNumber(subpoints[i][0])} '
+        '${_formatPathNumber(subpoints[i][1])}',
+      )
+      ..add(
+        'Q ${_formatPathNumber(subpoints[i + 1][0])} '
+        '${_formatPathNumber(subpoints[i + 1][1])}, '
+        '${_formatPathNumber(subpoints[i + 2][0])} '
+        '${_formatPathNumber(subpoints[i + 2][1])}',
       );
   }
   path.add(
-    'L ${points[points.length - 1][0]} '
-    '${points[points.length - 1][1]}',
+    'L ${_formatPathNumber(points[points.length - 1][0])} '
+    '${_formatPathNumber(points[points.length - 1][1])}',
   );
   return path.join(' ');
 }

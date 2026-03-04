@@ -589,4 +589,152 @@ void main() {
       );
     },
   );
+
+  test(
+    'finalize-focus-point-drag reconciles relation bindable patches from map payloads',
+    () {
+      final response = executeArrowOperationSafe(<String, dynamic>{
+        'type': 'finalize-focus-point-drag',
+        'input': <String, dynamic>{
+          'arrow': <String, dynamic>{
+            'id': 'arrow-1',
+            'startBinding': null,
+            'endBinding': null,
+          },
+          'bindables': <Map<String, dynamic>>[
+            <String, dynamic>{
+              'id': 'bind-1',
+              'boundArrowIds': <String>['arrow-1'],
+            },
+          ],
+        },
+      });
+
+      expect(response['type'], 'engine-result');
+      final result = response['result'] as EngineResult;
+      expect(result.bindablePatches, hasLength(1));
+      final patch = result.bindablePatches.first;
+      expect(patch.id, 'bind-1');
+      expect(patch.removeBoundArrowId, 'arrow-1');
+      expect(patch.addBoundArrowId, isNull);
+    },
+  );
+
+  test('move-fixed-segment-to-point accepts map arrow payload', () {
+    final response = executeArrowOperationSafe(<String, dynamic>{
+      'type': 'move-fixed-segment-to-point',
+      'input': <String, dynamic>{
+        'arrow': <String, dynamic>{
+          'id': 'arrow-1',
+          'x': 0,
+          'y': 0,
+          'width': 100,
+          'height': 0,
+          'points': const <Point>[
+            <double>[0, 0],
+            <double>[100, 0],
+          ],
+          'startBinding': null,
+          'endBinding': null,
+          'startArrowhead': null,
+          'endArrowhead': null,
+          'elbowed': false,
+          'fixedSegments': null,
+          'startIsSpecial': null,
+          'endIsSpecial': null,
+        },
+        'segmentIndex': 1,
+        'pointer': const <double>[100, 0],
+      },
+    });
+
+    expect(response['type'], 'fixed-segment-drag');
+    final value = response['value'] as MoveFixedSegmentToPointResult;
+    expect(value.activeSegmentIndex, 1);
+    expect(value.activeSegmentMidPoint, const <double>[50, 0]);
+  });
+
+  test(
+    'derive-bindable-patches-for-binding-change accepts previous/next without id',
+    () {
+      final response = executeArrowOperationSafe(<String, dynamic>{
+        'type': 'derive-bindable-patches-for-binding-change',
+        'input': <String, dynamic>{
+          'arrowId': 'arrow-1',
+          'previous': <String, dynamic>{
+            'startBinding': null,
+            'endBinding': null,
+          },
+          'next': <String, dynamic>{'startBinding': null, 'endBinding': null},
+        },
+      });
+
+      expect(response['type'], 'bindable-patches');
+      expect(response['patches'], isA<List<BindablePatch>>());
+      expect(response['patches'], isEmpty);
+    },
+  );
+
+  test('sync-bindings-after-duplication accepts map arrays', () {
+    final response = executeArrowOperationSafe(<String, dynamic>{
+      'type': 'sync-bindings-after-duplication',
+      'input': <String, dynamic>{
+        'arrows': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'arrow-1',
+            'x': 0,
+            'y': 0,
+            'width': 100,
+            'height': 0,
+            'points': const <Point>[
+              <double>[0, 0],
+              <double>[100, 0],
+            ],
+            'startBinding': null,
+            'endBinding': null,
+            'startArrowhead': null,
+            'endArrowhead': null,
+            'elbowed': false,
+            'fixedSegments': null,
+            'startIsSpecial': null,
+            'endIsSpecial': null,
+          },
+        ],
+        'bindables': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'id': 'bind-1',
+            'boundArrowIds': <String>['arrow-1'],
+          },
+        ],
+        'bindableIdMap': <String, String>{'bind-1': 'bind-2'},
+        'arrowIdMap': <String, String>{'arrow-1': 'arrow-2'},
+      },
+    });
+
+    expect(response['type'], 'binding-lifecycle-sync');
+    final value = response['value'] as LifecycleSyncResult;
+    expect(value.arrows, hasLength(1));
+    expect(value.bindables, hasLength(1));
+    expect(value.bindables.first.boundArrowIds, const <String>['arrow-2']);
+  });
+
+  test(
+    'generate-elbow-arrow-path formats integer coordinates without trailing decimals',
+    () {
+      final response = executeArrowOperationSafe(<String, dynamic>{
+        'type': 'generate-elbow-arrow-path',
+        'input': <String, dynamic>{
+          'points': const <Point>[
+            <double>[0, 0],
+            <double>[100, 0],
+            <double>[100, 40],
+          ],
+          'radius': 8,
+        },
+      });
+
+      expect(response['type'], 'string');
+      expect(response['value'], 'M 0 0 L 92 0 Q 100 0, 100 8 L 100 40');
+    },
+  );
 }

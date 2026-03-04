@@ -2539,6 +2539,19 @@ ArrowState _requireArrowState(
   return arrow;
 }
 
+List<ArrowState> _asArrowStates(Object? value) {
+  if (value is List<ArrowState>) {
+    return value;
+  }
+  if (value is! List) {
+    return const <ArrowState>[];
+  }
+  return value
+      .map(_asArrowState)
+      .whereType<ArrowState>()
+      .toList(growable: false);
+}
+
 BindableState? _asBindableState(Object? value) {
   if (value is BindableState) {
     return value;
@@ -2642,6 +2655,29 @@ ArrowBindingState _requireArrowBindingState(
     );
   }
   return arrow;
+}
+
+ArrowBindingState _requireArrowBindingDeltaState(
+  Object? value, {
+  required String operationType,
+  required String field,
+  required String fallbackId,
+}) {
+  final normalized = _asArrowBindingState(value);
+  if (normalized != null) {
+    return normalized;
+  }
+  final map = _asStringDynamicMap(value);
+  if (map == null) {
+    throw ArgumentError(
+      'request.input.$field must be an ArrowBindingState for operation "$operationType"',
+    );
+  }
+  return ArrowBindingState(
+    id: fallbackId,
+    startBinding: _asFixedPointBinding(map['startBinding']),
+    endBinding: _asFixedPointBinding(map['endBinding']),
+  );
 }
 
 List<ArrowBindingState> _asArrowBindingStates(Object? value) {
@@ -3130,10 +3166,17 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
           'result': computeFocusDrag(_requireInput(rawInput, operationType)),
         };
       case 'finalize-focus-point-drag':
-        return <String, dynamic>{
-          'type': 'engine-result',
-          'result': finalizeFocusDrag(_requireInput(rawInput, operationType)),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'engine-result',
+            'result': finalizeFocusDrag(<String, dynamic>{
+              ...input,
+              'arrow': _requireArrowBindingState(input['arrow'], operationType),
+              'bindables': _asBindableRelationStates(input['bindables']),
+            }),
+          };
+        }
       case 'resolve-visible-focus-points':
         return <String, dynamic>{
           'type': 'focus-points',
@@ -3236,10 +3279,12 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
             'type': 'fixed-segment-drag',
             'value': moveFixedSegmentToPoint(<String, dynamic>{
               ...input,
+              'arrow': _requireArrowState(input['arrow'], operationType),
               'segmentIndex': _requirePositiveInt(
                 input['segmentIndex'],
                 'request.input.segmentIndex',
               ),
+              'pointer': _asPoint(input['pointer']),
             }),
           };
         }
@@ -3914,19 +3959,22 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
       case 'derive-bindable-patches-for-binding-change':
         {
           final input = _requireInput(rawInput, operationType);
+          final arrowId = _asString(input['arrowId']);
           return <String, dynamic>{
             'type': 'bindable-patches',
             'patches': binding_lifecycle.deriveBindablePatchesForBindingChange(
-              arrowId: _asString(input['arrowId']),
-              previous: _requireArrowBindingState(
+              arrowId: arrowId,
+              previous: _requireArrowBindingDeltaState(
                 input['previous'],
-                operationType,
-                'previous',
+                operationType: operationType,
+                field: 'previous',
+                fallbackId: arrowId,
               ),
-              next: _requireArrowBindingState(
+              next: _requireArrowBindingDeltaState(
                 input['next'],
-                operationType,
-                'next',
+                operationType: operationType,
+                field: 'next',
+                fallbackId: arrowId,
               ),
             ),
           };
@@ -3934,21 +3982,24 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
       case 'derive-bindable-relation-patches-for-binding-change':
         {
           final input = _requireInput(rawInput, operationType);
+          final arrowId = _asString(input['arrowId']);
           return <String, dynamic>{
             'type': 'bindable-relation-patches',
             'patches': binding_lifecycle
                 .deriveBindableRelationPatchesForBindingChange(
                   DeriveBindableRelationPatchesForBindingChangeInput(
-                    arrowId: _asString(input['arrowId']),
-                    previous: _requireArrowBindingState(
+                    arrowId: arrowId,
+                    previous: _requireArrowBindingDeltaState(
                       input['previous'],
-                      operationType,
-                      'previous',
+                      operationType: operationType,
+                      field: 'previous',
+                      fallbackId: arrowId,
                     ),
-                    next: _requireArrowBindingState(
+                    next: _requireArrowBindingDeltaState(
                       input['next'],
-                      operationType,
-                      'next',
+                      operationType: operationType,
+                      field: 'next',
+                      fallbackId: arrowId,
                     ),
                     bindables: _asBindableRelationStates(input['bindables']),
                   ),
@@ -4042,26 +4093,79 @@ ArrowOperationResponse executeArrowOperation(ArrowOperationRequest request) {
           };
         }
       case 'sync-bindings-after-duplication':
-        return <String, dynamic>{
-          'type': 'binding-lifecycle-sync',
-          'value': binding_lifecycle.syncBindingsAfterDuplication(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'binding-lifecycle-sync',
+            'value': binding_lifecycle
+                .syncBindingsAfterDuplication(<String, dynamic>{
+                  ...input,
+                  'arrows': _asArrowStates(input['arrows']),
+                  'bindables': _asBindableRelationStates(input['bindables']),
+                  'bindableIdMap':
+                      (input['bindableIdMap'] ?? <String, String>{})
+                          as IdMapInput,
+                  'arrowIdMap':
+                      (input['arrowIdMap'] ?? <String, String>{}) as IdMapInput,
+                  'preserveUnmapped': _asBool(input['preserveUnmapped']),
+                  if (input.containsKey('geometryBindables'))
+                    'geometryBindables': _asBindableStates(
+                      input['geometryBindables'],
+                    ),
+                  if (input.containsKey('context'))
+                    'context': _asEngineContext(input['context']),
+                }),
+          };
+        }
       case 'sync-bindings-after-bindable-prune':
-        return <String, dynamic>{
-          'type': 'binding-lifecycle-sync',
-          'value': binding_lifecycle.syncBindingsAfterBindablePrune(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'binding-lifecycle-sync',
+            'value': binding_lifecycle
+                .syncBindingsAfterBindablePrune(<String, dynamic>{
+                  ...input,
+                  'arrows': _asArrowStates(input['arrows']),
+                  'bindables': _asBindableRelationStates(input['bindables']),
+                  'retainedBindableIds': _asStringList(
+                    input['retainedBindableIds'],
+                  ),
+                  if (input.containsKey('geometryBindables'))
+                    'geometryBindables': _asBindableStates(
+                      input['geometryBindables'],
+                    ),
+                  if (input.containsKey('context'))
+                    'context': _asEngineContext(input['context']),
+                  if (input.containsKey('options'))
+                    'options':
+                        _asStringDynamicMap(input['options']) ??
+                        const <String, dynamic>{},
+                }),
+          };
+        }
       case 'sync-bindings-after-deletion':
-        return <String, dynamic>{
-          'type': 'binding-lifecycle-sync',
-          'value': binding_lifecycle.syncBindingsAfterDeletion(
-            _requireInput(rawInput, operationType),
-          ),
-        };
+        {
+          final input = _requireInput(rawInput, operationType);
+          return <String, dynamic>{
+            'type': 'binding-lifecycle-sync',
+            'value': binding_lifecycle
+                .syncBindingsAfterDeletion(<String, dynamic>{
+                  ...input,
+                  'arrows': _asArrowStates(input['arrows']),
+                  'bindables': _asBindableRelationStates(input['bindables']),
+                  'deletedBindableIds': _asStringList(
+                    input['deletedBindableIds'],
+                  ),
+                  'deletedArrowIds': _asStringList(input['deletedArrowIds']),
+                  if (input.containsKey('geometryBindables'))
+                    'geometryBindables': _asBindableStates(
+                      input['geometryBindables'],
+                    ),
+                  if (input.containsKey('context'))
+                    'context': _asEngineContext(input['context']),
+                }),
+          };
+        }
       case 'apply-arrow-binding-state-patch':
         {
           final input = _requireInput(rawInput, operationType);
