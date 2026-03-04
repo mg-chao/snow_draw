@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -7,6 +9,7 @@ import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
 import '../../core/element_hit_tester.dart';
 import '../shared/hit_test_geometry.dart';
+import 'arrow_core_bridge.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
 
@@ -344,34 +347,221 @@ List<_ArrowheadHitTarget> _buildArrowheadTargets(
   final targets = <_ArrowheadHitTarget>[];
   final startDirection = pointDirections.start;
   if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
-    final target = _arrowheadTargetForStyle(
-      tip: points.first,
-      direction: startDirection,
-      style: data.startArrowhead,
-      strokeWidth: data.strokeWidth,
+    targets.addAll(
+      _arrowheadTargetsForStyle(
+        points: points,
+        arrowType: data.arrowType,
+        tip: points.first,
+        direction: startDirection,
+        style: data.startArrowhead,
+        strokeWidth: data.strokeWidth,
+        strokeStyle: data.strokeStyle,
+        position: core.arrowEndpointPositionStart,
+      ),
     );
-    if (target != null) {
-      targets.add(target);
-    }
   }
 
   final endDirection = pointDirections.end;
   if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
-    final target = _arrowheadTargetForStyle(
-      tip: points.last,
-      direction: endDirection,
-      style: data.endArrowhead,
-      strokeWidth: data.strokeWidth,
+    targets.addAll(
+      _arrowheadTargetsForStyle(
+        points: points,
+        arrowType: data.arrowType,
+        tip: points.last,
+        direction: endDirection,
+        style: data.endArrowhead,
+        strokeWidth: data.strokeWidth,
+        strokeStyle: data.strokeStyle,
+        position: core.arrowEndpointPositionEnd,
+      ),
     );
-    if (target != null) {
-      targets.add(target);
-    }
   }
 
   return targets;
 }
 
-_ArrowheadHitTarget? _arrowheadTargetForStyle({
+List<_ArrowheadHitTarget> _arrowheadTargetsForStyle({
+  required List<DrawPoint> points,
+  required ArrowType arrowType,
+  required DrawPoint tip,
+  required DrawPoint direction,
+  required ArrowheadStyle style,
+  required double strokeWidth,
+  required StrokeStyle strokeStyle,
+  required core.ArrowEndpointPosition position,
+}) {
+  final coreTargets = _coreArrowheadTargetsForStyle(
+    points: points,
+    arrowType: arrowType,
+    style: style,
+    strokeWidth: strokeWidth,
+    strokeStyle: strokeStyle,
+    position: position,
+  );
+  if (coreTargets.isNotEmpty) {
+    return coreTargets;
+  }
+
+  final fallbackTarget = _legacyArrowheadTargetForStyle(
+    tip: tip,
+    direction: direction,
+    style: style,
+    strokeWidth: strokeWidth,
+  );
+  return fallbackTarget == null
+      ? const <_ArrowheadHitTarget>[]
+      : <_ArrowheadHitTarget>[fallbackTarget];
+}
+
+List<_ArrowheadHitTarget> _coreArrowheadTargetsForStyle({
+  required List<DrawPoint> points,
+  required ArrowType arrowType,
+  required ArrowheadStyle style,
+  required double strokeWidth,
+  required StrokeStyle strokeStyle,
+  required core.ArrowEndpointPosition position,
+}) {
+  final coreArrowhead = _toCoreRenderableArrowhead(style);
+  if (coreArrowhead == null || points.length < 2 || strokeWidth <= 0) {
+    return const <_ArrowheadHitTarget>[];
+  }
+
+  final curveOps = _buildCoreCurveOps(points: points, arrowType: arrowType);
+  if (curveOps.length < 2) {
+    return const <_ArrowheadHitTarget>[];
+  }
+
+  final primitives = core.getArrowheadRenderPrimitives(
+    core.ArrowheadRenderPrimitivesInput(
+      arrowPoints: points
+          .map((point) => <double>[point.x, point.y])
+          .toList(growable: false),
+      strokeWidth: strokeWidth,
+      curveOps: curveOps,
+      position: position,
+      arrowhead: coreArrowhead,
+      strokeStyle: _toCoreStrokeStyle(strokeStyle),
+    ),
+  );
+  if (primitives.isEmpty) {
+    return const <_ArrowheadHitTarget>[];
+  }
+
+  final targets = <_ArrowheadHitTarget>[];
+  for (final primitive in primitives) {
+    switch (primitive) {
+      case core.ArrowheadLinePrimitive():
+        targets.add(
+          _segmentsTarget(<_ArrowheadSegment>[
+            _ArrowheadSegment(
+              start: DrawPoint(x: primitive.from[0], y: primitive.from[1]),
+              end: DrawPoint(x: primitive.to[0], y: primitive.to[1]),
+            ),
+          ]),
+        );
+      case core.ArrowheadPolygonPrimitive():
+        final vertices = primitive.points
+            .map((point) => DrawPoint(x: point[0], y: point[1]))
+            .toList(growable: false);
+        if (vertices.length >= 2) {
+          targets.add(_segmentsTarget(_closedSegments(vertices)));
+        }
+      case core.ArrowheadCirclePrimitive():
+        targets.add(
+          _circleTarget(
+            center: DrawPoint(x: primitive.center[0], y: primitive.center[1]),
+            radius: primitive.diameter / 2,
+          ),
+        );
+    }
+  }
+  return List<_ArrowheadHitTarget>.unmodifiable(targets);
+}
+
+List<core.CurvePathOp> _buildCoreCurveOps({
+  required List<DrawPoint> points,
+  required ArrowType arrowType,
+}) {
+  if (points.length < 2) {
+    return const <core.CurvePathOp>[];
+  }
+
+  final ops = <core.CurvePathOp>[
+    core.CurvePathOp(
+      op: 'move',
+      data: <double>[points.first.x, points.first.y],
+    ),
+  ];
+  for (var index = 0; index < points.length - 1; index++) {
+    final cubic = arrowType == ArrowType.curved && points.length >= 3
+        ? _buildCurvedCubicSegment(points, index)
+        : _buildLinearCubicSegment(points[index], points[index + 1]);
+    ops.add(
+      core.CurvePathOp(
+        op: 'bcurveTo',
+        data: <double>[
+          cubic.control1.x,
+          cubic.control1.y,
+          cubic.control2.x,
+          cubic.control2.y,
+          cubic.end.x,
+          cubic.end.y,
+        ],
+      ),
+    );
+  }
+  return List<core.CurvePathOp>.unmodifiable(ops);
+}
+
+({DrawPoint control1, DrawPoint control2, DrawPoint end})
+_buildLinearCubicSegment(DrawPoint start, DrawPoint end) {
+  final control1 = DrawPoint(
+    x: start.x + (end.x - start.x) / 3,
+    y: start.y + (end.y - start.y) / 3,
+  );
+  final control2 = DrawPoint(
+    x: start.x + (end.x - start.x) * (2 / 3),
+    y: start.y + (end.y - start.y) * (2 / 3),
+  );
+  return (control1: control1, control2: control2, end: end);
+}
+
+({DrawPoint control1, DrawPoint control2, DrawPoint end})
+_buildCurvedCubicSegment(List<DrawPoint> points, int index) {
+  final p0 = index == 0 ? points[index] : points[index - 1];
+  final p1 = points[index];
+  final p2 = points[index + 1];
+  final p3 = index + 2 < points.length ? points[index + 2] : points[index + 1];
+  const tension = 1.0;
+  final control1 = p1 + (p2 - p0) * (tension / 6);
+  final control2 = p2 - (p3 - p1) * (tension / 6);
+  return (control1: control1, control2: control2, end: p2);
+}
+
+core.ArrowStrokeStyle _toCoreStrokeStyle(StrokeStyle style) {
+  switch (style) {
+    case StrokeStyle.solid:
+      return 'solid';
+    case StrokeStyle.dashed:
+      return 'dashed';
+    case StrokeStyle.dotted:
+      return 'dotted';
+  }
+}
+
+core.Arrowhead? _toCoreRenderableArrowhead(ArrowheadStyle style) {
+  switch (style) {
+    case ArrowheadStyle.none:
+      return null;
+    case ArrowheadStyle.square:
+    case ArrowheadStyle.invertedTriangle:
+      return null;
+    default:
+      return toCoreArrowhead(style);
+  }
+}
+
+_ArrowheadHitTarget? _legacyArrowheadTargetForStyle({
   required DrawPoint tip,
   required DrawPoint direction,
   required ArrowheadStyle style,

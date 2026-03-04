@@ -1,0 +1,72 @@
+import 'package:snow_draw_engine/snow_draw_engine.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_hit_tester.dart';
+import 'package:test/test.dart';
+
+void main() {
+  group('ArrowHitTester arrowhead integration', () {
+    const tester = ArrowHitTester();
+
+    test('core-rendered standard arrowhead is hittable', () {
+      final element = _buildArrowElement(endArrowhead: ArrowheadStyle.standard);
+
+      final hit = tester.hitTest(
+        element: element,
+        position: const DrawPoint(x: 90, y: 13),
+      );
+
+      expect(hit, isTrue);
+    });
+
+    test('core-rendered circle arrowhead is hittable', () {
+      final element = _buildArrowElement(endArrowhead: ArrowheadStyle.circle);
+
+      final hit = tester.hitTest(
+        element: element,
+        position: const DrawPoint(x: 100, y: 10),
+      );
+
+      expect(hit, isTrue);
+    });
+
+    test('legacy square arrowhead fallback remains hittable', () {
+      final element = _buildArrowElement(endArrowhead: ArrowheadStyle.square);
+
+      final hit = tester.hitTest(
+        element: element,
+        position: const DrawPoint(x: 96, y: 16),
+      );
+
+      expect(hit, isTrue);
+    });
+
+    test('no arrowhead does not hit far from shaft', () {
+      final element = _buildArrowElement(endArrowhead: ArrowheadStyle.none);
+
+      final hit = tester.hitTest(
+        element: element,
+        position: const DrawPoint(x: 90, y: 16),
+      );
+
+      expect(hit, isFalse);
+    });
+  });
+}
+
+ElementState _buildArrowElement({required ArrowheadStyle endArrowhead}) =>
+    ElementState(
+      id: 'arrow-hit-test',
+      rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 20),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 0,
+      data: ArrowData(
+        points: const <DrawPoint>[
+          DrawPoint(x: 0, y: 0.5),
+          DrawPoint(x: 1, y: 0.5),
+        ],
+        strokeWidth: 2,
+        arrowType: ArrowType.straight,
+        startArrowhead: ArrowheadStyle.none,
+        endArrowhead: endArrowhead,
+      ),
+    );
