@@ -33,10 +33,12 @@ class CreationFinishResult {
     required this.data,
     required this.rect,
     required this.shouldCommit,
+    this.orderedElementIds,
   });
   final ElementData data;
   final DrawRect rect;
   final bool shouldCommit;
+  final List<String>? orderedElementIds;
 }
 
 /// Strategy for element creation.

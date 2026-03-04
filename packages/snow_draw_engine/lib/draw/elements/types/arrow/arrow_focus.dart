@@ -197,6 +197,7 @@ ArrowFocusDragResult dragArrowFocusPoint({
     result: result,
     orderedElementIds: orderedElementIds,
   );
+  final reorderedElementIds = reorderedElementIdsFromCoreResult(applied);
   final patchedElement = applied.arrow == arrow
       ? element
       : applyCoreArrowStateToElement(
@@ -211,7 +212,7 @@ ArrowFocusDragResult dragArrowFocusPoint({
     bindablePatches: List<core.BindablePatch>.unmodifiable(
       result.bindablePatches,
     ),
-    orderedElementIds: applied.orderedElementIds,
+    orderedElementIds: reorderedElementIds,
     suggestedBindableId: result.suggestedBinding?.bindableId,
   );
 }

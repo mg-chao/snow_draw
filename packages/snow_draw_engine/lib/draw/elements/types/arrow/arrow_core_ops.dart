@@ -334,6 +334,15 @@ core.ApplyEngineResultValue applyCoreEngineResult({
   ),
 );
 
+/// Returns `true` when applying an engine result changed document order.
+bool didCoreEngineResultReorder(core.ApplyEngineResultValue value) =>
+    value.orderChanged == true;
+
+/// Returns reordered ids only when the engine explicitly moved elements.
+List<String>? reorderedElementIdsFromCoreResult(
+  core.ApplyEngineResultValue value,
+) => didCoreEngineResultReorder(value) ? value.orderedElementIds : null;
+
 /// Typed wrapper around restore-time binding repair.
 core.FixedPointBinding? repairCoreBindingOnRestore({
   required core.FixedPointBinding? binding,

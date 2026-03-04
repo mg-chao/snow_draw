@@ -18,6 +18,7 @@ import '../../../elements/types/rectangle/rectangle_data.dart';
 import '../../../elements/types/serial_number/serial_number_data.dart';
 import '../../../elements/types/serial_number/serial_number_sequence.dart';
 import '../../../elements/types/text/text_data.dart';
+import '../../../edit/apply/edit_apply.dart';
 import '../../../models/draw_state.dart';
 import '../../../models/element_state.dart';
 import '../../../models/interaction_state.dart';
@@ -232,7 +233,10 @@ class CreateElementReducer {
       data: finishResult.data,
       zIndex: resolveNextZIndex(state.domain.document.elements),
     );
-    final newElements = [...state.domain.document.elements, updatedElement];
+    final newElements = EditApply.reorderElementsByIdOrder(
+      elements: [...state.domain.document.elements, updatedElement],
+      orderedElementIds: finishResult.orderedElementIds,
+    );
 
     final nextState = state.copyWith(
       domain: state.domain.copyWith(

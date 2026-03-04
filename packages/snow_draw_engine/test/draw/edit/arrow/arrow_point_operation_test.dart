@@ -20,6 +20,33 @@ import 'package:test/test.dart';
 
 void main() {
   group('ArrowPointOperation core endpoint drag integration', () {
+    test('dragging endpoint without movement is treated as no-op', () {
+      final arrow = _arrowElement(
+        id: 'arrow-noop',
+        points: const <DrawPoint>[
+          DrawPoint(x: 60, y: 60),
+          DrawPoint(x: 160, y: 60),
+        ],
+        zIndex: 1,
+      );
+      final state = _stateWithElements(
+        <ElementState>[arrow],
+        selectedIds: <String>{arrow.id},
+      );
+
+      final transform = _dragArrowEndpoint(
+        state: state,
+        elementId: arrow.id,
+        endpointIndex: 1,
+        startPosition: const DrawPoint(x: 160, y: 60),
+        currentPosition: const DrawPoint(x: 160, y: 60),
+      );
+
+      expect(transform.hasChanges, isFalse);
+      expect(transform.orderedElementIds, isNull);
+      expect(transform.endBinding, isNull);
+    });
+
     test('dragging endpoint near bindable creates binding via core engine', () {
       final bindTarget = _rectangleElement(
         id: 'rect-target',

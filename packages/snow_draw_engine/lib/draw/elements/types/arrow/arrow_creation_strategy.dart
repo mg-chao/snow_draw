@@ -344,9 +344,10 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       worldPoints: closedPoints,
       rect: arrowRect,
     );
-    var finalizedResult = (
+    _ArrowCreationFinishResult finalizedResult = (
       rect: arrowRect,
       data: data.copyWith(points: normalizedPoints),
+      orderedElementIds: null,
     );
     if (config.snap.enableArrowBinding) {
       finalizedResult = _finalizeArrowCreationBindings(
@@ -377,11 +378,16 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       data: finalizedResult.data,
       rect: finalizedResult.rect,
       shouldCommit: true,
+      orderedElementIds: finalizedResult.orderedElementIds,
     );
   }
 }
 
-typedef _ArrowCreationFinishResult = ({DrawRect rect, ArrowLikeData data});
+typedef _ArrowCreationFinishResult = ({
+  DrawRect rect,
+  ArrowLikeData data,
+  List<String>? orderedElementIds,
+});
 
 _ArrowCreationFinishResult _finalizeArrowCreationBindings({
   required DrawState state,
@@ -438,20 +444,31 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
     ),
     options: const <String, dynamic>{'newArrow': true, 'complexBindings': true},
   );
-  if (finalized.arrowPatch.isEmpty) {
-    return result;
-  }
-
-  final patchedElement = applyCoreArrowPatchToElement(
-    element: previewElement,
-    data: result.data,
-    patch: finalized.arrowPatch,
+  final applied = applyCoreEngineResult(
+    arrow: arrow,
+    bindables: collectCoreBindableRelations(state.domain.document.elements),
+    result: finalized,
+    orderedElementIds: <String>[
+      ...state.domain.document.elements.map((element) => element.id),
+      elementId,
+    ],
   );
+  final patchedElement = applied.arrow == arrow
+      ? previewElement
+      : applyCoreArrowStateToElement(
+          element: previewElement,
+          data: result.data,
+          nextArrow: applied.arrow,
+        );
   final patchedData = patchedElement.data;
   if (patchedData is! ArrowLikeData) {
     return result;
   }
-  return (rect: patchedElement.rect, data: patchedData);
+  return (
+    rect: patchedElement.rect,
+    data: patchedData,
+    orderedElementIds: reorderedElementIdsFromCoreResult(applied),
+  );
 }
 
 CreationUpdateResult _updateLine({

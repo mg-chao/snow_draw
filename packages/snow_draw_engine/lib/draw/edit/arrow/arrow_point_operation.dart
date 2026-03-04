@@ -970,8 +970,8 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
       : draggedIndex >= localPoints.length
       ? localPoints.length - 1
       : draggedIndex;
-  final orderedElementIds = applied.orderedElementIds;
-  final orderChanged = orderedElementIds != null;
+  final orderedElementIds = reorderedElementIdsFromCoreResult(applied);
+  final orderChanged = didCoreEngineResultReorder(applied);
 
   return _ArrowPointComputation(
     points: List<DrawPoint>.unmodifiable(localPoints),
