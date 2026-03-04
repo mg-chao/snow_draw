@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'arrow_binding_core.dart';
 import 'arrow_geom.dart';
+import 'arrow_hit_test.dart';
 import 'arrow_types.dart';
 
 typedef _Bounds = List<double>;
@@ -473,7 +474,7 @@ _Grid _makeGrid(
   );
 }
 
-List<_GridNode> _neighborsOf(_GridNode node, _Grid grid) {
+List<_GridNode?> _neighborsOf(_GridNode node, _Grid grid) {
   _GridNode? at(int col, int row) {
     if (col < 0 || row < 0 || col >= grid.cols || row >= grid.rows) {
       return null;
@@ -481,26 +482,12 @@ List<_GridNode> _neighborsOf(_GridNode node, _Grid grid) {
     return grid.nodes[row * grid.cols + col];
   }
 
-  final up = at(node.col, node.row - 1);
-  final right = at(node.col + 1, node.row);
-  final down = at(node.col, node.row + 1);
-  final left = at(node.col - 1, node.row);
-
-  final neighbors = <_GridNode>[];
-  if (up != null) {
-    neighbors.add(up);
-  }
-  if (right != null) {
-    neighbors.add(right);
-  }
-  if (down != null) {
-    neighbors.add(down);
-  }
-  if (left != null) {
-    neighbors.add(left);
-  }
-
-  return neighbors;
+  return <_GridNode?>[
+    at(node.col, node.row - 1),
+    at(node.col + 1, node.row),
+    at(node.col, node.row + 1),
+    at(node.col - 1, node.row),
+  ];
 }
 
 _GridNode? _pointToGridNode(Point point, _Grid grid) =>
@@ -703,6 +690,9 @@ List<Point>? _routeAStar(
     final candidates = _neighborsOf(current.node, grid);
     for (var index = 0; index < candidates.length; index += 1) {
       final candidate = candidates[index];
+      if (candidate == null) {
+        continue;
+      }
       final candidateCoord = '${candidate.x}:${candidate.y}';
       if (closedNodeCoords.contains(candidateCoord) &&
           !(candidate.col == end.col && candidate.row == end.row)) {
@@ -885,6 +875,35 @@ List<Point> _ensureOrthogonal(List<Point> points) {
   return dedupeCollinearPoints(result);
 }
 
+Heading _getBindPointHeading({
+  required Point point,
+  required Point otherPoint,
+  required BindableState? hoveredElement,
+  required Point origPoint,
+  double? zoom,
+}) {
+  if (hoveredElement == null) {
+    return vectorToHeading(point, otherPoint);
+  }
+
+  final distanceAtBindPoint = distanceToBindableOutline(point, hoveredElement);
+  final bindPointAabb = _aabbForBindableWithOffset(hoveredElement, <double>[
+    distanceAtBindPoint,
+    distanceAtBindPoint,
+    distanceAtBindPoint,
+    distanceAtBindPoint,
+  ]);
+
+  return getHeadingForElbowSnap(
+    point: point,
+    otherPoint: otherPoint,
+    bindable: hoveredElement,
+    aabb: bindPointAabb,
+    originPoint: origPoint,
+    zoom: zoom,
+  );
+}
+
 _EndpointAndHeading _computeEndpointAndHeading(
   ArrowState arrow,
   Map<String, BindableState> bindablesById,
@@ -893,24 +912,22 @@ _EndpointAndHeading _computeEndpointAndHeading(
 }) {
   final isStart = side == 'start';
   final binding = isStart ? arrow.startBinding : arrow.endBinding;
-  final point = getPointAtIndexGlobal(arrow, isStart ? 0 : -1);
+  final oppositeBinding = isStart ? arrow.endBinding : arrow.startBinding;
+  final originPoint = getPointAtIndexGlobal(arrow, isStart ? 0 : -1);
 
-  if (binding == null) {
-    final otherPoint = getPointAtIndexGlobal(arrow, isStart ? -1 : 0);
-    return _EndpointAndHeading(
-      point: point,
-      heading: getHeadingForElbowSnap(
-        point: point,
-        otherPoint: otherPoint,
-        zoom: zoom,
-      ),
-      obstacle: null,
-    );
-  }
+  final bindable = binding == null ? null : bindablesById[binding.elementId];
+  final point = bindable == null || binding == null
+      ? originPoint
+      : getGlobalFixedPoint(binding, bindable);
 
-  final bindable = bindablesById[binding.elementId];
+  final oppositeBindable = oppositeBinding == null
+      ? null
+      : bindablesById[oppositeBinding.elementId];
+  final otherPoint = oppositeBindable == null || oppositeBinding == null
+      ? getPointAtIndexGlobal(arrow, isStart ? -1 : 0)
+      : getGlobalFixedPoint(oppositeBinding, oppositeBindable);
+
   if (bindable == null) {
-    final otherPoint = getPointAtIndexGlobal(arrow, isStart ? -1 : 0);
     return _EndpointAndHeading(
       point: point,
       heading: getHeadingForElbowSnap(
@@ -922,14 +939,13 @@ _EndpointAndHeading _computeEndpointAndHeading(
     );
   }
 
-  final fixedPoint = getGlobalFixedPoint(binding, bindable);
-  final otherPoint = getPointAtIndexGlobal(arrow, isStart ? -1 : 0);
   return _EndpointAndHeading(
-    point: fixedPoint,
-    heading: getHeadingForElbowSnap(
-      point: fixedPoint,
+    point: point,
+    heading: _getBindPointHeading(
+      point: point,
       otherPoint: otherPoint,
-      bindable: bindable,
+      hoveredElement: bindable,
+      origPoint: originPoint,
       zoom: zoom,
     ),
     obstacle: _obstacleForBindable(bindable, getBindingGap(bindable, true)),
@@ -1000,9 +1016,6 @@ List<FixedSegment>? _normalizeFixedSegmentsFromPoints(
   for (final segment in fixedSegments) {
     final index = segment.index;
     if (index <= 0 || index >= points.length) {
-      continue;
-    }
-    if (index == 1 || index == points.length - 1) {
       continue;
     }
 
@@ -1174,18 +1187,18 @@ ArrowPatch _routeAndNormalizeElbowPatch({
       ? origEndGlobalPoint
       : getGlobalFixedPoint(endBinding, hoveredEndElement);
 
-  final startHeading = getHeadingForElbowSnap(
+  final startHeading = _getBindPointHeading(
     point: startGlobalPoint,
     otherPoint: endGlobalPoint,
-    bindable: hoveredStartElement,
-    originPoint: origStartGlobalPoint,
+    hoveredElement: hoveredStartElement,
+    origPoint: origStartGlobalPoint,
     zoom: zoom,
   );
-  final endHeading = getHeadingForElbowSnap(
+  final endHeading = _getBindPointHeading(
     point: endGlobalPoint,
     otherPoint: startGlobalPoint,
-    bindable: hoveredEndElement,
-    originPoint: origEndGlobalPoint,
+    hoveredElement: hoveredEndElement,
+    origPoint: origEndGlobalPoint,
     zoom: zoom,
   );
 
@@ -1542,8 +1555,11 @@ ArrowPatch _handleSegmentRenormalization(
       )
       .toList(growable: false);
   if (fixedSegments.isEmpty) {
+    final renormalizedLocalPoints = filteredPoints
+        .map((point) => <double>[point[0] - arrow.x, point[1] - arrow.y])
+        .toList(growable: false);
     return _routeAndNormalizeElbowPatch(
-      arrow: arrow,
+      arrow: arrow.copyWith(points: renormalizedLocalPoints),
       bindablesById: bindablesById,
       fixedSegments: null,
       zoom: zoom,
@@ -2614,7 +2630,7 @@ ArrowPatch _updateElbowArrowPointsPort(
     zoom: zoom,
   );
   return _handleEndpointDrag(
-    arrow: nextArrow,
+    arrow: arrow,
     updatedPoints: updatedPoints,
     fixedSegments: fixedSegments,
     startHeading: startEndpoint.heading,

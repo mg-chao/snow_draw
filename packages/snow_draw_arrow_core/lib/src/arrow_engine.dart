@@ -57,8 +57,99 @@ ArrowBindingState? _readArrowBindingState(Object? value) {
   return null;
 }
 
-BindableState? _readBindable(Object? value) =>
-    value is BindableState ? value : null;
+double? _readFiniteDouble(Object? value) {
+  if (value is num && value.isFinite) {
+    return value.toDouble();
+  }
+  return null;
+}
+
+Bounds? _readBounds(Object? value) {
+  if (value is! List || value.length != 4) {
+    return null;
+  }
+  final first = _readFiniteDouble(value[0]);
+  final second = _readFiniteDouble(value[1]);
+  final third = _readFiniteDouble(value[2]);
+  final fourth = _readFiniteDouble(value[3]);
+  if (first == null || second == null || third == null || fourth == null) {
+    return null;
+  }
+  return <double>[first, second, third, fourth];
+}
+
+BindableRoundness? _readBindableRoundness(Object? value) {
+  if (value is BindableRoundness) {
+    return value;
+  }
+  if (value is! Map) {
+    return null;
+  }
+
+  final type = value['type'];
+  if (type is! String && type is! num) {
+    return null;
+  }
+
+  final roundnessValue = _readFiniteDouble(value['value']);
+  return BindableRoundness(type: type, value: roundnessValue);
+}
+
+BindableState? _readBindable(Object? value) {
+  if (value is BindableState) {
+    return value;
+  }
+  if (value is! Map) {
+    return null;
+  }
+
+  final id = value['id'];
+  final shape = value['shape'];
+  final x = _readFiniteDouble(value['x']);
+  final y = _readFiniteDouble(value['y']);
+  final width = _readFiniteDouble(value['width']);
+  final height = _readFiniteDouble(value['height']);
+  final angle = _readFiniteDouble(value['angle']);
+  final strokeWidth = _readFiniteDouble(value['strokeWidth']);
+  if (id is! String ||
+      shape is! String ||
+      x == null ||
+      y == null ||
+      width == null ||
+      height == null ||
+      angle == null ||
+      strokeWidth == null) {
+    return null;
+  }
+
+  final zIndex = _readFiniteDouble(value['zIndex']);
+  final backgroundOpaque = value['backgroundOpaque'] is bool
+      ? value['backgroundOpaque'] as bool
+      : null;
+  final bindingEnabled = value['bindingEnabled'] is bool
+      ? value['bindingEnabled'] as bool
+      : null;
+  final interiorHitEnabled = value['interiorHitEnabled'] is bool
+      ? value['interiorHitEnabled'] as bool
+      : null;
+
+  return BindableState(
+    id: id,
+    shape: shape,
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    angle: angle,
+    strokeWidth: strokeWidth,
+    roundness: _readBindableRoundness(value['roundness']),
+    zIndex: zIndex,
+    backgroundOpaque: backgroundOpaque,
+    bindingEnabled: bindingEnabled,
+    interiorHitEnabled: interiorHitEnabled,
+    visibilityBounds: _readBounds(value['visibilityBounds']),
+  );
+}
 
 List<ArrowState> _readArrows(Object? value) {
   if (value is List<ArrowState>) {
@@ -75,7 +166,14 @@ List<BindableState> _readBindables(Object? value) {
     return value;
   }
   if (value is List) {
-    return value.whereType<BindableState>().toList(growable: false);
+    final bindables = <BindableState>[];
+    for (final entry in value) {
+      final bindable = _readBindable(entry);
+      if (bindable != null) {
+        bindables.add(bindable);
+      }
+    }
+    return bindables;
   }
   return const <BindableState>[];
 }
