@@ -1,23 +1,28 @@
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+
 import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
+import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../types/draw_rect.dart';
-import 'arrow_binding_cleanup.dart';
+import '../../utils/combined_element_lookup.dart';
 import 'edit_computed_result.dart';
 
 /// Shared post-geometry pipeline for standard edit operations.
 ///
 /// After an operation applies its geometry (move/resize/rotate), the
-/// remaining steps are identical: unbind arrows, resolve bindings, and
-/// package the result. This helper eliminates that duplication.
+/// remaining steps are identical: prune invalid transformed bindings via
+/// arrow-core lifecycle rules, resolve endpoint bindings, and package the
+/// result. This helper eliminates that duplication.
 class EditComputePipeline {
   const EditComputePipeline._();
 
   /// Runs the shared post-geometry pipeline on [updatedById].
   ///
-  /// Returns `null` when [updatedById] is empty. Otherwise unbinds
-  /// arrow elements, resolves bindings, and wraps everything in an
+  /// Returns `null` when [updatedById] is empty. Otherwise synchronizes
+  /// transformed arrow bindings through arrow-core, resolves bindings,
+  /// and wraps everything in an
   /// [EditComputedResult].
   ///
   /// [skipBindingUpdate] is an optional predicate that lets callers
@@ -36,12 +41,11 @@ class EditComputePipeline {
     }
 
     final document = state.domain.document;
-    final merged = Map<String, ElementState>.of(updatedById);
-    merged.addAll(
-      unbindArrowLikeElements(
-        transformedElements: merged,
-        baseElements: document.elementMap,
-      ),
+    final merged = _pruneTransformedArrowBindings(
+      state: state,
+      transformedElements: updatedById,
+      baseElements: document.elementMap,
+      isBindingEnabled: isBindingEnabled,
     );
 
     final bindingUpdates = ArrowBindingResolver.instance.resolve(
@@ -70,4 +74,73 @@ class EditComputePipeline {
       multiSelectRotation: multiSelectRotation,
     );
   }
+}
+
+Map<String, ElementState> _pruneTransformedArrowBindings({
+  required DrawState state,
+  required Map<String, ElementState> transformedElements,
+  required Map<String, ElementState> baseElements,
+  required bool isBindingEnabled,
+}) {
+  if (transformedElements.isEmpty) {
+    return transformedElements;
+  }
+
+  final merged = Map<String, ElementState>.of(transformedElements);
+  final lookup = CombinedElementLookup(base: baseElements, overlay: merged);
+  final transformedArrows = <core.ArrowState>[];
+  final arrowSourcesById = <String, (ElementState, ArrowLikeData)>{};
+
+  for (final element in transformedElements.values) {
+    final data = element.data;
+    if (data is! ArrowLikeData) {
+      continue;
+    }
+    if (data.startBinding == null && data.endBinding == null) {
+      continue;
+    }
+    transformedArrows.add(toCoreArrowState(element: element, data: data));
+    arrowSourcesById[element.id] = (element, data);
+  }
+
+  if (transformedArrows.isEmpty) {
+    return merged;
+  }
+
+  final retainedBindableIds = <String>[
+    for (final id in transformedElements.keys)
+      if (lookup[id] case final element? when isArrowBindableElement(element))
+        id,
+  ];
+  final syncResult = core.syncBindingsAfterBindablePrune(<String, dynamic>{
+    'arrows': transformedArrows,
+    'bindables': collectCoreBindableRelations(lookup.values),
+    'geometryBindables': collectCoreBindables(lookup.values),
+    'retainedBindableIds': retainedBindableIds,
+    'context': buildCoreEngineContext(
+      zoom: state.application.view.camera.zoom,
+      isBindingEnabled: isBindingEnabled,
+    ),
+    'options': const <String, dynamic>{'recomputeElbows': true},
+  });
+  if (syncResult.arrowPatches.isEmpty) {
+    return merged;
+  }
+
+  for (final arrowPatch in syncResult.arrowPatches) {
+    final source = arrowSourcesById[arrowPatch.id];
+    if (source == null) {
+      continue;
+    }
+    final (element, data) = source;
+    final patched = applyCoreArrowPatchToElement(
+      element: element,
+      data: data,
+      patch: arrowPatch.patch,
+    );
+    if (patched != element) {
+      merged[patched.id] = patched;
+    }
+  }
+  return merged;
 }

@@ -2,7 +2,6 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../actions/draw_actions.dart';
 import '../../core/draw_context.dart';
-import '../../edit/apply/edit_apply.dart';
 import '../../elements/core/element_style_updatable_data.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_data.dart';
@@ -20,6 +19,7 @@ import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/element_style.dart';
+import '../core/arrow_binding_sync.dart';
 import '../core/reducer_utils.dart';
 
 DrawState handleUpdateElementsStyle(
@@ -36,6 +36,7 @@ DrawState handleUpdateElementsStyle(
   final selectedIds = state.domain.selection.selectedIds;
   final trackSelectionOverlay = selectedIds.length > 1;
   final replacementsById = <String, ElementState>{};
+  final changedBindableIds = <String>{};
   var selectionGeometryChanged = false;
   final coreEngineContext = buildCoreEngineContext(
     zoom: state.application.view.camera.zoom,
@@ -60,6 +61,9 @@ DrawState handleUpdateElementsStyle(
       continue;
     }
     replacementsById[id] = update.element;
+    if (isArrowBindableElement(update.element)) {
+      changedBindableIds.add(update.element.id);
+    }
     if (update.geometryChanged) {
       selectionGeometryChanged = true;
     }
@@ -79,12 +83,39 @@ DrawState handleUpdateElementsStyle(
     return state;
   }
 
+  var mergedReplacementsById = replacementsById;
+  List<String>? orderedElementIds;
+  if (domainChanged && changedBindableIds.isNotEmpty) {
+    final bindingResolution = resolveArrowBindingsForChangedBindables(
+      state: state,
+      changedBindableIds: changedBindableIds,
+      overlayUpdates: replacementsById,
+      isBindingEnabled: context.config.snap.enableArrowBinding,
+    );
+    if (bindingResolution.updatedElements.isNotEmpty) {
+      mergedReplacementsById = {
+        ...replacementsById,
+        ...bindingResolution.updatedElements,
+      };
+      if (trackSelectionOverlay &&
+          _hasSelectionGeometryChanges(
+            selectedIds: selectedIds,
+            originalElementsById: document.elementMap,
+            updatesById: bindingResolution.updatedElements,
+          )) {
+        selectionGeometryChanged = true;
+      }
+    }
+    orderedElementIds = bindingResolution.orderedElementIds;
+  }
+
   final nextDomain = domainChanged
       ? state.domain.copyWith(
           document: document.copyWith(
-            elements: EditApply.replaceElementsById(
+            elements: applyElementReplacementsAndOrder(
               elements: document.elements,
-              replacementsById: replacementsById,
+              replacementsById: mergedReplacementsById,
+              orderedElementIds: orderedElementIds,
             ),
           ),
         )
@@ -295,6 +326,25 @@ DrawRect _resolveSerialNumberRect({
   data: data,
   textMetricsService: textMetricsService,
 );
+
+bool _hasSelectionGeometryChanges({
+  required Set<String> selectedIds,
+  required Map<String, ElementState> originalElementsById,
+  required Map<String, ElementState> updatesById,
+}) {
+  for (final id in selectedIds) {
+    final original = originalElementsById[id];
+    final updated = updatesById[id];
+    if (original == null || updated == null) {
+      continue;
+    }
+    if (original.rect != updated.rect ||
+        original.rotation != updated.rotation) {
+      return true;
+    }
+  }
+  return false;
+}
 
 ({DrawRect rect, ArrowData data}) _resolveArrowRectAndData({
   required ElementState element,

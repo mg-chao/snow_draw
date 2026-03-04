@@ -6,6 +6,7 @@ import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../models/interaction_state.dart';
 import '../../types/draw_point.dart';
+import '../core/arrow_binding_sync.dart';
 import '../core/reducer_utils.dart';
 
 DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
@@ -16,12 +17,11 @@ DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
   final document = state.domain.document;
   final selectedIds = state.domain.selection.selectedIds;
   final shouldRefreshSelectionOverlay = selectedIds.length > 1;
-
-  List<ElementState>? nextElements;
+  final replacementsById = <String, ElementState>{};
+  final changedBindableIds = <String>{};
   var refreshSelectionOverlay = false;
 
-  for (var index = 0; index < document.elements.length; index++) {
-    final element = document.elements[index];
+  for (final element in document.elements) {
     final data = element.data;
     if (data is! TextData || !data.autoResize) {
       continue;
@@ -36,8 +36,8 @@ DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
       continue;
     }
 
-    nextElements ??= [...document.elements];
-    nextElements[index] = element.copyWith(rect: nextRect);
+    replacementsById[element.id] = element.copyWith(rect: nextRect);
+    changedBindableIds.add(element.id);
     if (shouldRefreshSelectionOverlay && selectedIds.contains(element.id)) {
       refreshSelectionOverlay = true;
     }
@@ -60,15 +60,48 @@ DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
     }
   }
 
-  if (nextElements == null && nextTextInteraction == null) {
+  final hasDomainChanges = replacementsById.isNotEmpty;
+  if (!hasDomainChanges && nextTextInteraction == null) {
     return state;
   }
 
+  var mergedReplacementsById = replacementsById;
+  List<String>? orderedElementIds;
+  if (hasDomainChanges && changedBindableIds.isNotEmpty) {
+    final bindingResolution = resolveArrowBindingsForChangedBindables(
+      state: state,
+      changedBindableIds: changedBindableIds,
+      overlayUpdates: replacementsById,
+      isBindingEnabled: context.config.snap.enableArrowBinding,
+    );
+    if (bindingResolution.updatedElements.isNotEmpty) {
+      mergedReplacementsById = {
+        ...replacementsById,
+        ...bindingResolution.updatedElements,
+      };
+      if (shouldRefreshSelectionOverlay &&
+          _hasSelectionGeometryChanges(
+            selectedIds: selectedIds,
+            originalElementsById: document.elementMap,
+            updatesById: bindingResolution.updatedElements,
+          )) {
+        refreshSelectionOverlay = true;
+      }
+    }
+    orderedElementIds = bindingResolution.orderedElementIds;
+  }
+
   var nextState = state;
-  if (nextElements != null) {
+  if (hasDomainChanges) {
     nextState = nextState.copyWith(
       domain: nextState.domain.copyWith(
-        document: document.copyWith(elements: nextElements),
+        document: document.copyWith(
+          elements: applyElementReplacementsAndOrder(
+            elements: document.elements,
+            replacementsById: mergedReplacementsById,
+            orderedElementIds: orderedElementIds,
+          ),
+        ),
       ),
     );
   }
@@ -89,4 +122,23 @@ DrawState handleRefreshAutoResizeTextLayoutsAfterFontLoad(
     selectedIds,
     forceRefreshOverlay: true,
   );
+}
+
+bool _hasSelectionGeometryChanges({
+  required Set<String> selectedIds,
+  required Map<String, ElementState> originalElementsById,
+  required Map<String, ElementState> updatesById,
+}) {
+  for (final id in selectedIds) {
+    final original = originalElementsById[id];
+    final updated = updatesById[id];
+    if (original == null || updated == null) {
+      continue;
+    }
+    if (original.rect != updated.rect ||
+        original.rotation != updated.rotation) {
+      return true;
+    }
+  }
+  return false;
 }

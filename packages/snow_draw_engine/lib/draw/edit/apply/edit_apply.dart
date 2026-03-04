@@ -1,10 +1,13 @@
 import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../core/coordinates/overlay_space.dart';
 import '../../core/coordinates/world_space.dart';
+import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_data.dart';
+import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/text/text_bounds.dart';
@@ -17,7 +20,6 @@ import '../../types/edit_context.dart';
 import '../../types/element_geometry.dart';
 import '../../types/element_style.dart';
 import '../../types/resize_mode.dart';
-import '../../utils/list_equality.dart';
 
 const _resizeTolerance = 0.01;
 
@@ -147,7 +149,8 @@ class EditApply {
         } else if (resizedData is ArrowData) {
           resized = _applyArrowResize(
             element: resized,
-            startRect: startElement.rect,
+            flipX: scaleX < 0,
+            flipY: scaleY < 0,
           );
         }
 
@@ -469,41 +472,86 @@ ElementState _applySerialNumberResize({
 
 ElementState _applyArrowResize({
   required ElementState element,
-  required DrawRect startRect,
+  required bool flipX,
+  required bool flipY,
 }) {
   final data = element.data as ArrowData;
-  final fixedSegments = data.fixedSegments;
-  if (data.arrowType != ArrowType.elbow ||
-      fixedSegments == null ||
-      fixedSegments.isEmpty) {
+  if (data.arrowType != ArrowType.elbow) {
     return element;
   }
 
-  final scaled = _scaleFixedSegments(
-    fixedSegments: fixedSegments,
-    oldRect: startRect,
-    newRect: element.rect,
+  final worldPoints = ArrowGeometry.resolveWorldPoints(
+    rect: element.rect,
+    normalizedPoints: data.points,
   );
-  if (fixedSegmentListEquals(fixedSegments, scaled)) {
+  final corePatch = core.computeElbowResizePatch(<String, dynamic>{
+    'arrow': <String, dynamic>{
+      'startBinding': toCoreBinding(data.startBinding),
+      'endBinding': toCoreBinding(data.endBinding),
+      'fixedSegments': _toCoreFixedSegments(data.fixedSegments),
+    },
+    'points': toCorePoints(worldPoints),
+    'flipX': flipX,
+    'flipY': flipY,
+  });
+  final nextStartBinding = corePatch.containsKey('startBinding')
+      ? fromCoreBinding(corePatch['startBinding'] as core.FixedPointBinding?)
+      : data.startBinding;
+  final nextEndBinding = corePatch.containsKey('endBinding')
+      ? fromCoreBinding(corePatch['endBinding'] as core.FixedPointBinding?)
+      : data.endBinding;
+  final nextFixedSegments = corePatch.containsKey('fixedSegments')
+      ? _fromCoreFixedSegments(corePatch['fixedSegments'] as List<Object?>?)
+      : data.fixedSegments;
+
+  final nextData = data.copyWith(
+    startBinding: nextStartBinding,
+    endBinding: nextEndBinding,
+    fixedSegments: nextFixedSegments,
+  );
+  if (nextData == data) {
     return element;
   }
-  return element.copyWith(data: data.copyWith(fixedSegments: scaled));
+  return element.copyWith(data: nextData);
 }
 
-List<ElbowFixedSegment> _scaleFixedSegments({
-  required List<ElbowFixedSegment> fixedSegments,
-  required DrawRect oldRect,
-  required DrawRect newRect,
-}) {
-  final scaled = fixedSegments
+List<core.FixedSegment>? _toCoreFixedSegments(
+  List<ElbowFixedSegment>? fixedSegments,
+) {
+  if (fixedSegments == null || fixedSegments.isEmpty) {
+    return null;
+  }
+  return fixedSegments
       .map(
-        (segment) => segment.copyWith(
-          start: _scalePoint(segment.start, oldRect, newRect),
-          end: _scalePoint(segment.end, oldRect, newRect),
+        (segment) => core.FixedSegment(
+          index: segment.index,
+          start: <double>[segment.start.x, segment.start.y],
+          end: <double>[segment.end.x, segment.end.y],
         ),
       )
       .toList(growable: false);
-  return List<ElbowFixedSegment>.unmodifiable(scaled);
+}
+
+List<ElbowFixedSegment>? _fromCoreFixedSegments(List<Object?>? fixedSegments) {
+  if (fixedSegments == null || fixedSegments.isEmpty) {
+    return null;
+  }
+  final converted = <ElbowFixedSegment>[];
+  for (final entry in fixedSegments) {
+    if (entry is! core.FixedSegment) {
+      continue;
+    }
+    converted.add(
+      ElbowFixedSegment(
+        index: entry.index,
+        start: DrawPoint(x: entry.start[0], y: entry.start[1]),
+        end: DrawPoint(x: entry.end[0], y: entry.end[1]),
+      ),
+    );
+  }
+  return converted.isEmpty
+      ? null
+      : List<ElbowFixedSegment>.unmodifiable(converted);
 }
 
 DrawRect _rectFromCenter({
@@ -518,18 +566,5 @@ DrawRect _rectFromCenter({
     minY: center.y - halfHeight,
     maxX: center.x + halfWidth,
     maxY: center.y + halfHeight,
-  );
-}
-
-DrawPoint _scalePoint(DrawPoint point, DrawRect oldRect, DrawRect newRect) {
-  final oldWidth = oldRect.width;
-  final oldHeight = oldRect.height;
-  final newWidth = newRect.width;
-  final newHeight = newRect.height;
-  final nx = oldWidth == 0 ? 0.0 : (point.x - oldRect.minX) / oldWidth;
-  final ny = oldHeight == 0 ? 0.0 : (point.y - oldRect.minY) / oldHeight;
-  return DrawPoint(
-    x: newRect.minX + nx * newWidth,
-    y: newRect.minY + ny * newHeight,
   );
 }

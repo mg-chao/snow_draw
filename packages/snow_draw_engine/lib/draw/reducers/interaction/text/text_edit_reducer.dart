@@ -2,7 +2,7 @@ import 'package:meta/meta.dart';
 
 import '../../../actions/draw_actions.dart';
 import '../../../core/draw_context.dart';
-import '../../../edit/apply/edit_apply.dart';
+import '../../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../../elements/types/serial_number/serial_number_dependencies.dart';
 import '../../../elements/types/text/text_data.dart';
 import '../../../elements/types/text/text_editing_geometry.dart';
@@ -11,6 +11,7 @@ import '../../../models/element_state.dart';
 import '../../../models/interaction_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
+import '../../core/arrow_binding_sync.dart';
 import '../../core/reducer_utils.dart';
 
 typedef _TextEditSession = ({
@@ -162,7 +163,7 @@ class TextEditReducer {
     }
 
     if (action.text.trim().isEmpty) {
-      return _finishEmptyText(state, interaction);
+      return _finishEmptyText(state, interaction, context);
     }
 
     return _commitTextDraft(
@@ -173,10 +174,13 @@ class TextEditReducer {
     );
   }
 
-  DrawState _finishEmptyText(DrawState state, TextEditingState interaction) =>
-      interaction.isNew
+  DrawState _finishEmptyText(
+    DrawState state,
+    TextEditingState interaction,
+    DrawContext context,
+  ) => interaction.isNew
       ? _toIdle(state)
-      : _deleteExistingText(state, interaction);
+      : _deleteExistingText(state, interaction, context);
 
   DrawState _commitTextDraft({
     required DrawState state,
@@ -193,7 +197,7 @@ class TextEditReducer {
 
     return interaction.isNew
         ? _createTextElement(state, interaction, nextData, nextRect)
-        : _updateTextElement(state, interaction, nextData, nextRect);
+        : _updateTextElement(state, interaction, nextData, nextRect, context);
   }
 
   DrawState _createTextElement(
@@ -226,6 +230,7 @@ class TextEditReducer {
     TextEditingState interaction,
     TextData data,
     DrawRect rect,
+    DrawContext context,
   ) {
     final document = state.domain.document;
     final currentElement = document.getElementById(interaction.elementId);
@@ -235,11 +240,23 @@ class TextEditReducer {
     if (currentElement.rect == rect && currentElement.data == data) {
       return _finishTextEditing(state);
     }
-    final nextElements = EditApply.replaceElementsById(
+    final replacementsById = <String, ElementState>{
+      interaction.elementId: currentElement.copyWith(rect: rect, data: data),
+    };
+    final bindingResolution = resolveArrowBindingsForChangedBindables(
+      state: state,
+      changedBindableIds: {interaction.elementId},
+      overlayUpdates: replacementsById,
+      isBindingEnabled: context.config.snap.enableArrowBinding,
+    );
+    if (bindingResolution.updatedElements.isNotEmpty) {
+      replacementsById.addAll(bindingResolution.updatedElements);
+    }
+
+    final nextElements = applyElementReplacementsAndOrder(
       elements: document.elements,
-      replacementsById: {
-        interaction.elementId: currentElement.copyWith(rect: rect, data: data),
-      },
+      replacementsById: replacementsById,
+      orderedElementIds: bindingResolution.orderedElementIds,
     );
 
     final nextState = state.copyWith(
@@ -250,18 +267,39 @@ class TextEditReducer {
     return _finishTextEditing(nextState);
   }
 
-  DrawState _deleteExistingText(DrawState state, TextEditingState interaction) {
+  DrawState _deleteExistingText(
+    DrawState state,
+    TextEditingState interaction,
+    DrawContext context,
+  ) {
+    final deletedTextElement = state.domain.document.getElementById(
+      interaction.elementId,
+    );
     final nextElements = _removeTextElementAndUnbindReferences(
       elements: state.domain.document.elements,
       deletedTextId: interaction.elementId,
     );
-    final nextState = nextElements == null
-        ? state
-        : state.copyWith(
-            domain: state.domain.copyWith(
-              document: state.domain.document.copyWith(elements: nextElements),
-            ),
-          );
+    if (nextElements == null) {
+      return _finishTextEditing(state);
+    }
+    var syncedElements = nextElements;
+    if (deletedTextElement != null &&
+        isArrowBindableElement(deletedTextElement)) {
+      syncedElements = syncArrowBindingsAfterDeletion(
+        elements: nextElements,
+        deletedIds: {deletedTextElement.id},
+        deletedElementsById: {deletedTextElement.id: deletedTextElement},
+        engineContext: buildCoreEngineContext(
+          zoom: state.application.view.camera.zoom,
+          isBindingEnabled: context.config.snap.enableArrowBinding,
+        ),
+      );
+    }
+    final nextState = state.copyWith(
+      domain: state.domain.copyWith(
+        document: state.domain.document.copyWith(elements: syncedElements),
+      ),
+    );
     return _finishTextEditing(nextState);
   }
 
@@ -282,6 +320,7 @@ class TextEditReducer {
       final updatedElement = clearElementDependenciesForIds(
         element: element,
         targetIds: deletedIds,
+        includeArrowBindings: false,
       );
 
       if (updatedElement != element) {
