@@ -5,10 +5,12 @@ import '../../types/draw_rect.dart';
 class EditComputedResult {
   const EditComputedResult({
     required this.updatedElements,
+    this.orderedElementIds,
     this.multiSelectBounds,
     this.multiSelectRotation,
   });
   final Map<String, ElementState> updatedElements;
+  final List<String>? orderedElementIds;
   final DrawRect? multiSelectBounds;
   final double? multiSelectRotation;
 }

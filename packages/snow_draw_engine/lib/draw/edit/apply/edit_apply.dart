@@ -5,7 +5,6 @@ import 'package:meta/meta.dart';
 import '../../core/coordinates/overlay_space.dart';
 import '../../core/coordinates/world_space.dart';
 import '../../elements/types/arrow/arrow_data.dart';
-import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/text/text_bounds.dart';
@@ -71,11 +70,6 @@ class EditApply {
       snapshots: snapshots,
       currentElementsById: currentElementsById,
       visitor: (id, snapshot, current) {
-        final data = current.data;
-        if (data is ArrowLikeData && data.arrowType == ArrowType.elbow) {
-          return;
-        }
-
         final newRotation = snapshot.rotation + deltaAngle;
         final newCenter = space.rotatePoint(
           point: snapshot.center,
@@ -191,6 +185,82 @@ class EditApply {
     }
     return updatedElements ?? elements;
   }
+
+  /// Reorders [elements] to match [orderedElementIds] and normalizes z-index.
+  ///
+  /// Returns the original list when the provided id ordering is invalid.
+  static List<ElementState> reorderElementsByIdOrder({
+    required List<ElementState> elements,
+    required List<String>? orderedElementIds,
+  }) {
+    if (orderedElementIds == null || elements.isEmpty) {
+      return elements;
+    }
+    if (orderedElementIds.length != elements.length) {
+      return elements;
+    }
+
+    final byId = <String, ElementState>{
+      for (final element in elements) element.id: element,
+    };
+    if (byId.length != elements.length) {
+      return elements;
+    }
+
+    final seenIds = <String>{};
+    final reordered = <ElementState>[];
+    for (final id in orderedElementIds) {
+      if (!seenIds.add(id)) {
+        return elements;
+      }
+      final element = byId[id];
+      if (element == null) {
+        return elements;
+      }
+      reordered.add(element);
+    }
+
+    final sameOrder = _sameElementOrder(
+      current: elements,
+      candidate: reordered,
+    );
+    if (sameOrder) {
+      return _reindexElementsIfNeeded(elements);
+    }
+
+    return _reindexElementsIfNeeded(List<ElementState>.unmodifiable(reordered));
+  }
+}
+
+bool _sameElementOrder({
+  required List<ElementState> current,
+  required List<ElementState> candidate,
+}) {
+  if (identical(current, candidate)) {
+    return true;
+  }
+  if (current.length != candidate.length) {
+    return false;
+  }
+  for (var i = 0; i < current.length; i++) {
+    if (current[i].id != candidate[i].id) {
+      return false;
+    }
+  }
+  return true;
+}
+
+List<ElementState> _reindexElementsIfNeeded(List<ElementState> elements) {
+  List<ElementState>? reindexed;
+  for (var i = 0; i < elements.length; i++) {
+    final element = elements[i];
+    if (element.zIndex == i) {
+      continue;
+    }
+    reindexed ??= List<ElementState>.of(elements, growable: false);
+    reindexed[i] = element.copyWith(zIndex: i);
+  }
+  return reindexed ?? elements;
 }
 
 void _visitSelectedSnapshots<S>({

@@ -1,7 +1,10 @@
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+
 import '../../actions/draw_actions.dart';
 import '../../core/draw_context.dart';
 import '../../edit/apply/edit_apply.dart';
 import '../../elements/core/element_style_updatable_data.dart';
+import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
@@ -34,6 +37,10 @@ DrawState handleUpdateElementsStyle(
   final trackSelectionOverlay = selectedIds.length > 1;
   final replacementsById = <String, ElementState>{};
   var selectionGeometryChanged = false;
+  final coreEngineContext = buildCoreEngineContext(
+    zoom: state.application.view.camera.zoom,
+    isBindingEnabled: context.config.snap.enableArrowBinding,
+  );
 
   for (final id in targetIds) {
     final element = document.getElementById(id);
@@ -47,6 +54,7 @@ DrawState handleUpdateElementsStyle(
       trackGeometryChange: trackSelectionOverlay && selectedIds.contains(id),
       elementsById: document.elementMap,
       textMetricsService: context.textMetricsService,
+      coreEngineContext: coreEngineContext,
     );
     if (update == null) {
       continue;
@@ -108,6 +116,7 @@ DrawState handleUpdateElementsStyle(
   required bool trackGeometryChange,
   required Map<String, ElementState> elementsById,
   required TextMetricsService textMetricsService,
+  required core.EngineContext coreEngineContext,
 }) {
   final styleUpdated = _resolveDataStyleUpdate(
     element: element,
@@ -115,6 +124,7 @@ DrawState handleUpdateElementsStyle(
     trackGeometryChange: trackGeometryChange,
     elementsById: elementsById,
     textMetricsService: textMetricsService,
+    coreEngineContext: coreEngineContext,
   );
   final baseElement = styleUpdated?.element ?? element;
   final nextElement = _resolveOpacityUpdate(baseElement, opacity);
@@ -133,6 +143,7 @@ DrawState handleUpdateElementsStyle(
   required bool trackGeometryChange,
   required Map<String, ElementState> elementsById,
   required TextMetricsService textMetricsService,
+  required core.EngineContext coreEngineContext,
 }) {
   if (styleUpdate.isEmpty) {
     return null;
@@ -182,6 +193,7 @@ DrawState handleUpdateElementsStyle(
         element: updatedElement,
         data: updatedArrowData,
         elementsById: elementsById,
+        coreEngineContext: coreEngineContext,
       );
       if (result.rect != updatedElement.rect && trackGeometryChange) {
         geometryChanged = true;
@@ -288,6 +300,7 @@ DrawRect _resolveSerialNumberRect({
   required ElementState element,
   required ArrowData data,
   required Map<String, ElementState> elementsById,
+  required core.EngineContext coreEngineContext,
 }) {
   final sanitizedData = data.copyWith(
     fixedSegments: null,
@@ -299,6 +312,7 @@ DrawRect _resolveSerialNumberRect({
       element: element,
       data: sanitizedData,
       elementsById: elementsById,
+      engineContext: coreEngineContext,
     );
     final geometry = resolveArrowGeometryUpdate(
       localPoints: routed.localPoints,
@@ -308,6 +322,11 @@ DrawRect _resolveSerialNumberRect({
     );
     final updatedData = sanitizedData.copyWith(
       points: geometry.normalizedPoints,
+      startBinding: routed.startBinding,
+      endBinding: routed.endBinding,
+      fixedSegments: routed.localFixedSegments,
+      startIsSpecial: routed.startIsSpecial,
+      endIsSpecial: routed.endIsSpecial,
     );
     return (rect: geometry.rect, data: updatedData);
   }

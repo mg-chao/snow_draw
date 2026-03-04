@@ -231,6 +231,7 @@ final class RotateTransform extends EditTransform {
 final class ArrowPointTransform extends EditTransform {
   static const _bindingUnset = Object();
   static const _fixedSegmentsUnset = Object();
+  static const _orderedElementIdsUnset = Object();
 
   const ArrowPointTransform({
     required this.currentPosition,
@@ -238,6 +239,7 @@ final class ArrowPointTransform extends EditTransform {
     this.fixedSegments,
     this.startBinding,
     this.endBinding,
+    this.orderedElementIds,
     this.activeIndex,
     this.didInsert = false,
     this.shouldDelete = false,
@@ -249,6 +251,7 @@ final class ArrowPointTransform extends EditTransform {
   final List<ElbowFixedSegment>? fixedSegments;
   final ArrowBinding? startBinding;
   final ArrowBinding? endBinding;
+  final List<String>? orderedElementIds;
   final int? activeIndex;
   final bool didInsert;
   final bool shouldDelete;
@@ -260,6 +263,7 @@ final class ArrowPointTransform extends EditTransform {
     Object? fixedSegments = _fixedSegmentsUnset,
     Object? startBinding = _bindingUnset,
     Object? endBinding = _bindingUnset,
+    Object? orderedElementIds = _orderedElementIdsUnset,
     int? activeIndex,
     bool? didInsert,
     bool? shouldDelete,
@@ -276,6 +280,9 @@ final class ArrowPointTransform extends EditTransform {
     endBinding: endBinding == _bindingUnset
         ? this.endBinding
         : endBinding as ArrowBinding?,
+    orderedElementIds: orderedElementIds == _orderedElementIdsUnset
+        ? this.orderedElementIds
+        : orderedElementIds as List<String>?,
     activeIndex: activeIndex ?? this.activeIndex,
     didInsert: didInsert ?? this.didInsert,
     shouldDelete: shouldDelete ?? this.shouldDelete,
@@ -300,6 +307,7 @@ final class ArrowPointTransform extends EditTransform {
           fixedSegmentStructureEquals(other.fixedSegments, fixedSegments) &&
           other.startBinding == startBinding &&
           other.endBinding == endBinding &&
+          nullableListEquals(other.orderedElementIds, orderedElementIds) &&
           other.activeIndex == activeIndex &&
           other.didInsert == didInsert &&
           other.shouldDelete == shouldDelete &&
@@ -312,6 +320,7 @@ final class ArrowPointTransform extends EditTransform {
     fixedSegments == null ? null : Object.hashAll(fixedSegments!),
     startBinding,
     endBinding,
+    orderedElementIds == null ? null : Object.hashAll(orderedElementIds!),
     activeIndex,
     didInsert,
     shouldDelete,

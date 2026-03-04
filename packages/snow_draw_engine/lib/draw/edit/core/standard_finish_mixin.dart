@@ -69,9 +69,13 @@ mixin StandardFinishMixin on EditOperation {
     }
 
     final document = state.domain.document;
-    final elements = EditApply.replaceElementsById(
+    var elements = EditApply.replaceElementsById(
       elements: document.elements,
       replacementsById: result.updatedElements,
+    );
+    elements = EditApply.reorderElementsByIdOrder(
+      elements: elements,
+      orderedElementIds: result.orderedElementIds,
     );
     final overlay = context.isMultiSelect
         ? updateOverlay(

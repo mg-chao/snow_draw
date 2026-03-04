@@ -21,7 +21,6 @@ export 'draw/elements/types/arrow/arrow_binding.dart';
 export 'draw/elements/types/arrow/arrow_like_data.dart';
 export 'draw/elements/types/arrow/arrow_geometry.dart';
 export 'draw/elements/types/arrow/arrow_points.dart';
-export 'draw/elements/types/arrow/arrow_binding_target_cache.dart';
 export 'draw/elements/types/filter/filter_data.dart';
 export 'draw/elements/types/free_draw/free_draw_creation_strategy.dart';
 export 'draw/elements/types/free_draw/free_draw_data.dart';

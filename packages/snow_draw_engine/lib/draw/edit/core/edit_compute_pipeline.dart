@@ -1,4 +1,5 @@
 import '../../elements/types/arrow/arrow_binding_resolver.dart';
+import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../types/draw_rect.dart';
@@ -27,6 +28,7 @@ class EditComputePipeline {
     required Map<String, ElementState> updatedById,
     DrawRect? multiSelectBounds,
     double? multiSelectRotation,
+    bool isBindingEnabled = true,
     bool Function(String id, ElementState element)? skipBindingUpdate,
   }) {
     if (updatedById.isEmpty) {
@@ -46,8 +48,15 @@ class EditComputePipeline {
       baseElements: document.elementMap,
       updatedElements: merged,
       changedElementIds: merged.keys.toSet(),
+      orderedElementIds: document.elements
+          .map((element) => element.id)
+          .toList(growable: false),
+      engineContext: buildCoreEngineContext(
+        zoom: state.application.view.camera.zoom,
+        isBindingEnabled: isBindingEnabled,
+      ),
     );
-    for (final entry in bindingUpdates.entries) {
+    for (final entry in bindingUpdates.updatedElements.entries) {
       if (skipBindingUpdate?.call(entry.key, entry.value) ?? false) {
         continue;
       }
@@ -56,6 +65,7 @@ class EditComputePipeline {
 
     return EditComputedResult(
       updatedElements: Map.unmodifiable(merged),
+      orderedElementIds: bindingUpdates.orderedElementIds,
       multiSelectBounds: multiSelectBounds,
       multiSelectRotation: multiSelectRotation,
     );

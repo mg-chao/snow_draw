@@ -92,7 +92,10 @@ BindableRoundness? _readBindableRoundness(Object? value) {
   }
 
   final roundnessValue = _readFiniteDouble(value['value']);
-  return BindableRoundness(type: type, value: roundnessValue);
+  return BindableRoundness(
+    type: type as BindableRoundnessType,
+    value: roundnessValue,
+  );
 }
 
 BindableState? _readBindable(Object? value) {

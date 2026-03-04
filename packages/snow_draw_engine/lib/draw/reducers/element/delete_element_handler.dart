@@ -1,7 +1,9 @@
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+
 import '../../actions/draw_actions.dart';
 import '../../core/draw_context.dart';
 import '../../elements/core/element_data.dart';
-import '../../elements/types/arrow/arrow_binding.dart';
+import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/serial_number/serial_number_dependencies.dart';
@@ -55,20 +57,39 @@ Set<String> _resolveDeleteIds({
 List<ElementState> _buildElementsAfterDeletion({
   required List<ElementState> elements,
   required Set<String> deleteIds,
-}) => [
-  for (final element in elements)
-    if (!deleteIds.contains(element.id))
-      _applyDeleteElementUpdates(element: element, deleteIds: deleteIds),
-];
+}) {
+  final deletedElementsById = <String, ElementState>{
+    for (final element in elements)
+      if (deleteIds.contains(element.id)) element.id: element,
+  };
+  final retained = <ElementState>[
+    for (final element in elements)
+      if (!deleteIds.contains(element.id))
+        _applyDeleteElementUpdates(element: element, deleteIds: deleteIds),
+  ];
+  return _syncArrowBindingsAfterDeletion(
+    elements: retained,
+    deletedIds: deleteIds,
+    deletedElementsById: deletedElementsById,
+  );
+}
 
 ElementState _applyDeleteElementUpdates({
   required ElementState element,
   required Set<String> deleteIds,
 }) {
-  if (!isElementDependentOnIds(element: element, targetIds: deleteIds)) {
+  if (!isElementDependentOnIds(
+    element: element,
+    targetIds: deleteIds,
+    includeArrowBindings: false,
+  )) {
     return element;
   }
-  return clearElementDependenciesForIds(element: element, targetIds: deleteIds);
+  return clearElementDependenciesForIds(
+    element: element,
+    targetIds: deleteIds,
+    includeArrowBindings: false,
+  );
 }
 
 DrawState handleDuplicateElements(
@@ -180,7 +201,11 @@ _buildDuplicatedElements({
     }
   }
 
-  return (elements: duplicatedElements, selectedIds: duplicatedSelectedIds);
+  final syncedElements = _syncArrowBindingsAfterDuplication(
+    elements: duplicatedElements,
+    idMap: idMap,
+  );
+  return (elements: syncedElements, selectedIds: duplicatedSelectedIds);
 }
 
 ElementData _duplicateDataWithRemappedReferences(
@@ -192,9 +217,6 @@ ElementData _duplicateDataWithRemappedReferences(
     return data.copyWith(
       textElementId: textElementId == null ? null : idMap[textElementId],
     );
-  }
-  if (data is ArrowLikeData) {
-    return _remapArrowBindings(data, idMap);
   }
   return data;
 }
@@ -221,38 +243,151 @@ DrawState _reportDuplicateValidationFailure({
   return state;
 }
 
-/// Remaps arrow/line binding element IDs to their duplicated counterparts.
-///
-/// If a binding target was not duplicated, the binding is cleared (set to
-/// null) so the duplicated arrow does not reference the original element.
-ArrowLikeData _remapArrowBindings(
-  ArrowLikeData data,
-  Map<String, String> idMap,
-) {
-  final startBinding = data.startBinding;
-  final endBinding = data.endBinding;
-  if (startBinding == null && endBinding == null) {
-    return data;
+List<ElementState> _syncArrowBindingsAfterDeletion({
+  required List<ElementState> elements,
+  required Set<String> deletedIds,
+  required Map<String, ElementState> deletedElementsById,
+}) {
+  if (elements.isEmpty || deletedIds.isEmpty) {
+    return elements;
   }
 
-  final mappedStart = _remapBinding(startBinding, idMap);
-  final mappedEnd = _remapBinding(endBinding, idMap);
+  final arrows = <core.ArrowState>[];
+  final elementByArrowId = <String, (ElementState, ArrowLikeData)>{};
+  for (final element in elements) {
+    final data = element.data;
+    if (data is! ArrowLikeData) {
+      continue;
+    }
+    if (data.startBinding == null && data.endBinding == null) {
+      continue;
+    }
+    arrows.add(toCoreArrowState(element: element, data: data));
+    elementByArrowId[element.id] = (element, data);
+  }
+  if (arrows.isEmpty) {
+    return elements;
+  }
 
-  final clearStartSpecial = startBinding != null && mappedStart == null;
-  final clearEndSpecial = endBinding != null && mappedEnd == null;
+  final deletedArrowIds = <String>[
+    for (final element in deletedElementsById.values)
+      if (element.data is ArrowLikeData) element.id,
+  ];
+  final deletedBindableIds = <String>[
+    for (final element in deletedElementsById.values)
+      if (isArrowBindableElement(element)) element.id,
+  ];
 
-  return data.copyWith(
-    startBinding: mappedStart,
-    endBinding: mappedEnd,
-    startIsSpecial: clearStartSpecial ? null : data.startIsSpecial,
-    endIsSpecial: clearEndSpecial ? null : data.endIsSpecial,
-  );
+  final syncResult = core.syncBindingsAfterDeletion(<String, dynamic>{
+    'arrows': arrows,
+    'bindables': collectCoreBindableRelations(elements),
+    'geometryBindables': collectCoreBindables(elements),
+    'deletedArrowIds': deletedArrowIds,
+    'deletedBindableIds': deletedBindableIds,
+    'context': core.defaultEngineContext,
+  });
+  if (syncResult.arrowPatches.isEmpty) {
+    return elements;
+  }
+
+  final patchedById = <String, ElementState>{};
+  for (final arrowPatch in syncResult.arrowPatches) {
+    final source = elementByArrowId[arrowPatch.id];
+    if (source == null) {
+      continue;
+    }
+    final (element, data) = source;
+    final patched = applyCoreArrowPatchToElement(
+      element: element,
+      data: data,
+      patch: arrowPatch.patch,
+    );
+    if (patched != element) {
+      patchedById[patched.id] = patched;
+    }
+  }
+  if (patchedById.isEmpty) {
+    return elements;
+  }
+
+  return <ElementState>[
+    for (final element in elements) patchedById[element.id] ?? element,
+  ];
 }
 
-ArrowBinding? _remapBinding(ArrowBinding? binding, Map<String, String> idMap) {
-  if (binding == null) {
-    return null;
+List<ElementState> _syncArrowBindingsAfterDuplication({
+  required List<ElementState> elements,
+  required Map<String, String> idMap,
+}) {
+  if (elements.isEmpty || idMap.isEmpty) {
+    return elements;
   }
-  final targetId = idMap[binding.elementId];
-  return targetId == null ? null : binding.copyWith(elementId: targetId);
+
+  final elementsById = {for (final element in elements) element.id: element};
+  final bindableIdMap = <String, String>{};
+  final arrowIdMap = <String, String>{};
+  for (final entry in idMap.entries) {
+    final duplicate = elementsById[entry.value];
+    if (duplicate == null) {
+      continue;
+    }
+    if (isArrowBindableElement(duplicate)) {
+      bindableIdMap[entry.key] = entry.value;
+      bindableIdMap[entry.value] = entry.value;
+    }
+    if (duplicate.data is ArrowLikeData) {
+      arrowIdMap[entry.key] = entry.value;
+      arrowIdMap[entry.value] = entry.value;
+    }
+  }
+
+  final arrows = <core.ArrowState>[];
+  final elementByArrowId = <String, (ElementState, ArrowLikeData)>{};
+  for (final element in elements) {
+    final data = element.data;
+    if (data is! ArrowLikeData) {
+      continue;
+    }
+    arrows.add(toCoreArrowState(element: element, data: data));
+    elementByArrowId[element.id] = (element, data);
+  }
+  if (arrows.isEmpty) {
+    return elements;
+  }
+
+  final syncResult = core.syncBindingsAfterDuplication(<String, dynamic>{
+    'arrows': arrows,
+    'bindables': collectCoreBindableRelations(elements),
+    'bindableIdMap': bindableIdMap,
+    'arrowIdMap': arrowIdMap,
+    'geometryBindables': collectCoreBindables(elements),
+    'context': core.defaultEngineContext,
+  });
+  if (syncResult.arrowPatches.isEmpty) {
+    return elements;
+  }
+
+  final patchedById = <String, ElementState>{};
+  for (final arrowPatch in syncResult.arrowPatches) {
+    final source = elementByArrowId[arrowPatch.id];
+    if (source == null) {
+      continue;
+    }
+    final (element, data) = source;
+    final patched = applyCoreArrowPatchToElement(
+      element: element,
+      data: data,
+      patch: arrowPatch.patch,
+    );
+    if (patched != element) {
+      patchedById[patched.id] = patched;
+    }
+  }
+  if (patchedById.isEmpty) {
+    return elements;
+  }
+
+  return <ElementState>[
+    for (final element in elements) patchedById[element.id] ?? element,
+  ];
 }

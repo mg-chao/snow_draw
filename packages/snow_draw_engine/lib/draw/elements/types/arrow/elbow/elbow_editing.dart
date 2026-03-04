@@ -1,32 +1,18 @@
-import 'dart:math' as math;
-
 import 'package:meta/meta.dart';
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../../core/coordinates/element_space.dart';
 import '../../../../models/element_state.dart';
 import '../../../../types/draw_point.dart';
 import '../../../../types/draw_rect.dart';
-import '../../../../types/element_style.dart';
 import '../../../../utils/combined_element_lookup.dart';
-import '../../../../utils/selection_calculator.dart';
 import '../arrow_binding.dart';
+import '../arrow_core_bridge.dart';
 import '../arrow_data.dart';
-import '../arrow_geometry.dart';
-import 'elbow_constants.dart';
 import 'elbow_fixed_segment.dart';
-import 'elbow_geometry.dart';
-import 'elbow_router.dart';
-import 'elbow_spacing.dart';
-
-part 'elbow_edit_endpoint_drag.dart';
-part 'elbow_edit_fixed_segments.dart';
-part 'elbow_edit_perpendicular.dart';
-part 'elbow_edit_pipeline.dart';
 
 const _bindingOverrideUnset = Object();
 
-/// Elbow arrow editing entry points.
-/// Output of elbow edit computation (local points + fixed segment updates).
 @immutable
 final class ElbowEditResult {
   const ElbowEditResult({
@@ -42,11 +28,6 @@ final class ElbowEditResult {
   final bool? endIsSpecial;
 }
 
-/// Computes elbow edit using [CombinedElementLookup] for efficient element
-/// access.
-///
-/// Omit [startBindingOverride] / [endBindingOverride] to keep bindings from
-/// [data]. Pass `null` explicitly to clear a binding.
 ElbowEditResult computeElbowEdit({
   required ElementState element,
   required ArrowData data,
@@ -55,48 +36,72 @@ ElbowEditResult computeElbowEdit({
   List<ElbowFixedSegment>? fixedSegmentsOverride,
   Object? startBindingOverride = _bindingOverrideUnset,
   Object? endBindingOverride = _bindingOverrideUnset,
+  core.EngineContext? engineContext,
   bool finalize = false,
 }) {
-  final result = _runElbowEditPipeline(
+  final startBinding = _resolveBindingOverride(
+    override: startBindingOverride,
+    current: data.startBinding,
+  );
+  final endBinding = _resolveBindingOverride(
+    override: endBindingOverride,
+    current: data.endBinding,
+  );
+
+  final arrowState = toCoreArrowState(
     element: element,
     data: data,
-    lookup: lookup,
     localPointsOverride: localPointsOverride,
     fixedSegmentsOverride: fixedSegmentsOverride,
-    startBindingOverride: startBindingOverride,
-    endBindingOverride: endBindingOverride,
+    startBindingOverride: startBinding,
+    endBindingOverride: endBinding,
   );
-  return finalize
-      ? _finalizeElbowEditResult(
-          element: element,
-          data: data,
-          lookup: lookup,
-          result: result,
-          startBindingOverride: startBindingOverride,
-          endBindingOverride: endBindingOverride,
-        )
-      : result;
+  final bindables = collectCoreBindables(lookup.values);
+
+  final hasExplicitUpdates =
+      localPointsOverride != null ||
+      fixedSegmentsOverride != null ||
+      startBindingOverride != _bindingOverrideUnset ||
+      endBindingOverride != _bindingOverrideUnset;
+  final context = engineContext ?? core.defaultEngineContext;
+
+  final patch = hasExplicitUpdates
+      ? core.updateElbowArrowPatch(<String, dynamic>{
+          'arrow': arrowState,
+          'updates': <String, dynamic>{
+            if (localPointsOverride != null) 'points': arrowState.points,
+            if (fixedSegmentsOverride != null)
+              'fixedSegments': arrowState.fixedSegments,
+            if (startBindingOverride != _bindingOverrideUnset)
+              'startBinding': arrowState.startBinding,
+            if (endBindingOverride != _bindingOverrideUnset)
+              'endBinding': arrowState.endBinding,
+          },
+          'bindables': bindables,
+          'context': context,
+          'options': <String, dynamic>{'isDragging': !finalize},
+        })
+      : core.recomputeElbowPatch(<String, dynamic>{
+          'arrow': arrowState,
+          'bindables': bindables,
+          'context': context,
+        });
+
+  final nextArrow = core.applyArrowPatch(arrowState, patch);
+  final worldPoints = coreArrowWorldPoints(nextArrow);
+  final localPoints = worldToLocalPoints(element, worldPoints);
+  final fixedSegments = toLocalFixedSegmentsFromCoreArrow(nextArrow, element);
+
+  return ElbowEditResult(
+    localPoints: List<DrawPoint>.unmodifiable(localPoints),
+    fixedSegments: fixedSegments == null
+        ? null
+        : List<ElbowFixedSegment>.unmodifiable(fixedSegments),
+    startIsSpecial: nextArrow.startIsSpecial,
+    endIsSpecial: nextArrow.endIsSpecial,
+  );
 }
 
-ElbowEditResult _runElbowEditPipeline({
-  required ElementState element,
-  required ArrowData data,
-  required CombinedElementLookup lookup,
-  List<DrawPoint>? localPointsOverride,
-  List<ElbowFixedSegment>? fixedSegmentsOverride,
-  Object? startBindingOverride = _bindingOverrideUnset,
-  Object? endBindingOverride = _bindingOverrideUnset,
-}) => _ElbowEditPipeline(
-  element: element,
-  data: data,
-  lookup: lookup,
-  localPointsOverride: localPointsOverride,
-  fixedSegmentsOverride: fixedSegmentsOverride,
-  startBindingOverride: startBindingOverride,
-  endBindingOverride: endBindingOverride,
-).run();
-
-/// Transforms fixed segments when the owning element is resized/rotated.
 List<ElbowFixedSegment>? transformFixedSegments({
   required List<ElbowFixedSegment>? segments,
   required DrawRect oldRect,
@@ -118,5 +123,17 @@ List<ElbowFixedSegment>? transformFixedSegments({
         );
       })
       .toList(growable: false);
-  return List<ElbowFixedSegment>.unmodifiable(transformed);
+  return transformed.isEmpty
+      ? null
+      : List<ElbowFixedSegment>.unmodifiable(transformed);
+}
+
+ArrowBinding? _resolveBindingOverride({
+  required Object? override,
+  required ArrowBinding? current,
+}) {
+  if (override == _bindingOverrideUnset) {
+    return current;
+  }
+  return override as ArrowBinding?;
 }

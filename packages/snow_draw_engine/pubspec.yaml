@@ -2,6 +2,7 @@ name: snow_draw_engine
 resolution: workspace
 description: "The drawing engine functionality of the Snow Draw application."
 homepage: https://github.com/mg-chao/snow_draw
+publish_to: none
 
 version: 0.0.1-dev
 
@@ -13,6 +14,8 @@ dependencies:
   logger: ^2.6.2
   meta: ^1.15.0
   rbush: ^1.1.1
+  snow_draw_arrow_core:
+    path: ../snow_draw_arrow_core
 
 dev_dependencies:
   mocktail: ^1.0.4
