@@ -274,6 +274,28 @@ const List<String> _requiredFieldSpecs = <String>[
   'apply-engine-result|arrow,bindables,result',
 ];
 
+const List<String> _missingFieldValidationOrderSpecs = <String>[
+  'compute-endpoint-drag|arrow,bindables,draggedPoints,pointer,context',
+  'get-endpoint-binding-strategy|arrow,bindables,draggedPoints,pointer,context',
+  'compute-simple-binding-patch|arrow,bindables,draggedPoints,pointer,context',
+  'finalize-endpoint-drag|arrow,bindables,draggedPoints,pointer,context',
+  'compute-focus-point-drag|arrow,bindables,draggedEdge,pointer,context',
+  'resolve-focus-point-hit|arrow,bindables,pointer,context',
+  'resolve-focus-point-hit-with-offset|arrow,bindables,pointer,context',
+  'refresh-endpoint-binding|arrow,bindables,context,edge',
+  'avoid-rectangular-corner|bindable,point,arrow',
+  'get-snap-outline-mid-point|bindable,point,zoom',
+  'project-fixed-point-onto-diagonal|arrow,bindable,bindables,point,edge,zoom',
+  'update-bound-point|arrow,bindable,bindables,edge,binding',
+  'pick-hovered-bindable-for-focus|bindables,point,arrow',
+  'get-binding-side-mid-point|bindable,binding',
+  'get-global-fixed-point|bindable,binding',
+  'is-focus-point-visible|arrow,bindable,edge,binding,context',
+  'bind-arrow-endpoint|arrow,bindable,edge',
+  'derive-bindable-patches-for-binding-change|previous,next,arrowId',
+  'derive-bindable-relation-patches-for-binding-change|previous,next,arrowId,bindables',
+];
+
 Map<String, List<String>> _buildRequiredFieldsMap() {
   final out = <String, List<String>>{};
   for (final spec in _requiredFieldSpecs) {
@@ -292,6 +314,25 @@ Map<String, List<String>> _buildRequiredFieldsMap() {
 
 final Map<String, List<String>> _operationRequiredFields =
     _buildRequiredFieldsMap();
+
+Map<String, List<String>> _buildMissingFieldValidationOrderMap() {
+  final out = <String, List<String>>{};
+  for (final spec in _missingFieldValidationOrderSpecs) {
+    final parts = spec.split('|');
+    if (parts.isEmpty) {
+      continue;
+    }
+    final operation = parts.first;
+    final fieldList = parts.length < 2 || parts[1].trim().isEmpty
+        ? const <String>[]
+        : parts[1].split(',');
+    out[operation] = fieldList;
+  }
+  return Map<String, List<String>>.unmodifiable(out);
+}
+
+final Map<String, List<String>> _operationMissingFieldValidationOrder =
+    _buildMissingFieldValidationOrderMap();
 
 const List<String> _optionalFieldSpecs = <String>[
   'compute-endpoint-drag|options',
@@ -407,6 +448,12 @@ const Set<String> _operationsWithRelationBindablesField = <String>{
 
 const Set<String> _operationsWithRelationBindableField = <String>{
   'apply-bindable-relation-patch',
+};
+
+const Set<String> _missingFieldShapeValidationSkips = <String>{
+  'get-resize-arrow-direction|transformHandleType',
+  'are-bound-relations-equal|left',
+  'are-bound-relations-equal|right',
 };
 
 const Set<String> _operationsAllowNullBindingField = <String>{
@@ -1492,7 +1539,7 @@ List<String> _validateIdMapShape(Object? value, {required String path}) {
     return violations;
   }
   return <String>[
-    '$path must be a map of string-to-string, or an array of {from,to} entries',
+    '$path must be a readonly map, an array of { from, to } entries, or an object record',
   ];
 }
 
@@ -1681,6 +1728,23 @@ List<String> _validateBoundRelationEntriesShape(
   return violations;
 }
 
+class _MissingRequiredField {
+  const _MissingRequiredField();
+}
+
+const _MissingRequiredField _missingRequiredField = _MissingRequiredField();
+
+bool _isOptionalFieldForOperation(String operationType, String field) =>
+    _operationOptionalFields[operationType]?.contains(field) ?? false;
+
+String _optionalFieldSuffix(String operationType, String field) =>
+    _isOptionalFieldForOperation(operationType, field) ? ' when provided' : '';
+
+bool _shouldSkipMissingFieldShapeValidation(
+  String operationType,
+  String field,
+) => _missingFieldShapeValidationSkips.contains('$operationType|$field');
+
 List<String> _validateOperationFieldShape(
   String operationType,
   String field,
@@ -1715,9 +1779,13 @@ List<String> _validateOperationFieldShape(
       }
       return _validateStrictArrowStateArray(value, path: path);
     case 'bindable':
-      if (value == null &&
-          _operationsAllowNullBindableField.contains(operationType)) {
-        return const <String>[];
+      if (_operationsAllowNullBindableField.contains(operationType)) {
+        if (value == null) {
+          return const <String>[];
+        }
+        if (value is _MissingRequiredField) {
+          return <String>['$path must be an object or null'];
+        }
       }
       if (_operationsWithRelationBindableField.contains(operationType)) {
         return _validateStrictBindableRelationState(value, path: path);
@@ -1879,7 +1947,9 @@ List<String> _validateOperationFieldShape(
     case 'maxCoordinate':
       return _isFiniteNumber(value)
           ? const <String>[]
-          : <String>['$path must be a finite number'];
+          : <String>[
+              '$path must be a finite number${_optionalFieldSuffix(operationType, field)}',
+            ];
     case 'flipX':
     case 'flipY':
     case 'elbowed':
@@ -1888,7 +1958,9 @@ List<String> _validateOperationFieldShape(
     case 'ignoreOverlap':
       return value is bool
           ? const <String>[]
-          : <String>['$path must be a boolean'];
+          : <String>[
+              '$path must be a boolean${_optionalFieldSuffix(operationType, field)}',
+            ];
     case 'direction':
       return _isDirectionValue(value)
           ? const <String>[]
@@ -1958,7 +2030,7 @@ List<String> _validateOperationFieldShape(
     case 'endBounds':
       return _isDirectionalLinkBoundsShape(value)
           ? const <String>[]
-          : <String>['$path must be a directional link bounds object'];
+          : <String>['$path must be an object'];
     case 'updates':
       if (operationType == 'update-elbow-arrow') {
         return _validateUpdateElbowPatchShape(value, path: path);
@@ -2020,6 +2092,24 @@ List<String> _validateOperationInputShapeByHeuristics(
     }
     violations.addAll(
       _validateOperationFieldShape(operationType, entry.key, entry.value),
+    );
+  }
+  final requiredFields =
+      _operationRequiredFields[operationType] ?? const <String>[];
+  final missingFieldOrder =
+      _operationMissingFieldValidationOrder[operationType] ?? requiredFields;
+  for (final field in missingFieldOrder) {
+    if (!requiredFields.contains(field)) {
+      continue;
+    }
+    if (!validatedFields.contains(field) || input.containsKey(field)) {
+      continue;
+    }
+    if (_shouldSkipMissingFieldShapeValidation(operationType, field)) {
+      continue;
+    }
+    violations.addAll(
+      _validateOperationFieldShape(operationType, field, _missingRequiredField),
     );
   }
   return violations;
