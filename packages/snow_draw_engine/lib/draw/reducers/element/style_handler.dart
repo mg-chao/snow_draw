@@ -8,6 +8,7 @@ import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/elbow/elbow_router.dart';
+import '../../elements/types/arrow/elbow/elbow_editing.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/serial_number/serial_number_layout.dart';
 import '../../elements/types/text/text_data.dart';
@@ -19,6 +20,7 @@ import '../../services/text/text_metrics_service.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/element_style.dart';
+import '../../utils/combined_element_lookup.dart';
 import '../core/arrow_binding_sync.dart';
 import '../core/reducer_utils.dart';
 
@@ -233,6 +235,24 @@ DrawState handleUpdateElementsStyle(
         rect: result.rect,
         data: result.data,
       );
+    case (final ArrowData previousArrowData, final ArrowData updatedArrowData)
+        when _shouldRecomputeElbowAfterStyleChange(
+          previousArrowData,
+          updatedArrowData,
+        ):
+      final result = _resolveElbowRectAndDataAfterStyleChange(
+        element: updatedElement,
+        data: updatedArrowData,
+        elementsById: elementsById,
+        coreEngineContext: coreEngineContext,
+      );
+      if (result.rect != updatedElement.rect && trackGeometryChange) {
+        geometryChanged = true;
+      }
+      updatedElement = updatedElement.copyWith(
+        rect: result.rect,
+        data: result.data,
+      );
     case _:
   }
 
@@ -395,4 +415,51 @@ bool _hasSelectionGeometryChanges({
   );
   final updatedData = sanitizedData.copyWith(points: normalizedPoints);
   return (rect: rect, data: updatedData);
+}
+
+bool _shouldRecomputeElbowAfterStyleChange(ArrowData previous, ArrowData next) {
+  if (previous.arrowType != ArrowType.elbow ||
+      next.arrowType != ArrowType.elbow) {
+    return false;
+  }
+
+  return previous.startArrowhead != next.startArrowhead ||
+      previous.endArrowhead != next.endArrowhead ||
+      previous.strokeWidth != next.strokeWidth;
+}
+
+({DrawRect rect, ArrowData data}) _resolveElbowRectAndDataAfterStyleChange({
+  required ElementState element,
+  required ArrowData data,
+  required Map<String, ElementState> elementsById,
+  required core.EngineContext coreEngineContext,
+}) {
+  final edited = computeElbowEdit(
+    element: element,
+    data: data,
+    lookup: CombinedElementLookup(base: elementsById),
+    engineContext: coreEngineContext,
+    finalize: true,
+  );
+
+  final geometry = resolveArrowGeometryUpdate(
+    localPoints: edited.localPoints,
+    oldRect: element.rect,
+    rotation: element.rotation,
+    arrowType: data.arrowType,
+  );
+  final transformedFixedSegments = transformFixedSegments(
+    segments: edited.fixedSegments,
+    oldRect: element.rect,
+    newRect: geometry.rect,
+    rotation: element.rotation,
+  );
+
+  final updatedData = data.copyWith(
+    points: geometry.normalizedPoints,
+    fixedSegments: transformedFixedSegments,
+    startIsSpecial: edited.startIsSpecial,
+    endIsSpecial: edited.endIsSpecial,
+  );
+  return (rect: geometry.rect, data: updatedData);
 }
