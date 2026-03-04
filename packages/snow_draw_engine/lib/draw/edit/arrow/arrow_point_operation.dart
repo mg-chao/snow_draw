@@ -7,7 +7,6 @@ import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_data.dart';
-import '../../elements/types/arrow/arrow_engine_events.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
@@ -809,7 +808,17 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
     context: dragContext,
     options: const <String, dynamic>{'complexBindings': true},
   );
-  final draggedArrow = core.applyArrowPatch(arrow, dragResult.arrowPatch);
+  final applied = applyCoreEngineResult(
+    arrow: arrow,
+    bindables: collectCoreBindableRelations(
+      state.domain.document.elementMap.values,
+    ),
+    result: dragResult,
+    orderedElementIds: state.domain.document.elements
+        .map((element) => element.id)
+        .toList(growable: false),
+  );
+  final draggedArrow = applied.arrow;
   final worldPoints = coreArrowWorldPoints(draggedArrow);
   if (worldPoints.length < 2) {
     return _noOpComputation(
@@ -842,12 +851,7 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
       : draggedIndex >= localPoints.length
       ? localPoints.length - 1
       : draggedIndex;
-  final orderedElementIds = reduceArrowEngineEventsToOrderedIds(
-    orderedElementIds: state.domain.document.elements
-        .map((element) => element.id)
-        .toList(growable: false),
-    events: dragResult.events,
-  );
+  final orderedElementIds = applied.orderedElementIds;
   final orderChanged = orderedElementIds != null;
 
   return _ArrowPointComputation(

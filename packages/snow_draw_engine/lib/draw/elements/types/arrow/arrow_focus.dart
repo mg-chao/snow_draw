@@ -6,7 +6,6 @@ import '../../../types/draw_point.dart';
 import 'arrow_binding.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
-import 'arrow_engine_events.dart';
 import 'arrow_like_data.dart';
 
 /// Endpoint identifier for arrow focus-point interactions.
@@ -192,18 +191,18 @@ ArrowFocusDragResult dragArrowFocusPoint({
     gridSize: gridSize,
   );
 
-  final patchedElement = result.arrowPatch.isEmpty
+  final applied = applyCoreEngineResult(
+    arrow: arrow,
+    bindables: collectCoreBindableRelations(elementsById.values),
+    result: result,
+    orderedElementIds: orderedElementIds,
+  );
+  final patchedElement = applied.arrow == arrow
       ? element
-      : applyCoreArrowPatchToElement(
+      : applyCoreArrowStateToElement(
           element: element,
           data: data,
-          patch: result.arrowPatch,
-        );
-  final nextOrderedIds = orderedElementIds == null
-      ? null
-      : reduceArrowEngineEventsToOrderedIds(
-          orderedElementIds: orderedElementIds,
-          events: result.events,
+          nextArrow: applied.arrow,
         );
 
   return ArrowFocusDragResult(
@@ -212,7 +211,7 @@ ArrowFocusDragResult dragArrowFocusPoint({
     bindablePatches: List<core.BindablePatch>.unmodifiable(
       result.bindablePatches,
     ),
-    orderedElementIds: nextOrderedIds,
+    orderedElementIds: applied.orderedElementIds,
     suggestedBindableId: result.suggestedBinding?.bindableId,
   );
 }
