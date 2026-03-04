@@ -5,6 +5,7 @@ import '../../edit/apply/edit_apply.dart';
 import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
+import '../../elements/types/arrow/arrow_core_session.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_restore.dart';
 import '../../models/draw_state.dart';
@@ -90,8 +91,15 @@ List<ElementState> syncArrowBindingsAfterDeletion({
     return elements;
   }
 
-  final projection = projectCoreDocument(elements, onlyBoundArrows: true);
-  if (projection.arrows.isEmpty) {
+  final session = ArrowCoreSession.fromElements(
+    elements,
+    onlyBoundArrows: true,
+    orderedElementIds: elements
+        .map((element) => element.id)
+        .toList(growable: false),
+    context: engineContext,
+  );
+  if (!session.hasArrows) {
     return elements;
   }
 
@@ -105,31 +113,32 @@ List<ElementState> syncArrowBindingsAfterDeletion({
   ];
 
   final syncResult = syncCoreBindingsAfterDeletion(
-    arrows: projection.arrows,
-    bindables: projection.bindableRelations,
-    geometryBindables: projection.bindables,
+    arrows: session.arrows,
+    bindables: session.bindableRelations,
+    geometryBindables: session.bindables,
     deletedArrowIds: deletedArrowIds,
     deletedBindableIds: deletedBindableIds,
-    context: engineContext,
+    context: session.context,
   );
-  if (syncResult.arrowPatches.isEmpty) {
+  final patchedById = session.applyArrowPatches(syncResult.arrowPatches);
+  final reorderedElementIds = session.reduceEventsToOrderedElementIds(
+    syncResult.events,
+  );
+  if (patchedById.isEmpty && reorderedElementIds == null) {
     return elements;
   }
 
-  final patchedById = applyCoreArrowPatchesToSources(
-    patches: syncResult.arrowPatches,
-    sources: projection.arrowSources,
+  final synced = applyElementReplacementsAndOrder(
+    elements: elements,
+    replacementsById: patchedById,
+    orderedElementIds: reorderedElementIds,
   );
   if (patchedById.isEmpty) {
-    return elements;
+    return synced;
   }
-
-  final synced = <ElementState>[
-    for (final element in elements) patchedById[element.id] ?? element,
-  ];
   return repairArrowElementsOnRestore(
     elements: synced,
-    engineContext: engineContext,
+    engineContext: session.context,
   );
 }
 
@@ -143,6 +152,9 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     return elements;
   }
 
+  final orderedElementIds = elements
+      .map((element) => element.id)
+      .toList(growable: false);
   final elementsById = {for (final element in elements) element.id: element};
   final bindableIdMap = <String, String>{};
   final arrowIdMap = <String, String>{};
@@ -161,36 +173,41 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     }
   }
 
-  final projection = projectCoreDocument(elements);
-  if (projection.arrows.isEmpty) {
+  final session = ArrowCoreSession.fromElements(
+    elements,
+    orderedElementIds: orderedElementIds,
+    context: engineContext,
+  );
+  if (!session.hasArrows) {
     return elements;
   }
 
   final syncResult = syncCoreBindingsAfterDuplication(
-    arrows: projection.arrows,
-    bindables: projection.bindableRelations,
+    arrows: session.arrows,
+    bindables: session.bindableRelations,
     bindableIdMap: bindableIdMap,
     arrowIdMap: arrowIdMap,
-    geometryBindables: projection.bindables,
-    context: engineContext,
+    geometryBindables: session.bindables,
+    context: session.context,
   );
-  if (syncResult.arrowPatches.isEmpty) {
+  final patchedById = session.applyArrowPatches(syncResult.arrowPatches);
+  final reorderedElementIds = session.reduceEventsToOrderedElementIds(
+    syncResult.events,
+  );
+  if (patchedById.isEmpty && reorderedElementIds == null) {
     return elements;
   }
 
-  final patchedById = applyCoreArrowPatchesToSources(
-    patches: syncResult.arrowPatches,
-    sources: projection.arrowSources,
+  final synced = applyElementReplacementsAndOrder(
+    elements: elements,
+    replacementsById: patchedById,
+    orderedElementIds: reorderedElementIds,
   );
   if (patchedById.isEmpty) {
-    return elements;
+    return synced;
   }
-
-  final synced = <ElementState>[
-    for (final element in elements) patchedById[element.id] ?? element,
-  ];
   return repairArrowElementsOnRestore(
     elements: synced,
-    engineContext: engineContext,
+    engineContext: session.context,
   );
 }

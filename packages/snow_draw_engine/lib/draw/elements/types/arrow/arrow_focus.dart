@@ -6,6 +6,7 @@ import '../../../types/draw_point.dart';
 import 'arrow_binding.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
+import 'arrow_core_session.dart';
 import 'arrow_like_data.dart';
 
 /// Endpoint identifier for arrow focus-point interactions.
@@ -77,8 +78,11 @@ List<ArrowFocusPoint> listVisibleArrowFocusPoints({
   bool ignoreOverlap = false,
 }) {
   final arrow = toCoreArrowState(element: element, data: data);
-  final projection = projectCoreDocument(elements);
-  final bindables = projection.bindables;
+  final session = ArrowCoreSession.fromElements(
+    elements,
+    context: engineContext,
+  );
+  final bindables = session.bindables;
   if (bindables.isEmpty) {
     return const <ArrowFocusPoint>[];
   }
@@ -86,7 +90,7 @@ List<ArrowFocusPoint> listVisibleArrowFocusPoints({
   final focusPoints = listCoreVisibleFocusPoints(
     arrow: arrow,
     bindables: bindables,
-    context: engineContext ?? core.defaultEngineContext,
+    context: session.context,
     ignoreOverlap: ignoreOverlap,
   );
   if (focusPoints.isEmpty) {
@@ -121,8 +125,11 @@ ArrowFocusEndpoint? pickArrowFocusPoint({
   bool ignoreOverlap = false,
 }) {
   final arrow = toCoreArrowState(element: element, data: data);
-  final projection = projectCoreDocument(elements);
-  final bindables = projection.bindables;
+  final session = ArrowCoreSession.fromElements(
+    elements,
+    context: engineContext,
+  );
+  final bindables = session.bindables;
   if (bindables.isEmpty) {
     return null;
   }
@@ -131,7 +138,7 @@ ArrowFocusEndpoint? pickArrowFocusPoint({
     arrow: arrow,
     pointer: toCorePoint(pointer),
     bindables: bindables,
-    context: engineContext ?? core.defaultEngineContext,
+    context: session.context,
     ignoreOverlap: ignoreOverlap,
   );
   if (edge == null) {
@@ -151,8 +158,11 @@ ArrowFocusHit pickArrowFocusPointWithOffset({
   bool ignoreOverlap = false,
 }) {
   final arrow = toCoreArrowState(element: element, data: data);
-  final projection = projectCoreDocument(elements);
-  final bindables = projection.bindables;
+  final session = ArrowCoreSession.fromElements(
+    elements,
+    context: engineContext,
+  );
+  final bindables = session.bindables;
   if (bindables.isEmpty) {
     return const ArrowFocusHit(endpoint: null, pointerOffset: DrawPoint.zero);
   }
@@ -161,7 +171,7 @@ ArrowFocusHit pickArrowFocusPointWithOffset({
     arrow: arrow,
     pointer: toCorePoint(pointer),
     bindables: bindables,
-    context: engineContext ?? core.defaultEngineContext,
+    context: session.context,
     ignoreOverlap: ignoreOverlap,
   );
   return ArrowFocusHit(
@@ -183,27 +193,28 @@ ArrowFocusDragResult dragArrowFocusPoint({
   List<String>? orderedElementIds,
 }) {
   final arrow = toCoreArrowState(element: element, data: data);
-  final projection = projectCoreDocument(
+  final session = ArrowCoreSession.fromElements(
     elementsById.values,
     orderedElementIds: orderedElementIds,
+    context: engineContext,
   );
-  final bindables = projection.bindables;
+  final bindables = session.bindables;
   final result = computeCoreFocusPointDrag(
     arrow: arrow,
     draggedEdge: _endpointToCore(draggedEndpoint),
     pointer: toCorePoint(pointer),
     bindables: bindables,
-    context: engineContext ?? core.defaultEngineContext,
+    context: session.context,
     switchToInsideBinding: switchToInsideBinding,
     gridSize: gridSize,
   );
 
   final applied = applyCoreEngineResult(
     arrow: arrow,
-    bindables: projection.bindableRelations,
+    bindables: session.bindableRelations,
     result: result,
     orderedElementIds: orderedElementIds,
-    anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
+    anchorElementIdsByBindableId: session.anchorElementIdsByBindableId,
   );
   final reorderedElementIds = reorderedElementIdsFromCoreResult(applied);
   final patchedElement = applied.arrow == arrow

@@ -3,9 +3,8 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../models/element_state.dart';
 import '../../../utils/combined_element_lookup.dart';
-import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
-import 'arrow_engine_events.dart';
+import 'arrow_core_session.dart';
 
 /// Resolves arrow bindings when bindable elements change position.
 ///
@@ -44,32 +43,27 @@ final class ArrowBindingResolver {
       base: baseElements,
       overlay: updatedElements,
     );
-    final projection = projectCoreDocument(
+    final session = ArrowCoreSession.fromElements(
       lookup.values,
       onlyBoundArrows: true,
       orderedElementIds: orderedElementIds,
+      context: engineContext,
     );
-    if (projection.arrows.isEmpty) {
+    if (!session.hasArrows) {
       return ArrowBindingResolutionResult.empty;
     }
 
     final result = recomputeCoreBindingsForChangedBindables(
-      arrows: projection.arrows,
-      bindables: projection.bindables,
-      relations: projection.bindableRelations,
+      arrows: session.arrows,
+      bindables: session.bindables,
+      relations: session.bindableRelations,
       changedBindableIds: changedElementIds.toList(growable: false),
-      context: engineContext ?? core.defaultEngineContext,
+      context: session.context,
     );
 
-    final updates = applyCoreArrowPatchesToSources(
-      patches: result.arrowPatches,
-      sources: projection.arrowSources,
-    );
-
-    final reorderedElementIds = reduceArrowEngineEventsToOrderedIds(
-      orderedElementIds: projection.orderedElementIds,
-      events: result.events,
-      anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
+    final updates = session.applyArrowPatches(result.arrowPatches);
+    final reorderedElementIds = session.reduceEventsToOrderedElementIds(
+      result.events,
     );
 
     return ArrowBindingResolutionResult(
