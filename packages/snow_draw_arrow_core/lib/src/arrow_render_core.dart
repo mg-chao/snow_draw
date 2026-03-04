@@ -355,26 +355,76 @@ List<ArrowheadRenderPrimitive> getArrowheadRenderPrimitives(
       ];
     case 'triangle':
     case 'triangle_outline':
+    case 'inverted_triangle':
       if (points.length != 6) {
         return <ArrowheadRenderPrimitive>[];
       }
       final x = points[0];
       final y = points[1];
-      final x2 = points[2];
-      final y2 = points[3];
-      final x3 = points[4];
-      final y3 = points[5];
+      var x2 = points[2];
+      var y2 = points[3];
+      var x3 = points[4];
+      var y3 = points[5];
+      if (input.arrowhead == 'inverted_triangle') {
+        x2 = (2 * x) - x2;
+        y2 = (2 * y) - y2;
+        x3 = (2 * x) - x3;
+        y3 = (2 * y) - y3;
+      }
       return <ArrowheadRenderPrimitive>[
         polygon(
-          <Point>[
-            _toPoint(x, y),
-            _toPoint(x2, y2),
-            _toPoint(x3, y3),
-            _toPoint(x, y),
-          ],
+          input.arrowhead == 'inverted_triangle'
+              ? <Point>[_toPoint(x, y), _toPoint(x2, y2), _toPoint(x3, y3)]
+              : <Point>[
+                  _toPoint(x, y),
+                  _toPoint(x2, y2),
+                  _toPoint(x3, y3),
+                  _toPoint(x, y),
+                ],
           input.arrowhead == 'triangle_outline' ? 'background' : 'stroke',
           1,
         ),
+      ];
+    case 'square':
+      if (points.length != 6) {
+        return <ArrowheadRenderPrimitive>[];
+      }
+      final tip = _toPoint(points[0], points[1]);
+      final wingLeft = _toPoint(points[2], points[3]);
+      final wingRight = _toPoint(points[4], points[5]);
+      final baseMid = _toPoint(
+        (wingLeft[0] + wingRight[0]) / 2,
+        (wingLeft[1] + wingRight[1]) / 2,
+      );
+      final shaftDirection = _normalizeDirection(baseMid, tip);
+      if (shaftDirection == null) {
+        return <ArrowheadRenderPrimitive>[];
+      }
+      final side = math.max(1, distance(wingLeft, wingRight));
+      final half = side / 2;
+      final center = <double>[
+        tip[0] - shaftDirection[0] * half,
+        tip[1] - shaftDirection[1] * half,
+      ];
+      final perpendicular = <double>[-shaftDirection[1], shaftDirection[0]];
+      final corner1 = <double>[
+        center[0] + perpendicular[0] * half + shaftDirection[0] * half,
+        center[1] + perpendicular[1] * half + shaftDirection[1] * half,
+      ];
+      final corner2 = <double>[
+        center[0] - perpendicular[0] * half + shaftDirection[0] * half,
+        center[1] - perpendicular[1] * half + shaftDirection[1] * half,
+      ];
+      final corner3 = <double>[
+        center[0] - perpendicular[0] * half - shaftDirection[0] * half,
+        center[1] - perpendicular[1] * half - shaftDirection[1] * half,
+      ];
+      final corner4 = <double>[
+        center[0] + perpendicular[0] * half - shaftDirection[0] * half,
+        center[1] + perpendicular[1] * half - shaftDirection[1] * half,
+      ];
+      return <ArrowheadRenderPrimitive>[
+        polygon(<Point>[corner1, corner2, corner3, corner4], 'stroke', 1),
       ];
     case 'diamond':
     case 'diamond_outline':

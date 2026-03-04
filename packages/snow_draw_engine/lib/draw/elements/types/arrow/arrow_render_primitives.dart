@@ -65,8 +65,8 @@ final class ArrowheadCirclePrimitiveData extends ArrowheadRenderPrimitiveData {
 
 /// Resolves arrowhead primitives via arrow-core first, then engine fallback.
 ///
-/// The fallback path is used for engine-specific styles that are not part of
-/// Excalidraw's native arrowhead protocol (`square`, `invertedTriangle`).
+/// The fallback path is retained as a defensive safety net for unknown or
+/// malformed host styles.
 final class ArrowRenderPrimitives {
   const ArrowRenderPrimitives._();
 
@@ -289,17 +289,11 @@ core.Arrowhead? _toCoreRenderableArrowhead(ArrowheadStyle style) {
     case ArrowheadStyle.none:
       return null;
     case ArrowheadStyle.standard:
-      return toCoreArrowhead(style);
     case ArrowheadStyle.triangle:
-      return toCoreArrowhead(style);
     case ArrowheadStyle.square:
-      return null;
     case ArrowheadStyle.circle:
-      return toCoreArrowhead(style);
     case ArrowheadStyle.diamond:
-      return toCoreArrowhead(style);
     case ArrowheadStyle.invertedTriangle:
-      return null;
     case ArrowheadStyle.verticalLine:
       return toCoreArrowhead(style);
   }

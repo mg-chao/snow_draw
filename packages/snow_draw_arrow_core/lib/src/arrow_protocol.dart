@@ -490,10 +490,12 @@ const Set<String> _operationsContextRequireBindModeAndMaxCoordinate = <String>{
 const Set<String> _arrowheadValues = <String>{
   'arrow',
   'bar',
+  'square',
   'dot',
   'circle',
   'circle_outline',
   'triangle',
+  'inverted_triangle',
   'triangle_outline',
   'diamond',
   'diamond_outline',

@@ -101,13 +101,13 @@ String? toCoreArrowhead(ArrowheadStyle style) {
     case ArrowheadStyle.triangle:
       return 'triangle';
     case ArrowheadStyle.square:
-      return 'bar';
+      return 'square';
     case ArrowheadStyle.circle:
       return 'dot';
     case ArrowheadStyle.diamond:
       return 'diamond';
     case ArrowheadStyle.invertedTriangle:
-      return 'triangle';
+      return 'inverted_triangle';
     case ArrowheadStyle.verticalLine:
       return 'bar';
   }

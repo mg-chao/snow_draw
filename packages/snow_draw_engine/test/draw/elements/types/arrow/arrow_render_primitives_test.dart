@@ -24,7 +24,7 @@ void main() {
       expect(polygon.single.points.length, greaterThanOrEqualTo(3));
     });
 
-    test('resolves square fallback into filled polygon primitive', () {
+    test('resolves core square into filled polygon primitive', () {
       final primitives = ArrowRenderPrimitives.resolveArrowheadPrimitives(
         points: points,
         arrowType: ArrowType.straight,
@@ -32,12 +32,17 @@ void main() {
         strokeStyle: StrokeStyle.solid,
         strokeWidth: 2,
         position: ArrowEndpointPosition.end,
+        directionOverride: const DrawPoint(x: -1, y: 0),
       );
 
       final polygon = primitives.whereType<ArrowheadPolygonPrimitiveData>();
       expect(polygon, hasLength(1));
       expect(polygon.single.fillMode, ArrowheadPrimitiveFillMode.stroke);
       expect(polygon.single.points.length, 4);
+      final maxX = polygon.single.points
+          .map((point) => point.x)
+          .reduce((left, right) => left > right ? left : right);
+      expect(maxX, lessThanOrEqualTo(points.last.x + 1e-6));
     });
 
     test('resolves circle into filled circle primitive', () {
@@ -57,7 +62,7 @@ void main() {
       expect(circles.single.center.x, lessThanOrEqualTo(points.last.x));
     });
 
-    test('resolves inverted triangle fallback with opposite heading', () {
+    test('resolves core inverted triangle with opposite heading', () {
       final primitives = ArrowRenderPrimitives.resolveArrowheadPrimitives(
         points: points,
         arrowType: ArrowType.straight,
@@ -65,6 +70,7 @@ void main() {
         strokeStyle: StrokeStyle.solid,
         strokeWidth: 2,
         position: ArrowEndpointPosition.end,
+        directionOverride: const DrawPoint(x: -1, y: 0),
       );
 
       final polygon = primitives.whereType<ArrowheadPolygonPrimitiveData>();

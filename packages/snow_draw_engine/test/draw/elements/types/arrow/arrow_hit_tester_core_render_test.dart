@@ -50,7 +50,7 @@ void main() {
       expect(hit, isTrue);
     });
 
-    test('legacy square arrowhead fallback remains hittable', () {
+    test('core-rendered square arrowhead is hittable', () {
       final element = _buildArrowElement(endArrowhead: ArrowheadStyle.square);
 
       final hit = tester.hitTest(
