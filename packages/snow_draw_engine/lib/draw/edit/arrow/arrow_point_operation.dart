@@ -5,6 +5,7 @@ import '../../config/draw_config.dart';
 import '../../core/coordinates/element_space.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
+import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_engine_events.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
@@ -193,7 +194,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
         startBindingOverride: data.startBinding,
         endBindingOverride: data.endBinding,
       );
-      final releasePatch = core.releaseFixedSegment(
+      final releasePatch = releaseCoreFixedSegment(
         arrow: currentArrow,
         segmentIndex: segmentIndex,
       );
@@ -800,14 +801,14 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
       : _coreContextWithBindingDisabled(coreEngineContext);
 
   final dragPoint = <double>[worldTarget.x - arrow.x, worldTarget.y - arrow.y];
-  final dragResult = core.computeEndpointDrag(<String, dynamic>{
-    'arrow': arrow,
-    'draggedPoints': <int, core.Point>{draggedIndex: dragPoint},
-    'pointer': toCorePoint(worldTarget),
-    'bindables': bindables,
-    'context': dragContext,
-    'options': const <String, dynamic>{'complexBindings': true},
-  });
+  final dragResult = computeCoreEndpointDrag(
+    arrow: arrow,
+    draggedPoints: <int, core.Point>{draggedIndex: dragPoint},
+    pointer: toCorePoint(worldTarget),
+    bindables: bindables,
+    context: dragContext,
+    options: const <String, dynamic>{'complexBindings': true},
+  );
   final draggedArrow = core.applyArrowPatch(arrow, dragResult.arrowPatch);
   final worldPoints = coreArrowWorldPoints(draggedArrow);
   if (worldPoints.length < 2) {
@@ -953,11 +954,11 @@ _ArrowPointComputation _computeElbowAddableComputation({
     startBindingOverride: startBinding,
     endBindingOverride: endBinding,
   );
-  final dragResult = core.moveFixedSegmentToPoint(<String, dynamic>{
-    'arrow': arrowState,
-    'segmentIndex': segmentIndex,
-    'pointer': toCorePoint(worldTarget),
-  });
+  final dragResult = moveCoreFixedSegmentToPoint(
+    arrow: arrowState,
+    segmentIndex: segmentIndex,
+    pointer: toCorePoint(worldTarget),
+  );
   final movedArrow = core.applyArrowPatch(arrowState, dragResult.patch);
   final movedFixedSegments = toLocalFixedSegmentsFromCoreArrow(
     movedArrow,

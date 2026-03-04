@@ -2,6 +2,7 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
+import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -112,17 +113,17 @@ Map<String, ElementState> _pruneTransformedArrowBindings({
       if (lookup[id] case final element? when isArrowBindableElement(element))
         id,
   ];
-  final syncResult = core.syncBindingsAfterBindablePrune(<String, dynamic>{
-    'arrows': transformedArrows,
-    'bindables': collectCoreBindableRelations(lookup.values),
-    'geometryBindables': collectCoreBindables(lookup.values),
-    'retainedBindableIds': retainedBindableIds,
-    'context': buildCoreEngineContext(
+  final syncResult = syncCoreBindingsAfterBindablePrune(
+    arrows: transformedArrows,
+    bindables: collectCoreBindableRelations(lookup.values),
+    geometryBindables: collectCoreBindables(lookup.values),
+    retainedBindableIds: retainedBindableIds,
+    context: buildCoreEngineContext(
       zoom: state.application.view.camera.zoom,
       isBindingEnabled: isBindingEnabled,
     ),
-    'options': const <String, dynamic>{'recomputeElbows': true},
-  });
+    options: const <String, dynamic>{'recomputeElbows': true},
+  );
   if (syncResult.arrowPatches.isEmpty) {
     return merged;
   }

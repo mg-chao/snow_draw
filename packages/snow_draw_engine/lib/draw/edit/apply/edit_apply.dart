@@ -6,6 +6,7 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import '../../core/coordinates/overlay_space.dart';
 import '../../core/coordinates/world_space.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
+import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
@@ -484,16 +485,14 @@ ElementState _applyArrowResize({
     rect: element.rect,
     normalizedPoints: data.points,
   );
-  final corePatch = core.computeElbowResizePatch(<String, dynamic>{
-    'arrow': <String, dynamic>{
-      'startBinding': toCoreBinding(data.startBinding),
-      'endBinding': toCoreBinding(data.endBinding),
-      'fixedSegments': _toCoreFixedSegments(data.fixedSegments),
-    },
-    'points': toCorePoints(worldPoints),
-    'flipX': flipX,
-    'flipY': flipY,
-  });
+  final corePatch = computeCoreElbowResizePatch(
+    startBinding: toCoreBinding(data.startBinding),
+    endBinding: toCoreBinding(data.endBinding),
+    fixedSegments: _toCoreFixedSegments(data.fixedSegments),
+    points: toCorePoints(worldPoints),
+    flipX: flipX,
+    flipY: flipY,
+  );
   final nextStartBinding = corePatch.containsKey('startBinding')
       ? fromCoreBinding(corePatch['startBinding'] as core.FixedPointBinding?)
       : data.startBinding;

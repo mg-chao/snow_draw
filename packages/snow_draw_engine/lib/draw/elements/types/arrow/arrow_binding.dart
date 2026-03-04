@@ -13,6 +13,7 @@ import '../serial_number/serial_number_data.dart';
 import '../serial_number/serial_number_layout.dart';
 import '../shared/element_data_codec.dart';
 import '../text/text_data.dart';
+import 'arrow_core_ops.dart';
 import 'elbow/elbow_geometry.dart';
 import 'elbow/elbow_heading.dart';
 
@@ -581,19 +582,19 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     endIsSpecial: null,
   );
 
-  final result = core.computeSimpleBindingPatch(<String, dynamic>{
-    'arrow': arrow,
-    'draggedPoints': <int, core.Point>{
+  final result = computeCoreSimpleBindingPatch(
+    arrow: arrow,
+    draggedPoints: <int, core.Point>{
       arrow.points.length - 1: _toCorePoint(worldPoint),
     },
-    'pointer': _toCorePoint(worldPoint),
-    'bindables': bindables,
-    'context': core.defaultEngineContext,
-    'options': <String, dynamic>{
+    pointer: _toCorePoint(worldPoint),
+    bindables: bindables,
+    context: core.defaultEngineContext,
+    options: <String, dynamic>{
       'complexBindings': true,
       if (referencePoint == null) 'newArrow': true,
     },
-  });
+  );
 
   final nextArrow = core.applyArrowPatch(arrow, result.arrowPatch);
   final nextBinding = nextArrow.endBinding;

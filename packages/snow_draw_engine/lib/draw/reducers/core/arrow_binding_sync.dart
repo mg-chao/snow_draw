@@ -4,6 +4,7 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import '../../edit/apply/edit_apply.dart';
 import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
+import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
@@ -114,14 +115,14 @@ List<ElementState> syncArrowBindingsAfterDeletion({
       if (isArrowBindableElement(element)) element.id,
   ];
 
-  final syncResult = core.syncBindingsAfterDeletion(<String, dynamic>{
-    'arrows': arrows,
-    'bindables': collectCoreBindableRelations(elements),
-    'geometryBindables': collectCoreBindables(elements),
-    'deletedArrowIds': deletedArrowIds,
-    'deletedBindableIds': deletedBindableIds,
-    'context': engineContext,
-  });
+  final syncResult = syncCoreBindingsAfterDeletion(
+    arrows: arrows,
+    bindables: collectCoreBindableRelations(elements),
+    geometryBindables: collectCoreBindables(elements),
+    deletedArrowIds: deletedArrowIds,
+    deletedBindableIds: deletedBindableIds,
+    context: engineContext,
+  );
   if (syncResult.arrowPatches.isEmpty) {
     return elements;
   }
@@ -193,14 +194,14 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     return elements;
   }
 
-  final syncResult = core.syncBindingsAfterDuplication(<String, dynamic>{
-    'arrows': arrows,
-    'bindables': collectCoreBindableRelations(elements),
-    'bindableIdMap': bindableIdMap,
-    'arrowIdMap': arrowIdMap,
-    'geometryBindables': collectCoreBindables(elements),
-    'context': engineContext,
-  });
+  final syncResult = syncCoreBindingsAfterDuplication(
+    arrows: arrows,
+    bindables: collectCoreBindableRelations(elements),
+    bindableIdMap: bindableIdMap,
+    arrowIdMap: arrowIdMap,
+    geometryBindables: collectCoreBindables(elements),
+    context: engineContext,
+  );
   if (syncResult.arrowPatches.isEmpty) {
     return elements;
   }

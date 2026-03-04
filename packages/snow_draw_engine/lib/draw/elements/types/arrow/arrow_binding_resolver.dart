@@ -4,6 +4,7 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import '../../../models/element_state.dart';
 import '../../../utils/combined_element_lookup.dart';
 import 'arrow_core_bridge.dart';
+import 'arrow_core_ops.dart';
 import 'arrow_engine_events.dart';
 import 'arrow_like_data.dart';
 
@@ -66,13 +67,13 @@ final class ArrowBindingResolver {
       return ArrowBindingResolutionResult.empty;
     }
 
-    final result = core.recomputeBindingsForChangedBindables(<String, dynamic>{
-      'arrows': arrows,
-      'bindables': bindables,
-      'relations': relations,
-      'changedBindableIds': changedElementIds.toList(growable: false),
-      'context': engineContext ?? core.defaultEngineContext,
-    });
+    final result = recomputeCoreBindingsForChangedBindables(
+      arrows: arrows,
+      bindables: bindables,
+      relations: relations,
+      changedBindableIds: changedElementIds.toList(growable: false),
+      context: engineContext ?? core.defaultEngineContext,
+    );
 
     final updates = <String, ElementState>{};
     for (final arrowPatch in result.arrowPatches) {

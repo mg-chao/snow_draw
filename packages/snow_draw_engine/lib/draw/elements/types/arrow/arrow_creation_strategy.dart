@@ -21,6 +21,7 @@ import '../../../utils/visible_elements.dart';
 import '../arrow/arrow_binding.dart';
 import '../line/line_data.dart';
 import 'arrow_core_bridge.dart';
+import 'arrow_core_ops.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
 import 'arrow_two_point_layout.dart';
@@ -718,16 +719,16 @@ _BindingSnapResult _snapBindingPoint({
     'complexBindings': true,
     if (dragStart && preferredBinding == null) 'initialBinding': true,
   };
-  final dragResult = core.computeEndpointDrag(<String, dynamic>{
-    'arrow': arrow,
-    'draggedPoints': <int, core.Point>{
+  final dragResult = computeCoreEndpointDrag(
+    arrow: arrow,
+    draggedPoints: <int, core.Point>{
       dragStart ? 0 : 1: dragStart ? <double>[0, 0] : <double>[dx, dy],
     },
-    'pointer': toCorePoint(position),
-    'bindables': bindables,
-    'context': buildCoreEngineContext(zoom: state.application.view.camera.zoom),
-    'options': options,
-  });
+    pointer: toCorePoint(position),
+    bindables: bindables,
+    context: buildCoreEngineContext(zoom: state.application.view.camera.zoom),
+    options: options,
+  );
   final nextArrow = core.applyArrowPatch(arrow, dragResult.arrowPatch);
   final worldPoints = coreArrowWorldPoints(nextArrow);
   if (worldPoints.length < 2) {

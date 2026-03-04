@@ -8,6 +8,7 @@ import '../../../../types/draw_rect.dart';
 import '../../../../utils/combined_element_lookup.dart';
 import '../arrow_binding.dart';
 import '../arrow_core_bridge.dart';
+import '../arrow_core_ops.dart';
 import '../arrow_data.dart';
 import 'elbow_fixed_segment.dart';
 
@@ -66,9 +67,9 @@ ElbowEditResult computeElbowEdit({
   final context = engineContext ?? core.defaultEngineContext;
 
   final patch = hasExplicitUpdates
-      ? core.updateElbowArrowPatch(<String, dynamic>{
-          'arrow': arrowState,
-          'updates': <String, dynamic>{
+      ? updateCoreElbowArrowPatch(
+          arrow: arrowState,
+          updates: <String, dynamic>{
             if (localPointsOverride != null) 'points': arrowState.points,
             if (fixedSegmentsOverride != null)
               'fixedSegments': arrowState.fixedSegments,
@@ -77,15 +78,15 @@ ElbowEditResult computeElbowEdit({
             if (endBindingOverride != _bindingOverrideUnset)
               'endBinding': arrowState.endBinding,
           },
-          'bindables': bindables,
-          'context': context,
-          'options': <String, dynamic>{'isDragging': !finalize},
-        })
-      : core.recomputeElbowPatch(<String, dynamic>{
-          'arrow': arrowState,
-          'bindables': bindables,
-          'context': context,
-        });
+          bindables: bindables,
+          context: context,
+          options: <String, dynamic>{'isDragging': !finalize},
+        )
+      : recomputeCoreElbowPatch(
+          arrow: arrowState,
+          bindables: bindables,
+          context: context,
+        );
 
   final nextArrow = core.applyArrowPatch(arrowState, patch);
   final worldPoints = coreArrowWorldPoints(nextArrow);

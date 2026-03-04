@@ -18,6 +18,7 @@ export 'draw/elements/text_rendering_cache_invalidation.dart';
 export 'draw/elements/registration.dart';
 export 'draw/elements/types/arrow/arrow_data.dart';
 export 'draw/elements/types/arrow/arrow_binding.dart';
+export 'draw/elements/types/arrow/arrow_focus.dart';
 export 'draw/elements/types/arrow/arrow_like_data.dart';
 export 'draw/elements/types/arrow/arrow_geometry.dart';
 export 'draw/elements/types/arrow/arrow_points.dart';

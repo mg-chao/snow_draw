@@ -7,6 +7,7 @@ import '../../../../types/draw_point.dart';
 import '../../../../types/element_style.dart';
 import '../arrow_binding.dart';
 import '../arrow_core_bridge.dart';
+import '../arrow_core_ops.dart';
 import '../arrow_data.dart';
 import '../arrow_geometry.dart';
 import 'elbow_fixed_segment.dart';
@@ -80,11 +81,11 @@ ElbowRouteResult routeElbowArrow({
     endArrowhead: endArrowhead,
   );
   final bindables = collectCoreBindables(elementsById.values);
-  final patch = core.recomputeElbowPatch(<String, dynamic>{
-    'arrow': baseArrow,
-    'bindables': bindables,
-    'context': engineContext ?? core.defaultEngineContext,
-  });
+  final patch = recomputeCoreElbowPatch(
+    arrow: baseArrow,
+    bindables: bindables,
+    context: engineContext ?? core.defaultEngineContext,
+  );
   final routedArrow = core.applyArrowPatch(baseArrow, patch);
   final points = coreArrowWorldPoints(routedArrow);
   if (points.length < 2) {
