@@ -218,6 +218,7 @@ class CreateElementReducer {
     );
 
     final finishResult = strategy.finish(
+      state: state,
       config: context.config,
       creatingState: interaction,
       textMetricsService: context.textMetricsService,

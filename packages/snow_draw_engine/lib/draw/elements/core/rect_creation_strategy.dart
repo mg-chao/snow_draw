@@ -115,6 +115,7 @@ class RectCreationStrategy extends CreationStrategy {
 
   @override
   CreationFinishResult finish({
+    required DrawState state,
     required DrawConfig config,
     required CreatingState creatingState,
     TextMetricsService textMetricsService = defaultTextMetricsService,

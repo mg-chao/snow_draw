@@ -17,6 +17,23 @@ core.EngineResult computeCoreEndpointDrag({
   ...?(options == null ? null : <String, dynamic>{'options': options}),
 });
 
+/// Typed wrapper around endpoint-drag finalization.
+core.EngineResult finalizeCoreEndpointDrag({
+  required core.ArrowState arrow,
+  required Map<int, core.Point> draggedPoints,
+  required core.Point pointer,
+  required List<core.BindableState> bindables,
+  required core.EngineContext context,
+  Map<String, dynamic>? options,
+}) => core.finalizeEndpointDrag(<String, dynamic>{
+  'arrow': arrow,
+  'draggedPoints': draggedPoints,
+  'pointer': pointer,
+  'bindables': bindables,
+  'context': context,
+  ...?(options == null ? null : <String, dynamic>{'options': options}),
+});
+
 /// Typed wrapper around `snow_draw_arrow_core` binding preview computation.
 core.EngineResult computeCoreSimpleBindingPatch({
   required core.ArrowState arrow,

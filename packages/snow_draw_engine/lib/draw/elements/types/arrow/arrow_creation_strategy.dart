@@ -301,6 +301,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
 
   @override
   CreationFinishResult finish({
+    required DrawState state,
     required DrawConfig config,
     required CreatingState creatingState,
     TextMetricsService textMetricsService = defaultTextMetricsService,
@@ -343,14 +344,26 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       worldPoints: closedPoints,
       rect: arrowRect,
     );
-    final updatedData = data.copyWith(points: normalizedPoints);
-    final points = ArrowGeometry.resolveWorldPoints(
+    var finalizedResult = (
       rect: arrowRect,
-      normalizedPoints: updatedData.points,
+      data: data.copyWith(points: normalizedPoints),
+    );
+    if (config.snap.enableArrowBinding) {
+      finalizedResult = _finalizeArrowCreationBindings(
+        state: state,
+        config: config,
+        elementId: creatingState.element.id,
+        result: finalizedResult,
+      );
+    }
+
+    final points = ArrowGeometry.resolveWorldPoints(
+      rect: finalizedResult.rect,
+      normalizedPoints: finalizedResult.data.points,
     );
     final length = ArrowGeometry.calculateShaftLength(
       points: points,
-      arrowType: updatedData.arrowType,
+      arrowType: finalizedResult.data.arrowType,
     );
     if (!length.isFinite || length < minSize) {
       return CreationFinishResult(
@@ -361,11 +374,84 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     }
 
     return CreationFinishResult(
-      data: updatedData,
-      rect: arrowRect,
+      data: finalizedResult.data,
+      rect: finalizedResult.rect,
       shouldCommit: true,
     );
   }
+}
+
+typedef _ArrowCreationFinishResult = ({DrawRect rect, ArrowLikeData data});
+
+_ArrowCreationFinishResult _finalizeArrowCreationBindings({
+  required DrawState state,
+  required DrawConfig config,
+  required String elementId,
+  required _ArrowCreationFinishResult result,
+}) {
+  final worldPoints = ArrowGeometry.resolveWorldPoints(
+    rect: result.rect,
+    normalizedPoints: result.data.points,
+  );
+  if (worldPoints.length < 2) {
+    return result;
+  }
+
+  final bindingDistance = resolveZoomAdjustedDistance(
+    distance: config.snap.arrowBindingDistance,
+    zoom: state.application.view.camera.zoom,
+  );
+  final bindables = _resolveCoreBindingSnapBindables(
+    state: state,
+    worldPoint: worldPoints.last,
+    bindingDistance: bindingDistance,
+    preferredBinding: result.data.endBinding,
+    oppositeBinding: result.data.startBinding,
+  );
+  if (bindables.isEmpty &&
+      result.data.startBinding == null &&
+      result.data.endBinding == null) {
+    return result;
+  }
+
+  final previewElement = ElementState(
+    id: elementId,
+    rect: result.rect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: 0,
+    data: result.data,
+  );
+  final arrow = toCoreArrowState(element: previewElement, data: result.data);
+  final dragIndex = arrow.points.length - 1;
+  final pointer = worldPoints.last;
+  final dragPoint = <double>[pointer.x - arrow.x, pointer.y - arrow.y];
+
+  final finalized = finalizeCoreEndpointDrag(
+    arrow: arrow,
+    draggedPoints: <int, core.Point>{dragIndex: dragPoint},
+    pointer: toCorePoint(pointer),
+    bindables: bindables,
+    context: buildCoreEngineContext(
+      zoom: state.application.view.camera.zoom,
+      isBindingEnabled: config.snap.enableArrowBinding,
+    ),
+    options: const <String, dynamic>{'newArrow': true, 'complexBindings': true},
+  );
+  if (finalized.arrowPatch.isEmpty) {
+    return result;
+  }
+
+  final patchedElement = applyCoreArrowPatchToElement(
+    element: previewElement,
+    data: result.data,
+    patch: finalized.arrowPatch,
+  );
+  final patchedData = patchedElement.data;
+  if (patchedData is! ArrowLikeData) {
+    return result;
+  }
+  return (rect: patchedElement.rect, data: patchedData);
 }
 
 CreationUpdateResult _updateLine({

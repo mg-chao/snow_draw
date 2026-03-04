@@ -5,7 +5,6 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
-import '../../../types/draw_rect.dart';
 import '../shared/element_data_codec.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
@@ -93,13 +92,13 @@ final class ArrowBindingResult {
 /// Bridge utilities that project engine element state into arrow-core binding
 /// primitives.
 ///
-/// All binding resolution now delegates directly to `snow_draw_arrow_core`.
+/// All binding resolution delegates to `snow_draw_arrow_core`.
 class ArrowBindingUtils {
   const ArrowBindingUtils._();
 
-  static const double elbowBindingGapBase = _elbowBindingGapBase;
+  static const double elbowBindingGapBase = core.baseBindingGapElbow;
   static const double elbowArrowheadGapMultiplier =
-      _bindingArrowheadGapMultiplier;
+      core.baseBindingGap / core.baseBindingGapElbow;
 
   static bool isBindableTarget(ElementState target) =>
       toCoreBindableState(target) != null;
@@ -124,7 +123,7 @@ class ArrowBindingUtils {
   static double resolveBindingGap({required ElementState target}) {
     final bindable = toCoreBindableState(target);
     if (bindable == null) {
-      return _fallbackBindingGapBase;
+      return core.baseBindingGap;
     }
     return core.getBindingGap(bindable, false);
   }
@@ -139,25 +138,15 @@ class ArrowBindingUtils {
     ArrowBinding? preferredBinding,
     bool allowNewBinding = true,
     DrawPoint? referencePoint,
-  }) =>
-      _resolveBindingCandidateViaCore(
-        worldPoint: worldPoint,
-        targets: targets,
-        snapDistance: snapDistance,
-        preferredBinding: preferredBinding,
-        allowNewBinding: allowNewBinding,
-        referencePoint: referencePoint,
-        elbowed: false,
-      ) ??
-      _resolveFallbackBindingCandidate(
-        worldPoint: worldPoint,
-        targets: targets,
-        snapDistance: snapDistance,
-        preferredBinding: preferredBinding,
-        allowNewBinding: allowNewBinding,
-        referencePoint: referencePoint,
-        elbowed: false,
-      );
+  }) => _resolveBindingCandidateViaCore(
+    worldPoint: worldPoint,
+    targets: targets,
+    snapDistance: snapDistance,
+    preferredBinding: preferredBinding,
+    allowNewBinding: allowNewBinding,
+    referencePoint: referencePoint,
+    elbowed: false,
+  );
 
   static ArrowBindingResult? resolveElbowBindingCandidate({
     required DrawPoint worldPoint,
@@ -166,27 +155,16 @@ class ArrowBindingUtils {
     required bool hasArrowhead,
     ArrowBinding? preferredBinding,
     bool allowNewBinding = true,
-  }) =>
-      _resolveBindingCandidateViaCore(
-        worldPoint: worldPoint,
-        targets: targets,
-        snapDistance: snapDistance,
-        preferredBinding: preferredBinding,
-        allowNewBinding: allowNewBinding,
-        referencePoint: null,
-        elbowed: true,
-        hasArrowhead: hasArrowhead,
-      ) ??
-      _resolveFallbackBindingCandidate(
-        worldPoint: worldPoint,
-        targets: targets,
-        snapDistance: snapDistance,
-        preferredBinding: preferredBinding,
-        allowNewBinding: allowNewBinding,
-        referencePoint: null,
-        elbowed: true,
-        hasArrowhead: hasArrowhead,
-      );
+  }) => _resolveBindingCandidateViaCore(
+    worldPoint: worldPoint,
+    targets: targets,
+    snapDistance: snapDistance,
+    preferredBinding: preferredBinding,
+    allowNewBinding: allowNewBinding,
+    referencePoint: null,
+    elbowed: true,
+    hasArrowhead: hasArrowhead,
+  );
 
   /// Resolves a single-target binding candidate without list iteration.
   ///
@@ -201,21 +179,14 @@ class ArrowBindingUtils {
       return null;
     }
     return _resolveBindingCandidateViaCore(
-          worldPoint: worldPoint,
-          targets: <ElementState>[target],
-          snapDistance: snapDistance,
-          preferredBinding: null,
-          allowNewBinding: true,
-          referencePoint: referencePoint,
-          elbowed: false,
-        ) ??
-        _resolveFallbackBindingOnTarget(
-          worldPoint: worldPoint,
-          target: target,
-          snapDistance: snapDistance,
-          referencePoint: referencePoint,
-          elbowed: false,
-        );
+      worldPoint: worldPoint,
+      targets: <ElementState>[target],
+      snapDistance: snapDistance,
+      preferredBinding: null,
+      allowNewBinding: true,
+      referencePoint: referencePoint,
+      elbowed: false,
+    );
   }
 
   /// Resolves a single-target elbow binding candidate without list iteration.
@@ -231,23 +202,15 @@ class ArrowBindingUtils {
       return null;
     }
     return _resolveBindingCandidateViaCore(
-          worldPoint: worldPoint,
-          targets: <ElementState>[target],
-          snapDistance: snapDistance,
-          preferredBinding: null,
-          allowNewBinding: true,
-          referencePoint: null,
-          elbowed: true,
-          hasArrowhead: hasArrowhead,
-        ) ??
-        _resolveFallbackBindingOnTarget(
-          worldPoint: worldPoint,
-          target: target,
-          snapDistance: snapDistance,
-          referencePoint: null,
-          elbowed: true,
-          hasArrowhead: hasArrowhead,
-        );
+      worldPoint: worldPoint,
+      targets: <ElementState>[target],
+      snapDistance: snapDistance,
+      preferredBinding: null,
+      allowNewBinding: true,
+      referencePoint: null,
+      elbowed: true,
+      hasArrowhead: hasArrowhead,
+    );
   }
 
   static DrawPoint? resolveBoundPoint({
@@ -382,7 +345,7 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
           mode: _toCoreBindingMode(preferredBinding.mode),
         );
 
-  final arrow = core.ArrowState(
+  final previewArrow = core.ArrowState(
     id: '__binding-preview__',
     x: normalized.x,
     y: normalized.y,
@@ -398,11 +361,15 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     startIsSpecial: null,
     endIsSpecial: null,
   );
+  final localPointer = <double>[
+    worldPoint.x - previewArrow.x,
+    worldPoint.y - previewArrow.y,
+  ];
 
   final result = computeCoreSimpleBindingPatch(
-    arrow: arrow,
+    arrow: previewArrow,
     draggedPoints: <int, core.Point>{
-      arrow.points.length - 1: _toCorePoint(worldPoint),
+      previewArrow.points.length - 1: localPointer,
     },
     pointer: _toCorePoint(worldPoint),
     bindables: bindables,
@@ -413,7 +380,7 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     },
   );
 
-  final nextArrow = core.applyArrowPatch(arrow, result.arrowPatch);
+  final nextArrow = core.applyArrowPatch(previewArrow, result.arrowPatch);
   final nextBinding = nextArrow.endBinding;
   if (nextBinding == null) {
     return null;
@@ -508,443 +475,6 @@ DrawPoint? _resolveBoundPointViaCore({
   return DrawPoint(x: arrow.x + local[0], y: arrow.y + local[1]);
 }
 
-ArrowBindingResult? _resolveFallbackBindingCandidate({
-  required DrawPoint worldPoint,
-  required Iterable<ElementState> targets,
-  required double snapDistance,
-  required ArrowBinding? preferredBinding,
-  required bool allowNewBinding,
-  required DrawPoint? referencePoint,
-  required bool elbowed,
-  bool hasArrowhead = false,
-}) {
-  if (snapDistance <= 0) {
-    return null;
-  }
-
-  final preferredElementId = preferredBinding?.elementId;
-  if (!allowNewBinding && preferredElementId == null) {
-    return null;
-  }
-
-  ArrowBindingResult? best;
-  var bestScore = double.infinity;
-
-  for (final target in targets) {
-    if (target.opacity <= 0 || !ArrowBindingUtils.isBindableTarget(target)) {
-      continue;
-    }
-    if (!allowNewBinding &&
-        preferredElementId != null &&
-        target.id != preferredElementId) {
-      continue;
-    }
-
-    final candidate = _resolveFallbackBindingOnTarget(
-      worldPoint: worldPoint,
-      target: target,
-      snapDistance: snapDistance,
-      referencePoint: referencePoint,
-      elbowed: elbowed,
-      hasArrowhead: hasArrowhead,
-    );
-    if (candidate == null) {
-      continue;
-    }
-
-    var score = candidate.distance;
-    if (preferredElementId == target.id) {
-      score = math.max(0, score - snapDistance * 0.25);
-    }
-    if (_isBetterFallbackCandidate(
-      candidate: candidate,
-      candidateScore: score,
-      currentBest: best,
-      currentBestScore: bestScore,
-    )) {
-      best = candidate;
-      bestScore = score;
-    }
-  }
-
-  return best;
-}
-
-ArrowBindingResult? _resolveFallbackBindingOnTarget({
-  required DrawPoint worldPoint,
-  required ElementState target,
-  required double snapDistance,
-  required DrawPoint? referencePoint,
-  required bool elbowed,
-  bool hasArrowhead = false,
-}) {
-  final rect = target.rect;
-  if (rect.width == 0 || rect.height == 0) {
-    return null;
-  }
-
-  final circle = _isCircularTarget(target);
-  final center = rect.center;
-  final radius = circle
-      ? math.min(rect.width.abs(), rect.height.abs()) / 2
-      : 0.0;
-  final isInside = circle
-      ? _isInsideCircle(worldPoint: worldPoint, center: center, radius: radius)
-      : _isInsideRect(worldPoint: worldPoint, element: target);
-
-  final anchor = circle
-      ? _nearestCircleBoundaryPoint(
-          center: center,
-          radius: radius,
-          point: worldPoint,
-          referencePoint: referencePoint,
-        )
-      : _nearestRectBoundaryPoint(
-          target: target,
-          point: worldPoint,
-          referencePoint: referencePoint,
-        );
-
-  if (anchor == null) {
-    return null;
-  }
-
-  final mode = elbowed
-      ? ArrowBindingMode.orbit
-      : (isInside ? ArrowBindingMode.inside : ArrowBindingMode.orbit);
-
-  final distance = isInside ? 0.0 : worldPoint.distance(anchor);
-  final threshold = ArrowBindingUtils.resolveBindingSearchDistance(
-    snapDistance,
-  );
-  if (distance > threshold) {
-    return null;
-  }
-
-  final binding = ArrowBindingUtils.bindingFromLocalPoint(
-    target: target,
-    localPoint: anchor,
-    mode: mode,
-  );
-  if (binding == null) {
-    return null;
-  }
-
-  if (mode == ArrowBindingMode.inside) {
-    return ArrowBindingResult(
-      binding: binding,
-      snapPoint: anchor,
-      distance: distance,
-      zIndex: target.zIndex,
-    );
-  }
-
-  final gap = elbowed
-      ? _resolveFallbackElbowGap(hasArrowhead)
-      : ArrowBindingUtils.resolveBindingGap(target: target);
-  final direction = _resolveOrbitDirection(
-    target: target,
-    anchor: anchor,
-    referencePoint: referencePoint,
-  );
-  final snapPoint = DrawPoint(
-    x: anchor.x + direction.x * gap,
-    y: anchor.y + direction.y * gap,
-  );
-  return ArrowBindingResult(
-    binding: binding,
-    snapPoint: snapPoint,
-    distance: distance,
-    zIndex: target.zIndex,
-  );
-}
-
-bool _isBetterFallbackCandidate({
-  required ArrowBindingResult candidate,
-  required double candidateScore,
-  required ArrowBindingResult? currentBest,
-  required double currentBestScore,
-}) {
-  if (candidateScore < currentBestScore) {
-    return true;
-  }
-  if (candidateScore > currentBestScore) {
-    return false;
-  }
-  if (currentBest == null) {
-    return true;
-  }
-  if (candidate.zIndex > currentBest.zIndex) {
-    return true;
-  }
-  if (candidate.zIndex < currentBest.zIndex) {
-    return false;
-  }
-  return candidate.binding.elementId.compareTo(currentBest.binding.elementId) <
-      0;
-}
-
-double _resolveFallbackElbowGap(bool hasArrowhead) => hasArrowhead
-    ? _elbowBindingGapBase * _bindingArrowheadGapMultiplier
-    : _elbowBindingGapBase;
-
-bool _isCircularTarget(ElementState target) =>
-    toCoreBindableState(target)?.shape == 'ellipse';
-
-bool _isInsideRect({
-  required DrawPoint worldPoint,
-  required ElementState element,
-}) {
-  final rect = element.rect;
-  return worldPoint.x >= rect.minX &&
-      worldPoint.x <= rect.maxX &&
-      worldPoint.y >= rect.minY &&
-      worldPoint.y <= rect.maxY;
-}
-
-bool _isInsideCircle({
-  required DrawPoint worldPoint,
-  required DrawPoint center,
-  required double radius,
-}) {
-  if (radius <= 0) {
-    return false;
-  }
-  final dx = worldPoint.x - center.x;
-  final dy = worldPoint.y - center.y;
-  return dx * dx + dy * dy <= radius * radius;
-}
-
-DrawPoint? _nearestRectBoundaryPoint({
-  required ElementState target,
-  required DrawPoint point,
-  DrawPoint? referencePoint,
-}) {
-  final rect = target.rect;
-  if (rect.width == 0 || rect.height == 0) {
-    return null;
-  }
-  if (referencePoint != null) {
-    final hit = _intersectRectByRay(
-      rect: rect,
-      from: referencePoint,
-      to: point,
-    );
-    if (hit != null) {
-      return hit;
-    }
-  }
-
-  final clampedX = _clamp(point.x, rect.minX, rect.maxX);
-  final clampedY = _clamp(point.y, rect.minY, rect.maxY);
-  final inside = _isInsideRect(worldPoint: point, element: target);
-  if (!inside) {
-    return DrawPoint(x: clampedX, y: clampedY);
-  }
-
-  final left = (point.x - rect.minX).abs();
-  final right = (rect.maxX - point.x).abs();
-  final top = (point.y - rect.minY).abs();
-  final bottom = (rect.maxY - point.y).abs();
-  final minDistance = math.min(math.min(left, right), math.min(top, bottom));
-
-  if (minDistance == left) {
-    return DrawPoint(x: rect.minX, y: point.y);
-  }
-  if (minDistance == right) {
-    return DrawPoint(x: rect.maxX, y: point.y);
-  }
-  if (minDistance == top) {
-    return DrawPoint(x: point.x, y: rect.minY);
-  }
-  return DrawPoint(x: point.x, y: rect.maxY);
-}
-
-DrawPoint? _nearestCircleBoundaryPoint({
-  required DrawPoint center,
-  required double radius,
-  required DrawPoint point,
-  DrawPoint? referencePoint,
-}) {
-  if (radius <= 0) {
-    return null;
-  }
-  if (referencePoint != null) {
-    final hit = _intersectCircleByRay(
-      center: center,
-      radius: radius,
-      from: referencePoint,
-      to: point,
-    );
-    if (hit != null) {
-      return hit;
-    }
-  }
-
-  final dx = point.x - center.x;
-  final dy = point.y - center.y;
-  final length = math.sqrt(dx * dx + dy * dy);
-  if (length <= _epsilon) {
-    return DrawPoint(x: center.x + radius, y: center.y);
-  }
-  final scale = radius / length;
-  return DrawPoint(x: center.x + dx * scale, y: center.y + dy * scale);
-}
-
-DrawPoint _resolveOrbitDirection({
-  required ElementState target,
-  required DrawPoint anchor,
-  DrawPoint? referencePoint,
-}) {
-  if (_isCircularTarget(target)) {
-    final center = target.rect.center;
-    return _normalize(anchor - center) ?? const DrawPoint(x: 1, y: 0);
-  }
-
-  final center = target.rect.center;
-  final dx = anchor.x - center.x;
-  final dy = anchor.y - center.y;
-  if (dx.abs() > dy.abs()) {
-    return DrawPoint(x: dx >= 0 ? 1 : -1, y: 0);
-  }
-  if (dy.abs() > dx.abs()) {
-    return DrawPoint(x: 0, y: dy >= 0 ? 1 : -1);
-  }
-
-  if (referencePoint != null) {
-    final referenceDirection = _normalize(anchor - referencePoint);
-    if (referenceDirection != null) {
-      return referenceDirection;
-    }
-  }
-  return const DrawPoint(x: 1, y: 0);
-}
-
-DrawPoint? _intersectRectByRay({
-  required DrawRect rect,
-  required DrawPoint from,
-  required DrawPoint to,
-}) {
-  final dx = to.x - from.x;
-  final dy = to.y - from.y;
-  final length = math.sqrt(dx * dx + dy * dy);
-  if (length <= _epsilon) {
-    return null;
-  }
-  final dirX = dx / length;
-  final dirY = dy / length;
-  final maxDim = math.max(rect.width.abs(), rect.height.abs());
-  final extension = length + maxDim + _fallbackBindingGapBase * 2;
-
-  final start = DrawPoint(
-    x: from.x - dirX * extension,
-    y: from.y - dirY * extension,
-  );
-  final end = DrawPoint(
-    x: from.x + dirX * extension,
-    y: from.y + dirY * extension,
-  );
-
-  final intersections = _segmentRectIntersections(
-    rect: rect,
-    start: start,
-    end: end,
-  );
-  if (intersections.isEmpty) {
-    return null;
-  }
-  intersections.sort(
-    (a, b) => to.distanceSquared(a).compareTo(to.distanceSquared(b)),
-  );
-  return intersections.first;
-}
-
-DrawPoint? _intersectCircleByRay({
-  required DrawPoint center,
-  required double radius,
-  required DrawPoint from,
-  required DrawPoint to,
-}) {
-  if (radius <= 0) {
-    return null;
-  }
-  final dx = to.x - from.x;
-  final dy = to.y - from.y;
-  final a = dx * dx + dy * dy;
-  if (a <= _epsilon) {
-    return null;
-  }
-  final ox = from.x - center.x;
-  final oy = from.y - center.y;
-  final b = 2 * (dx * ox + dy * oy);
-  final c = ox * ox + oy * oy - radius * radius;
-  final discriminant = b * b - 4 * a * c;
-  if (discriminant < 0) {
-    return null;
-  }
-  final sqrtD = math.sqrt(discriminant);
-  final t1 = (-b - sqrtD) / (2 * a);
-  final t2 = (-b + sqrtD) / (2 * a);
-  final p1 = DrawPoint(x: from.x + dx * t1, y: from.y + dy * t1);
-  final p2 = DrawPoint(x: from.x + dx * t2, y: from.y + dy * t2);
-  return to.distanceSquared(p1) <= to.distanceSquared(p2) ? p1 : p2;
-}
-
-List<DrawPoint> _segmentRectIntersections({
-  required DrawRect rect,
-  required DrawPoint start,
-  required DrawPoint end,
-}) {
-  final intersections = <DrawPoint>[];
-  final dx = end.x - start.x;
-  final dy = end.y - start.y;
-
-  void addIfValid(double t, double x, double y) {
-    if (t < -_epsilon || t > 1 + _epsilon) {
-      return;
-    }
-    if (x < rect.minX - _epsilon ||
-        x > rect.maxX + _epsilon ||
-        y < rect.minY - _epsilon ||
-        y > rect.maxY + _epsilon) {
-      return;
-    }
-    final point = DrawPoint(x: x, y: y);
-    if (intersections.any(
-      (existing) => existing.distanceSquared(point) <= _epsilon * _epsilon,
-    )) {
-      return;
-    }
-    intersections.add(point);
-  }
-
-  if (dx.abs() > _epsilon) {
-    var t = (rect.minX - start.x) / dx;
-    addIfValid(t, rect.minX, start.y + t * dy);
-    t = (rect.maxX - start.x) / dx;
-    addIfValid(t, rect.maxX, start.y + t * dy);
-  }
-  if (dy.abs() > _epsilon) {
-    var t = (rect.minY - start.y) / dy;
-    addIfValid(t, start.x + t * dx, rect.minY);
-    t = (rect.maxY - start.y) / dy;
-    addIfValid(t, start.x + t * dx, rect.maxY);
-  }
-
-  return intersections;
-}
-
-DrawPoint? _normalize(DrawPoint value) {
-  final length = value.distance(DrawPoint.zero);
-  if (length <= _epsilon) {
-    return null;
-  }
-  return DrawPoint(x: value.x / length, y: value.y / length);
-}
-
-double _clamp(double value, double min, double max) =>
-    math.min(math.max(value, min), max);
-
 core.Point _toCorePoint(DrawPoint point) => <double>[point.x, point.y];
 
 ArrowBindingMode _fromCoreBindingMode(String mode) =>
@@ -977,11 +507,5 @@ double _clamp01(double value) {
 }
 
 const _defaultMaxCoordinate = 1e6;
-const _fallbackBindingGapBase = 6.0;
 const _bindingHitToleranceFactor = 0.4;
 const _previewSpanMultiplier = 3.0;
-const _elbowBindingGapBase = 5.0;
-const _bindingGapBase = 6.0;
-const _epsilon = 1e-6;
-const double _bindingArrowheadGapMultiplier =
-    _bindingGapBase / _elbowBindingGapBase;

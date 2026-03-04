@@ -129,6 +129,7 @@ abstract class CreationStrategy {
   }) => null;
 
   CreationFinishResult finish({
+    required DrawState state,
     required DrawConfig config,
     required CreatingState creatingState,
     TextMetricsService textMetricsService = defaultTextMetricsService,
