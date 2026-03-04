@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
@@ -127,7 +128,7 @@ class ArrowBindingUtils {
   }
 
   static double resolveBindingGap({required ElementState target}) =>
-      _resolveBindingGap(target);
+      _resolveBindingGapViaCore(target) ?? _resolveBindingGap(target);
 
   static double resolveBindingSearchDistance(double snapDistance) =>
       snapDistance * (1 + _bindingHitToleranceFactor);
@@ -139,18 +140,28 @@ class ArrowBindingUtils {
     ArrowBinding? preferredBinding,
     bool allowNewBinding = true,
     DrawPoint? referencePoint,
-  }) => _resolveBestBindingCandidate(
-    targets: targets,
-    snapDistance: snapDistance,
-    preferredBinding: preferredBinding,
-    allowNewBinding: allowNewBinding,
-    resolver: (target) => _resolveBindingOnTarget(
-      target: target,
-      worldPoint: worldPoint,
-      snapDistance: snapDistance,
-      referencePoint: referencePoint,
-    ),
-  );
+  }) =>
+      _resolveBindingCandidateViaCore(
+        worldPoint: worldPoint,
+        targets: targets,
+        snapDistance: snapDistance,
+        preferredBinding: preferredBinding,
+        allowNewBinding: allowNewBinding,
+        referencePoint: referencePoint,
+        elbowed: false,
+      ) ??
+      _resolveBestBindingCandidate(
+        targets: targets,
+        snapDistance: snapDistance,
+        preferredBinding: preferredBinding,
+        allowNewBinding: allowNewBinding,
+        resolver: (target) => _resolveBindingOnTarget(
+          target: target,
+          worldPoint: worldPoint,
+          snapDistance: snapDistance,
+          referencePoint: referencePoint,
+        ),
+      );
 
   static ArrowBindingResult? resolveElbowBindingCandidate({
     required DrawPoint worldPoint,
@@ -159,18 +170,29 @@ class ArrowBindingUtils {
     required bool hasArrowhead,
     ArrowBinding? preferredBinding,
     bool allowNewBinding = true,
-  }) => _resolveBestBindingCandidate(
-    targets: targets,
-    snapDistance: snapDistance,
-    preferredBinding: preferredBinding,
-    allowNewBinding: allowNewBinding,
-    resolver: (target) => _resolveElbowBindingOnTarget(
-      target: target,
-      worldPoint: worldPoint,
-      snapDistance: snapDistance,
-      hasArrowhead: hasArrowhead,
-    ),
-  );
+  }) =>
+      _resolveBindingCandidateViaCore(
+        worldPoint: worldPoint,
+        targets: targets,
+        snapDistance: snapDistance,
+        preferredBinding: preferredBinding,
+        allowNewBinding: allowNewBinding,
+        referencePoint: null,
+        elbowed: true,
+        hasArrowhead: hasArrowhead,
+      ) ??
+      _resolveBestBindingCandidate(
+        targets: targets,
+        snapDistance: snapDistance,
+        preferredBinding: preferredBinding,
+        allowNewBinding: allowNewBinding,
+        resolver: (target) => _resolveElbowBindingOnTarget(
+          target: target,
+          worldPoint: worldPoint,
+          snapDistance: snapDistance,
+          hasArrowhead: hasArrowhead,
+        ),
+      );
 
   /// Resolves a single-target binding candidate without list iteration.
   ///
@@ -184,12 +206,21 @@ class ArrowBindingUtils {
     if (snapDistance <= 0 || target.opacity <= 0) {
       return null;
     }
-    return _resolveBindingOnTarget(
-      target: target,
-      worldPoint: worldPoint,
-      snapDistance: snapDistance,
-      referencePoint: referencePoint,
-    );
+    return _resolveBindingCandidateViaCore(
+          worldPoint: worldPoint,
+          targets: <ElementState>[target],
+          snapDistance: snapDistance,
+          preferredBinding: null,
+          allowNewBinding: true,
+          referencePoint: referencePoint,
+          elbowed: false,
+        ) ??
+        _resolveBindingOnTarget(
+          target: target,
+          worldPoint: worldPoint,
+          snapDistance: snapDistance,
+          referencePoint: referencePoint,
+        );
   }
 
   /// Resolves a single-target elbow binding candidate without list iteration.
@@ -204,12 +235,22 @@ class ArrowBindingUtils {
     if (snapDistance <= 0 || target.opacity <= 0) {
       return null;
     }
-    return _resolveElbowBindingOnTarget(
-      target: target,
-      worldPoint: worldPoint,
-      snapDistance: snapDistance,
-      hasArrowhead: hasArrowhead,
-    );
+    return _resolveBindingCandidateViaCore(
+          worldPoint: worldPoint,
+          targets: <ElementState>[target],
+          snapDistance: snapDistance,
+          preferredBinding: null,
+          allowNewBinding: true,
+          referencePoint: null,
+          elbowed: true,
+          hasArrowhead: hasArrowhead,
+        ) ??
+        _resolveElbowBindingOnTarget(
+          target: target,
+          worldPoint: worldPoint,
+          snapDistance: snapDistance,
+          hasArrowhead: hasArrowhead,
+        );
   }
 
   static DrawPoint? resolveBoundPoint({
@@ -217,6 +258,16 @@ class ArrowBindingUtils {
     required ElementState target,
     DrawPoint? referencePoint,
   }) {
+    final coreResolved = _resolveBoundPointViaCore(
+      binding: binding,
+      target: target,
+      referencePoint: referencePoint,
+      elbowed: false,
+    );
+    if (coreResolved != null) {
+      return coreResolved;
+    }
+
     final rect = target.rect;
     if (rect.width == 0 || rect.height == 0) {
       return null;
@@ -262,6 +313,16 @@ class ArrowBindingUtils {
     required ElementState target,
     required bool hasArrowhead,
   }) {
+    final coreResolved = _resolveBoundPointViaCore(
+      binding: binding,
+      target: target,
+      elbowed: true,
+      hasArrowhead: hasArrowhead,
+    );
+    if (coreResolved != null) {
+      return coreResolved;
+    }
+
     final rect = target.rect;
     if (rect.width == 0 || rect.height == 0) {
       return null;
@@ -313,6 +374,20 @@ class ArrowBindingUtils {
     required ArrowBinding binding,
     required ElementState target,
   }) {
+    final bindable = _toCoreBindableStateForPreview(target);
+    if (bindable != null && binding.elementId == bindable.id) {
+      final coreBinding = core.FixedPointBinding(
+        elementId: binding.elementId,
+        fixedPoint: <double>[
+          _clamp01(binding.anchor.x),
+          _clamp01(binding.anchor.y),
+        ],
+        mode: _toCoreBindingMode(binding.mode),
+      );
+      final global = core.getGlobalFixedPoint(coreBinding, bindable);
+      return DrawPoint(x: global[0], y: global[1]);
+    }
+
     final rect = target.rect;
     if (rect.width == 0 || rect.height == 0) {
       return null;
@@ -413,6 +488,289 @@ class ArrowBindingUtils {
       zIndex: target.zIndex,
     );
   }
+}
+
+double? _resolveBindingGapViaCore(ElementState target) {
+  final bindable = _toCoreBindableStateForPreview(target);
+  if (bindable == null) {
+    return null;
+  }
+  return core.getBindingGap(bindable, false);
+}
+
+ArrowBindingResult? _resolveBindingCandidateViaCore({
+  required DrawPoint worldPoint,
+  required Iterable<ElementState> targets,
+  required double snapDistance,
+  required ArrowBinding? preferredBinding,
+  required bool allowNewBinding,
+  required DrawPoint? referencePoint,
+  required bool elbowed,
+  bool hasArrowhead = false,
+}) {
+  if (snapDistance <= 0) {
+    return null;
+  }
+
+  final preferredElementId = preferredBinding?.elementId;
+  if (!allowNewBinding && preferredElementId == null) {
+    return null;
+  }
+
+  final targetById = <String, ElementState>{};
+  final bindables = <core.BindableState>[];
+  for (final target in targets) {
+    if (target.opacity <= 0 || !ArrowBindingUtils.isBindableTarget(target)) {
+      continue;
+    }
+    if (!allowNewBinding &&
+        preferredElementId != null &&
+        target.id != preferredElementId) {
+      continue;
+    }
+    final bindable = _toCoreBindableStateForPreview(target);
+    if (bindable == null) {
+      continue;
+    }
+    targetById[target.id] = target;
+    bindables.add(bindable);
+  }
+
+  if (bindables.isEmpty) {
+    return null;
+  }
+  if (!allowNewBinding &&
+      preferredElementId != null &&
+      !targetById.containsKey(preferredElementId)) {
+    return null;
+  }
+
+  final oppositePoint =
+      referencePoint ??
+      DrawPoint(x: worldPoint.x - math.max(1, snapDistance), y: worldPoint.y);
+  final normalized = core.normalizeArrowFromGlobalPoints(<core.Point>[
+    _toCorePoint(oppositePoint),
+    _toCorePoint(worldPoint),
+  ], 1000000);
+
+  final preferredCoreBinding = preferredBinding == null
+      ? null
+      : core.FixedPointBinding(
+          elementId: preferredBinding.elementId,
+          fixedPoint: <double>[
+            _clamp01(preferredBinding.anchor.x),
+            _clamp01(preferredBinding.anchor.y),
+          ],
+          mode: _toCoreBindingMode(preferredBinding.mode),
+        );
+
+  final arrow = core.ArrowState(
+    id: '__binding-preview__',
+    x: normalized.x,
+    y: normalized.y,
+    width: normalized.width,
+    height: normalized.height,
+    points: normalized.points,
+    startBinding: null,
+    endBinding: preferredCoreBinding,
+    startArrowhead: null,
+    endArrowhead: elbowed && hasArrowhead ? 'arrow' : null,
+    elbowed: elbowed,
+    fixedSegments: null,
+    startIsSpecial: null,
+    endIsSpecial: null,
+  );
+
+  final result = core.computeSimpleBindingPatch(<String, dynamic>{
+    'arrow': arrow,
+    'draggedPoints': <int, core.Point>{
+      arrow.points.length - 1: _toCorePoint(worldPoint),
+    },
+    'pointer': _toCorePoint(worldPoint),
+    'bindables': bindables,
+    'context': core.defaultEngineContext,
+    'options': <String, dynamic>{
+      'complexBindings': true,
+      if (referencePoint == null) 'newArrow': true,
+    },
+  });
+
+  final nextArrow = core.applyArrowPatch(arrow, result.arrowPatch);
+  final nextBinding = nextArrow.endBinding;
+  if (nextBinding == null) {
+    return null;
+  }
+  if (!allowNewBinding &&
+      preferredElementId != null &&
+      nextBinding.elementId != preferredElementId) {
+    return null;
+  }
+
+  final target = targetById[nextBinding.elementId];
+  if (target == null) {
+    return null;
+  }
+
+  final endpoint = _arrowWorldEndpoint(nextArrow);
+  return ArrowBindingResult(
+    binding: ArrowBinding(
+      elementId: nextBinding.elementId,
+      anchor: DrawPoint(
+        x: _clamp01(nextBinding.fixedPoint[0]),
+        y: _clamp01(nextBinding.fixedPoint[1]),
+      ),
+      mode: _fromCoreBindingMode(nextBinding.mode),
+    ),
+    snapPoint: endpoint,
+    distance: worldPoint.distance(endpoint),
+    zIndex: target.zIndex,
+  );
+}
+
+core.Point _toCorePoint(DrawPoint point) => <double>[point.x, point.y];
+
+ArrowBindingMode _fromCoreBindingMode(String mode) =>
+    mode == core.bindModeInside
+    ? ArrowBindingMode.inside
+    : ArrowBindingMode.orbit;
+
+String _toCoreBindingMode(ArrowBindingMode mode) =>
+    mode == ArrowBindingMode.inside ? core.bindModeInside : core.bindModeOrbit;
+
+DrawPoint _arrowWorldEndpoint(core.ArrowState arrow) {
+  if (arrow.points.isEmpty) {
+    return DrawPoint(x: arrow.x, y: arrow.y);
+  }
+  final endpoint = arrow.points.last;
+  return DrawPoint(x: arrow.x + endpoint[0], y: arrow.y + endpoint[1]);
+}
+
+DrawPoint? _resolveBoundPointViaCore({
+  required ArrowBinding binding,
+  required ElementState target,
+  required bool elbowed,
+  DrawPoint? referencePoint,
+  bool hasArrowhead = false,
+}) {
+  final bindable = _toCoreBindableStateForPreview(target);
+  if (bindable == null || binding.elementId != bindable.id) {
+    return null;
+  }
+
+  final coreBinding = core.FixedPointBinding(
+    elementId: binding.elementId,
+    fixedPoint: <double>[
+      _clamp01(binding.anchor.x),
+      _clamp01(binding.anchor.y),
+    ],
+    mode: _toCoreBindingMode(binding.mode),
+  );
+  final focus = core.getGlobalFixedPoint(coreBinding, bindable);
+  final focusPoint = DrawPoint(x: focus[0], y: focus[1]);
+  final otherPoint =
+      referencePoint ??
+      DrawPoint(
+        x: focusPoint.x + math.max(1, bindable.strokeWidth),
+        y: focusPoint.y,
+      );
+
+  final normalized = core.normalizeArrowFromGlobalPoints(<core.Point>[
+    _toCorePoint(focusPoint),
+    _toCorePoint(otherPoint),
+  ], 1000000);
+  final arrow = core.ArrowState(
+    id: '__binding-bound-point__',
+    x: normalized.x,
+    y: normalized.y,
+    width: normalized.width,
+    height: normalized.height,
+    points: normalized.points,
+    startBinding: coreBinding,
+    endBinding: null,
+    startArrowhead: elbowed && hasArrowhead ? 'arrow' : null,
+    endArrowhead: null,
+    elbowed: elbowed,
+    fixedSegments: null,
+    startIsSpecial: null,
+    endIsSpecial: null,
+  );
+
+  final local = core.updateBoundPoint(
+    arrow: arrow,
+    edge: 'startBinding',
+    binding: coreBinding,
+    bindable: bindable,
+    bindablesById: <String, core.BindableState>{bindable.id: bindable},
+  );
+  if (local == null) {
+    return focusPoint;
+  }
+  return DrawPoint(x: arrow.x + local[0], y: arrow.y + local[1]);
+}
+
+core.BindableRoundness? _toCoreRoundness(ElementState target) {
+  final data = target.data;
+  if (data is! RectangleData || data.cornerRadius <= 0) {
+    return null;
+  }
+  return core.BindableRoundness(type: 'adaptive', value: data.cornerRadius);
+}
+
+core.BindableState? _toCoreBindableStateForPreview(ElementState target) {
+  final data = target.data;
+  if (data is RectangleData) {
+    return core.BindableState(
+      id: target.id,
+      shape: 'rectangle',
+      x: target.rect.minX,
+      y: target.rect.minY,
+      width: target.rect.width,
+      height: target.rect.height,
+      angle: target.rotation,
+      strokeWidth: data.strokeWidth,
+      roundness: _toCoreRoundness(target),
+      zIndex: target.zIndex.toDouble(),
+      backgroundOpaque: data.fillColor.a > 0,
+      bindingEnabled: true,
+      interiorHitEnabled: true,
+    );
+  }
+
+  if (data is TextData) {
+    return core.BindableState(
+      id: target.id,
+      shape: 'rectangle',
+      x: target.rect.minX,
+      y: target.rect.minY,
+      width: target.rect.width,
+      height: target.rect.height,
+      angle: target.rotation,
+      strokeWidth: data.strokeWidth,
+      zIndex: target.zIndex.toDouble(),
+      backgroundOpaque: data.fillColor.a > 0,
+      bindingEnabled: true,
+      interiorHitEnabled: true,
+    );
+  }
+
+  if (data is SerialNumberData) {
+    return core.BindableState(
+      id: target.id,
+      shape: 'ellipse',
+      x: target.rect.minX,
+      y: target.rect.minY,
+      width: target.rect.width,
+      height: target.rect.height,
+      angle: target.rotation,
+      strokeWidth: resolveSerialNumberStrokeWidth(data: data),
+      zIndex: target.zIndex.toDouble(),
+      backgroundOpaque: data.fillColor.a > 0,
+      bindingEnabled: true,
+      interiorHitEnabled: true,
+    );
+  }
+
+  return null;
 }
 
 ArrowBindingResult? _resolveBestBindingCandidate({

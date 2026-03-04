@@ -7,6 +7,7 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../rectangle/rectangle_data.dart';
 import '../serial_number/serial_number_data.dart';
+import '../serial_number/serial_number_layout.dart';
 import '../text/text_data.dart';
 import 'arrow_binding.dart';
 import 'arrow_geometry.dart';
@@ -109,6 +110,9 @@ core.BindableState? toCoreBindableState(ElementState element) {
       height: element.rect.height,
       angle: element.rotation,
       strokeWidth: data.strokeWidth,
+      roundness: data.cornerRadius > 0
+          ? core.BindableRoundness(type: 'adaptive', value: data.cornerRadius)
+          : null,
       zIndex: element.zIndex.toDouble(),
       backgroundOpaque: data.fillColor.a > 0,
       bindingEnabled: true,
@@ -140,7 +144,7 @@ core.BindableState? toCoreBindableState(ElementState element) {
       width: element.rect.width,
       height: element.rect.height,
       angle: element.rotation,
-      strokeWidth: data.strokeWidth,
+      strokeWidth: resolveSerialNumberStrokeWidth(data: data),
       zIndex: element.zIndex.toDouble(),
       backgroundOpaque: data.fillColor.a > 0,
       bindingEnabled: true,

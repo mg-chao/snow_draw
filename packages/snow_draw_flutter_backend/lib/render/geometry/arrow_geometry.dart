@@ -30,7 +30,7 @@ class FlutterArrowGeometry {
     return switch (arrowType) {
       ArrowType.curved => _buildCurvedPath(points),
       ArrowType.straight => _buildStraightPath(points),
-      ArrowType.elbow => _buildStraightPath(points),
+      ArrowType.elbow => _buildElbowPath(points),
     };
   }
 
@@ -124,6 +124,82 @@ class FlutterArrowGeometry {
         segment.end.dy,
       );
     }
+    return path;
+  }
+
+  static Path _buildElbowPath(List<Offset> points) {
+    if (points.length < 2) {
+      return Path();
+    }
+
+    final pathData = ArrowGeometry.generateElbowPathData(
+      points: points
+          .map((point) => DrawPoint(x: point.dx, y: point.dy))
+          .toList(growable: false),
+    );
+    final parsedPath = _pathFromCorePathData(pathData);
+    return parsedPath ?? _buildStraightPath(points);
+  }
+
+  static Path? _pathFromCorePathData(String pathData) {
+    if (pathData.isEmpty) {
+      return Path();
+    }
+
+    final tokens = pathData
+        .replaceAll(',', ' ')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((token) => token.isNotEmpty)
+        .toList(growable: false);
+    if (tokens.isEmpty) {
+      return Path();
+    }
+
+    final path = Path();
+    var index = 0;
+
+    double? readNumber() {
+      if (index >= tokens.length) {
+        return null;
+      }
+      return double.tryParse(tokens[index++]);
+    }
+
+    while (index < tokens.length) {
+      final command = tokens[index++].toUpperCase();
+      if (command == 'M') {
+        final x = readNumber();
+        final y = readNumber();
+        if (x == null || y == null) {
+          return null;
+        }
+        path.moveTo(x, y);
+        continue;
+      }
+      if (command == 'L') {
+        final x = readNumber();
+        final y = readNumber();
+        if (x == null || y == null) {
+          return null;
+        }
+        path.lineTo(x, y);
+        continue;
+      }
+      if (command == 'Q') {
+        final cx = readNumber();
+        final cy = readNumber();
+        final x = readNumber();
+        final y = readNumber();
+        if (cx == null || cy == null || x == null || y == null) {
+          return null;
+        }
+        path.quadraticBezierTo(cx, cy, x, y);
+        continue;
+      }
+      return null;
+    }
+
     return path;
   }
 

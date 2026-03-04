@@ -1,5 +1,7 @@
 import 'dart:math' as math;
 
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
@@ -73,6 +75,21 @@ class ArrowGeometry {
           pressure: point.pressure,
         );
       }),
+    );
+  }
+
+  /// Generates a rounded elbow SVG path from [points] using arrow-core.
+  ///
+  /// The returned path uses `M`, `L`, and `Q` commands and is suitable for
+  /// render backends that can consume lightweight SVG path data.
+  static String generateElbowPathData({
+    required List<DrawPoint> points,
+    double radius = 16,
+  }) {
+    final safeRadius = (radius.isFinite && radius > 0) ? radius : 0.0;
+    return core.generateElbowArrowPath(
+      points.map((point) => <double>[point.x, point.y]).toList(growable: false),
+      safeRadius,
     );
   }
 
