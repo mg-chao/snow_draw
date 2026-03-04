@@ -65,6 +65,38 @@ void main() {
       },
     );
   });
+
+  group('FlutterArrowGeometry arrowhead integration', () {
+    const straightPoints = <Offset>[Offset.zero, Offset(100, 0)];
+
+    test('triangle arrowhead returns both stroke and fill paths', () {
+      final paths = FlutterArrowGeometry.buildArrowheadPaths(
+        points: straightPoints,
+        arrowType: ArrowType.straight,
+        style: ArrowheadStyle.triangle,
+        strokeStyle: StrokeStyle.solid,
+        strokeWidth: 2,
+        position: ArrowEndpointPosition.end,
+      );
+
+      expect(paths.strokePath.getBounds().isEmpty, isFalse);
+      expect(paths.fillPath.getBounds().isEmpty, isFalse);
+    });
+
+    test('standard arrowhead returns stroke path without fill path', () {
+      final paths = FlutterArrowGeometry.buildArrowheadPaths(
+        points: straightPoints,
+        arrowType: ArrowType.straight,
+        style: ArrowheadStyle.standard,
+        strokeStyle: StrokeStyle.solid,
+        strokeWidth: 2,
+        position: ArrowEndpointPosition.end,
+      );
+
+      expect(paths.strokePath.getBounds().isEmpty, isFalse);
+      expect(paths.fillPath.getBounds().isEmpty, isTrue);
+    });
+  });
 }
 
 double _totalPathLength(Path path) {

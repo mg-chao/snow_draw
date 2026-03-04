@@ -34,68 +34,72 @@ class FlutterArrowGeometry {
     };
   }
 
-  static Path buildArrowheadPath({
-    required Offset tip,
-    required Offset direction,
+  static FlutterArrowheadPaths buildArrowheadPaths({
+    required List<Offset> points,
+    required ArrowType arrowType,
     required ArrowheadStyle style,
+    required StrokeStyle strokeStyle,
     required double strokeWidth,
+    required ArrowEndpointPosition position,
+    Offset? directionOverride,
   }) {
-    if (strokeWidth <= 0) {
-      return Path();
+    final drawPoints = points
+        .map((point) => DrawPoint(x: point.dx, y: point.dy))
+        .toList(growable: false);
+    final overrideDirection = directionOverride == null
+        ? null
+        : DrawPoint(x: directionOverride.dx, y: directionOverride.dy);
+    final primitives = ArrowRenderPrimitives.resolveArrowheadPrimitives(
+      points: drawPoints,
+      arrowType: arrowType,
+      style: style,
+      strokeStyle: strokeStyle,
+      strokeWidth: strokeWidth,
+      position: position,
+      directionOverride: overrideDirection,
+    );
+    if (primitives.isEmpty) {
+      return FlutterArrowheadPaths.empty();
     }
 
-    final normalizedDirection = _normalize(direction);
-    if (normalizedDirection == null) {
-      return Path();
+    final strokePath = Path();
+    final fillPath = Path();
+    for (final primitive in primitives) {
+      switch (primitive) {
+        case ArrowheadLinePrimitiveData():
+          strokePath
+            ..moveTo(primitive.from.x, primitive.from.y)
+            ..lineTo(primitive.to.x, primitive.to.y);
+        case ArrowheadPolygonPrimitiveData():
+          if (primitive.points.isEmpty) {
+            continue;
+          }
+          final polygonPath = Path()
+            ..moveTo(primitive.points.first.x, primitive.points.first.y);
+          for (var i = 1; i < primitive.points.length; i++) {
+            polygonPath.lineTo(primitive.points[i].x, primitive.points[i].y);
+          }
+          polygonPath.close();
+          strokePath.addPath(polygonPath, Offset.zero);
+          if (primitive.fillMode == ArrowheadPrimitiveFillMode.stroke) {
+            fillPath.addPath(polygonPath, Offset.zero);
+          }
+        case ArrowheadCirclePrimitiveData():
+          final circlePath = Path()
+            ..addOval(
+              Rect.fromCircle(
+                center: Offset(primitive.center.x, primitive.center.y),
+                radius: primitive.radius,
+              ),
+            );
+          strokePath.addPath(circlePath, Offset.zero);
+          if (primitive.fillMode == ArrowheadPrimitiveFillMode.stroke) {
+            fillPath.addPath(circlePath, Offset.zero);
+          }
+      }
     }
 
-    final length = ArrowGeometry.resolveArrowheadLength(strokeWidth);
-    final width = length * 0.6;
-    final perp = Offset(-normalizedDirection.dy, normalizedDirection.dx);
-
-    return switch (style) {
-      ArrowheadStyle.standard => _buildVArrowhead(
-        tip,
-        normalizedDirection,
-        perp,
-        length,
-        width,
-      ),
-      ArrowheadStyle.triangle => _buildTriangleArrowhead(
-        tip,
-        normalizedDirection,
-        perp,
-        length,
-        width,
-      ),
-      ArrowheadStyle.square => _buildSquareArrowhead(
-        tip,
-        normalizedDirection,
-        perp,
-        length,
-      ),
-      ArrowheadStyle.circle => _buildCircleArrowhead(
-        tip,
-        normalizedDirection,
-        length,
-      ),
-      ArrowheadStyle.diamond => _buildDiamondArrowhead(
-        tip,
-        normalizedDirection,
-        perp,
-        length,
-        width,
-      ),
-      ArrowheadStyle.invertedTriangle => _buildTriangleArrowhead(
-        tip,
-        -normalizedDirection,
-        perp,
-        length,
-        width,
-      ),
-      ArrowheadStyle.verticalLine => _buildLineArrowhead(tip, perp, width),
-      ArrowheadStyle.none => Path(),
-    };
+    return FlutterArrowheadPaths(strokePath: strokePath, fillPath: fillPath);
   }
 
   static Path _buildStraightPath(List<Offset> points) {
@@ -203,103 +207,6 @@ class FlutterArrowGeometry {
     return path;
   }
 
-  static Path _buildVArrowhead(
-    Offset tip,
-    Offset dir,
-    Offset perp,
-    double length,
-    double width,
-  ) {
-    final base = tip - dir * length;
-    final left = base + perp * (width / 2);
-    final right = base - perp * (width / 2);
-    return Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo(left.dx, left.dy)
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo(right.dx, right.dy);
-  }
-
-  static Path _buildTriangleArrowhead(
-    Offset tip,
-    Offset dir,
-    Offset perp,
-    double length,
-    double width,
-  ) {
-    final base = tip - dir * length;
-    final left = base + perp * (width / 2);
-    final right = base - perp * (width / 2);
-    return Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo(left.dx, left.dy)
-      ..lineTo(right.dx, right.dy)
-      ..close();
-  }
-
-  static Path _buildSquareArrowhead(
-    Offset tip,
-    Offset dir,
-    Offset perp,
-    double length,
-  ) {
-    final side = length * 0.6;
-    final half = side / 2;
-    final center = tip - dir * half;
-    final corner1 = center + perp * half + dir * half;
-    final corner2 = center - perp * half + dir * half;
-    final corner3 = center - perp * half - dir * half;
-    final corner4 = center + perp * half - dir * half;
-    return Path()
-      ..moveTo(corner1.dx, corner1.dy)
-      ..lineTo(corner2.dx, corner2.dy)
-      ..lineTo(corner3.dx, corner3.dy)
-      ..lineTo(corner4.dx, corner4.dy)
-      ..close();
-  }
-
-  static Path _buildCircleArrowhead(Offset tip, Offset dir, double length) {
-    final radius = length * 0.3;
-    final center = tip - dir * radius;
-    return Path()..addOval(Rect.fromCircle(center: center, radius: radius));
-  }
-
-  static Path _buildDiamondArrowhead(
-    Offset tip,
-    Offset dir,
-    Offset perp,
-    double length,
-    double width,
-  ) {
-    final base = tip - dir * length;
-    final mid = tip - dir * (length / 2);
-    final left = mid + perp * (width / 2);
-    final right = mid - perp * (width / 2);
-    return Path()
-      ..moveTo(tip.dx, tip.dy)
-      ..lineTo(left.dx, left.dy)
-      ..lineTo(base.dx, base.dy)
-      ..lineTo(right.dx, right.dy)
-      ..close();
-  }
-
-  static Path _buildLineArrowhead(Offset tip, Offset perp, double width) {
-    final half = width / 2;
-    final left = tip + perp * half;
-    final right = tip - perp * half;
-    return Path()
-      ..moveTo(left.dx, left.dy)
-      ..lineTo(right.dx, right.dy);
-  }
-
-  static Offset? _normalize(Offset value) {
-    final length = value.distance;
-    if (length == 0) {
-      return null;
-    }
-    return Offset(value.dx / length, value.dy / length);
-  }
-
   static _CubicSegment _buildCubicSegment(List<Offset> points, int index) {
     final p0 = index == 0 ? points[index] : points[index - 1];
     final p1 = points[index];
@@ -354,4 +261,17 @@ class _CubicSegment {
   final Offset control1;
   final Offset control2;
   final Offset end;
+}
+
+class FlutterArrowheadPaths {
+  const FlutterArrowheadPaths({
+    required this.strokePath,
+    required this.fillPath,
+  });
+
+  factory FlutterArrowheadPaths.empty() =>
+      FlutterArrowheadPaths(strokePath: Path(), fillPath: Path());
+
+  final Path strokePath;
+  final Path fillPath;
 }

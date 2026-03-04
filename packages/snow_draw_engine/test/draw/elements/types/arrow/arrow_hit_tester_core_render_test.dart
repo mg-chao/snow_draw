@@ -1,5 +1,5 @@
-import 'package:snow_draw_engine/snow_draw_engine.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_hit_tester.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -23,6 +23,28 @@ void main() {
       final hit = tester.hitTest(
         element: element,
         position: const DrawPoint(x: 100, y: 10),
+      );
+
+      expect(hit, isTrue);
+    });
+
+    test('core-rendered circle arrowhead interior is hittable', () {
+      final element = _buildArrowElement(endArrowhead: ArrowheadStyle.circle);
+
+      final hit = tester.hitTest(
+        element: element,
+        position: const DrawPoint(x: 94, y: 10),
+      );
+
+      expect(hit, isTrue);
+    });
+
+    test('core-rendered triangle arrowhead interior is hittable', () {
+      final element = _buildArrowElement(endArrowhead: ArrowheadStyle.triangle);
+
+      final hit = tester.hitTest(
+        element: element,
+        position: const DrawPoint(x: 92, y: 10),
       );
 
       expect(hit, isTrue);
@@ -55,18 +77,15 @@ void main() {
 ElementState _buildArrowElement({required ArrowheadStyle endArrowhead}) =>
     ElementState(
       id: 'arrow-hit-test',
-      rect: const DrawRect(minX: 0, minY: 0, maxX: 100, maxY: 20),
+      rect: const DrawRect(maxX: 100, maxY: 20),
       rotation: 0,
       opacity: 1,
       zIndex: 0,
       data: ArrowData(
         points: const <DrawPoint>[
-          DrawPoint(x: 0, y: 0.5),
+          DrawPoint(y: 0.5, x: 0),
           DrawPoint(x: 1, y: 0.5),
         ],
-        strokeWidth: 2,
-        arrowType: ArrowType.straight,
-        startArrowhead: ArrowheadStyle.none,
         endArrowhead: endArrowhead,
       ),
     );

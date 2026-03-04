@@ -189,10 +189,15 @@ class FlutterRenderTaskExecutor {
       data: data,
       rect: element.rect,
     );
-    if (descriptor.insetPoints.length < 2) {
+    if (descriptor.localPoints.length < 2 ||
+        descriptor.insetPoints.length < 2) {
       return;
     }
 
+    final worldLocalPoints = <Offset>[
+      for (final point in descriptor.localPoints)
+        Offset(element.rect.minX + point.dx, element.rect.minY + point.dy),
+    ];
     final worldInsetPoints = <Offset>[
       for (final point in descriptor.insetPoints)
         Offset(element.rect.minX + point.dx, element.rect.minY + point.dy),
@@ -202,30 +207,35 @@ class FlutterRenderTaskExecutor {
       arrowType: data.arrowType,
     );
 
-    final arrowheadsPath = Path();
+    final arrowheadsStrokePath = Path();
+    final arrowheadsFillPath = Path();
     final startDirection = descriptor.startDirection;
     if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
-      arrowheadsPath.addPath(
-        FlutterArrowGeometry.buildArrowheadPath(
-          tip: worldInsetPoints.first,
-          direction: startDirection,
-          style: data.startArrowhead,
-          strokeWidth: data.strokeWidth,
-        ),
-        Offset.zero,
+      final arrowheadPaths = FlutterArrowGeometry.buildArrowheadPaths(
+        points: worldLocalPoints,
+        arrowType: data.arrowType,
+        style: data.startArrowhead,
+        strokeStyle: data.strokeStyle,
+        strokeWidth: data.strokeWidth,
+        position: ArrowEndpointPosition.start,
+        directionOverride: startDirection,
       );
+      arrowheadsStrokePath.addPath(arrowheadPaths.strokePath, Offset.zero);
+      arrowheadsFillPath.addPath(arrowheadPaths.fillPath, Offset.zero);
     }
     final endDirection = descriptor.endDirection;
     if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
-      arrowheadsPath.addPath(
-        FlutterArrowGeometry.buildArrowheadPath(
-          tip: worldInsetPoints.last,
-          direction: endDirection,
-          style: data.endArrowhead,
-          strokeWidth: data.strokeWidth,
-        ),
-        Offset.zero,
+      final arrowheadPaths = FlutterArrowGeometry.buildArrowheadPaths(
+        points: worldLocalPoints,
+        arrowType: data.arrowType,
+        style: data.endArrowhead,
+        strokeStyle: data.strokeStyle,
+        strokeWidth: data.strokeWidth,
+        position: ArrowEndpointPosition.end,
+        directionOverride: endDirection,
       );
+      arrowheadsStrokePath.addPath(arrowheadPaths.strokePath, Offset.zero);
+      arrowheadsFillPath.addPath(arrowheadPaths.fillPath, Offset.zero);
     }
 
     final strokeColor = _withOpacity(data.color, element.opacity);
@@ -247,13 +257,18 @@ class FlutterRenderTaskExecutor {
       strokeJoin: StrokeJoin.round,
     );
 
-    if (!arrowheadsPath.getBounds().isEmpty) {
+    if (!arrowheadsFillPath.getBounds().isEmpty) {
+      final fillPaint = _fillPaint..color = strokeColor;
+      canvas.drawPath(arrowheadsFillPath, fillPaint);
+    }
+
+    if (!arrowheadsStrokePath.getBounds().isEmpty) {
       final paint = _strokePaint
         ..color = strokeColor
         ..strokeWidth = data.strokeWidth
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
-      canvas.drawPath(arrowheadsPath, paint);
+      canvas.drawPath(arrowheadsStrokePath, paint);
     }
 
     canvas.restore();

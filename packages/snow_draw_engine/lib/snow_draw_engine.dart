@@ -24,6 +24,7 @@ export 'draw/elements/types/arrow/arrow_core_session.dart';
 export 'draw/elements/types/arrow/arrow_engine_events.dart';
 export 'draw/elements/types/arrow/arrow_focus.dart';
 export 'draw/elements/types/arrow/arrow_like_data.dart';
+export 'draw/elements/types/arrow/arrow_render_primitives.dart';
 export 'draw/elements/types/arrow/arrow_restore.dart';
 export 'draw/elements/types/arrow/arrow_geometry.dart';
 export 'draw/elements/types/arrow/arrow_points.dart';

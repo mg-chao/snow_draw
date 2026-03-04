@@ -1,7 +1,5 @@
 import 'dart:math' as math;
 
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
-
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
@@ -9,9 +7,9 @@ import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
 import '../../core/element_hit_tester.dart';
 import '../shared/hit_test_geometry.dart';
-import 'arrow_core_bridge.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
+import 'arrow_render_primitives.dart';
 
 class ArrowHitTester implements ElementHitTester {
   const ArrowHitTester();
@@ -202,13 +200,30 @@ _ArrowheadHitTarget _segmentsTarget(List<_ArrowheadSegment> segments) =>
 _ArrowheadHitTarget _circleTarget({
   required DrawPoint center,
   required double radius,
+  required ArrowheadPrimitiveFillMode fillMode,
 }) => (position, tolerance, _) {
   final dx = position.x - center.x;
   final dy = position.y - center.y;
   final distanceSq = dx * dx + dy * dy;
-  final min = math.max(0, radius - tolerance);
   final max = radius + tolerance;
+  if (fillMode == ArrowheadPrimitiveFillMode.stroke) {
+    return distanceSq <= max * max;
+  }
+  final min = math.max(0, radius - tolerance);
   return distanceSq >= min * min && distanceSq <= max * max;
+};
+
+_ArrowheadHitTarget _polygonTarget({
+  required List<DrawPoint> vertices,
+  required ArrowheadPrimitiveFillMode fillMode,
+}) => (position, _, radiusSq) {
+  if (_segmentsTarget(_closedSegments(vertices))(position, 0, radiusSq)) {
+    return true;
+  }
+  if (fillMode != ArrowheadPrimitiveFillMode.stroke) {
+    return false;
+  }
+  return _isPointInsidePolygon(position: position, vertices: vertices);
 };
 
 double _arrowheadExtent(ArrowLikeData data) {
@@ -338,304 +353,61 @@ List<_ArrowheadHitTarget> _buildArrowheadTargets(
   ArrowGeometryDescriptor geometry,
 ) {
   final points = geometry.localDrawPoints;
-  final pointDirections = (
-    start: geometry.startDirectionPoint,
-    end: geometry.endDirectionPoint,
-  );
   final data = geometry.data;
+  final startDirection = geometry.startDirectionPoint;
+  final endDirection = geometry.endDirectionPoint;
 
   final targets = <_ArrowheadHitTarget>[];
-  final startDirection = pointDirections.start;
-  if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
-    targets.addAll(
-      _arrowheadTargetsForStyle(
-        points: points,
-        arrowType: data.arrowType,
-        tip: points.first,
-        direction: startDirection,
-        style: data.startArrowhead,
-        strokeWidth: data.strokeWidth,
-        strokeStyle: data.strokeStyle,
-        position: core.arrowEndpointPositionStart,
-      ),
+  if (data.startArrowhead != ArrowheadStyle.none) {
+    final primitives = ArrowRenderPrimitives.resolveArrowheadPrimitives(
+      points: points,
+      arrowType: data.arrowType,
+      style: data.startArrowhead,
+      strokeStyle: data.strokeStyle,
+      strokeWidth: data.strokeWidth,
+      position: ArrowEndpointPosition.start,
+      directionOverride: startDirection,
     );
-  }
-
-  final endDirection = pointDirections.end;
-  if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
-    targets.addAll(
-      _arrowheadTargetsForStyle(
-        points: points,
-        arrowType: data.arrowType,
-        tip: points.last,
-        direction: endDirection,
-        style: data.endArrowhead,
-        strokeWidth: data.strokeWidth,
-        strokeStyle: data.strokeStyle,
-        position: core.arrowEndpointPositionEnd,
-      ),
-    );
-  }
-
-  return targets;
-}
-
-List<_ArrowheadHitTarget> _arrowheadTargetsForStyle({
-  required List<DrawPoint> points,
-  required ArrowType arrowType,
-  required DrawPoint tip,
-  required DrawPoint direction,
-  required ArrowheadStyle style,
-  required double strokeWidth,
-  required StrokeStyle strokeStyle,
-  required core.ArrowEndpointPosition position,
-}) {
-  final coreTargets = _coreArrowheadTargetsForStyle(
-    points: points,
-    arrowType: arrowType,
-    style: style,
-    strokeWidth: strokeWidth,
-    strokeStyle: strokeStyle,
-    position: position,
-  );
-  if (coreTargets.isNotEmpty) {
-    return coreTargets;
-  }
-
-  final fallbackTarget = _legacyArrowheadTargetForStyle(
-    tip: tip,
-    direction: direction,
-    style: style,
-    strokeWidth: strokeWidth,
-  );
-  return fallbackTarget == null
-      ? const <_ArrowheadHitTarget>[]
-      : <_ArrowheadHitTarget>[fallbackTarget];
-}
-
-List<_ArrowheadHitTarget> _coreArrowheadTargetsForStyle({
-  required List<DrawPoint> points,
-  required ArrowType arrowType,
-  required ArrowheadStyle style,
-  required double strokeWidth,
-  required StrokeStyle strokeStyle,
-  required core.ArrowEndpointPosition position,
-}) {
-  final coreArrowhead = _toCoreRenderableArrowhead(style);
-  if (coreArrowhead == null || points.length < 2 || strokeWidth <= 0) {
-    return const <_ArrowheadHitTarget>[];
-  }
-
-  final curveOps = _buildCoreCurveOps(points: points, arrowType: arrowType);
-  if (curveOps.length < 2) {
-    return const <_ArrowheadHitTarget>[];
-  }
-
-  final primitives = core.getArrowheadRenderPrimitives(
-    core.ArrowheadRenderPrimitivesInput(
-      arrowPoints: points
-          .map((point) => <double>[point.x, point.y])
-          .toList(growable: false),
-      strokeWidth: strokeWidth,
-      curveOps: curveOps,
-      position: position,
-      arrowhead: coreArrowhead,
-      strokeStyle: _toCoreStrokeStyle(strokeStyle),
-    ),
-  );
-  if (primitives.isEmpty) {
-    return const <_ArrowheadHitTarget>[];
-  }
-
-  final targets = <_ArrowheadHitTarget>[];
-  for (final primitive in primitives) {
-    switch (primitive) {
-      case core.ArrowheadLinePrimitive():
-        targets.add(
-          _segmentsTarget(<_ArrowheadSegment>[
-            _ArrowheadSegment(
-              start: DrawPoint(x: primitive.from[0], y: primitive.from[1]),
-              end: DrawPoint(x: primitive.to[0], y: primitive.to[1]),
-            ),
-          ]),
-        );
-      case core.ArrowheadPolygonPrimitive():
-        final vertices = primitive.points
-            .map((point) => DrawPoint(x: point[0], y: point[1]))
-            .toList(growable: false);
-        if (vertices.length >= 2) {
-          targets.add(_segmentsTarget(_closedSegments(vertices)));
-        }
-      case core.ArrowheadCirclePrimitive():
-        targets.add(
-          _circleTarget(
-            center: DrawPoint(x: primitive.center[0], y: primitive.center[1]),
-            radius: primitive.diameter / 2,
-          ),
-        );
+    for (final primitive in primitives) {
+      targets.add(_primitiveToTarget(primitive));
     }
   }
+
+  if (data.endArrowhead != ArrowheadStyle.none) {
+    final primitives = ArrowRenderPrimitives.resolveArrowheadPrimitives(
+      points: points,
+      arrowType: data.arrowType,
+      style: data.endArrowhead,
+      strokeStyle: data.strokeStyle,
+      strokeWidth: data.strokeWidth,
+      position: ArrowEndpointPosition.end,
+      directionOverride: endDirection,
+    );
+    for (final primitive in primitives) {
+      targets.add(_primitiveToTarget(primitive));
+    }
+  }
+
   return List<_ArrowheadHitTarget>.unmodifiable(targets);
 }
 
-List<core.CurvePathOp> _buildCoreCurveOps({
-  required List<DrawPoint> points,
-  required ArrowType arrowType,
-}) {
-  if (points.length < 2) {
-    return const <core.CurvePathOp>[];
-  }
-
-  final ops = <core.CurvePathOp>[
-    core.CurvePathOp(
-      op: 'move',
-      data: <double>[points.first.x, points.first.y],
-    ),
-  ];
-  for (var index = 0; index < points.length - 1; index++) {
-    final cubic = arrowType == ArrowType.curved && points.length >= 3
-        ? _buildCurvedCubicSegment(points, index)
-        : _buildLinearCubicSegment(points[index], points[index + 1]);
-    ops.add(
-      core.CurvePathOp(
-        op: 'bcurveTo',
-        data: <double>[
-          cubic.control1.x,
-          cubic.control1.y,
-          cubic.control2.x,
-          cubic.control2.y,
-          cubic.end.x,
-          cubic.end.y,
-        ],
-      ),
-    );
-  }
-  return List<core.CurvePathOp>.unmodifiable(ops);
-}
-
-({DrawPoint control1, DrawPoint control2, DrawPoint end})
-_buildLinearCubicSegment(DrawPoint start, DrawPoint end) {
-  final control1 = DrawPoint(
-    x: start.x + (end.x - start.x) / 3,
-    y: start.y + (end.y - start.y) / 3,
-  );
-  final control2 = DrawPoint(
-    x: start.x + (end.x - start.x) * (2 / 3),
-    y: start.y + (end.y - start.y) * (2 / 3),
-  );
-  return (control1: control1, control2: control2, end: end);
-}
-
-({DrawPoint control1, DrawPoint control2, DrawPoint end})
-_buildCurvedCubicSegment(List<DrawPoint> points, int index) {
-  final p0 = index == 0 ? points[index] : points[index - 1];
-  final p1 = points[index];
-  final p2 = points[index + 1];
-  final p3 = index + 2 < points.length ? points[index + 2] : points[index + 1];
-  const tension = 1.0;
-  final control1 = p1 + (p2 - p0) * (tension / 6);
-  final control2 = p2 - (p3 - p1) * (tension / 6);
-  return (control1: control1, control2: control2, end: p2);
-}
-
-core.ArrowStrokeStyle _toCoreStrokeStyle(StrokeStyle style) {
-  switch (style) {
-    case StrokeStyle.solid:
-      return 'solid';
-    case StrokeStyle.dashed:
-      return 'dashed';
-    case StrokeStyle.dotted:
-      return 'dotted';
-  }
-}
-
-core.Arrowhead? _toCoreRenderableArrowhead(ArrowheadStyle style) {
-  switch (style) {
-    case ArrowheadStyle.none:
-      return null;
-    case ArrowheadStyle.square:
-    case ArrowheadStyle.invertedTriangle:
-      return null;
-    default:
-      return toCoreArrowhead(style);
-  }
-}
-
-_ArrowheadHitTarget? _legacyArrowheadTargetForStyle({
-  required DrawPoint tip,
-  required DrawPoint direction,
-  required ArrowheadStyle style,
-  required double strokeWidth,
-}) {
-  final normalized = normalizeDrawVector(direction);
-  if (normalized == null) {
-    return null;
-  }
-
-  var dir = normalized;
-  final length = _arrowheadLength(strokeWidth);
-  final width = length * 0.6;
-
-  if (style == ArrowheadStyle.invertedTriangle) {
-    dir = DrawPoint(x: -dir.x, y: -dir.y);
-  }
-
-  final perp = DrawPoint(x: -dir.y, y: dir.x);
-  switch (style) {
-    case ArrowheadStyle.standard:
-      final base = subtractScaledDrawPoint(tip, dir, length);
-      final left = addScaledDrawPoint(base, perp, width / 2);
-      final right = addScaledDrawPoint(base, perp, -width / 2);
-      return _segmentsTarget([
-        _ArrowheadSegment(start: tip, end: left),
-        _ArrowheadSegment(start: tip, end: right),
+_ArrowheadHitTarget _primitiveToTarget(ArrowheadRenderPrimitiveData primitive) {
+  switch (primitive) {
+    case ArrowheadLinePrimitiveData():
+      return _segmentsTarget(<_ArrowheadSegment>[
+        _ArrowheadSegment(start: primitive.from, end: primitive.to),
       ]);
-    case ArrowheadStyle.triangle:
-    case ArrowheadStyle.invertedTriangle:
-      final base = subtractScaledDrawPoint(tip, dir, length);
-      final left = addScaledDrawPoint(base, perp, width / 2);
-      final right = addScaledDrawPoint(base, perp, -width / 2);
-      return _segmentsTarget(_closedSegments([tip, left, right]));
-    case ArrowheadStyle.square:
-      final side = length * 0.6;
-      final half = side / 2;
-      final center = subtractScaledDrawPoint(tip, dir, half);
-      final corner1 = addDrawPoints(
-        addScaledDrawPoint(center, perp, half),
-        addScaledDrawPoint(DrawPoint.zero, dir, half),
+    case ArrowheadPolygonPrimitiveData():
+      return _polygonTarget(
+        vertices: primitive.points,
+        fillMode: primitive.fillMode,
       );
-      final corner2 = addDrawPoints(
-        addScaledDrawPoint(center, perp, -half),
-        addScaledDrawPoint(DrawPoint.zero, dir, half),
+    case ArrowheadCirclePrimitiveData():
+      return _circleTarget(
+        center: primitive.center,
+        radius: primitive.radius,
+        fillMode: primitive.fillMode,
       );
-      final corner3 = addDrawPoints(
-        addScaledDrawPoint(center, perp, -half),
-        addScaledDrawPoint(DrawPoint.zero, dir, -half),
-      );
-      final corner4 = addDrawPoints(
-        addScaledDrawPoint(center, perp, half),
-        addScaledDrawPoint(DrawPoint.zero, dir, -half),
-      );
-      return _segmentsTarget(
-        _closedSegments([corner1, corner2, corner3, corner4]),
-      );
-    case ArrowheadStyle.circle:
-      final radius = length * 0.3;
-      final center = subtractScaledDrawPoint(tip, dir, radius);
-      return _circleTarget(center: center, radius: radius);
-    case ArrowheadStyle.diamond:
-      final base = subtractScaledDrawPoint(tip, dir, length);
-      final mid = subtractScaledDrawPoint(tip, dir, length / 2);
-      final left = addScaledDrawPoint(mid, perp, width / 2);
-      final right = addScaledDrawPoint(mid, perp, -width / 2);
-      return _segmentsTarget(_closedSegments([tip, left, base, right]));
-    case ArrowheadStyle.verticalLine:
-      final half = width / 2;
-      final left = addScaledDrawPoint(tip, perp, half);
-      final right = addScaledDrawPoint(tip, perp, -half);
-      return _segmentsTarget([_ArrowheadSegment(start: left, end: right)]);
-    case ArrowheadStyle.none:
-      return null;
   }
 }
 
@@ -646,4 +418,27 @@ List<_ArrowheadSegment> _closedSegments(List<DrawPoint> vertices) {
     segments.add(_ArrowheadSegment(start: vertices[i], end: next));
   }
   return segments;
+}
+
+bool _isPointInsidePolygon({
+  required DrawPoint position,
+  required List<DrawPoint> vertices,
+}) {
+  if (vertices.length < 3) {
+    return false;
+  }
+
+  var inside = false;
+  for (var i = 0, j = vertices.length - 1; i < vertices.length; j = i++) {
+    final pi = vertices[i];
+    final pj = vertices[j];
+    final intersects =
+        ((pi.y > position.y) != (pj.y > position.y)) &&
+        (position.x <
+            (pj.x - pi.x) * (position.y - pi.y) / (pj.y - pi.y) + pi.x);
+    if (intersects) {
+      inside = !inside;
+    }
+  }
+  return inside;
 }

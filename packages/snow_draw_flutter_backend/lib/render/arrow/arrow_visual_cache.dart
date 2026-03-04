@@ -126,26 +126,34 @@ class ArrowVisualCache {
     final paths = <Path>[];
     final startDirection = geometry.startDirection;
     if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
-      paths.add(
-        FlutterArrowGeometry.buildArrowheadPath(
-          tip: points.first,
-          direction: startDirection,
-          style: data.startArrowhead,
-          strokeWidth: data.strokeWidth,
-        ),
+      final arrowheadPaths = FlutterArrowGeometry.buildArrowheadPaths(
+        points: points,
+        arrowType: data.arrowType,
+        style: data.startArrowhead,
+        strokeStyle: data.strokeStyle,
+        strokeWidth: data.strokeWidth,
+        position: ArrowEndpointPosition.start,
+        directionOverride: startDirection,
       );
+      if (!arrowheadPaths.strokePath.getBounds().isEmpty) {
+        paths.add(arrowheadPaths.strokePath);
+      }
     }
 
     final endDirection = geometry.endDirection;
     if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
-      paths.add(
-        FlutterArrowGeometry.buildArrowheadPath(
-          tip: points.last,
-          direction: endDirection,
-          style: data.endArrowhead,
-          strokeWidth: data.strokeWidth,
-        ),
+      final arrowheadPaths = FlutterArrowGeometry.buildArrowheadPaths(
+        points: points,
+        arrowType: data.arrowType,
+        style: data.endArrowhead,
+        strokeStyle: data.strokeStyle,
+        strokeWidth: data.strokeWidth,
+        position: ArrowEndpointPosition.end,
+        directionOverride: endDirection,
       );
+      if (!arrowheadPaths.strokePath.getBounds().isEmpty) {
+        paths.add(arrowheadPaths.strokePath);
+      }
     }
 
     return paths;
