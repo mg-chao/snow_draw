@@ -7,8 +7,8 @@ import '../../core/coordinates/overlay_space.dart';
 import '../../core/coordinates/world_space.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
-import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
+import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/text/text_bounds.dart';
@@ -19,7 +19,6 @@ import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/element_geometry.dart';
-import '../../types/element_style.dart';
 import '../../types/resize_mode.dart';
 
 const _resizeTolerance = 0.01;
@@ -147,9 +146,10 @@ class EditApply {
             element: resized,
             startRect: startElement.rect,
           );
-        } else if (resizedData is ArrowData) {
+        } else if (resizedData is ArrowLikeData) {
           resized = _applyArrowResize(
             element: resized,
+            data: resizedData,
             flipX: scaleX < 0,
             flipY: scaleY < 0,
           );
@@ -473,17 +473,17 @@ ElementState _applySerialNumberResize({
 
 ElementState _applyArrowResize({
   required ElementState element,
+  required ArrowLikeData data,
   required bool flipX,
   required bool flipY,
 }) {
-  final data = element.data as ArrowData;
-  if (data.arrowType != ArrowType.elbow) {
-    return element;
-  }
+  final nextPoints = flipX || flipY
+      ? _flipNormalizedArrowPoints(data.points, flipX: flipX, flipY: flipY)
+      : data.points;
 
   final worldPoints = ArrowGeometry.resolveWorldPoints(
     rect: element.rect,
-    normalizedPoints: data.points,
+    normalizedPoints: nextPoints,
   );
   final corePatch = computeCoreElbowResizePatch(
     startBinding: toCoreBinding(data.startBinding),
@@ -504,6 +504,7 @@ ElementState _applyArrowResize({
       : data.fixedSegments;
 
   final nextData = data.copyWith(
+    points: nextPoints,
     startBinding: nextStartBinding,
     endBinding: nextEndBinding,
     fixedSegments: nextFixedSegments,
@@ -513,6 +514,20 @@ ElementState _applyArrowResize({
   }
   return element.copyWith(data: nextData);
 }
+
+List<DrawPoint> _flipNormalizedArrowPoints(
+  List<DrawPoint> points, {
+  required bool flipX,
+  required bool flipY,
+}) => List<DrawPoint>.unmodifiable(
+  points.map(
+    (point) => DrawPoint(
+      x: flipX ? (1 - point.x) : point.x,
+      y: flipY ? (1 - point.y) : point.y,
+      pressure: point.pressure,
+    ),
+  ),
+);
 
 List<core.FixedSegment>? _toCoreFixedSegments(
   List<ElbowFixedSegment>? fixedSegments,
