@@ -4,6 +4,7 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import '../../config/draw_config.dart';
 import '../../core/coordinates/element_space.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
+import '../../elements/types/arrow/arrow_core_bindable_query.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_data.dart';
@@ -1156,40 +1157,19 @@ List<core.BindableState> _resolveCoreEndpointBindables({
     return const <core.BindableState>[];
   }
 
-  final document = state.domain.document;
-  final bindableIds = <String>{};
-  if (activeBinding != null) {
-    bindableIds.add(activeBinding.elementId);
-  }
-  if (oppositeBinding != null) {
-    bindableIds.add(oppositeBinding.elementId);
-  }
-  if (allowNewBinding && bindingDistance > 0) {
-    document.visitArrowBindableElementsAtPoint(worldTarget, bindingDistance, (
-      element,
-    ) {
-      bindableIds.add(element.id);
-      return true;
-    }, excludedElementId: excludedElementId);
-  }
-  if (bindableIds.isEmpty) {
+  final resolved = resolveCoreBindableCandidates(
+    document: state.domain.document,
+    worldPoint: worldTarget,
+    distance: bindingDistance,
+    preferredBinding: activeBinding,
+    oppositeBinding: oppositeBinding,
+    excludedElementId: excludedElementId,
+    includeNearby: allowNewBinding,
+  );
+  if (resolved.isEmpty) {
     return const <core.BindableState>[];
   }
-
-  final bindables = <core.BindableState>[];
-  for (final id in bindableIds) {
-    final element = document.elementMap[id];
-    if (element == null ||
-        element.opacity <= 0 ||
-        !isArrowBindableElement(element)) {
-      continue;
-    }
-    final bindable = toCoreBindableState(element);
-    if (bindable != null) {
-      bindables.add(bindable);
-    }
-  }
-  return bindables;
+  return resolved.bindables;
 }
 
 core.EngineContext _coreContextWithBindingDisabled(

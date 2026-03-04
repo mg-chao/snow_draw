@@ -20,6 +20,7 @@ import '../../../utils/snapping_mode.dart';
 import '../../../utils/visible_elements.dart';
 import '../arrow/arrow_binding.dart';
 import '../line/line_data.dart';
+import 'arrow_core_bindable_query.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
 import 'arrow_geometry.dart';
@@ -933,42 +934,17 @@ List<core.BindableState> _resolveCoreBindingSnapBindables({
   required ArrowBinding? preferredBinding,
   required ArrowBinding? oppositeBinding,
 }) {
-  final document = state.domain.document;
-  final bindableIds = <String>{};
-
-  if (preferredBinding != null) {
-    bindableIds.add(preferredBinding.elementId);
-  }
-  if (oppositeBinding != null) {
-    bindableIds.add(oppositeBinding.elementId);
-  }
-
-  if (bindingDistance > 0) {
-    document.visitArrowBindableElementsAtPoint(worldPoint, bindingDistance, (
-      element,
-    ) {
-      bindableIds.add(element.id);
-      return true;
-    });
-  }
-  if (bindableIds.isEmpty) {
+  final resolved = resolveCoreBindableCandidates(
+    document: state.domain.document,
+    worldPoint: worldPoint,
+    distance: bindingDistance,
+    preferredBinding: preferredBinding,
+    oppositeBinding: oppositeBinding,
+  );
+  if (resolved.isEmpty) {
     return const <core.BindableState>[];
   }
-
-  final bindables = <core.BindableState>[];
-  for (final bindableId in bindableIds) {
-    final element = document.elementMap[bindableId];
-    if (element == null ||
-        element.opacity <= 0 ||
-        !isArrowBindableElement(element)) {
-      continue;
-    }
-    final bindable = toCoreBindableState(element);
-    if (bindable != null) {
-      bindables.add(bindable);
-    }
-  }
-  return bindables;
+  return resolved.bindables;
 }
 
 _ArrowCreationSessionData _resolveSessionData(CreationMode mode) {
