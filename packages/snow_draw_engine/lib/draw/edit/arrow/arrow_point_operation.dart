@@ -4,9 +4,11 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import '../../config/draw_config.dart';
 import '../../core/coordinates/element_space.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
+import '../../elements/types/arrow/arrow_binding_policy.dart';
 import '../../elements/types/arrow/arrow_core_bindable_query.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
+import '../../elements/types/arrow/arrow_core_session.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_focus.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
@@ -280,10 +282,11 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
         (typedContext.hasBindableTargets ||
             startBinding != null ||
             endBinding != null);
-    final allowNewBinding =
-        snapConfig.enableArrowBinding &&
-        !modifiers.snapOverride &&
-        snappingMode != SnappingMode.grid;
+    final allowNewBinding = shouldAttemptArrowBinding(
+      snapConfig: snapConfig,
+      snappingMode: snappingMode,
+      snapOverrideActive: modifiers.snapOverride,
+    );
     final bindingDistance = shouldLookupBindings
         ? resolveZoomAdjustedDistance(
             distance: snapConfig.arrowBindingDistance,
@@ -954,14 +957,8 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
     context: dragContext,
     options: const <String, dynamic>{'complexBindings': true},
   );
-  final projection = projectCoreDocument(state.domain.document.elements);
-  final applied = applyCoreEngineResult(
-    arrow: arrow,
-    bindables: projection.bindableRelations,
-    result: dragResult,
-    orderedElementIds: projection.orderedElementIds,
-    anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
-  );
+  final session = ArrowCoreSession.fromElements(state.domain.document.elements);
+  final applied = session.applyEngineResult(arrow: arrow, result: dragResult);
   final draggedArrow = applied.arrow;
   final worldPoints = coreArrowWorldPoints(draggedArrow);
   if (worldPoints.length < 2) {
@@ -1099,14 +1096,8 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
     return null;
   }
 
-  final projection = projectCoreDocument(state.domain.document.elements);
-  final applied = applyCoreEngineResult(
-    arrow: arrow,
-    bindables: projection.bindableRelations,
-    result: dragResult,
-    orderedElementIds: projection.orderedElementIds,
-    anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
-  );
+  final session = ArrowCoreSession.fromElements(state.domain.document.elements);
+  final applied = session.applyEngineResult(arrow: arrow, result: dragResult);
   final finalizedArrow = applied.arrow;
   final worldPoints = coreArrowWorldPoints(finalizedArrow);
   if (worldPoints.length < 2) {

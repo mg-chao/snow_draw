@@ -3,6 +3,7 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../models/element_state.dart';
 import 'arrow_core_bridge.dart';
+import 'arrow_core_ops.dart';
 import 'arrow_engine_events.dart';
 import 'arrow_like_data.dart';
 
@@ -72,6 +73,22 @@ final class ArrowCoreSession {
   ) => reduceArrowEngineEventsToOrderedIds(
     orderedElementIds: projection.orderedElementIds,
     events: events,
+    anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
+  );
+
+  /// Applies an arrow-core engine [result] to [arrow] with session projection.
+  ///
+  /// This ensures every caller uses the same relation graph, anchor mapping,
+  /// and ordering baseline for result reduction.
+  core.ApplyEngineResultValue applyEngineResult({
+    required core.ArrowState arrow,
+    required core.EngineResult result,
+    List<String>? orderedElementIds,
+  }) => applyCoreEngineResult(
+    arrow: arrow,
+    bindables: projection.bindableRelations,
+    result: result,
+    orderedElementIds: orderedElementIds ?? projection.orderedElementIds,
     anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
   );
 }

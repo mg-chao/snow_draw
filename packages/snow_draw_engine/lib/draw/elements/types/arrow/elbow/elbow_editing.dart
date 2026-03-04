@@ -1,7 +1,6 @@
 import 'package:meta/meta.dart';
 import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
-import '../../../../core/coordinates/element_space.dart';
 import '../../../../models/element_state.dart';
 import '../../../../types/draw_point.dart';
 import '../../../../types/draw_rect.dart';
@@ -108,26 +107,12 @@ List<ElbowFixedSegment>? transformFixedSegments({
   required DrawRect oldRect,
   required DrawRect newRect,
   required double rotation,
-}) {
-  if (segments == null || segments.isEmpty) {
-    return null;
-  }
-  final oldSpace = ElementSpace(rotation: rotation, origin: oldRect.center);
-  final newSpace = ElementSpace(rotation: rotation, origin: newRect.center);
-  final transformed = segments
-      .map((segment) {
-        final worldStart = oldSpace.toWorld(segment.start);
-        final worldEnd = oldSpace.toWorld(segment.end);
-        return segment.copyWith(
-          start: newSpace.fromWorld(worldStart),
-          end: newSpace.fromWorld(worldEnd),
-        );
-      })
-      .toList(growable: false);
-  return transformed.isEmpty
-      ? null
-      : List<ElbowFixedSegment>.unmodifiable(transformed);
-}
+}) => transformArrowLocalFixedSegments(
+  segments: segments,
+  oldRect: oldRect,
+  newRect: newRect,
+  rotation: rotation,
+);
 
 ArrowBinding? _resolveBindingOverride({
   required Object? override,

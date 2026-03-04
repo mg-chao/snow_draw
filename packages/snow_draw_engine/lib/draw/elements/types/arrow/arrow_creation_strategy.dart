@@ -19,10 +19,12 @@ import '../../../utils/camera_zoom.dart';
 import '../../../utils/snapping_mode.dart';
 import '../../../utils/visible_elements.dart';
 import '../arrow/arrow_binding.dart';
+import '../arrow/arrow_binding_policy.dart';
 import '../line/line_data.dart';
 import 'arrow_core_bindable_query.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
+import 'arrow_core_session.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
 import 'arrow_two_point_layout.dart';
@@ -445,17 +447,19 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
     ),
     options: const <String, dynamic>{'newArrow': true, 'complexBindings': true},
   );
-  final projection = projectCoreDocument(state.domain.document.elements);
-  final applied = applyCoreEngineResult(
-    arrow: arrow,
-    bindables: projection.bindableRelations,
-    result: finalized,
-    orderedElementIds: <String>[
-      ...state.domain.document.elements.map((element) => element.id),
-      elementId,
-    ],
-    anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
+  final orderedElementIds = <String>[
+    ...state.domain.document.elements.map((element) => element.id),
+    elementId,
+  ];
+  final session = ArrowCoreSession.fromElements(
+    state.domain.document.elements,
+    orderedElementIds: orderedElementIds,
+    context: buildCoreEngineContext(
+      zoom: state.application.view.camera.zoom,
+      isBindingEnabled: config.snap.enableArrowBinding,
+    ),
   );
+  final applied = session.applyEngineResult(arrow: arrow, result: finalized);
   final patchedElement = applied.arrow == arrow
       ? previewElement
       : applyCoreArrowStateToElement(
@@ -786,66 +790,44 @@ _BindingSnapResult _snapBindingPoint({
     return _BindingSnapResult(position: position);
   }
 
-  final bindables = _resolveCoreBindingSnapBindables(
-    state: state,
+  final candidates = resolveCoreBindableCandidates(
+    document: state.domain.document,
     worldPoint: position,
-    bindingDistance: bindingDistance,
+    distance: bindingDistance,
     preferredBinding: preferredBinding,
     oppositeBinding: oppositeBinding,
   );
-  if (bindables.isEmpty) {
+  if (candidates.isEmpty || candidates.elements.isEmpty) {
     return _BindingSnapResult(position: position);
   }
 
-  final startPoint = dragStart ? position : oppositePoint;
-  final endPoint = dragStart ? oppositePoint : position;
-  final dx = endPoint.x - startPoint.x;
-  final dy = endPoint.y - startPoint.y;
-  final arrow = core.ArrowState(
-    id: '__create__',
-    x: startPoint.x,
-    y: startPoint.y,
-    width: dx.abs(),
-    height: dy.abs(),
-    points: <core.Point>[
-      <double>[0, 0],
-      <double>[dx, dy],
-    ],
-    startBinding: toCoreBinding(dragStart ? preferredBinding : oppositeBinding),
-    endBinding: toCoreBinding(dragStart ? oppositeBinding : preferredBinding),
-    startArrowhead: toCoreArrowhead(startArrowheadStyle),
-    endArrowhead: toCoreArrowhead(endArrowheadStyle),
-    elbowed: arrowType == ArrowType.elbow,
-    fixedSegments: null,
-    startIsSpecial: null,
-    endIsSpecial: null,
-  );
-  final options = <String, dynamic>{
-    'newArrow': true,
-    'complexBindings': true,
-    if (dragStart && preferredBinding == null) 'initialBinding': true,
-  };
-  final dragResult = computeCoreEndpointDrag(
-    arrow: arrow,
-    draggedPoints: <int, core.Point>{
-      dragStart ? 0 : 1: dragStart ? <double>[0, 0] : <double>[dx, dy],
-    },
-    pointer: toCorePoint(position),
-    bindables: bindables,
-    context: buildCoreEngineContext(zoom: state.application.view.camera.zoom),
-    options: options,
-  );
-  final nextArrow = core.applyArrowPatch(arrow, dragResult.arrowPatch);
-  final worldPoints = coreArrowWorldPoints(nextArrow);
-  if (worldPoints.length < 2) {
+  final hasArrowhead = dragStart
+      ? startArrowheadStyle != ArrowheadStyle.none
+      : endArrowheadStyle != ArrowheadStyle.none;
+  final bindingCandidate = arrowType == ArrowType.elbow
+      ? ArrowBindingUtils.resolveElbowBindingCandidate(
+          worldPoint: position,
+          targets: candidates.elements,
+          snapDistance: bindingDistance,
+          hasArrowhead: hasArrowhead,
+          preferredBinding: preferredBinding,
+          allowNewBinding: shouldLookupBindings,
+        )
+      : ArrowBindingUtils.resolveBindingCandidate(
+          worldPoint: position,
+          targets: candidates.elements,
+          snapDistance: bindingDistance,
+          preferredBinding: preferredBinding,
+          allowNewBinding: shouldLookupBindings,
+          referencePoint: oppositePoint,
+        );
+  if (bindingCandidate == null) {
     return _BindingSnapResult(position: position);
   }
 
   return _BindingSnapResult(
-    position: dragStart ? worldPoints.first : worldPoints.last,
-    binding: fromCoreBinding(
-      dragStart ? nextArrow.startBinding : nextArrow.endBinding,
-    ),
+    position: bindingCandidate.snapPoint,
+    binding: bindingCandidate.binding,
   );
 }
 
@@ -922,10 +904,10 @@ _BindingSnapResult _resolveStartBindingPoint({
 bool _shouldAttemptBinding({
   required SnapConfig snapConfig,
   required SnappingMode snappingMode,
-}) =>
-    snapConfig.enableArrowBinding &&
-    snappingMode != SnappingMode.grid &&
-    !(snapConfig.enabled && snappingMode == SnappingMode.none);
+}) => shouldAttemptArrowBinding(
+  snapConfig: snapConfig,
+  snappingMode: snappingMode,
+);
 
 List<core.BindableState> _resolveCoreBindingSnapBindables({
   required DrawState state,

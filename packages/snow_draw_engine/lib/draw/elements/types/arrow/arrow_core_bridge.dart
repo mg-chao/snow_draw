@@ -532,7 +532,7 @@ ElementState applyCoreArrowStateToElement({
     nextArrow,
     element,
   );
-  final transformedFixedSegments = _transformFixedSegments(
+  final transformedFixedSegments = transformArrowLocalFixedSegments(
     segments: fixedSegmentsInOldFrame,
     oldRect: element.rect,
     newRect: geometry.rect,
@@ -589,7 +589,7 @@ Map<String, ElementState> applyCoreArrowPatchesToSources({
   return Map<String, ElementState>.unmodifiable(patchedById);
 }
 
-List<ElbowFixedSegment>? _transformFixedSegments({
+List<ElbowFixedSegment>? transformArrowLocalFixedSegments({
   required List<ElbowFixedSegment>? segments,
   required DrawRect oldRect,
   required DrawRect newRect,

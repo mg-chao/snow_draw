@@ -209,12 +209,10 @@ ArrowFocusDragResult dragArrowFocusPoint({
     gridSize: gridSize,
   );
 
-  final applied = applyCoreEngineResult(
+  final applied = session.applyEngineResult(
     arrow: arrow,
-    bindables: session.bindableRelations,
     result: result,
     orderedElementIds: orderedElementIds,
-    anchorElementIdsByBindableId: session.anchorElementIdsByBindableId,
   );
   final reorderedElementIds = reorderedElementIdsFromCoreResult(applied);
   final patchedElement = applied.arrow == arrow
