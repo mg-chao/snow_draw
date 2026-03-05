@@ -6,6 +6,7 @@ import '../../../types/element_style.dart';
 import '../shared/hit_test_geometry.dart';
 import 'arrow_core.dart' as core;
 import 'arrow_core_codec.dart';
+import 'arrow_core_elbow_path.dart';
 import 'arrow_like_data.dart';
 
 class ArrowGeometry {
@@ -245,69 +246,40 @@ List<DrawPoint> _sampleElbowPathForHitTest({
   if (pathData.isEmpty) {
     return points;
   }
-
-  final tokens = pathData
-      .replaceAll(',', ' ')
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((token) => token.isNotEmpty)
-      .toList(growable: false);
-  if (tokens.isEmpty) {
+  final commands = parseArrowCoreElbowPathCommands(pathData);
+  if (commands == null || commands.isEmpty) {
     return points;
   }
 
   final flattened = <DrawPoint>[];
   DrawPoint? current;
-  var index = 0;
-
-  double? readNumber() {
-    if (index >= tokens.length) {
-      return null;
+  for (final command in commands) {
+    switch (command) {
+      case ArrowCoreElbowMoveTo():
+        _appendPointIfDistinct(flattened, command.point);
+        current = command.point;
+      case ArrowCoreElbowLineTo():
+        _appendPointIfDistinct(flattened, command.point);
+        current = command.point;
+      case ArrowCoreElbowQuadraticTo():
+        final start = current;
+        if (start == null) {
+          return points;
+        }
+        final chordLength = (command.end - start).distance(DrawPoint.zero);
+        final roughLength =
+            chordLength +
+            (command.control - start).distance(DrawPoint.zero) * 0.5;
+        final stepSize = math.max(1.5, strokeWidth * 0.7);
+        final steps = roughLength <= 0 ? 6 : roughLength ~/ stepSize + 1;
+        final clampedSteps = steps.clamp(6, 32);
+        for (var i = 1; i <= clampedSteps; i++) {
+          final t = i / clampedSteps;
+          final point = _quadraticPoint(start, command.control, command.end, t);
+          _appendPointIfDistinct(flattened, point);
+        }
+        current = command.end;
     }
-    return double.tryParse(tokens[index++]);
-  }
-
-  while (index < tokens.length) {
-    final command = tokens[index++].toUpperCase();
-    if (command == 'M' || command == 'L') {
-      final x = readNumber();
-      final y = readNumber();
-      if (x == null || y == null) {
-        return points;
-      }
-      final next = DrawPoint(x: x, y: y);
-      _appendPointIfDistinct(flattened, next);
-      current = next;
-      continue;
-    }
-
-    if (command == 'Q') {
-      final cx = readNumber();
-      final cy = readNumber();
-      final x = readNumber();
-      final y = readNumber();
-      final start = current;
-      if (cx == null || cy == null || x == null || y == null || start == null) {
-        return points;
-      }
-      final control = DrawPoint(x: cx, y: cy);
-      final end = DrawPoint(x: x, y: y);
-      final chordLength = (end - start).distance(DrawPoint.zero);
-      final roughLength =
-          chordLength + (control - start).distance(DrawPoint.zero) * 0.5;
-      final stepSize = math.max(1.5, strokeWidth * 0.7);
-      final steps = roughLength <= 0 ? 6 : roughLength ~/ stepSize + 1;
-      final clampedSteps = steps.clamp(6, 32);
-      for (var i = 1; i <= clampedSteps; i++) {
-        final t = i / clampedSteps;
-        final point = _quadraticPoint(start, control, end, t);
-        _appendPointIfDistinct(flattened, point);
-      }
-      current = end;
-      continue;
-    }
-
-    return points;
   }
 
   return flattened.length >= 2 ? flattened : points;

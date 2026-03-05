@@ -8,6 +8,7 @@ import '../shared/element_data_codec.dart';
 import 'arrow_core.dart' as core;
 import 'arrow_core_bindable_candidates.dart';
 import 'arrow_core_bridge.dart';
+import 'arrow_core_bindable_projector.dart';
 import 'arrow_core_ops.dart';
 
 enum ArrowBindingMode { inside, orbit }
@@ -664,28 +665,4 @@ const _previewSpanMultiplier = 3.0;
 
 ArrowCoreBindableCandidates _collectCoreBindableCandidatesFromTargets(
   Iterable<ElementState> targets,
-) {
-  final seenIds = <String>{};
-  final elements = <ElementState>[];
-  final bindables = <core.BindableState>[];
-  for (final target in targets) {
-    if (target.opacity <= 0 ||
-        !ArrowBindingUtils.isBindableTarget(target) ||
-        !seenIds.add(target.id)) {
-      continue;
-    }
-    final bindable = toCoreBindableState(target);
-    if (bindable == null) {
-      continue;
-    }
-    elements.add(target);
-    bindables.add(bindable);
-  }
-  if (bindables.isEmpty) {
-    return ArrowCoreBindableCandidates.empty;
-  }
-  return ArrowCoreBindableCandidates(
-    elements: List<ElementState>.unmodifiable(elements),
-    bindables: List<core.BindableState>.unmodifiable(bindables),
-  );
-}
+) => projectArrowCoreBindableCandidates(elements: targets);

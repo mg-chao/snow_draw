@@ -149,61 +149,29 @@ class FlutterArrowGeometry {
     if (pathData.isEmpty) {
       return Path();
     }
-
-    final tokens = pathData
-        .replaceAll(',', ' ')
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((token) => token.isNotEmpty)
-        .toList(growable: false);
-    if (tokens.isEmpty) {
-      return Path();
-    }
-
-    final path = Path();
-    var index = 0;
-
-    double? readNumber() {
-      if (index >= tokens.length) {
-        return null;
-      }
-      return double.tryParse(tokens[index++]);
-    }
-
-    while (index < tokens.length) {
-      final command = tokens[index++].toUpperCase();
-      if (command == 'M') {
-        final x = readNumber();
-        final y = readNumber();
-        if (x == null || y == null) {
-          return null;
-        }
-        path.moveTo(x, y);
-        continue;
-      }
-      if (command == 'L') {
-        final x = readNumber();
-        final y = readNumber();
-        if (x == null || y == null) {
-          return null;
-        }
-        path.lineTo(x, y);
-        continue;
-      }
-      if (command == 'Q') {
-        final cx = readNumber();
-        final cy = readNumber();
-        final x = readNumber();
-        final y = readNumber();
-        if (cx == null || cy == null || x == null || y == null) {
-          return null;
-        }
-        path.quadraticBezierTo(cx, cy, x, y);
-        continue;
-      }
+    final commands = parseArrowCoreElbowPathCommands(pathData);
+    if (commands == null) {
       return null;
     }
-
+    if (commands.isEmpty) {
+      return Path();
+    }
+    final path = Path();
+    for (final command in commands) {
+      switch (command) {
+        case ArrowCoreElbowMoveTo():
+          path.moveTo(command.point.x, command.point.y);
+        case ArrowCoreElbowLineTo():
+          path.lineTo(command.point.x, command.point.y);
+        case ArrowCoreElbowQuadraticTo():
+          path.quadraticBezierTo(
+            command.control.x,
+            command.control.y,
+            command.end.x,
+            command.end.y,
+          );
+      }
+    }
     return path;
   }
 
