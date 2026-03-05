@@ -20,7 +20,7 @@ void main() {
       );
     });
 
-    test('resolveCoreEndpointBindingStrategy defaults to complex parity', () {
+    test('resolveCoreEndpointBindingStrategy defaults to legacy parity', () {
       final arrow = _arrowState(
         startBinding: const core.FixedPointBinding(
           elementId: 'bindable-1',
@@ -39,13 +39,15 @@ void main() {
         context: buildCoreEngineContext(),
       );
 
-      expect(strategies.start, isNull);
+      expect(strategies.start, isNotNull);
+      expect(strategies.start!.bindableId, bindable.id);
+      expect(strategies.start!.mode, core.bindModeInside);
       expect(strategies.end, isNotNull);
       expect(strategies.end!.bindableId, bindable.id);
-      expect(strategies.end!.mode, core.bindModeOrbit);
+      expect(strategies.end!.mode, core.bindModeInside);
     });
 
-    test('computeCoreSimpleBindingPatch defaults to complex parity', () {
+    test('computeCoreSimpleBindingPatch defaults to legacy parity', () {
       final arrow = _arrowState(
         startBinding: const core.FixedPointBinding(
           elementId: 'bindable-1',
@@ -64,12 +66,13 @@ void main() {
         context: buildCoreEngineContext(),
       );
 
-      final start = result.arrowPatch['startBinding'] as core.FixedPointBinding?;
+      final start =
+          result.arrowPatch['startBinding'] as core.FixedPointBinding?;
       final end = result.arrowPatch['endBinding'] as core.FixedPointBinding?;
       expect(start, isNotNull);
-      expect(start!.mode, core.bindModeOrbit);
+      expect(start!.mode, core.bindModeInside);
       expect(end, isNotNull);
-      expect(end!.mode, core.bindModeOrbit);
+      expect(end!.mode, core.bindModeInside);
     });
 
     test('bind/unbind relation wrappers preserve relation patches', () {
