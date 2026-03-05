@@ -177,7 +177,7 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
     oppositeBinding: oppositeBinding,
     orderedElementIds: orderedElementIds,
   );
-  final dragContext = shouldLookupBindings
+  final dragContext = shouldLookupBindings && allowNewBinding
       ? coreEngineContext
       : _coreContextWithBindingDisabled(coreEngineContext);
   final session = ArrowCoreSession.fromDocument(

@@ -643,6 +643,46 @@ void main() {
     });
 
     test(
+      'snap override clears dragged elbow endpoint binding even over same target',
+      () {
+        final bindTarget = _rectangleElement(
+          id: 'elbow-snap-target',
+          rect: const DrawRect(minX: 300, minY: 120, maxX: 420, maxY: 260),
+          zIndex: 1,
+        );
+        final arrow = _elbowArrowElement(
+          id: 'elbow-snap-override',
+          points: const <DrawPoint>[
+            DrawPoint(x: 120, y: 180),
+            DrawPoint(x: 300, y: 180),
+          ],
+          zIndex: 2,
+          endBinding: const ArrowBinding(
+            elementId: 'elbow-snap-target',
+            anchor: DrawPoint(x: 0, y: 0.5),
+            mode: ArrowBindingMode.orbit,
+          ),
+        );
+        final state = _stateWithElements(
+          <ElementState>[bindTarget, arrow],
+          selectedIds: <String>{arrow.id},
+        );
+
+        final session = _dragArrowHandleSession(
+          state: state,
+          elementId: arrow.id,
+          pointKind: ArrowPointKind.turning,
+          pointIndex: 1,
+          startPosition: const DrawPoint(x: 300, y: 180),
+          currentPosition: const DrawPoint(x: 320, y: 180),
+          modifiers: const EditModifiers(snapOverride: true),
+        );
+
+        expect(session.transform.endBinding, isNull);
+      },
+    );
+
+    test(
       'dragging elbow endpoint keeps connected segment routing consistent',
       () {
         final arrow = _elbowArrowElement(

@@ -90,7 +90,7 @@ void main() {
           endBinding: data.endBinding,
           excludedElementId: arrow.id,
           shouldLookupBindings: true,
-          allowNewBinding: false,
+          allowNewBinding: true,
           bindingDistance: 0,
           coreEngineContext: buildCoreEngineContext(),
           orderedElementIds: const <String>['arrow-1', 'rect-target'],
@@ -98,6 +98,50 @@ void main() {
 
         expect(result, isNotNull);
         expect(result!.orderedElementIds, <String>['rect-target', 'arrow-1']);
+      },
+    );
+
+    test(
+      'computeArrowCoreEndpointDragResult disables existing binding when new bindings are disallowed',
+      () {
+        final bindable = _rectangleElement(
+          id: 'rect-target',
+          rect: const DrawRect(minX: 220, minY: 20, maxX: 320, maxY: 120),
+          zIndex: 1,
+        );
+        final arrow = _arrowElement(
+          id: 'arrow-1',
+          points: const <DrawPoint>[
+            DrawPoint(x: 60, y: 60),
+            DrawPoint(x: 220, y: 60),
+          ],
+          zIndex: 0,
+          endBinding: const ArrowBinding(
+            elementId: 'rect-target',
+            anchor: DrawPoint(x: 0, y: 0.5),
+          ),
+        );
+        final state = _stateWithElements(<ElementState>[arrow, bindable]);
+        final data = arrow.data as ArrowData;
+
+        final result = computeArrowCoreEndpointDragResult(
+          state: state,
+          element: arrow,
+          data: data,
+          localPoints: _resolveLocalPoints(arrow, data),
+          draggedIndex: 1,
+          worldPointer: const DrawPoint(x: 220, y: 60),
+          startBinding: data.startBinding,
+          endBinding: data.endBinding,
+          excludedElementId: arrow.id,
+          shouldLookupBindings: true,
+          allowNewBinding: false,
+          bindingDistance: 80,
+          coreEngineContext: buildCoreEngineContext(),
+        );
+
+        expect(result, isNotNull);
+        expect(result!.endBinding, isNull);
       },
     );
 

@@ -1079,7 +1079,13 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
   var draggedEndpoint = target;
   String? hoveredBindableId;
 
-  if (shouldLookupBindings) {
+  if (!allowNewBinding) {
+    if (draggedStart) {
+      nextStartBinding = null;
+    } else {
+      nextEndBinding = null;
+    }
+  } else if (shouldLookupBindings) {
     final worldTarget = context.toWorld(target);
     final activeBinding = draggedStart ? startBinding : endBinding;
     final oppositeBinding = draggedStart ? endBinding : startBinding;
