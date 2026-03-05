@@ -281,6 +281,84 @@ void main() {
       expect(binding!.anchor.x, closeTo(-0.2, 1e-9));
       expect(binding.anchor.y, closeTo(1.25, 1e-9));
     });
+
+    test(
+      'applyCoreArrowPatchToElement applies binding-only patches without geometry drift',
+      () {
+        final element = _arrowElement(
+          id: 'arrow-geometry-stable',
+          points: const <DrawPoint>[
+            DrawPoint(x: 20, y: 40),
+            DrawPoint(x: 120, y: 60),
+          ],
+          zIndex: 2,
+        );
+        final data = element.data as ArrowData;
+
+        final patched = applyCoreArrowPatchToElement(
+          element: element,
+          data: data,
+          patch: <String, dynamic>{
+            'startBinding': core.FixedPointBinding(
+              elementId: 'rect-1',
+              fixedPoint: const <double>[0.25, 0.75],
+              mode: core.bindModeInside,
+            ),
+          },
+        );
+        final patchedData = patched.data as ArrowData;
+
+        expect(patched.rect, element.rect);
+        expect(patchedData.points, data.points);
+        expect(
+          patchedData.startBinding,
+          const ArrowBinding(
+            elementId: 'rect-1',
+            anchor: DrawPoint(x: 0.25, y: 0.75),
+            mode: ArrowBindingMode.inside,
+          ),
+        );
+        expect(patchedData.endBinding, isNull);
+      },
+    );
+
+    test(
+      'applyCoreArrowPatchToElement accepts map-shaped binding patch values',
+      () {
+        final element = _arrowElement(
+          id: 'arrow-map-patch',
+          points: const <DrawPoint>[
+            DrawPoint(x: 0, y: 0),
+            DrawPoint(x: 100, y: 0),
+          ],
+          zIndex: 3,
+        );
+        final data = element.data as ArrowData;
+
+        final patched = applyCoreArrowPatchToElement(
+          element: element,
+          data: data,
+          patch: <String, dynamic>{
+            'endBinding': <String, dynamic>{
+              'elementId': 'rect-2',
+              'fixedPoint': <double>[1, 0.5],
+              'mode': core.bindModeOrbit,
+            },
+          },
+        );
+        final patchedData = patched.data as ArrowData;
+
+        expect(
+          patchedData.endBinding,
+          const ArrowBinding(
+            elementId: 'rect-2',
+            anchor: DrawPoint(x: 1, y: 0.5),
+            mode: ArrowBindingMode.orbit,
+          ),
+        );
+        expect(patchedData.points, data.points);
+      },
+    );
   });
 }
 

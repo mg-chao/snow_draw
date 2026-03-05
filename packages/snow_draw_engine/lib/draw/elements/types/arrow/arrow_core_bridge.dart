@@ -587,6 +587,14 @@ ElementState applyCoreArrowPatchToElement({
   required ArrowLikeData data,
   required core.ArrowPatch patch,
 }) {
+  if (patch.isEmpty) {
+    return element;
+  }
+  if (!_patchTouchesGeometryOrSegments(patch)) {
+    final nextData = _applyNonGeometryPatch(data: data, patch: patch);
+    return nextData == data ? element : element.copyWith(data: nextData);
+  }
+
   final currentArrow = toCoreArrowState(element: element, data: data);
   final nextArrow = core.applyArrowPatch(currentArrow, patch);
   return applyCoreArrowStateToElement(
@@ -644,4 +652,83 @@ List<ElbowFixedSegment>? transformArrowLocalFixedSegments({
   return transformed.isEmpty
       ? null
       : List<ElbowFixedSegment>.unmodifiable(transformed);
+}
+
+bool _patchTouchesGeometryOrSegments(core.ArrowPatch patch) =>
+    patch.containsKey('x') ||
+    patch.containsKey('y') ||
+    patch.containsKey('width') ||
+    patch.containsKey('height') ||
+    patch.containsKey('points') ||
+    patch.containsKey('fixedSegments');
+
+ArrowLikeData _applyNonGeometryPatch({
+  required ArrowLikeData data,
+  required core.ArrowPatch patch,
+}) {
+  final startBindingUpdate = patch.containsKey('startBinding')
+      ? _decodeCoreBindingPatchValue(patch['startBinding'])
+      : ArrowLikeData.unset;
+  final endBindingUpdate = patch.containsKey('endBinding')
+      ? _decodeCoreBindingPatchValue(patch['endBinding'])
+      : ArrowLikeData.unset;
+  final startIsSpecialUpdate = patch.containsKey('startIsSpecial')
+      ? _decodeNullableBoolPatchValue(patch['startIsSpecial'])
+      : ArrowLikeData.unset;
+  final endIsSpecialUpdate = patch.containsKey('endIsSpecial')
+      ? _decodeNullableBoolPatchValue(patch['endIsSpecial'])
+      : ArrowLikeData.unset;
+
+  return data.copyWith(
+    startBinding: startBindingUpdate,
+    endBinding: endBindingUpdate,
+    startIsSpecial: startIsSpecialUpdate,
+    endIsSpecial: endIsSpecialUpdate,
+  );
+}
+
+ArrowBinding? _decodeCoreBindingPatchValue(Object? raw) {
+  if (raw == null) {
+    return null;
+  }
+  if (raw is core.FixedPointBinding) {
+    return fromCoreBinding(raw);
+  }
+  if (raw is! Map<Object?, Object?>) {
+    return null;
+  }
+
+  final elementId = raw['elementId'];
+  final fixedPoint = raw['fixedPoint'];
+  final mode = raw['mode'];
+  if (elementId is! String ||
+      fixedPoint is! List<Object?> ||
+      fixedPoint.length != 2) {
+    return null;
+  }
+
+  final x = fixedPoint[0];
+  final y = fixedPoint[1];
+  if (x is! num || y is! num) {
+    return null;
+  }
+
+  final resolvedMode = mode is String ? mode : core.bindModeOrbit;
+  return fromCoreBinding(
+    core.FixedPointBinding(
+      elementId: elementId,
+      fixedPoint: <double>[x.toDouble(), y.toDouble()],
+      mode: resolvedMode,
+    ),
+  );
+}
+
+bool? _decodeNullableBoolPatchValue(Object? raw) {
+  if (raw == null) {
+    return null;
+  }
+  if (raw is bool) {
+    return raw;
+  }
+  return null;
 }
