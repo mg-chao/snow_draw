@@ -437,15 +437,13 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     return null;
   }
 
-  final targetById = <String, ElementState>{
-    for (final target in candidates.elements) target.id: target,
-  };
+  final targetById = candidates.elementById;
   if (targetById.isEmpty) {
     return null;
   }
   final bindables = <core.BindableState>[];
   for (final bindable in candidates.bindables) {
-    if (!targetById.containsKey(bindable.id)) {
+    if (candidates.elementForId(bindable.id) == null) {
       continue;
     }
     if (!allowNewBinding &&
@@ -667,10 +665,13 @@ const _previewSpanMultiplier = 3.0;
 ArrowCoreBindableCandidates _collectCoreBindableCandidatesFromTargets(
   Iterable<ElementState> targets,
 ) {
+  final seenIds = <String>{};
   final elements = <ElementState>[];
   final bindables = <core.BindableState>[];
   for (final target in targets) {
-    if (target.opacity <= 0 || !ArrowBindingUtils.isBindableTarget(target)) {
+    if (target.opacity <= 0 ||
+        !ArrowBindingUtils.isBindableTarget(target) ||
+        !seenIds.add(target.id)) {
       continue;
     }
     final bindable = toCoreBindableState(target);

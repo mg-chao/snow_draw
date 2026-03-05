@@ -5,7 +5,6 @@ import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import 'arrow_binding.dart';
 import 'arrow_core_bindable_candidates.dart';
-import 'arrow_core_bridge.dart';
 
 /// Resolves bindable lookup candidates for arrow-core binding/focus routines.
 ///
@@ -39,17 +38,19 @@ ArrowCoreBindableCandidates resolveCoreBindableCandidates({
     return ArrowCoreBindableCandidates.empty;
   }
 
+  final bindableById = document.arrowCoreBindableById;
   final elements = <ElementState>[];
   final bindables = <core.BindableState>[];
-  for (final candidateId in candidateIds) {
+  for (final candidateId in document.orderedElementIds) {
+    if (!candidateIds.contains(candidateId)) {
+      continue;
+    }
     final element = document.elementMap[candidateId];
-    if (element == null ||
-        element.opacity <= 0 ||
-        !isArrowBindableElement(element)) {
+    if (element == null || element.opacity <= 0) {
       continue;
     }
 
-    final bindable = toCoreBindableState(element);
+    final bindable = bindableById[candidateId];
     if (bindable == null) {
       continue;
     }

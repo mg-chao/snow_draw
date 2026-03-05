@@ -86,6 +86,15 @@ class DocumentState {
     collectCoreBindables(_arrowBindableElements),
   );
 
+  /// Cached bindables keyed by id for fast arrow-core candidate resolution.
+  ///
+  /// This avoids rebuilding bindable projections in high-frequency pointer
+  /// interactions.
+  late final _arrowCoreBindableById =
+      Map<String, core.BindableState>.unmodifiable({
+        for (final bindable in _arrowCoreBindables) bindable.id: bindable,
+      });
+
   /// Cached bindable relation snapshots projected for arrow-core operations.
   ///
   /// The relation graph is derived from current arrow endpoint bindings and
@@ -113,6 +122,10 @@ class DocumentState {
 
   /// Arrow-core bindable projections for this document snapshot.
   List<core.BindableState> get arrowCoreBindables => _arrowCoreBindables;
+
+  /// Arrow-core bindables keyed by element id.
+  Map<String, core.BindableState> get arrowCoreBindableById =>
+      _arrowCoreBindableById;
 
   /// Arrow-core bindable relation projections for this document snapshot.
   List<core.BindableRelationState> get arrowCoreBindableRelations =>
@@ -171,6 +184,7 @@ class DocumentState {
       _spatialIndex.size +
       _arrowBindableSpatialIndex.size +
       _arrowCoreBindables.length +
+      _arrowCoreBindableById.length +
       _arrowCoreBindableRelations.length +
       _arrowCoreAnchorElementIdsByBindableId.length +
       boundArrowTargetIds.length +
