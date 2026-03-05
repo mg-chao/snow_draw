@@ -1068,14 +1068,12 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
     final worldTarget = context.toWorld(target);
     final activeBinding = draggedStart ? startBinding : endBinding;
     final oppositeBinding = draggedStart ? endBinding : startBinding;
-    final candidates = resolveCoreBindableCandidates(
+    final candidates = resolveCoreBindableCandidatesForEndpointStrategy(
       document: state.domain.document,
-      worldPoint: worldTarget,
-      distance: bindingDistance,
-      preferredBinding: activeBinding,
+      activeBinding: activeBinding,
       oppositeBinding: oppositeBinding,
       excludedElementId: context.elementId,
-      includeNearby: allowNewBinding,
+      allowNewBinding: allowNewBinding,
     );
     final hasArrowhead = draggedStart
         ? context.startArrowhead != ArrowheadStyle.none

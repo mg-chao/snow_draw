@@ -54,7 +54,7 @@ List<ElementState> resolveArrowBindingTargets({
       continue;
     }
     final element = elementsById[normalized.id];
-    if (element != null) {
+    if (element != null && element.opacity > 0) {
       orderedTargets.add(element);
     }
   }

@@ -148,6 +148,7 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
   List<String>? orderedElementIds,
   Map<String, dynamic>? options,
 }) {
+  assert(bindingDistance >= 0);
   if (localPoints.length < 2 ||
       draggedIndex < 0 ||
       draggedIndex >= localPoints.length) {
@@ -169,11 +170,9 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
   final oppositeBinding = draggedIndex == 0 ? endBinding : startBinding;
   final bindables = _resolveCoreEndpointBindables(
     state: state,
-    worldTarget: worldPointer,
     excludedElementId: excludedElementId,
     shouldLookupBindings: shouldLookupBindings,
     allowNewBinding: allowNewBinding,
-    bindingDistance: bindingDistance,
     activeBinding: activeBinding,
     oppositeBinding: oppositeBinding,
   );
@@ -237,11 +236,9 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
 
 List<core.BindableState> _resolveCoreEndpointBindables({
   required DrawState state,
-  required DrawPoint worldTarget,
   required String excludedElementId,
   required bool shouldLookupBindings,
   required bool allowNewBinding,
-  required double bindingDistance,
   required ArrowBinding? activeBinding,
   required ArrowBinding? oppositeBinding,
 }) {
@@ -249,14 +246,12 @@ List<core.BindableState> _resolveCoreEndpointBindables({
     return const <core.BindableState>[];
   }
 
-  final resolved = resolveCoreBindableCandidates(
+  final resolved = resolveCoreBindableCandidatesForEndpointStrategy(
     document: state.domain.document,
-    worldPoint: worldTarget,
-    distance: bindingDistance,
-    preferredBinding: activeBinding,
+    activeBinding: activeBinding,
     oppositeBinding: oppositeBinding,
     excludedElementId: excludedElementId,
-    includeNearby: allowNewBinding,
+    allowNewBinding: allowNewBinding,
   );
   if (resolved.isEmpty) {
     return const <core.BindableState>[];

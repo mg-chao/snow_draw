@@ -116,6 +116,76 @@ void main() {
         );
       },
     );
+
+    test(
+      'endpoint strategy candidates include all bindables when new binding is allowed',
+      () {
+        final first = _rectangleElement(
+          id: 'first',
+          rect: const DrawRect(minX: 20, minY: 20, maxX: 120, maxY: 120),
+        );
+        final second = _rectangleElement(
+          id: 'second',
+          rect: const DrawRect(minX: 140, minY: 20, maxX: 240, maxY: 120),
+        );
+        final third = _rectangleElement(
+          id: 'third',
+          rect: const DrawRect(minX: 260, minY: 20, maxX: 360, maxY: 120),
+        );
+        final document = DocumentState(
+          elements: <ElementState>[first, second, third],
+        );
+
+        final resolved = resolveCoreBindableCandidatesForEndpointStrategy(
+          document: document,
+          allowNewBinding: true,
+        );
+
+        expect(
+          resolved.elements.map((element) => element.id).toList(),
+          <String>['first', 'second', 'third'],
+        );
+      },
+    );
+
+    test(
+      'endpoint strategy candidates keep only bound targets when new binding is disabled',
+      () {
+        final first = _rectangleElement(
+          id: 'first',
+          rect: const DrawRect(minX: 20, minY: 20, maxX: 120, maxY: 120),
+        );
+        final second = _rectangleElement(
+          id: 'second',
+          rect: const DrawRect(minX: 140, minY: 20, maxX: 240, maxY: 120),
+        );
+        final third = _rectangleElement(
+          id: 'third',
+          rect: const DrawRect(minX: 260, minY: 20, maxX: 360, maxY: 120),
+        );
+        final document = DocumentState(
+          elements: <ElementState>[first, second, third],
+        );
+
+        final resolved = resolveCoreBindableCandidatesForEndpointStrategy(
+          document: document,
+          activeBinding: const ArrowBinding(
+            elementId: 'third',
+            anchor: DrawPoint(x: 0.5, y: 0.5),
+          ),
+          oppositeBinding: const ArrowBinding(
+            elementId: 'first',
+            anchor: DrawPoint(x: 0.5, y: 0.5),
+          ),
+          allowNewBinding: false,
+        );
+
+        expect(
+          resolved.elements.map((element) => element.id).toList(),
+          <String>['first', 'third'],
+        );
+      },
+    );
   });
 }
 

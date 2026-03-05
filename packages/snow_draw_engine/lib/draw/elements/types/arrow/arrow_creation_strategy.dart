@@ -930,14 +930,12 @@ _CorePreviewBindingResult? _resolveBindingWithCoreEndpointPreview({
       ? previewData.endBinding
       : previewData.startBinding;
   final bindables = shouldLookupBindings
-      ? resolveCoreBindableCandidates(
+      ? resolveCoreBindableCandidatesForEndpointStrategy(
           document: state.domain.document,
-          worldPoint: worldPointer,
-          distance: bindingDistance,
-          preferredBinding: activeBinding,
+          activeBinding: activeBinding,
           oppositeBinding: otherBinding,
           excludedElementId: previewElement.id,
-          includeNearby: allowNewBinding,
+          allowNewBinding: allowNewBinding,
         ).bindables
       : const <core.BindableState>[];
   final bindablesById = <String, core.BindableState>{

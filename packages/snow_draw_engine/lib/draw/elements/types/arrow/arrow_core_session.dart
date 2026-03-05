@@ -191,10 +191,7 @@ final class ArrowCoreSession {
     if (nextOrderedElementIds == null) {
       final suggestedBindableId =
           hoveredBindableId ?? result.suggestedBinding?.bindableId;
-      final canFallbackReorder =
-          (suggestedBindableId != null && suggestedBindableId.isNotEmpty) ||
-          point != null;
-      if (canFallbackReorder) {
+      if (suggestedBindableId != null && suggestedBindableId.isNotEmpty) {
         nextOrderedElementIds = reorderArrowAboveHoveredBindable(
           arrowId: arrow.id,
           hoveredBindableId: suggestedBindableId,

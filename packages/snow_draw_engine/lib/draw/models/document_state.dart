@@ -83,7 +83,7 @@ class DocumentState {
   /// Reused by high-frequency arrow interactions to avoid repeatedly
   /// re-projecting static bindable geometry for the same document version.
   late final _arrowCoreBindables = List<core.BindableState>.unmodifiable(
-    collectCoreBindables(_arrowBindableElements),
+    collectCoreBindables(elements),
   );
 
   /// Cached bindables keyed by id for fast arrow-core candidate resolution.
@@ -302,7 +302,7 @@ class DocumentState {
 
   List<ElementState> _buildArrowBindableElements() => [
     for (final element in elements)
-      if (element.opacity > 0 && isArrowBindableElement(element)) element,
+      if (isArrowBindableElement(element)) element,
   ];
 
   List<ElementState> _buildHighlightElements() => [

@@ -104,7 +104,7 @@ bool isArrowBindableElement(ElementState element) {
       data is HighlightData;
 }
 
-core.BindableState? toCoreBindableState(ElementState element) {
+core.BindableState? toCoreBindableState(ElementState element, {int? zIndex}) {
   final data = element.data;
   if (data is RectangleData) {
     return _buildCoreBindableState(
@@ -113,6 +113,7 @@ core.BindableState? toCoreBindableState(ElementState element) {
       strokeWidth: data.strokeWidth,
       roundness: _adaptiveRoundness(data.cornerRadius),
       backgroundOpaque: data.fillColor.a > 0,
+      zIndex: zIndex,
     );
   }
   if (data is TextData) {
@@ -122,6 +123,7 @@ core.BindableState? toCoreBindableState(ElementState element) {
       strokeWidth: data.strokeWidth,
       roundness: _adaptiveRoundness(data.cornerRadius),
       backgroundOpaque: data.fillColor.a > 0,
+      zIndex: zIndex,
     );
   }
   if (data is SerialNumberData) {
@@ -130,6 +132,7 @@ core.BindableState? toCoreBindableState(ElementState element) {
       shape: 'ellipse',
       strokeWidth: resolveSerialNumberStrokeWidth(data: data),
       backgroundOpaque: data.fillColor.a > 0,
+      zIndex: zIndex,
     );
   }
   if (data is HighlightData) {
@@ -138,6 +141,7 @@ core.BindableState? toCoreBindableState(ElementState element) {
       shape: data.shape == HighlightShape.ellipse ? 'ellipse' : 'rectangle',
       strokeWidth: data.strokeWidth,
       backgroundOpaque: data.color.a > 0,
+      zIndex: zIndex,
     );
   }
   return null;
@@ -152,6 +156,7 @@ core.BindableState _buildCoreBindableState({
   required double strokeWidth,
   required bool backgroundOpaque,
   core.BindableRoundness? roundness,
+  int? zIndex,
 }) => core.BindableState(
   id: element.id,
   shape: shape,
@@ -162,34 +167,45 @@ core.BindableState _buildCoreBindableState({
   angle: element.rotation,
   strokeWidth: strokeWidth,
   roundness: roundness,
-  zIndex: element.zIndex.toDouble(),
+  zIndex: (zIndex ?? element.zIndex).toDouble(),
   backgroundOpaque: backgroundOpaque,
   bindingEnabled: true,
   interiorHitEnabled: true,
 );
 
-List<core.BindableState> collectCoreBindables(
-  Iterable<ElementState> elements,
-) => elements
-    .map(toCoreBindableState)
-    .whereType<core.BindableState>()
-    .toList(growable: false);
+List<core.BindableState> collectCoreBindables(Iterable<ElementState> elements) {
+  final orderedElements = elements.toList(growable: false)
+    ..sort(_compareByZIndexThenId);
+  final bindables = <core.BindableState>[];
+  var orderIndex = 0;
+  for (final element in orderedElements) {
+    final bindable = toCoreBindableState(element, zIndex: orderIndex);
+    orderIndex += 1;
+    if (bindable == null) {
+      continue;
+    }
+    bindables.add(bindable);
+  }
+  return List<core.BindableState>.unmodifiable(bindables);
+}
 
 List<core.BindableRelationState> collectCoreBindableRelations(
   Iterable<ElementState> elements,
 ) {
+  final orderedElements = elements.toList(growable: false)
+    ..sort(_compareByZIndexThenId);
   final orderedBindableIds = <String>[];
   final bindableIdSet = <String>{};
   final boundArrowIdsByBindable = <String, Set<String>>{};
 
-  for (final element in elements) {
+  for (final element in orderedElements) {
     if (isArrowBindableElement(element) && bindableIdSet.add(element.id)) {
       orderedBindableIds.add(element.id);
       boundArrowIdsByBindable[element.id] = <String>{};
     }
   }
 
-  for (final element in elements) {
+  for (final element in orderedElements) {
     final data = element.data;
     if (data is! ArrowLikeData) {
       continue;
@@ -305,29 +321,55 @@ ArrowCoreDocumentProjection projectCoreDocument(
   bool onlyBoundArrows = false,
   List<String>? orderedElementIds,
 }) {
-  final materialized = List<ElementState>.unmodifiable(
-    elements.toList(growable: false),
+  final materialized = elements.toList(growable: false);
+  final elementById = <String, ElementState>{
+    for (final element in materialized) element.id: element,
+  };
+  final orderedMaterialized = <ElementState>[];
+  if (orderedElementIds != null && orderedElementIds.isNotEmpty) {
+    final orderedIdSet = orderedElementIds.toSet();
+    for (final id in orderedElementIds) {
+      final element = elementById[id];
+      if (element == null) {
+        continue;
+      }
+      orderedMaterialized.add(element);
+    }
+    for (final element in materialized) {
+      if (orderedIdSet.contains(element.id)) {
+        continue;
+      }
+      orderedMaterialized.add(element);
+    }
+  } else {
+    orderedMaterialized.addAll(materialized);
+  }
+
+  final materializedSnapshot = List<ElementState>.unmodifiable(
+    orderedMaterialized,
   );
   final arrowsWithSources = collectCoreArrowStatesWithSources(
-    materialized,
+    materializedSnapshot,
     onlyBoundArrows: onlyBoundArrows,
   );
 
   return ArrowCoreDocumentProjection(
     bindables: List<core.BindableState>.unmodifiable(
-      collectCoreBindables(materialized),
+      collectCoreBindables(materializedSnapshot),
     ),
     bindableRelations: List<core.BindableRelationState>.unmodifiable(
-      collectCoreBindableRelations(materialized),
+      collectCoreBindableRelations(materializedSnapshot),
     ),
     arrows: arrowsWithSources.arrows,
     arrowSources: arrowsWithSources.sources,
     orderedElementIds: List<String>.unmodifiable(
       orderedElementIds ??
-          materialized.map((element) => element.id).toList(growable: false),
+          materializedSnapshot
+              .map((element) => element.id)
+              .toList(growable: false),
     ),
     anchorElementIdsByBindableId: collectCoreAnchorElementIdsByBindableId(
-      materialized,
+      materializedSnapshot,
     ),
   );
 }
@@ -617,4 +659,12 @@ double _clamp01(double value) {
     return 1;
   }
   return value;
+}
+
+int _compareByZIndexThenId(ElementState left, ElementState right) {
+  final zOrder = left.zIndex.compareTo(right.zIndex);
+  if (zOrder != 0) {
+    return zOrder;
+  }
+  return left.id.compareTo(right.id);
 }

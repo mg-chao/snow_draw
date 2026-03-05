@@ -17,7 +17,7 @@ ArrowCoreBindableCandidates projectArrowCoreBindableCandidates({
   final projectedBindables = <core.BindableState>[];
 
   for (final element in elements) {
-    if (element.opacity <= 0 || !seenIds.add(element.id)) {
+    if (!seenIds.add(element.id)) {
       continue;
     }
 

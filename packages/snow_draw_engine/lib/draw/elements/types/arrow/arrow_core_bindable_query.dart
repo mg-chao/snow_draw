@@ -53,3 +53,70 @@ ArrowCoreBindableCandidates resolveCoreBindableCandidates({
     bindablesById: document.arrowCoreBindableById,
   );
 }
+
+/// Resolves bindables for endpoint strategy/drag routines.
+///
+/// Excalidraw parity:
+/// - allow new binding -> provide all bindables in document z-order
+/// - disallow new binding -> keep only currently bound endpoint targets
+ArrowCoreBindableCandidates resolveCoreBindableCandidatesForEndpointStrategy({
+  required DocumentState document,
+  ArrowBinding? activeBinding,
+  ArrowBinding? oppositeBinding,
+  String? excludedElementId,
+  required bool allowNewBinding,
+}) {
+  if (allowNewBinding) {
+    final allBindableElements = <ElementState>[];
+    for (final elementId in document.orderedElementIds) {
+      if (excludedElementId != null && elementId == excludedElementId) {
+        continue;
+      }
+      if (!document.arrowCoreBindableById.containsKey(elementId)) {
+        continue;
+      }
+      final element = document.elementMap[elementId];
+      if (element == null) {
+        continue;
+      }
+      allBindableElements.add(element);
+    }
+    return projectArrowCoreBindableCandidates(
+      elements: allBindableElements,
+      bindablesById: document.arrowCoreBindableById,
+    );
+  }
+
+  final boundIds = <String>{};
+  final activeId = activeBinding?.elementId;
+  if (activeId != null && activeId.isNotEmpty) {
+    boundIds.add(activeId);
+  }
+  final oppositeId = oppositeBinding?.elementId;
+  if (oppositeId != null && oppositeId.isNotEmpty) {
+    boundIds.add(oppositeId);
+  }
+  if (boundIds.isEmpty) {
+    return ArrowCoreBindableCandidates.empty;
+  }
+
+  final boundElements = <ElementState>[];
+  for (final elementId in document.orderedElementIds) {
+    if (!boundIds.contains(elementId)) {
+      continue;
+    }
+    if (excludedElementId != null && elementId == excludedElementId) {
+      continue;
+    }
+    final element = document.elementMap[elementId];
+    if (element == null) {
+      continue;
+    }
+    boundElements.add(element);
+  }
+
+  return projectArrowCoreBindableCandidates(
+    elements: boundElements,
+    bindablesById: document.arrowCoreBindableById,
+  );
+}

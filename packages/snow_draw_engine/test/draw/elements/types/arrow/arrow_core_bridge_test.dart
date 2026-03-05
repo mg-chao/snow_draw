@@ -86,6 +86,41 @@ void main() {
   });
 
   group('arrow_core_bridge document projection', () {
+    test('collectCoreBindables normalizes z-order from element zIndex', () {
+      final top = _rectangleElement(
+        id: 'top',
+        rect: const DrawRect(minX: 200, minY: 0, maxX: 260, maxY: 60),
+        zIndex: 2,
+      );
+      final bottom = _rectangleElement(
+        id: 'bottom',
+        rect: const DrawRect(minX: 0, minY: 0, maxX: 60, maxY: 60),
+        zIndex: 0,
+      );
+      final middle = _rectangleElement(
+        id: 'middle',
+        rect: const DrawRect(minX: 100, minY: 0, maxX: 160, maxY: 60),
+        zIndex: 1,
+      );
+
+      final bindables = collectCoreBindables(<ElementState>[
+        top,
+        bottom,
+        middle,
+      ]);
+
+      expect(bindables.map((bindable) => bindable.id).toList(), <String>[
+        'bottom',
+        'middle',
+        'top',
+      ]);
+      expect(bindables.map((bindable) => bindable.zIndex).toList(), <double>[
+        0,
+        1,
+        2,
+      ]);
+    });
+
     test(
       'collectCoreAnchorElementIdsByBindableId includes serial text anchors',
       () {
@@ -130,12 +165,16 @@ void main() {
         const orderOverride = <String>['serial-1', 'text-1', 'arrow-1'];
 
         final projection = projectCoreDocument(<ElementState>[
-          serial,
-          text,
           arrow,
+          text,
+          serial,
         ], orderedElementIds: orderOverride);
 
         expect(projection.orderedElementIds, orderOverride);
+        expect(
+          projection.bindables.map((bindable) => bindable.id).toList(),
+          <String>['serial-1', 'text-1'],
+        );
         expect(projection.anchorElementIdsByBindableId['serial-1'], <String>[
           'serial-1',
           'text-1',
