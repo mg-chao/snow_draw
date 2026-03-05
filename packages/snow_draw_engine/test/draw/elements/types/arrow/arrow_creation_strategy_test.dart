@@ -84,6 +84,79 @@ void main() {
       expect(data.startBinding!.elementId, 'rect-start');
     });
 
+    test(
+      'new-arrow start binding defaults to orbit when started outside shape',
+      () {
+        const startPosition = DrawPoint(x: 218, y: 60);
+        const currentPosition = DrawPoint(x: 440, y: 60);
+        final state = _stateWithElements(<ElementState>[
+          _rectangleElement(
+            id: 'rect-start',
+            rect: const DrawRect(minX: 220, maxX: 320, maxY: 120),
+            zIndex: 1,
+          ),
+        ]);
+        final creatingState = _startCreatingArrow(
+          strategy: strategy,
+          startPosition: startPosition,
+        );
+
+        final update = strategy.update(
+          state: state,
+          config: DrawConfig.defaultConfig,
+          creatingState: creatingState,
+          currentPosition: currentPosition,
+          maintainAspectRatio: false,
+          createFromCenter: false,
+          snappingMode: SnappingMode.none,
+        );
+
+        final data = update.data as ArrowData;
+        expect(data.startBinding, isNotNull);
+        expect(data.startBinding!.elementId, 'rect-start');
+        expect(data.startBinding!.mode, ArrowBindingMode.orbit);
+      },
+    );
+
+    test('initial start binding is deterministic regardless of '
+        'first drag distance', () {
+      const startPosition = DrawPoint(x: 218, y: 60);
+      final state = _stateWithElements(<ElementState>[
+        _rectangleElement(
+          id: 'rect-start',
+          rect: const DrawRect(minX: 220, maxX: 320, maxY: 120),
+          zIndex: 1,
+        ),
+      ]);
+
+      ArrowBinding resolveStartBindingForEndPoint(DrawPoint currentPosition) {
+        final creatingState = _startCreatingArrow(
+          strategy: strategy,
+          startPosition: startPosition,
+        );
+        final update = strategy.update(
+          state: state,
+          config: DrawConfig.defaultConfig,
+          creatingState: creatingState,
+          currentPosition: currentPosition,
+          maintainAspectRatio: false,
+          createFromCenter: false,
+          snappingMode: SnappingMode.none,
+        );
+        final data = update.data as ArrowData;
+        return data.startBinding!;
+      }
+
+      final nearDragStartBinding = resolveStartBindingForEndPoint(
+        const DrawPoint(x: 240, y: 60),
+      );
+      final farDragStartBinding = resolveStartBindingForEndPoint(
+        const DrawPoint(x: 620, y: 90),
+      );
+
+      expect(nearDragStartBinding, equals(farDragStartBinding));
+    });
+
     test('update binds endpoint to nearby highlight ellipse via core', () {
       const startPosition = DrawPoint(x: 20, y: 140);
       const currentPosition = DrawPoint(x: 220, y: 140);

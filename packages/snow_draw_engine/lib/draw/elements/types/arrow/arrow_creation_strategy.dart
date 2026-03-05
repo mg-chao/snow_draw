@@ -118,11 +118,14 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       preferredBinding: elementData.endBinding,
       oppositeBinding: endpoints.startBinding,
       oppositePoint: endpoints.segmentStart,
+      initialBinding: false,
+      preserveOppositeInsideBinding: sessionData.preserveStartInsideBinding,
       angleLocked: maintainAspectRatio,
       altKey: createFromCenter,
     );
     adjustedCurrent = bindingResult.position;
     var endBinding = bindingResult.binding;
+    final startBinding = bindingResult.startBinding ?? endpoints.startBinding;
     final closeTolerance =
         config.selection.interaction.handleTolerance *
         _loopCloseToleranceMultiplier;
@@ -132,7 +135,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       if (adjustedCurrent.distanceSquared(startPoint) <=
           closeTolerance * closeTolerance) {
         adjustedCurrent = startPoint;
-        endBinding = endpoints.startBinding;
+        endBinding = startBinding;
       }
     }
 
@@ -142,7 +145,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     );
     late final DrawRect arrowRect;
     late final List<DrawPoint> normalizedPoints;
-    var resolvedStartBinding = endpoints.startBinding;
+    var resolvedStartBinding = startBinding;
     var resolvedEndBinding = endBinding;
     List<ElbowFixedSegment>? resolvedFixedSegments;
     bool? resolvedStartIsSpecial;
@@ -151,7 +154,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       final routed = routeElbowArrow(
         start: endpoints.startPosition,
         end: adjustedCurrent,
-        startBinding: endpoints.startBinding,
+        startBinding: resolvedStartBinding,
         endBinding: bindingResult.binding,
         elementsById: state.domain.document.elementMap,
         startArrowhead: elementData.startArrowhead,
@@ -259,10 +262,14 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       preferredBinding: elementData.endBinding,
       oppositeBinding: endpoints.startBinding,
       oppositePoint: endpoints.segmentStart,
+      initialBinding: false,
+      preserveOppositeInsideBinding: sessionData.preserveStartInsideBinding,
       angleLocked: false,
       altKey: false,
     );
     adjustedPosition = bindingResult.position;
+    final resolvedStartBinding =
+        bindingResult.startBinding ?? endpoints.startBinding;
 
     var updatedFixedPoints = endpoints.fixedPoints;
     if (updatedFixedPoints.isEmpty ||
@@ -290,7 +297,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     );
     final updatedData = elementData.copyWith(
       points: normalizedPoints,
-      startBinding: endpoints.startBinding,
+      startBinding: resolvedStartBinding,
       endBinding: bindingResult.binding,
     );
 
@@ -525,11 +532,15 @@ CreationUpdateResult _updateLine({
     preferredBinding: data.endBinding,
     oppositeBinding: endpoints.startBinding,
     oppositePoint: endpoints.segmentStart,
+    initialBinding: false,
+    preserveOppositeInsideBinding: sessionData.preserveStartInsideBinding,
     angleLocked: maintainAspectRatio,
     altKey: createFromCenter,
   );
   adjustedCurrent = bindingResult.position;
   var endBinding = bindingResult.binding;
+  final resolvedStartBinding =
+      bindingResult.startBinding ?? endpoints.startBinding;
 
   final closeTolerance =
       config.selection.interaction.handleTolerance *
@@ -539,7 +550,7 @@ CreationUpdateResult _updateLine({
     if (adjustedCurrent.distanceSquared(firstPoint) <=
         closeTolerance * closeTolerance) {
       adjustedCurrent = firstPoint;
-      endBinding = endpoints.startBinding;
+      endBinding = resolvedStartBinding;
     }
   }
 
@@ -568,7 +579,7 @@ CreationUpdateResult _updateLine({
   }
   final updatedData = data.copyWith(
     points: normalizedPoints,
-    startBinding: endpoints.startBinding,
+    startBinding: resolvedStartBinding,
     endBinding: endBinding,
   );
 
@@ -792,8 +803,11 @@ _BindingSnapResult _snapBindingPoint({
   required ArrowBinding? preferredBinding,
   required ArrowBinding? oppositeBinding,
   required DrawPoint oppositePoint,
+  required bool initialBinding,
   required bool angleLocked,
   required bool altKey,
+  bool newArrow = true,
+  bool? preserveOppositeInsideBinding,
 }) {
   final snapConfig = config.snap;
   final shouldLookupBindings = _shouldAttemptBinding(
@@ -814,7 +828,8 @@ _BindingSnapResult _snapBindingPoint({
     zoom: state.application.view.camera.zoom,
     bindMode: altKey ? core.bindModeInside : core.bindModeOrbit,
   );
-  final preserveOppositeInsideBinding =
+  final shouldPreserveOppositeInsideBinding =
+      preserveOppositeInsideBinding ??
       oppositeBinding?.mode == ArrowBindingMode.inside;
   final oppositeOrbitFocusPoint =
       oppositeBinding?.mode == ArrowBindingMode.orbit ? oppositePoint : null;
@@ -831,9 +846,10 @@ _BindingSnapResult _snapBindingPoint({
     bindingDistance: bindingDistance,
     coreEngineContext: coreEngineContext,
     options: <String, dynamic>{
-      'newArrow': true,
-      'initialBinding': dragStart,
-      if (preserveOppositeInsideBinding) 'preserveOppositeInsideBinding': true,
+      if (newArrow) 'newArrow': true,
+      if (initialBinding) 'initialBinding': true,
+      if (shouldPreserveOppositeInsideBinding)
+        'preserveOppositeInsideBinding': true,
       if (oppositeOrbitFocusPoint != null)
         'oppositeOrbitFocusPoint': <double>[
           oppositeOrbitFocusPoint.x,
@@ -850,6 +866,8 @@ _BindingSnapResult _snapBindingPoint({
   return _BindingSnapResult(
     position: bindingResult.snapPoint,
     binding: bindingResult.binding,
+    startBinding: bindingResult.startBinding,
+    endBinding: bindingResult.endBinding,
   );
 }
 
@@ -912,7 +930,12 @@ _CorePreviewBindingResult? _resolveBindingWithCoreEndpointPreview({
   final snappedPoint = dragStart
       ? previewResult.localPoints.first
       : previewResult.localPoints.last;
-  return _CorePreviewBindingResult(binding: binding, snapPoint: snappedPoint);
+  return _CorePreviewBindingResult(
+    binding: binding,
+    snapPoint: snappedPoint,
+    startBinding: previewResult.startBinding,
+    endBinding: previewResult.endBinding,
+  );
 }
 
 _BindingSnapResult _resolveStartBindingPoint({
@@ -942,6 +965,33 @@ _BindingSnapResult _resolveStartBindingPoint({
           zoom: state.application.view.camera.zoom,
         )
       : 0.0;
+  if (preferredBinding?.mode == ArrowBindingMode.inside &&
+      sessionData.preserveStartInsideBinding) {
+    final target = state.domain.document.getElementById(
+      preferredBinding!.elementId,
+    );
+    if (target != null &&
+        target.opacity > 0 &&
+        ArrowBindingUtils.isBindableTarget(target)) {
+      final boundPoint = arrowType == ArrowType.elbow
+          ? ArrowBindingUtils.resolveElbowBoundPoint(
+              binding: preferredBinding,
+              target: target,
+              hasArrowhead: startArrowheadStyle != ArrowheadStyle.none,
+            )
+          : ArrowBindingUtils.resolveBoundPoint(
+              binding: preferredBinding,
+              target: target,
+              referencePoint: oppositePoint,
+            );
+      if (boundPoint != null) {
+        return _BindingSnapResult(
+          position: boundPoint,
+          binding: preferredBinding,
+        );
+      }
+    }
+  }
   final elementsVersion = state.domain.document.elementsVersion;
   if (sessionData.canReuseStartBinding(
     startPosition: startPosition,
@@ -974,10 +1024,17 @@ _BindingSnapResult _resolveStartBindingPoint({
     dragStart: true,
     preferredBinding: preferredBinding,
     oppositeBinding: oppositeBinding,
-    oppositePoint: oppositePoint,
+    // Excalidraw parity: start-point initial binding is computed from the
+    // pointer-down origin before the dragged endpoint moves away.
+    oppositePoint: preferredBinding == null ? startPosition : oppositePoint,
+    initialBinding: preferredBinding == null,
+    newArrow: false,
     angleLocked: angleLocked,
     altKey: altKey,
   );
+  if (preferredBinding == null) {
+    sessionData.preserveStartInsideBinding = altKey;
+  }
   sessionData.cacheStartBinding(
     startPosition: startPosition,
     preferredBinding: preferredBinding,
@@ -1018,6 +1075,7 @@ class _ArrowCreationSessionData {
   double? _cachedStartBindingDistance;
   bool? _cachedStartAngleLocked;
   bool? _cachedStartAltKey;
+  var preserveStartInsideBinding = false;
   var _cachedStartElementsVersion = -1;
 
   var _referenceElementsVersion = -1;
@@ -1163,18 +1221,32 @@ class _PointSnapResult {
 
 @immutable
 class _BindingSnapResult {
-  const _BindingSnapResult({required this.position, this.binding});
+  const _BindingSnapResult({
+    required this.position,
+    this.binding,
+    this.startBinding,
+    this.endBinding,
+  });
 
   final DrawPoint position;
   final ArrowBinding? binding;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
 }
 
 @immutable
 class _CorePreviewBindingResult {
-  const _CorePreviewBindingResult({required this.snapPoint, this.binding});
+  const _CorePreviewBindingResult({
+    required this.snapPoint,
+    this.binding,
+    this.startBinding,
+    this.endBinding,
+  });
 
   final DrawPoint snapPoint;
   final ArrowBinding? binding;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
 }
 
 List<DrawPoint> _applyBoundStartToFixedPoints({
