@@ -7,7 +7,6 @@ import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_core_session.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
-import '../../elements/types/arrow/arrow_restore.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 
@@ -133,13 +132,7 @@ List<ElementState> syncArrowBindingsAfterDeletion({
     replacementsById: patchedById,
     orderedElementIds: reorderedElementIds,
   );
-  if (patchedById.isEmpty) {
-    return synced;
-  }
-  return repairArrowElementsOnRestore(
-    elements: synced,
-    engineContext: session.context,
-  );
+  return synced;
 }
 
 /// Synchronizes arrow bindings for duplicated element snapshots.
@@ -203,11 +196,5 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     replacementsById: patchedById,
     orderedElementIds: reorderedElementIds,
   );
-  if (patchedById.isEmpty) {
-    return synced;
-  }
-  return repairArrowElementsOnRestore(
-    elements: synced,
-    engineContext: session.context,
-  );
+  return synced;
 }
