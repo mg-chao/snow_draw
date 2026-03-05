@@ -20,7 +20,6 @@ import '../../../utils/visible_elements.dart';
 import '../arrow/arrow_binding.dart';
 import '../arrow/arrow_binding_policy.dart';
 import '../line/line_data.dart';
-import 'arrow_core_bindable_query.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_endpoint_drag.dart';
 import 'arrow_geometry.dart';
@@ -111,12 +110,10 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     final bindingResult = _snapBindingPoint(
       state: state,
       config: config,
+      data: elementData,
       position: adjustedCurrent,
       snappingMode: snappingMode,
-      arrowType: elementData.arrowType,
       dragStart: false,
-      startArrowheadStyle: elementData.startArrowhead,
-      endArrowheadStyle: elementData.endArrowhead,
       preferredBinding: elementData.endBinding,
       oppositeBinding: endpoints.startBinding,
       oppositePoint: endpoints.segmentStart,
@@ -254,12 +251,10 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     final bindingResult = _snapBindingPoint(
       state: state,
       config: config,
+      data: elementData,
       position: adjustedPosition,
       snappingMode: snappingMode,
-      arrowType: elementData.arrowType,
       dragStart: false,
-      startArrowheadStyle: elementData.startArrowhead,
-      endArrowheadStyle: elementData.endArrowhead,
       preferredBinding: elementData.endBinding,
       oppositeBinding: endpoints.startBinding,
       oppositePoint: endpoints.segmentStart,
@@ -522,12 +517,10 @@ CreationUpdateResult _updateLine({
   final bindingResult = _snapBindingPoint(
     state: state,
     config: config,
+    data: data,
     position: adjustedCurrent,
     snappingMode: snappingMode,
-    arrowType: data.arrowType,
     dragStart: false,
-    startArrowheadStyle: data.startArrowhead,
-    endArrowheadStyle: data.endArrowhead,
     preferredBinding: data.endBinding,
     oppositeBinding: endpoints.startBinding,
     oppositePoint: endpoints.segmentStart,
@@ -617,6 +610,7 @@ _CreationEndpointResolution _resolveCreationEndpoints({
   final startBindingResult = _resolveStartBindingPoint(
     state: state,
     config: config,
+    data: data,
     startPosition: startPosition,
     snappingMode: snappingMode,
     arrowType: data.arrowType,
@@ -792,12 +786,10 @@ _PointSnapResult _snapCreatePoint({
 _BindingSnapResult _snapBindingPoint({
   required DrawState state,
   required DrawConfig config,
+  required ArrowLikeData data,
   required DrawPoint position,
   required SnappingMode snappingMode,
-  required ArrowType arrowType,
   required bool dragStart,
-  required ArrowheadStyle startArrowheadStyle,
-  required ArrowheadStyle endArrowheadStyle,
   required ArrowBinding? preferredBinding,
   required ArrowBinding? oppositeBinding,
   required DrawPoint oppositePoint,
@@ -819,74 +811,115 @@ _BindingSnapResult _snapBindingPoint({
     return _BindingSnapResult(position: position);
   }
 
-  final candidates = resolveCoreBindableCandidates(
-    document: state.domain.document,
-    worldPoint: position,
-    distance: bindingDistance,
-    preferredBinding: preferredBinding,
-    oppositeBinding: oppositeBinding,
-  );
-  if (candidates.isEmpty || candidates.elements.isEmpty) {
-    return _BindingSnapResult(position: position);
-  }
-
   final coreEngineContext = buildCoreEngineContext(
     zoom: state.application.view.camera.zoom,
     bindMode: altKey ? core.bindModeInside : core.bindModeOrbit,
   );
-  final hasArrowhead = dragStart
-      ? startArrowheadStyle != ArrowheadStyle.none
-      : endArrowheadStyle != ArrowheadStyle.none;
   final preserveOppositeInsideBinding =
       oppositeBinding?.mode == ArrowBindingMode.inside;
   final oppositeOrbitFocusPoint =
       oppositeBinding?.mode == ArrowBindingMode.orbit ? oppositePoint : null;
-  final bindingCandidate = arrowType == ArrowType.elbow
-      ? ArrowBindingUtils.resolveElbowBindingCandidateFromCoreCandidates(
-          worldPoint: position,
-          candidates: candidates,
-          snapDistance: bindingDistance,
-          hasArrowhead: hasArrowhead,
-          preferredBinding: preferredBinding,
-          allowNewBinding: shouldLookupBindings,
-          dragStart: dragStart,
-          newArrow: true,
-          initialBinding: dragStart,
-          preserveOppositeInsideBinding: preserveOppositeInsideBinding,
-          oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
-          angleLocked: angleLocked,
-          altKey: altKey,
-          coreEngineContext: coreEngineContext,
-        )
-      : ArrowBindingUtils.resolveBindingCandidateFromCoreCandidates(
-          worldPoint: position,
-          candidates: candidates,
-          snapDistance: bindingDistance,
-          preferredBinding: preferredBinding,
-          allowNewBinding: shouldLookupBindings,
-          referencePoint: oppositePoint,
-          dragStart: dragStart,
-          newArrow: true,
-          initialBinding: dragStart,
-          preserveOppositeInsideBinding: preserveOppositeInsideBinding,
-          oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
-          angleLocked: angleLocked,
-          altKey: altKey,
-          coreEngineContext: coreEngineContext,
-        );
-  if (bindingCandidate == null) {
+  final bindingResult = _resolveBindingWithCoreEndpointPreview(
+    state: state,
+    data: data,
+    worldPointer: position,
+    oppositePoint: oppositePoint,
+    dragStart: dragStart,
+    preferredBinding: preferredBinding,
+    oppositeBinding: oppositeBinding,
+    shouldLookupBindings: shouldLookupBindings,
+    allowNewBinding: shouldLookupBindings,
+    bindingDistance: bindingDistance,
+    coreEngineContext: coreEngineContext,
+    options: <String, dynamic>{
+      'newArrow': true,
+      'initialBinding': dragStart,
+      if (preserveOppositeInsideBinding) 'preserveOppositeInsideBinding': true,
+      if (oppositeOrbitFocusPoint != null)
+        'oppositeOrbitFocusPoint': <double>[
+          oppositeOrbitFocusPoint.x,
+          oppositeOrbitFocusPoint.y,
+        ],
+      if (angleLocked) 'angleLocked': true,
+      if (altKey) 'altKey': true,
+    },
+  );
+  if (bindingResult == null || bindingResult.binding == null) {
     return _BindingSnapResult(position: position);
   }
 
   return _BindingSnapResult(
-    position: bindingCandidate.snapPoint,
-    binding: bindingCandidate.binding,
+    position: bindingResult.snapPoint,
+    binding: bindingResult.binding,
   );
+}
+
+_CorePreviewBindingResult? _resolveBindingWithCoreEndpointPreview({
+  required DrawState state,
+  required ArrowLikeData data,
+  required DrawPoint worldPointer,
+  required DrawPoint oppositePoint,
+  required bool dragStart,
+  required ArrowBinding? preferredBinding,
+  required ArrowBinding? oppositeBinding,
+  required bool shouldLookupBindings,
+  required bool allowNewBinding,
+  required double bindingDistance,
+  required core.EngineContext coreEngineContext,
+  Map<String, dynamic>? options,
+}) {
+  final startPoint = dragStart ? worldPointer : oppositePoint;
+  final endPoint = dragStart ? oppositePoint : worldPointer;
+  final previewLayout = computeArrowTwoPointLayout(
+    first: startPoint,
+    second: endPoint,
+  );
+  final previewData = data.copyWith(
+    points: previewLayout.normalizedPoints,
+    startBinding: dragStart ? preferredBinding : oppositeBinding,
+    endBinding: dragStart ? oppositeBinding : preferredBinding,
+  );
+  final previewElement = ElementState(
+    id: '__binding-preview__',
+    rect: previewLayout.rect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: 0,
+    data: previewData,
+  );
+  final previewResult = computeArrowCoreEndpointDragResult(
+    state: state,
+    element: previewElement,
+    data: previewData,
+    localPoints: <DrawPoint>[startPoint, endPoint],
+    draggedIndex: dragStart ? 0 : 1,
+    worldPointer: worldPointer,
+    startBinding: previewData.startBinding,
+    endBinding: previewData.endBinding,
+    excludedElementId: previewElement.id,
+    shouldLookupBindings: shouldLookupBindings,
+    allowNewBinding: allowNewBinding,
+    bindingDistance: bindingDistance,
+    coreEngineContext: coreEngineContext,
+    options: options,
+  );
+  if (previewResult == null) {
+    return null;
+  }
+
+  final binding = dragStart
+      ? previewResult.startBinding
+      : previewResult.endBinding;
+  final snappedPoint = dragStart
+      ? previewResult.localPoints.first
+      : previewResult.localPoints.last;
+  return _CorePreviewBindingResult(binding: binding, snapPoint: snappedPoint);
 }
 
 _BindingSnapResult _resolveStartBindingPoint({
   required DrawState state,
   required DrawConfig config,
+  required ArrowLikeData data,
   required DrawPoint startPosition,
   required SnappingMode snappingMode,
   required ArrowType arrowType,
@@ -936,12 +969,10 @@ _BindingSnapResult _resolveStartBindingPoint({
   final resolved = _snapBindingPoint(
     state: state,
     config: config,
+    data: data,
     position: startPosition,
     snappingMode: snappingMode,
-    arrowType: arrowType,
     dragStart: true,
-    startArrowheadStyle: startArrowheadStyle,
-    endArrowheadStyle: endArrowheadStyle,
     preferredBinding: preferredBinding,
     oppositeBinding: oppositeBinding,
     oppositePoint: oppositePoint,
@@ -1136,6 +1167,14 @@ class _BindingSnapResult {
   const _BindingSnapResult({required this.position, this.binding});
 
   final DrawPoint position;
+  final ArrowBinding? binding;
+}
+
+@immutable
+class _CorePreviewBindingResult {
+  const _CorePreviewBindingResult({required this.snapPoint, this.binding});
+
+  final DrawPoint snapPoint;
   final ArrowBinding? binding;
 }
 

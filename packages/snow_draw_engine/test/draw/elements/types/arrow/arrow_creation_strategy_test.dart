@@ -1,8 +1,10 @@
 import 'package:snow_draw_engine/draw/config/draw_config.dart';
+import 'package:snow_draw_engine/draw/elements/core/element_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_creation_strategy.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
+import 'package:snow_draw_engine/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/models/application_state.dart';
 import 'package:snow_draw_engine/draw/models/camera_state.dart';
@@ -320,17 +322,55 @@ void main() {
       expect(data.endBinding, isNotNull);
       expect(data.endBinding!.elementId, 'rect-target');
     });
+
+    test('update line-like data binds endpoint via core drag pipeline', () {
+      const startPosition = DrawPoint(x: 20, y: 60);
+      const currentPosition = DrawPoint(x: 240, y: 60);
+      final state = _stateWithElements(<ElementState>[
+        _rectangleElement(
+          id: 'rect-target',
+          rect: const DrawRect(minX: 220, maxX: 320, maxY: 120),
+          zIndex: 1,
+        ),
+      ]);
+      final creatingState = _startCreating(
+        strategy: strategy,
+        startPosition: startPosition,
+        data: const LineData(),
+      );
+
+      final update = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creatingState,
+        currentPosition: currentPosition,
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+
+      final data = update.data as LineData;
+      expect(data.endBinding, isNotNull);
+      expect(data.endBinding!.elementId, 'rect-target');
+    });
   });
 }
 
 CreatingState _startCreatingArrow({
   required ArrowCreationStrategy strategy,
   required DrawPoint startPosition,
+}) => _startCreating(
+  strategy: strategy,
+  startPosition: startPosition,
+  data: const ArrowData(),
+);
+
+CreatingState _startCreating({
+  required ArrowCreationStrategy strategy,
+  required DrawPoint startPosition,
+  required ElementData data,
 }) {
-  final start = strategy.start(
-    data: const ArrowData(),
-    startPosition: startPosition,
-  );
+  final start = strategy.start(data: data, startPosition: startPosition);
   return CreatingState(
     element: ElementState(
       id: 'draft-arrow',
