@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 
 import 'package:meta/meta.dart';
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../core/coordinates/overlay_space.dart';
 import '../../core/coordinates/world_space.dart';
+import '../../elements/types/arrow/arrow_core.dart' as core;
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';

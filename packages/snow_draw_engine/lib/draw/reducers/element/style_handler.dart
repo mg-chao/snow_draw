@@ -1,14 +1,13 @@
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
-
 import '../../actions/draw_actions.dart';
 import '../../core/draw_context.dart';
 import '../../elements/core/element_style_updatable_data.dart';
+import '../../elements/types/arrow/arrow_core.dart' as core;
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_layout.dart';
-import '../../elements/types/arrow/elbow/elbow_router.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
+import '../../elements/types/arrow/elbow/elbow_router.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/serial_number/serial_number_layout.dart';
 import '../../elements/types/text/text_data.dart';

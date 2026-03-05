@@ -8,7 +8,6 @@ import 'package:snow_draw_engine/draw/models/document_state.dart';
 import 'package:snow_draw_engine/draw/models/domain_state.dart';
 import 'package:snow_draw_engine/draw/models/draw_state.dart';
 import 'package:snow_draw_engine/draw/models/element_state.dart';
-import 'package:snow_draw_engine/draw/models/selection_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
 import 'package:test/test.dart';
@@ -105,10 +104,7 @@ void main() {
 }
 
 DrawState _stateWithElements(List<ElementState> elements) => DrawState(
-  domain: DomainState(
-    document: DocumentState(elements: elements),
-    selection: const SelectionState(),
-  ),
+  domain: DomainState(document: DocumentState(elements: elements)),
 );
 
 ElementState _rectangleElement({

@@ -1,7 +1,6 @@
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
-
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
+import 'arrow_core.dart' as core;
 
 /// Encodes an engine [DrawPoint] into an arrow-core point tuple.
 core.Point encodeArrowCorePoint(DrawPoint point) => <double>[point.x, point.y];

@@ -1,4 +1,4 @@
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+import 'arrow_core.dart' as core;
 
 /// Reduces arrow-core events into an updated element ordering.
 ///
