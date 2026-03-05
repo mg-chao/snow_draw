@@ -6,6 +6,7 @@ import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_points.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/models/document_state.dart';
 import 'package:snow_draw_engine/draw/models/domain_state.dart';
@@ -16,6 +17,7 @@ import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
 import 'package:snow_draw_engine/draw/types/edit_context.dart';
 import 'package:snow_draw_engine/draw/types/edit_transform.dart';
+import 'package:snow_draw_engine/draw/types/element_style.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -339,6 +341,146 @@ void main() {
       expect(session.transform.startBinding!.mode, ArrowBindingMode.inside);
     });
   });
+
+  group('ArrowPointOperation elbow parity', () {
+    test('dragging addable midpoint creates and releases fixed segment', () {
+      final arrow = _elbowArrowElement(
+        id: 'elbow-1',
+        points: const <DrawPoint>[
+          DrawPoint(x: 0, y: 0),
+          DrawPoint(x: 125, y: 0),
+          DrawPoint(x: 125, y: 200),
+          DrawPoint(x: 250, y: 200),
+        ],
+        zIndex: 1,
+      );
+      final state = _stateWithElements(
+        <ElementState>[arrow],
+        selectedIds: <String>{arrow.id},
+      );
+
+      final dragged = _dragArrowHandleSession(
+        state: state,
+        elementId: arrow.id,
+        pointKind: ArrowPointKind.addable,
+        pointIndex: 1,
+        startPosition: const DrawPoint(x: 125, y: 100),
+        currentPosition: const DrawPoint(x: 130, y: 100),
+      );
+      final draggedState = const ArrowPointOperation().finish(
+        state: state,
+        context: dragged.context,
+        transform: dragged.transform,
+      );
+
+      final draggedArrow = draggedState.domain.document.getElementById(
+        arrow.id,
+      )!;
+      final draggedData = draggedArrow.data as ArrowData;
+      final draggedPoints = ArrowGeometry.resolveWorldPoints(
+        rect: draggedArrow.rect,
+        normalizedPoints: draggedData.points,
+      );
+      expect(draggedPoints, const <DrawPoint>[
+        DrawPoint(x: 0, y: 0),
+        DrawPoint(x: 130, y: 0),
+        DrawPoint(x: 130, y: 200),
+        DrawPoint(x: 250, y: 200),
+      ]);
+      expect(draggedData.fixedSegments, isNotNull);
+      expect(draggedData.fixedSegments, hasLength(1));
+      expect(draggedData.fixedSegments!.first.index, 2);
+
+      final releaseState = _stateWithElements(
+        <ElementState>[draggedArrow],
+        selectedIds: <String>{draggedArrow.id},
+      );
+      final released = _dragArrowHandleSession(
+        state: releaseState,
+        elementId: draggedArrow.id,
+        pointKind: ArrowPointKind.addable,
+        pointIndex: 1,
+        startPosition: const DrawPoint(x: 130, y: 100),
+        currentPosition: const DrawPoint(x: 130, y: 100),
+        isDoubleClick: true,
+      );
+      final releasedState = const ArrowPointOperation().finish(
+        state: releaseState,
+        context: released.context,
+        transform: released.transform,
+      );
+      final releasedArrow = releasedState.domain.document.getElementById(
+        draggedArrow.id,
+      )!;
+      final releasedData = releasedArrow.data as ArrowData;
+      final releasedPoints = ArrowGeometry.resolveWorldPoints(
+        rect: releasedArrow.rect,
+        normalizedPoints: releasedData.points,
+      );
+      expect(releasedPoints, const <DrawPoint>[
+        DrawPoint(x: 0, y: 0),
+        DrawPoint(x: 125, y: 0),
+        DrawPoint(x: 125, y: 200),
+        DrawPoint(x: 250, y: 200),
+      ]);
+      expect(
+        releasedData.fixedSegments == null ||
+            releasedData.fixedSegments!.isEmpty,
+        isTrue,
+      );
+    });
+
+    test('dragging elbow endpoint preserves existing fixed segment lock', () {
+      final arrow = _elbowArrowElement(
+        id: 'elbow-endpoint',
+        points: const <DrawPoint>[
+          DrawPoint(x: 0, y: 0),
+          DrawPoint(x: 130, y: 0),
+          DrawPoint(x: 130, y: 200),
+          DrawPoint(x: 250, y: 200),
+        ],
+        zIndex: 1,
+        fixedSegments: const <ElbowFixedSegment>[
+          ElbowFixedSegment(
+            index: 2,
+            start: DrawPoint(x: 130, y: 0),
+            end: DrawPoint(x: 130, y: 200),
+          ),
+        ],
+      );
+      final state = _stateWithElements(
+        <ElementState>[arrow],
+        selectedIds: <String>{arrow.id},
+      );
+
+      final session = _dragArrowHandleSession(
+        state: state,
+        elementId: arrow.id,
+        pointKind: ArrowPointKind.turning,
+        pointIndex: 3,
+        startPosition: const DrawPoint(x: 250, y: 200),
+        currentPosition: const DrawPoint(x: 270, y: 200),
+      );
+      final next = const ArrowPointOperation().finish(
+        state: state,
+        context: session.context,
+        transform: session.transform,
+      );
+      final updatedArrow = next.domain.document.getElementById(arrow.id)!;
+      final updatedData = updatedArrow.data as ArrowData;
+      final updatedPoints = ArrowGeometry.resolveWorldPoints(
+        rect: updatedArrow.rect,
+        normalizedPoints: updatedData.points,
+      );
+      expect(updatedPoints.first, const DrawPoint(x: 0, y: 0));
+      expect(updatedPoints.last, const DrawPoint(x: 270, y: 200));
+      expect(updatedData.fixedSegments, isNotNull);
+      expect(updatedData.fixedSegments, hasLength(1));
+      expect(updatedData.fixedSegments!.first.index, 2);
+      expect(updatedData.fixedSegments!.first.start.x, closeTo(130, 1e-6));
+      expect(updatedData.fixedSegments!.first.end.x, closeTo(130, 1e-6));
+    });
+  });
 }
 
 ArrowPointTransform _dragArrowEndpoint({
@@ -368,6 +510,7 @@ ArrowPointTransform _dragArrowEndpoint({
   required int pointIndex,
   required DrawPoint startPosition,
   required DrawPoint currentPosition,
+  bool isDoubleClick = false,
   EditModifiers modifiers = const EditModifiers(),
 }) {
   const operation = ArrowPointOperation();
@@ -378,6 +521,7 @@ ArrowPointTransform _dragArrowEndpoint({
       elementId: elementId,
       pointKind: pointKind,
       pointIndex: pointIndex,
+      isDoubleClick: isDoubleClick,
     ),
   );
   final initial = operation.initialTransform(
@@ -394,6 +538,35 @@ ArrowPointTransform _dragArrowEndpoint({
     config: DrawConfig.defaultConfig,
   );
   return (context: context, transform: update.transform as ArrowPointTransform);
+}
+
+ElementState _elbowArrowElement({
+  required String id,
+  required List<DrawPoint> points,
+  required int zIndex,
+  List<ElbowFixedSegment>? fixedSegments,
+  ArrowBinding? startBinding,
+  ArrowBinding? endBinding,
+}) {
+  final rect = DrawRect.fromPointCloud(points);
+  final normalized = ArrowGeometry.normalizePoints(
+    worldPoints: points,
+    rect: rect,
+  );
+  return ElementState(
+    id: id,
+    rect: rect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: zIndex,
+    data: ArrowData(
+      points: normalized,
+      arrowType: ArrowType.elbow,
+      fixedSegments: fixedSegments,
+      startBinding: startBinding,
+      endBinding: endBinding,
+    ),
+  );
 }
 
 DrawState _stateWithElements(

@@ -211,8 +211,9 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
         element: baseElement,
         data: arrowData,
         lookup: CombinedElementLookup(base: state.domain.document.elementMap),
-        localPointsOverride: points,
-        fixedSegmentsOverride: updatedFixed,
+        // Excalidraw parity: fixed-segment release updates only fixed-segment
+        // metadata, then lets elbow recomputation route points from endpoints.
+        fixedSegmentsOverride: updatedFixed ?? const <ElbowFixedSegment>[],
         engineContext: _coreContextForState(
           state: state,
           isBindingEnabled: true,
@@ -479,8 +480,19 @@ ElementState _buildUpdatedElement({
     return element.copyWith(rect: layout.rect, data: updatedData);
   }
   if (data.arrowType == ArrowType.elbow && arrowData != null) {
-    final fixedSegments =
-        transform.fixedSegments ?? const <ElbowFixedSegment>[];
+    final isFixedSegmentEditing = context.pointKind == ArrowPointKind.addable;
+    final shouldReleaseFixedSegment =
+        isFixedSegmentEditing && context.releaseFixedSegment;
+    final elbowPointsOverride = shouldReleaseFixedSegment ? null : localPoints;
+    final fixedSegmentsOverride = isFixedSegmentEditing
+        ? (shouldReleaseFixedSegment
+              // Excalidraw parity: releasing a fixed segment explicitly clears
+              // the removed lock when needed.
+              ? (transform.fixedSegments ?? const <ElbowFixedSegment>[])
+              // Midpoint dragging should only send fixed-segment updates when
+              // core produced them; null keeps the update unset.
+              : transform.fixedSegments)
+        : null;
     final elbowData = arrowData.copyWith(
       startBinding: transform.startBinding,
       endBinding: transform.endBinding,
@@ -489,8 +501,8 @@ ElementState _buildUpdatedElement({
       element: element,
       data: elbowData,
       lookup: CombinedElementLookup(base: elementMap),
-      localPointsOverride: localPoints,
-      fixedSegmentsOverride: fixedSegments,
+      localPointsOverride: elbowPointsOverride,
+      fixedSegmentsOverride: fixedSegmentsOverride,
       engineContext: coreEngineContext,
       finalize: finalize,
     );
@@ -1035,6 +1047,11 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   }
 
   final data = context.baseElement.data as ArrowLikeData;
+  if (data.arrowType == ArrowType.elbow) {
+    // Excalidraw parity: elbow endpoint finalization is handled through elbow
+    // point normalization, not endpoint-drag finalize.
+    return null;
+  }
   final startBinding = transform.startBinding;
   final endBinding = transform.endBinding;
   final worldTarget = context.toWorld(localPoints[activeIndex]);
@@ -1131,14 +1148,22 @@ _ArrowPointComputation _computeElbowAddableComputation({
     movedArrow,
     context.baseElement,
   );
+  final movedPoints = _applyMovedFixedSegmentsToPoints(
+    points: basePoints,
+    fixedSegments: movedFixedSegments,
+  );
+  final editData = data.copyWith(
+    startBinding: startBinding,
+    endBinding: endBinding,
+  );
   final updated = computeElbowEdit(
     element: context.baseElement,
-    data: data,
+    data: editData,
     lookup: CombinedElementLookup(base: state.domain.document.elementMap),
-    localPointsOverride: basePoints,
+    // Keep points + fixed segments in sync so arrow-core can treat this as an
+    // active fixed-segment move even when the segment is newly created.
+    localPointsOverride: movedPoints,
     fixedSegmentsOverride: movedFixedSegments,
-    startBindingOverride: startBinding,
-    endBindingOverride: endBinding,
     engineContext: coreEngineContext,
   );
 
@@ -1163,6 +1188,25 @@ _ArrowPointComputation _computeElbowAddableComputation({
     fixedSegments: updated.fixedSegments,
     orderedElementIds: null,
   );
+}
+
+List<DrawPoint> _applyMovedFixedSegmentsToPoints({
+  required List<DrawPoint> points,
+  required List<ElbowFixedSegment>? fixedSegments,
+}) {
+  if (fixedSegments == null || fixedSegments.isEmpty || points.length < 2) {
+    return points;
+  }
+  final updated = List<DrawPoint>.from(points);
+  for (final segment in fixedSegments) {
+    final endIndex = segment.index;
+    if (endIndex <= 0 || endIndex >= updated.length) {
+      continue;
+    }
+    updated[endIndex - 1] = segment.start;
+    updated[endIndex] = segment.end;
+  }
+  return List<DrawPoint>.unmodifiable(updated);
 }
 
 _ArrowPointComputation _noOpComputation({

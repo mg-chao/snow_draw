@@ -2545,13 +2545,16 @@ ArrowPatch _updateElbowArrowPointsPort(
       index < arrow.points.length ? arrow.points[index] : <double>[0, 0],
     );
   });
+  final missingBindingSentinel = Object();
+  final startBindingUpdate = hasStartBindingUpdate
+      ? updates['startBinding']
+      : missingBindingSentinel;
+  final endBindingUpdate = hasEndBindingUpdate
+      ? updates['endBinding']
+      : missingBindingSentinel;
 
-  if ((hasPointsUpdate ||
-          hasFixedSegmentsUpdate ||
-          hasStartBindingUpdate ||
-          hasEndBindingUpdate) &&
-      updates['startBinding'] == arrow.startBinding &&
-      updates['endBinding'] == arrow.endBinding &&
+  if (startBindingUpdate == arrow.startBinding &&
+      endBindingUpdate == arrow.endBinding &&
       hasNoopPointsUpdate &&
       areUpdatedPointsValid) {
     return const <String, dynamic>{};

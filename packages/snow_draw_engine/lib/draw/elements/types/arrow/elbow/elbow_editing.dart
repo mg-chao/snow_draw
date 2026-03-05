@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
+import '../../../../core/coordinates/element_space.dart';
 import '../../../../models/element_state.dart';
 import '../../../../types/draw_point.dart';
 import '../../../../types/draw_rect.dart';
@@ -47,15 +48,12 @@ ElbowEditResult computeElbowEdit({
     override: endBindingOverride,
     current: data.endBinding,
   );
-
-  final arrowState = toCoreArrowState(
-    element: element,
-    data: data,
-    localPointsOverride: localPointsOverride,
-    fixedSegmentsOverride: fixedSegmentsOverride,
-    startBindingOverride: startBinding,
-    endBindingOverride: endBinding,
+  final baseData = data.copyWith(
+    startBinding: startBinding,
+    endBinding: endBinding,
   );
+
+  final baseArrowState = toCoreArrowState(element: element, data: baseData);
   final bindables = collectCoreBindables(lookup.values);
 
   final hasExplicitUpdates =
@@ -67,27 +65,36 @@ ElbowEditResult computeElbowEdit({
 
   final patch = hasExplicitUpdates
       ? updateCoreElbowArrowPatch(
-          arrow: arrowState,
+          arrow: baseArrowState,
           updates: <String, dynamic>{
-            if (localPointsOverride != null) 'points': arrowState.points,
+            if (localPointsOverride != null)
+              'points': _toCorePointsUpdate(
+                element: element,
+                localPoints: localPointsOverride,
+                baseArrow: baseArrowState,
+              ),
             if (fixedSegmentsOverride != null)
-              'fixedSegments': arrowState.fixedSegments,
+              'fixedSegments': _toCoreFixedSegmentsUpdate(
+                element: element,
+                fixedSegments: fixedSegmentsOverride,
+                baseArrow: baseArrowState,
+              ),
             if (startBindingOverride != _bindingOverrideUnset)
-              'startBinding': arrowState.startBinding,
+              'startBinding': toCoreBinding(startBinding),
             if (endBindingOverride != _bindingOverrideUnset)
-              'endBinding': arrowState.endBinding,
+              'endBinding': toCoreBinding(endBinding),
           },
           bindables: bindables,
           context: context,
           options: <String, dynamic>{'isDragging': !finalize},
         )
       : recomputeCoreElbowPatch(
-          arrow: arrowState,
+          arrow: baseArrowState,
           bindables: bindables,
           context: context,
         );
 
-  final nextArrow = core.applyArrowPatch(arrowState, patch);
+  final nextArrow = core.applyArrowPatch(baseArrowState, patch);
   final worldPoints = coreArrowWorldPoints(nextArrow);
   final localPoints = worldToLocalPoints(element, worldPoints);
   final fixedSegments = toLocalFixedSegmentsFromCoreArrow(nextArrow, element);
@@ -100,6 +107,45 @@ ElbowEditResult computeElbowEdit({
     startIsSpecial: nextArrow.startIsSpecial,
     endIsSpecial: nextArrow.endIsSpecial,
   );
+}
+
+List<core.Point> _toCorePointsUpdate({
+  required ElementState element,
+  required List<DrawPoint> localPoints,
+  required core.ArrowState baseArrow,
+}) {
+  final worldPoints = localToWorldPoints(element, localPoints);
+  return worldPoints
+      .map((point) => <double>[point.x - baseArrow.x, point.y - baseArrow.y])
+      .toList(growable: false);
+}
+
+List<core.FixedSegment> _toCoreFixedSegmentsUpdate({
+  required ElementState element,
+  required List<ElbowFixedSegment> fixedSegments,
+  required core.ArrowState baseArrow,
+}) {
+  if (fixedSegments.isEmpty) {
+    return const <core.FixedSegment>[];
+  }
+  final space = ElementSpace(
+    rotation: element.rotation,
+    origin: element.rect.center,
+  );
+  return fixedSegments
+      .map((segment) {
+        final worldStart = space.toWorld(segment.start);
+        final worldEnd = space.toWorld(segment.end);
+        return core.FixedSegment(
+          index: segment.index,
+          start: <double>[
+            worldStart.x - baseArrow.x,
+            worldStart.y - baseArrow.y,
+          ],
+          end: <double>[worldEnd.x - baseArrow.x, worldEnd.y - baseArrow.y],
+        );
+      })
+      .toList(growable: false);
 }
 
 List<ElbowFixedSegment>? transformFixedSegments({
