@@ -1,6 +1,9 @@
+import 'dart:math' as math;
+
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
+import '../shared/hit_test_geometry.dart';
 import 'arrow_core.dart' as core;
 import 'arrow_core_codec.dart';
 import 'arrow_like_data.dart';
@@ -178,6 +181,38 @@ class ArrowGeometry {
     ),
   );
 
+  /// Samples a render-aligned shaft polyline for arrow hit testing.
+  ///
+  /// The returned points track the visible shaft geometry:
+  /// - curved arrows are flattened from Catmull-Rom control points;
+  /// - elbow arrows are sampled from arrow-core rounded path commands;
+  /// - straight arrows are returned unchanged.
+  static List<DrawPoint> sampleShaftForHitTest({
+    required List<DrawPoint> points,
+    required ArrowType arrowType,
+    required double strokeWidth,
+  }) {
+    if (points.length < 2) {
+      return points;
+    }
+
+    if (arrowType == ArrowType.curved && points.length > 2) {
+      return flattenCatmullRomDrawPoints(
+        points: points,
+        strokeWidth: strokeWidth,
+      );
+    }
+
+    if (arrowType == ArrowType.elbow && points.length > 2) {
+      return _sampleElbowPathForHitTest(
+        points: points,
+        strokeWidth: strokeWidth,
+      );
+    }
+
+    return points;
+  }
+
   static List<DrawPoint> _ensureMinPoints(List<DrawPoint> points) {
     if (points.length >= 2) {
       return points;
@@ -200,6 +235,110 @@ class ArrowGeometry {
     }
     return value;
   }
+}
+
+List<DrawPoint> _sampleElbowPathForHitTest({
+  required List<DrawPoint> points,
+  required double strokeWidth,
+}) {
+  final pathData = ArrowGeometry.generateElbowPathData(points: points);
+  if (pathData.isEmpty) {
+    return points;
+  }
+
+  final tokens = pathData
+      .replaceAll(',', ' ')
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((token) => token.isNotEmpty)
+      .toList(growable: false);
+  if (tokens.isEmpty) {
+    return points;
+  }
+
+  final flattened = <DrawPoint>[];
+  DrawPoint? current;
+  var index = 0;
+
+  double? readNumber() {
+    if (index >= tokens.length) {
+      return null;
+    }
+    return double.tryParse(tokens[index++]);
+  }
+
+  while (index < tokens.length) {
+    final command = tokens[index++].toUpperCase();
+    if (command == 'M' || command == 'L') {
+      final x = readNumber();
+      final y = readNumber();
+      if (x == null || y == null) {
+        return points;
+      }
+      final next = DrawPoint(x: x, y: y);
+      _appendPointIfDistinct(flattened, next);
+      current = next;
+      continue;
+    }
+
+    if (command == 'Q') {
+      final cx = readNumber();
+      final cy = readNumber();
+      final x = readNumber();
+      final y = readNumber();
+      final start = current;
+      if (cx == null || cy == null || x == null || y == null || start == null) {
+        return points;
+      }
+      final control = DrawPoint(x: cx, y: cy);
+      final end = DrawPoint(x: x, y: y);
+      final chordLength = (end - start).distance(DrawPoint.zero);
+      final roughLength =
+          chordLength + (control - start).distance(DrawPoint.zero) * 0.5;
+      final stepSize = math.max(1.5, strokeWidth * 0.7);
+      final steps = roughLength <= 0 ? 6 : roughLength ~/ stepSize + 1;
+      final clampedSteps = steps.clamp(6, 32);
+      for (var i = 1; i <= clampedSteps; i++) {
+        final t = i / clampedSteps;
+        final point = _quadraticPoint(start, control, end, t);
+        _appendPointIfDistinct(flattened, point);
+      }
+      current = end;
+      continue;
+    }
+
+    return points;
+  }
+
+  return flattened.length >= 2 ? flattened : points;
+}
+
+void _appendPointIfDistinct(List<DrawPoint> points, DrawPoint point) {
+  if (points.isEmpty) {
+    points.add(point);
+    return;
+  }
+  final previous = points.last;
+  if ((previous.x - point.x).abs() <= 1e-6 &&
+      (previous.y - point.y).abs() <= 1e-6) {
+    return;
+  }
+  points.add(point);
+}
+
+DrawPoint _quadraticPoint(
+  DrawPoint start,
+  DrawPoint control,
+  DrawPoint end,
+  double t,
+) {
+  final oneMinusT = 1 - t;
+  final oneMinusTSq = oneMinusT * oneMinusT;
+  final tSq = t * t;
+  return DrawPoint(
+    x: oneMinusTSq * start.x + 2 * oneMinusT * t * control.x + tSq * end.x,
+    y: oneMinusTSq * start.y + 2 * oneMinusT * t * control.y + tSq * end.y,
+  );
 }
 
 class ArrowGeometryDescriptor {

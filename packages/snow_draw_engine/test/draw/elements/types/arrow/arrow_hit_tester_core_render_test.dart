@@ -71,21 +71,40 @@ void main() {
 
       expect(hit, isFalse);
     });
+
+    test(
+      'triangle outline arrowhead interior does not hit trimmed shaft segment',
+      () {
+        final element = _buildArrowElement(
+          endArrowhead: ArrowheadStyle.triangleOutline,
+          strokeWidth: 4,
+          width: 120,
+        );
+
+        final hit = tester.hitTest(
+          element: element,
+          position: const DrawPoint(x: 100, y: 10),
+        );
+
+        expect(hit, isFalse);
+      },
+    );
   });
 }
 
-ElementState _buildArrowElement({required ArrowheadStyle endArrowhead}) =>
-    ElementState(
-      id: 'arrow-hit-test',
-      rect: const DrawRect(maxX: 100, maxY: 20),
-      rotation: 0,
-      opacity: 1,
-      zIndex: 0,
-      data: ArrowData(
-        points: const <DrawPoint>[
-          DrawPoint(y: 0.5, x: 0),
-          DrawPoint(x: 1, y: 0.5),
-        ],
-        endArrowhead: endArrowhead,
-      ),
-    );
+ElementState _buildArrowElement({
+  required ArrowheadStyle endArrowhead,
+  double strokeWidth = 2,
+  double width = 100,
+}) => ElementState(
+  id: 'arrow-hit-test',
+  rect: DrawRect(maxX: width, maxY: 20),
+  rotation: 0,
+  opacity: 1,
+  zIndex: 0,
+  data: ArrowData(
+    points: const <DrawPoint>[DrawPoint(y: 0.5, x: 0), DrawPoint(x: 1, y: 0.5)],
+    endArrowhead: endArrowhead,
+    strokeWidth: strokeWidth,
+  ),
+);

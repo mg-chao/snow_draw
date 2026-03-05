@@ -147,18 +147,11 @@ class _ArrowHitTestCacheEntry {
   }) {
     final rect = element.rect;
     final geometry = ArrowGeometryDescriptor(data: data, rect: rect);
-    final points = geometry.localDrawPoints;
-    final shaftPoints = switch (data.arrowType) {
-      ArrowType.curved when points.length > 2 => _flattenCurvedShaft(
-        points,
-        data.strokeWidth,
-      ),
-      ArrowType.elbow when points.length > 2 => _flattenElbowShaft(
-        points,
-        data.strokeWidth,
-      ),
-      _ => points,
-    };
+    final shaftPoints = ArrowGeometry.sampleShaftForHitTest(
+      points: geometry.insetDrawPoints,
+      arrowType: data.arrowType,
+      strokeWidth: data.strokeWidth,
+    );
 
     final arrowheadTargets = _buildArrowheadTargets(geometry);
 
@@ -237,154 +230,8 @@ double _arrowheadExtent(ArrowLikeData data) {
   return length * 0.3;
 }
 
-double _arrowheadLength(double strokeWidth) => strokeWidth * 4 + 12.0;
-
-List<DrawPoint> _flattenCurvedShaft(
-  List<DrawPoint> points,
-  double strokeWidth,
-) {
-  if (points.length < 3) {
-    return points;
-  }
-
-  final flattened = <DrawPoint>[points.first];
-  final stepSize = math.max(1.5, strokeWidth * 0.6);
-
-  for (var segmentIndex = 0; segmentIndex < points.length - 1; segmentIndex++) {
-    final start = points[segmentIndex];
-    final end = points[segmentIndex + 1];
-    final segmentLength = start.distance(end);
-    var steps = (segmentLength / stepSize).ceil();
-    if (steps < 4) {
-      steps = 4;
-    } else if (steps > 24) {
-      steps = 24;
-    }
-
-    for (var step = 1; step <= steps; step++) {
-      final t = step / steps;
-      final curvePoint = ArrowGeometry.calculateCurveDrawPoint(
-        points: points,
-        segmentIndex: segmentIndex,
-        t: t,
-      );
-      final sampled =
-          curvePoint ??
-          DrawPoint(
-            x: start.x + (end.x - start.x) * t,
-            y: start.y + (end.y - start.y) * t,
-          );
-      _appendPointIfDistinct(flattened, sampled);
-    }
-  }
-
-  return flattened.length >= 2 ? flattened : points;
-}
-
-List<DrawPoint> _flattenElbowShaft(List<DrawPoint> points, double strokeWidth) {
-  if (points.length < 3) {
-    return points;
-  }
-
-  final pathData = ArrowGeometry.generateElbowPathData(points: points);
-  if (pathData.isEmpty) {
-    return points;
-  }
-
-  final tokens = pathData
-      .replaceAll(',', ' ')
-      .trim()
-      .split(RegExp(r'\s+'))
-      .where((token) => token.isNotEmpty)
-      .toList(growable: false);
-  if (tokens.isEmpty) {
-    return points;
-  }
-
-  final flattened = <DrawPoint>[];
-  DrawPoint? current;
-  var index = 0;
-
-  double? readNumber() {
-    if (index >= tokens.length) {
-      return null;
-    }
-    return double.tryParse(tokens[index++]);
-  }
-
-  while (index < tokens.length) {
-    final command = tokens[index++].toUpperCase();
-    if (command == 'M' || command == 'L') {
-      final x = readNumber();
-      final y = readNumber();
-      if (x == null || y == null) {
-        return points;
-      }
-      final next = DrawPoint(x: x, y: y);
-      _appendPointIfDistinct(flattened, next);
-      current = next;
-      continue;
-    }
-
-    if (command == 'Q') {
-      final cx = readNumber();
-      final cy = readNumber();
-      final x = readNumber();
-      final y = readNumber();
-      final start = current;
-      if (cx == null || cy == null || x == null || y == null || start == null) {
-        return points;
-      }
-      final control = DrawPoint(x: cx, y: cy);
-      final end = DrawPoint(x: x, y: y);
-      final chordLength = (end - start).distance(DrawPoint.zero);
-      final roughLength =
-          chordLength + (control - start).distance(DrawPoint.zero) * 0.5;
-      final stepSize = math.max(1.5, strokeWidth * 0.7);
-      final steps = roughLength <= 0 ? 6 : roughLength ~/ stepSize + 1;
-      final clampedSteps = steps.clamp(6, 32);
-      for (var i = 1; i <= clampedSteps; i++) {
-        final t = i / clampedSteps;
-        final point = _quadraticPoint(start, control, end, t);
-        _appendPointIfDistinct(flattened, point);
-      }
-      current = end;
-      continue;
-    }
-
-    return points;
-  }
-
-  return flattened.length >= 2 ? flattened : points;
-}
-
-void _appendPointIfDistinct(List<DrawPoint> points, DrawPoint point) {
-  if (points.isEmpty) {
-    points.add(point);
-    return;
-  }
-  final previous = points.last;
-  if ((previous.x - point.x).abs() <= 1e-6 &&
-      (previous.y - point.y).abs() <= 1e-6) {
-    return;
-  }
-  points.add(point);
-}
-
-DrawPoint _quadraticPoint(
-  DrawPoint start,
-  DrawPoint control,
-  DrawPoint end,
-  double t,
-) {
-  final oneMinusT = 1 - t;
-  final oneMinusTSq = oneMinusT * oneMinusT;
-  final tSq = t * t;
-  return DrawPoint(
-    x: oneMinusTSq * start.x + 2 * oneMinusT * t * control.x + tSq * end.x,
-    y: oneMinusTSq * start.y + 2 * oneMinusT * t * control.y + tSq * end.y,
-  );
-}
+double _arrowheadLength(double strokeWidth) =>
+    ArrowGeometry.resolveArrowheadLength(strokeWidth);
 
 List<_ArrowheadHitTarget> _buildArrowheadTargets(
   ArrowGeometryDescriptor geometry,
