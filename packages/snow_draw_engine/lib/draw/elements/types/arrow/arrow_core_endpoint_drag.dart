@@ -187,15 +187,14 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
   );
   final mergedOptions = <String, dynamic>{...?options};
   final computed = data.arrowType == ArrowType.elbow
-      ? _runEndpointDragViaEngineResult(
+      ? _runEndpointDragViaElbowStrategy(
           arrow: arrow,
           bindables: bindables,
           dragContext: dragContext,
           draggedIndex: draggedIndex,
           worldPointer: worldPointer,
           orderedElementIds: orderedElementIds,
-          mergedOptions: mergedOptions,
-          finalize: finalize,
+          bindingDistance: bindingDistance,
           session: session,
         )
       : _runEndpointDragViaStrategy(
@@ -240,50 +239,116 @@ typedef _ComputedEndpointDrag = ({
   String? suggestedBindableId,
 });
 
-_ComputedEndpointDrag? _runEndpointDragViaEngineResult({
+_ComputedEndpointDrag? _runEndpointDragViaElbowStrategy({
   required core.ArrowState arrow,
   required List<core.BindableState> bindables,
   required core.EngineContext dragContext,
   required int draggedIndex,
   required DrawPoint worldPointer,
   required List<String>? orderedElementIds,
-  required Map<String, dynamic> mergedOptions,
-  required bool finalize,
+  required double bindingDistance,
   required ArrowCoreSession session,
 }) {
-  final dragPoint = <double>[
-    worldPointer.x - arrow.x,
-    worldPointer.y - arrow.y,
-  ];
-  final engineResult = finalize
-      ? finalizeCoreEndpointDrag(
-          arrow: arrow,
-          draggedPoints: <int, core.Point>{draggedIndex: dragPoint},
-          pointer: toCorePoint(worldPointer),
-          bindables: bindables,
-          context: dragContext,
-          options: mergedOptions,
-        )
-      : computeCoreEndpointDrag(
-          arrow: arrow,
-          draggedPoints: <int, core.Point>{draggedIndex: dragPoint},
-          pointer: toCorePoint(worldPointer),
-          bindables: bindables,
-          context: dragContext,
-          options: mergedOptions,
-        );
+  if (arrow.points.length < 2) {
+    return null;
+  }
+  final endpointIndex = arrow.points.length - 1;
+  final draggedStart = draggedIndex == 0;
+  final draggedEnd = draggedIndex == endpointIndex;
+  if (!draggedStart && !draggedEnd) {
+    return (arrow: arrow, orderedElementIds: null, suggestedBindableId: null);
+  }
 
-  final applied = session.applyEngineResultWithOrderFallback(
-    arrow: arrow,
-    result: engineResult,
-    point: toCorePoint(worldPointer),
-    orderedElementIds: orderedElementIds,
+  final draggedPoints = <int, core.Point>{
+    draggedIndex: <double>[worldPointer.x - arrow.x, worldPointer.y - arrow.y],
+  };
+  var nextArrow = arrow.copyWith(
+    points: _applyDraggedPointsToArrowPoints(arrow.points, draggedPoints),
   );
 
+  core.BindableState? hoveredBindable;
+  final hoverDistance = bindingDistance > 0
+      ? bindingDistance
+      : resolveCoreMaxBindingDistance(zoom: dragContext.zoom);
+  if (dragContext.isBindingEnabled &&
+      bindables.isNotEmpty &&
+      hoverDistance > 0) {
+    hoveredBindable = core.getHoveredBindable(
+      toCorePoint(worldPointer),
+      bindables,
+      hoverDistance,
+    );
+  }
+
+  if (hoveredBindable == null) {
+    if (draggedStart) {
+      nextArrow = nextArrow.copyWith(setStartBinding: true, startBinding: null);
+    } else {
+      nextArrow = nextArrow.copyWith(setEndBinding: true, endBinding: null);
+    }
+  } else {
+    final edge = draggedStart ? core.arrowEndpointStart : core.arrowEndpointEnd;
+    final fixedPoint = calculateCoreFixedPointForElbowBinding(
+      arrow: nextArrow,
+      bindable: hoveredBindable,
+      edge: edge,
+    );
+    final nextBinding = core.FixedPointBinding(
+      elementId: hoveredBindable.id,
+      fixedPoint: fixedPoint,
+      mode: core.bindModeOrbit,
+    );
+    if (draggedStart) {
+      nextArrow = nextArrow.copyWith(
+        setStartBinding: true,
+        startBinding: nextBinding,
+      );
+    } else {
+      nextArrow = nextArrow.copyWith(
+        setEndBinding: true,
+        endBinding: nextBinding,
+      );
+    }
+  }
+
+  if (draggedStart) {
+    nextArrow = nextArrow.copyWith(
+      setEndBinding: true,
+      endBinding: arrow.endBinding,
+    );
+  } else {
+    nextArrow = nextArrow.copyWith(
+      setStartBinding: true,
+      startBinding: arrow.startBinding,
+    );
+  }
+
+  final elbowPatch = recomputeCoreElbowPatch(
+    arrow: nextArrow,
+    bindables: bindables,
+    context: dragContext,
+  );
+  nextArrow = elbowPatch.isEmpty
+      ? nextArrow
+      : core.applyArrowPatch(nextArrow, elbowPatch);
+
+  List<String>? nextOrderedElementIds;
+  final hoveredBindableId = hoveredBindable?.id;
+  if (dragContext.isBindingEnabled &&
+      hoveredBindableId != null &&
+      hoveredBindableId.isNotEmpty) {
+    nextOrderedElementIds = session.reorderArrowAboveHoveredBindable(
+      arrowId: arrow.id,
+      hoveredBindableId: hoveredBindableId,
+      point: toCorePoint(worldPointer),
+      orderedElementIds: orderedElementIds,
+    );
+  }
+
   return (
-    arrow: applied.arrow,
-    orderedElementIds: applied.orderedElementIds,
-    suggestedBindableId: engineResult.suggestedBinding?.bindableId,
+    arrow: nextArrow,
+    orderedElementIds: nextOrderedElementIds,
+    suggestedBindableId: hoveredBindableId,
   );
 }
 
@@ -398,10 +463,7 @@ core.EndpointBindingStrategy? _withStrategyFocusPoint(
   core.EndpointBindingStrategy? strategy,
   core.Point focusPoint,
 ) {
-  if (strategy == null ||
-      strategy.mode == null ||
-      strategy.element == null ||
-      strategy.focusPoint == null) {
+  if (strategy == null || strategy.mode == null || strategy.element == null) {
     return strategy;
   }
 

@@ -10,6 +10,7 @@ import 'package:snow_draw_engine/draw/models/draw_state.dart';
 import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
+import 'package:snow_draw_engine/draw/types/element_style.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -236,6 +237,125 @@ void main() {
         expect(result!.orderedElementIds, isNull);
       },
     );
+
+    test(
+      'computeArrowCoreEndpointDragResult keeps opposite elbow endpoint binding',
+      () {
+        final startTarget = _rectangleElement(
+          id: 'rect-start',
+          rect: const DrawRect(minX: 20, minY: 20, maxX: 120, maxY: 120),
+          zIndex: 1,
+        );
+        final endTarget = _rectangleElement(
+          id: 'rect-end',
+          rect: const DrawRect(minX: 260, minY: 20, maxX: 360, maxY: 120),
+          zIndex: 2,
+        );
+        final arrow = _arrowElement(
+          id: 'arrow-1',
+          points: const <DrawPoint>[
+            DrawPoint(x: 70, y: 70),
+            DrawPoint(x: 220, y: 70),
+          ],
+          zIndex: 0,
+          arrowType: ArrowType.elbow,
+          startBinding: const ArrowBinding(
+            elementId: 'rect-start',
+            anchor: DrawPoint(x: 0.5001, y: 0.5001),
+          ),
+        );
+        final state = _stateWithElements(<ElementState>[
+          arrow,
+          startTarget,
+          endTarget,
+        ]);
+        final data = arrow.data as ArrowData;
+
+        final result = computeArrowCoreEndpointDragResult(
+          state: state,
+          element: arrow,
+          data: data,
+          localPoints: _resolveLocalPoints(arrow, data),
+          draggedIndex: 1,
+          worldPointer: const DrawPoint(x: 280, y: 70),
+          startBinding: data.startBinding,
+          endBinding: data.endBinding,
+          excludedElementId: arrow.id,
+          shouldLookupBindings: true,
+          allowNewBinding: true,
+          bindingDistance: 80,
+          coreEngineContext: buildCoreEngineContext(),
+          orderedElementIds: const <String>[
+            'arrow-1',
+            'rect-start',
+            'rect-end',
+          ],
+        );
+
+        expect(result, isNotNull);
+        expect(result!.startBinding?.elementId, 'rect-start');
+        expect(result.endBinding?.elementId, 'rect-end');
+      },
+    );
+
+    test(
+      'computeArrowCoreEndpointDragResult unbinds dragged elbow endpoint when no hovered bindable',
+      () {
+        final startTarget = _rectangleElement(
+          id: 'rect-start',
+          rect: const DrawRect(minX: 20, minY: 20, maxX: 120, maxY: 120),
+          zIndex: 1,
+        );
+        final endTarget = _rectangleElement(
+          id: 'rect-end',
+          rect: const DrawRect(minX: 260, minY: 20, maxX: 360, maxY: 120),
+          zIndex: 2,
+        );
+        final arrow = _arrowElement(
+          id: 'arrow-1',
+          points: const <DrawPoint>[
+            DrawPoint(x: 70, y: 70),
+            DrawPoint(x: 280, y: 70),
+          ],
+          zIndex: 0,
+          arrowType: ArrowType.elbow,
+          startBinding: const ArrowBinding(
+            elementId: 'rect-start',
+            anchor: DrawPoint(x: 0.5001, y: 0.5001),
+          ),
+          endBinding: const ArrowBinding(
+            elementId: 'rect-end',
+            anchor: DrawPoint(x: 0.5001, y: 0.5001),
+          ),
+        );
+        final state = _stateWithElements(<ElementState>[
+          arrow,
+          startTarget,
+          endTarget,
+        ]);
+        final data = arrow.data as ArrowData;
+
+        final result = computeArrowCoreEndpointDragResult(
+          state: state,
+          element: arrow,
+          data: data,
+          localPoints: _resolveLocalPoints(arrow, data),
+          draggedIndex: 1,
+          worldPointer: const DrawPoint(x: 520, y: 340),
+          startBinding: data.startBinding,
+          endBinding: data.endBinding,
+          excludedElementId: arrow.id,
+          shouldLookupBindings: true,
+          allowNewBinding: true,
+          bindingDistance: 40,
+          coreEngineContext: buildCoreEngineContext(),
+        );
+
+        expect(result, isNotNull);
+        expect(result!.startBinding?.elementId, 'rect-start');
+        expect(result.endBinding, isNull);
+      },
+    );
   });
 }
 
@@ -260,6 +380,7 @@ ElementState _arrowElement({
   required String id,
   required List<DrawPoint> points,
   required int zIndex,
+  ArrowType arrowType = ArrowType.straight,
   ArrowBinding? startBinding,
   ArrowBinding? endBinding,
 }) {
@@ -276,6 +397,7 @@ ElementState _arrowElement({
     zIndex: zIndex,
     data: ArrowData(
       points: normalized,
+      arrowType: arrowType,
       startBinding: startBinding,
       endBinding: endBinding,
     ),
