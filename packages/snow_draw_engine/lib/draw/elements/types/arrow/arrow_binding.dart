@@ -6,6 +6,7 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../shared/element_data_codec.dart';
+import 'arrow_core_bindable_candidates.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
 
@@ -146,9 +147,47 @@ class ArrowBindingUtils {
     bool angleLocked = false,
     bool altKey = false,
     core.EngineContext? coreEngineContext,
+  }) {
+    final candidates = _collectCoreBindableCandidatesFromTargets(targets);
+    if (candidates.isEmpty) {
+      return null;
+    }
+    return resolveBindingCandidateFromCoreCandidates(
+      worldPoint: worldPoint,
+      candidates: candidates,
+      snapDistance: snapDistance,
+      preferredBinding: preferredBinding,
+      allowNewBinding: allowNewBinding,
+      referencePoint: referencePoint,
+      dragStart: dragStart,
+      newArrow: newArrow,
+      initialBinding: initialBinding,
+      preserveOppositeInsideBinding: preserveOppositeInsideBinding,
+      oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
+      angleLocked: angleLocked,
+      altKey: altKey,
+      coreEngineContext: coreEngineContext,
+    );
+  }
+
+  static ArrowBindingResult? resolveBindingCandidateFromCoreCandidates({
+    required DrawPoint worldPoint,
+    required ArrowCoreBindableCandidates candidates,
+    required double snapDistance,
+    ArrowBinding? preferredBinding,
+    bool allowNewBinding = true,
+    DrawPoint? referencePoint,
+    bool dragStart = false,
+    bool newArrow = false,
+    bool initialBinding = false,
+    bool preserveOppositeInsideBinding = false,
+    DrawPoint? oppositeOrbitFocusPoint,
+    bool angleLocked = false,
+    bool altKey = false,
+    core.EngineContext? coreEngineContext,
   }) => _resolveBindingCandidateViaCore(
     worldPoint: worldPoint,
-    targets: targets,
+    candidates: candidates,
     snapDistance: snapDistance,
     preferredBinding: preferredBinding,
     allowNewBinding: allowNewBinding,
@@ -179,9 +218,47 @@ class ArrowBindingUtils {
     bool angleLocked = false,
     bool altKey = false,
     core.EngineContext? coreEngineContext,
+  }) {
+    final candidates = _collectCoreBindableCandidatesFromTargets(targets);
+    if (candidates.isEmpty) {
+      return null;
+    }
+    return resolveElbowBindingCandidateFromCoreCandidates(
+      worldPoint: worldPoint,
+      candidates: candidates,
+      snapDistance: snapDistance,
+      hasArrowhead: hasArrowhead,
+      preferredBinding: preferredBinding,
+      allowNewBinding: allowNewBinding,
+      dragStart: dragStart,
+      newArrow: newArrow,
+      initialBinding: initialBinding,
+      preserveOppositeInsideBinding: preserveOppositeInsideBinding,
+      oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
+      angleLocked: angleLocked,
+      altKey: altKey,
+      coreEngineContext: coreEngineContext,
+    );
+  }
+
+  static ArrowBindingResult? resolveElbowBindingCandidateFromCoreCandidates({
+    required DrawPoint worldPoint,
+    required ArrowCoreBindableCandidates candidates,
+    required double snapDistance,
+    required bool hasArrowhead,
+    ArrowBinding? preferredBinding,
+    bool allowNewBinding = true,
+    bool dragStart = false,
+    bool newArrow = false,
+    bool initialBinding = false,
+    bool preserveOppositeInsideBinding = false,
+    DrawPoint? oppositeOrbitFocusPoint,
+    bool angleLocked = false,
+    bool altKey = false,
+    core.EngineContext? coreEngineContext,
   }) => _resolveBindingCandidateViaCore(
     worldPoint: worldPoint,
-    targets: targets,
+    candidates: candidates,
     snapDistance: snapDistance,
     preferredBinding: preferredBinding,
     allowNewBinding: allowNewBinding,
@@ -213,15 +290,18 @@ class ArrowBindingUtils {
     if (snapDistance <= 0 || target.opacity <= 0) {
       return null;
     }
-    return _resolveBindingCandidateViaCore(
+    final bindable = toCoreBindableState(target);
+    if (bindable == null) {
+      return null;
+    }
+    return resolveBindingCandidateFromCoreCandidates(
       worldPoint: worldPoint,
-      targets: <ElementState>[target],
+      candidates: ArrowCoreBindableCandidates(
+        elements: <ElementState>[target],
+        bindables: <core.BindableState>[bindable],
+      ),
       snapDistance: snapDistance,
-      preferredBinding: null,
-      allowNewBinding: true,
       referencePoint: referencePoint,
-      elbowed: false,
-      dragStart: false,
       angleLocked: angleLocked,
       altKey: altKey,
       coreEngineContext: coreEngineContext,
@@ -243,16 +323,18 @@ class ArrowBindingUtils {
     if (snapDistance <= 0 || target.opacity <= 0) {
       return null;
     }
-    return _resolveBindingCandidateViaCore(
+    final bindable = toCoreBindableState(target);
+    if (bindable == null) {
+      return null;
+    }
+    return resolveElbowBindingCandidateFromCoreCandidates(
       worldPoint: worldPoint,
-      targets: <ElementState>[target],
+      candidates: ArrowCoreBindableCandidates(
+        elements: <ElementState>[target],
+        bindables: <core.BindableState>[bindable],
+      ),
       snapDistance: snapDistance,
-      preferredBinding: null,
-      allowNewBinding: true,
-      referencePoint: null,
-      elbowed: true,
       hasArrowhead: hasArrowhead,
-      dragStart: false,
       angleLocked: angleLocked,
       altKey: altKey,
       coreEngineContext: coreEngineContext,
@@ -327,7 +409,7 @@ class ArrowBindingUtils {
 
 ArrowBindingResult? _resolveBindingCandidateViaCore({
   required DrawPoint worldPoint,
-  required Iterable<ElementState> targets,
+  required ArrowCoreBindableCandidates candidates,
   required double snapDistance,
   required ArrowBinding? preferredBinding,
   required bool allowNewBinding,
@@ -351,23 +433,26 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
   if (!allowNewBinding && preferredElementId == null) {
     return null;
   }
+  if (candidates.isEmpty) {
+    return null;
+  }
 
-  final targetById = <String, ElementState>{};
+  final targetById = <String, ElementState>{
+    for (final target in candidates.elements) target.id: target,
+  };
+  if (targetById.isEmpty) {
+    return null;
+  }
   final bindables = <core.BindableState>[];
-  for (final target in targets) {
-    if (target.opacity <= 0 || !ArrowBindingUtils.isBindableTarget(target)) {
+  for (final bindable in candidates.bindables) {
+    if (!targetById.containsKey(bindable.id)) {
       continue;
     }
     if (!allowNewBinding &&
         preferredElementId != null &&
-        target.id != preferredElementId) {
+        bindable.id != preferredElementId) {
       continue;
     }
-    final bindable = toCoreBindableState(target);
-    if (bindable == null) {
-      continue;
-    }
-    targetById[target.id] = target;
     bindables.add(bindable);
   }
 
@@ -578,3 +663,28 @@ double _clamp01(double value) {
 const _defaultMaxCoordinate = 1e6;
 const _bindingHitToleranceFactor = 0.4;
 const _previewSpanMultiplier = 3.0;
+
+ArrowCoreBindableCandidates _collectCoreBindableCandidatesFromTargets(
+  Iterable<ElementState> targets,
+) {
+  final elements = <ElementState>[];
+  final bindables = <core.BindableState>[];
+  for (final target in targets) {
+    if (target.opacity <= 0 || !ArrowBindingUtils.isBindableTarget(target)) {
+      continue;
+    }
+    final bindable = toCoreBindableState(target);
+    if (bindable == null) {
+      continue;
+    }
+    elements.add(target);
+    bindables.add(bindable);
+  }
+  if (bindables.isEmpty) {
+    return ArrowCoreBindableCandidates.empty;
+  }
+  return ArrowCoreBindableCandidates(
+    elements: List<ElementState>.unmodifiable(elements),
+    bindables: List<core.BindableState>.unmodifiable(bindables),
+  );
+}

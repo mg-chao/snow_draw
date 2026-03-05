@@ -1,4 +1,5 @@
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bindable_candidates.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dart';
 import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
@@ -24,6 +25,30 @@ void main() {
         targets: <ElementState>[target],
         snapDistance: 48,
       );
+
+      expect(result, isNotNull);
+      expect(result!.binding.elementId, target.id);
+      expect(result.zIndex, target.zIndex);
+    });
+
+    test('resolveBindingCandidateFromCoreCandidates reuses projected data', () {
+      final target = _rectangleElement(
+        id: 'rect-projected',
+        rect: const DrawRect(minX: 100, minY: 100, maxX: 220, maxY: 220),
+        zIndex: 5,
+      );
+      final bindable = toCoreBindableState(target);
+      expect(bindable, isNotNull);
+
+      final result =
+          ArrowBindingUtils.resolveBindingCandidateFromCoreCandidates(
+            worldPoint: const DrawPoint(x: 160, y: 160),
+            candidates: ArrowCoreBindableCandidates(
+              elements: <ElementState>[target],
+              bindables: [bindable!],
+            ),
+            snapDistance: 48,
+          );
 
       expect(result, isNotNull);
       expect(result!.binding.elementId, target.id);
@@ -205,6 +230,34 @@ void main() {
       expect(bound!.x, greaterThanOrEqualTo(220));
       expect(bound.y, closeTo(160, 2));
     });
+
+    test(
+      'resolveElbowBindingCandidateFromCoreCandidates supports elbow mode',
+      () {
+        final target = _rectangleElement(
+          id: 'rect-elbow-projected',
+          rect: const DrawRect(minX: 100, minY: 100, maxX: 220, maxY: 220),
+          zIndex: 4,
+        );
+        final bindable = toCoreBindableState(target);
+        expect(bindable, isNotNull);
+
+        final result =
+            ArrowBindingUtils.resolveElbowBindingCandidateFromCoreCandidates(
+              worldPoint: const DrawPoint(x: 220, y: 160),
+              candidates: ArrowCoreBindableCandidates(
+                elements: <ElementState>[target],
+                bindables: [bindable!],
+              ),
+              snapDistance: 48,
+              hasArrowhead: true,
+            );
+
+        expect(result, isNotNull);
+        expect(result!.binding.elementId, target.id);
+        expect(result.zIndex, target.zIndex);
+      },
+    );
   });
 }
 

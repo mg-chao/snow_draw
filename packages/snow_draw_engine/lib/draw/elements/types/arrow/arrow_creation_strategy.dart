@@ -842,9 +842,9 @@ _BindingSnapResult _snapBindingPoint({
   final oppositeOrbitFocusPoint =
       oppositeBinding?.mode == ArrowBindingMode.orbit ? oppositePoint : null;
   final bindingCandidate = arrowType == ArrowType.elbow
-      ? ArrowBindingUtils.resolveElbowBindingCandidate(
+      ? ArrowBindingUtils.resolveElbowBindingCandidateFromCoreCandidates(
           worldPoint: position,
-          targets: candidates.elements,
+          candidates: candidates,
           snapDistance: bindingDistance,
           hasArrowhead: hasArrowhead,
           preferredBinding: preferredBinding,
@@ -858,9 +858,9 @@ _BindingSnapResult _snapBindingPoint({
           altKey: altKey,
           coreEngineContext: coreEngineContext,
         )
-      : ArrowBindingUtils.resolveBindingCandidate(
+      : ArrowBindingUtils.resolveBindingCandidateFromCoreCandidates(
           worldPoint: position,
-          targets: candidates.elements,
+          candidates: candidates,
           snapDistance: bindingDistance,
           preferredBinding: preferredBinding,
           allowNewBinding: shouldLookupBindings,
