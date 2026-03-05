@@ -1,4 +1,5 @@
 import 'package:meta/meta.dart';
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import '../../../config/draw_config.dart';
 import '../../../elements/core/creation_strategy.dart';
 import '../../../elements/core/element_data.dart';
@@ -829,6 +830,10 @@ _BindingSnapResult _snapBindingPoint({
     return _BindingSnapResult(position: position);
   }
 
+  final coreEngineContext = buildCoreEngineContext(
+    zoom: state.application.view.camera.zoom,
+    bindMode: altKey ? core.bindModeInside : core.bindModeOrbit,
+  );
   final hasArrowhead = dragStart
       ? startArrowheadStyle != ArrowheadStyle.none
       : endArrowheadStyle != ArrowheadStyle.none;
@@ -851,6 +856,7 @@ _BindingSnapResult _snapBindingPoint({
           oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
           angleLocked: angleLocked,
           altKey: altKey,
+          coreEngineContext: coreEngineContext,
         )
       : ArrowBindingUtils.resolveBindingCandidate(
           worldPoint: position,
@@ -866,6 +872,7 @@ _BindingSnapResult _snapBindingPoint({
           oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
           angleLocked: angleLocked,
           altKey: altKey,
+          coreEngineContext: coreEngineContext,
         );
   if (bindingCandidate == null) {
     return _BindingSnapResult(position: position);

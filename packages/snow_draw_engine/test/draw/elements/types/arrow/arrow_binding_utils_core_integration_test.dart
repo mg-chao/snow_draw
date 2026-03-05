@@ -1,4 +1,5 @@
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dart';
 import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/serial_number/serial_number_data.dart';
@@ -115,6 +116,31 @@ void main() {
       );
 
       expect(result, isNull);
+    });
+
+    test('resolveBindingCandidate honors core engine-context zoom', () {
+      final target = _rectangleElement(
+        id: 'rect-zoom',
+        rect: const DrawRect(minX: 100, minY: 100, maxX: 220, maxY: 220),
+        zIndex: 3,
+      );
+      const worldPoint = DrawPoint(x: 82, y: 160);
+
+      final defaultContextResult = ArrowBindingUtils.resolveBindingCandidate(
+        worldPoint: worldPoint,
+        targets: <ElementState>[target],
+        snapDistance: 56,
+      );
+      final zoomedOutContextResult = ArrowBindingUtils.resolveBindingCandidate(
+        worldPoint: worldPoint,
+        targets: <ElementState>[target],
+        snapDistance: 56,
+        coreEngineContext: buildCoreEngineContext(zoom: 0.5),
+      );
+
+      expect(defaultContextResult, isNull);
+      expect(zoomedOutContextResult, isNotNull);
+      expect(zoomedOutContextResult!.binding.elementId, target.id);
     });
 
     test('resolveBindingGap uses serial-number scaled stroke width', () {

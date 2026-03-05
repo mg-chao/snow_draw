@@ -145,6 +145,7 @@ class ArrowBindingUtils {
     DrawPoint? oppositeOrbitFocusPoint,
     bool angleLocked = false,
     bool altKey = false,
+    core.EngineContext? coreEngineContext,
   }) => _resolveBindingCandidateViaCore(
     worldPoint: worldPoint,
     targets: targets,
@@ -160,6 +161,7 @@ class ArrowBindingUtils {
     oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
     angleLocked: angleLocked,
     altKey: altKey,
+    coreEngineContext: coreEngineContext,
   );
 
   static ArrowBindingResult? resolveElbowBindingCandidate({
@@ -176,6 +178,7 @@ class ArrowBindingUtils {
     DrawPoint? oppositeOrbitFocusPoint,
     bool angleLocked = false,
     bool altKey = false,
+    core.EngineContext? coreEngineContext,
   }) => _resolveBindingCandidateViaCore(
     worldPoint: worldPoint,
     targets: targets,
@@ -192,6 +195,7 @@ class ArrowBindingUtils {
     oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
     angleLocked: angleLocked,
     altKey: altKey,
+    coreEngineContext: coreEngineContext,
   );
 
   /// Resolves a single-target binding candidate without list iteration.
@@ -204,6 +208,7 @@ class ArrowBindingUtils {
     DrawPoint? referencePoint,
     bool angleLocked = false,
     bool altKey = false,
+    core.EngineContext? coreEngineContext,
   }) {
     if (snapDistance <= 0 || target.opacity <= 0) {
       return null;
@@ -219,6 +224,7 @@ class ArrowBindingUtils {
       dragStart: false,
       angleLocked: angleLocked,
       altKey: altKey,
+      coreEngineContext: coreEngineContext,
     );
   }
 
@@ -232,6 +238,7 @@ class ArrowBindingUtils {
     required bool hasArrowhead,
     bool angleLocked = false,
     bool altKey = false,
+    core.EngineContext? coreEngineContext,
   }) {
     if (snapDistance <= 0 || target.opacity <= 0) {
       return null;
@@ -248,6 +255,7 @@ class ArrowBindingUtils {
       dragStart: false,
       angleLocked: angleLocked,
       altKey: altKey,
+      coreEngineContext: coreEngineContext,
     );
   }
 
@@ -330,6 +338,7 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
   bool hasArrowhead = false,
   bool angleLocked = false,
   bool altKey = false,
+  core.EngineContext? coreEngineContext,
 }) {
   if (snapDistance <= 0) {
     return null;
@@ -421,7 +430,7 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     },
     pointer: _toCorePoint(worldPoint),
     bindables: bindables,
-    context: core.defaultEngineContext,
+    context: coreEngineContext ?? core.defaultEngineContext,
     options: <String, dynamic>{
       'complexBindings': true,
       if (newArrow) 'newArrow': true,

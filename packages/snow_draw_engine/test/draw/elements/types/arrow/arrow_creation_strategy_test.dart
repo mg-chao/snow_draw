@@ -4,11 +4,14 @@ import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_creation_strate
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
+import 'package:snow_draw_engine/draw/models/application_state.dart';
+import 'package:snow_draw_engine/draw/models/camera_state.dart';
 import 'package:snow_draw_engine/draw/models/document_state.dart';
 import 'package:snow_draw_engine/draw/models/domain_state.dart';
 import 'package:snow_draw_engine/draw/models/draw_state.dart';
 import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/models/interaction_state.dart';
+import 'package:snow_draw_engine/draw/models/view_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
 import 'package:snow_draw_engine/draw/types/element_style.dart';
@@ -287,6 +290,36 @@ void main() {
       expect(finishedData.startBinding, isNotNull);
       expect(finishedData.startBinding!.mode, ArrowBindingMode.inside);
     });
+
+    test('update honors zoom-aware core binding distance', () {
+      const startPosition = DrawPoint(x: 20, y: 60);
+      const currentPosition = DrawPoint(x: 82, y: 60);
+      final state = _stateWithElements(<ElementState>[
+        _rectangleElement(
+          id: 'rect-target',
+          rect: const DrawRect(minX: 100, maxX: 220, maxY: 120),
+          zIndex: 1,
+        ),
+      ], zoom: 0.5);
+      final creatingState = _startCreatingArrow(
+        strategy: strategy,
+        startPosition: startPosition,
+      );
+
+      final update = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creatingState,
+        currentPosition: currentPosition,
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+
+      final data = update.data as ArrowData;
+      expect(data.endBinding, isNotNull);
+      expect(data.endBinding!.elementId, 'rect-target');
+    });
   });
 }
 
@@ -313,9 +346,13 @@ CreatingState _startCreatingArrow({
   );
 }
 
-DrawState _stateWithElements(List<ElementState> elements) => DrawState(
-  domain: DomainState(document: DocumentState(elements: elements)),
-);
+DrawState _stateWithElements(List<ElementState> elements, {double zoom = 1}) =>
+    DrawState(
+      domain: DomainState(document: DocumentState(elements: elements)),
+      application: ApplicationState.initial(
+        view: ViewState(camera: CameraState(zoom: zoom)),
+      ),
+    );
 
 ElementState _rectangleElement({
   required String id,
