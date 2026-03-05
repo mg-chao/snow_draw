@@ -1098,6 +1098,7 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
     final hasArrowhead = draggedStart
         ? context.startArrowhead != ArrowheadStyle.none
         : context.endArrowhead != ArrowheadStyle.none;
+    final oppositePoint = draggedStart ? basePoints.last : basePoints.first;
     final bindingResult = candidates.isEmpty
         ? null
         : ArrowBindingUtils.resolveElbowBindingCandidateFromCoreCandidates(
@@ -1106,6 +1107,8 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
             snapDistance: bindingDistance,
             hasArrowhead: hasArrowhead,
             preferredBinding: activeBinding,
+            oppositeBinding: oppositeBinding,
+            referencePoint: context.toWorld(oppositePoint),
             allowNewBinding: allowNewBinding,
             dragStart: draggedStart,
             angleLocked: angleLocked,

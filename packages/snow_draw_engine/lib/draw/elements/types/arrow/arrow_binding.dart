@@ -141,6 +141,7 @@ class ArrowBindingUtils {
     required Iterable<ElementState> targets,
     required double snapDistance,
     ArrowBinding? preferredBinding,
+    ArrowBinding? oppositeBinding,
     bool allowNewBinding = true,
     DrawPoint? referencePoint,
     bool dragStart = false,
@@ -161,6 +162,7 @@ class ArrowBindingUtils {
       candidates: candidates,
       snapDistance: snapDistance,
       preferredBinding: preferredBinding,
+      oppositeBinding: oppositeBinding,
       allowNewBinding: allowNewBinding,
       referencePoint: referencePoint,
       dragStart: dragStart,
@@ -179,6 +181,7 @@ class ArrowBindingUtils {
     required ArrowCoreBindableCandidates candidates,
     required double snapDistance,
     ArrowBinding? preferredBinding,
+    ArrowBinding? oppositeBinding,
     bool allowNewBinding = true,
     DrawPoint? referencePoint,
     bool dragStart = false,
@@ -194,6 +197,7 @@ class ArrowBindingUtils {
     candidates: candidates,
     snapDistance: snapDistance,
     preferredBinding: preferredBinding,
+    oppositeBinding: oppositeBinding,
     allowNewBinding: allowNewBinding,
     referencePoint: referencePoint,
     elbowed: false,
@@ -213,6 +217,8 @@ class ArrowBindingUtils {
     required double snapDistance,
     required bool hasArrowhead,
     ArrowBinding? preferredBinding,
+    ArrowBinding? oppositeBinding,
+    DrawPoint? referencePoint,
     bool allowNewBinding = true,
     bool dragStart = false,
     bool newArrow = false,
@@ -233,6 +239,8 @@ class ArrowBindingUtils {
       snapDistance: snapDistance,
       hasArrowhead: hasArrowhead,
       preferredBinding: preferredBinding,
+      oppositeBinding: oppositeBinding,
+      referencePoint: referencePoint,
       allowNewBinding: allowNewBinding,
       dragStart: dragStart,
       newArrow: newArrow,
@@ -251,6 +259,8 @@ class ArrowBindingUtils {
     required double snapDistance,
     required bool hasArrowhead,
     ArrowBinding? preferredBinding,
+    ArrowBinding? oppositeBinding,
+    DrawPoint? referencePoint,
     bool allowNewBinding = true,
     bool dragStart = false,
     bool newArrow = false,
@@ -265,8 +275,9 @@ class ArrowBindingUtils {
     candidates: candidates,
     snapDistance: snapDistance,
     preferredBinding: preferredBinding,
+    oppositeBinding: oppositeBinding,
     allowNewBinding: allowNewBinding,
-    referencePoint: null,
+    referencePoint: referencePoint,
     elbowed: true,
     hasArrowhead: hasArrowhead,
     dragStart: dragStart,
@@ -287,6 +298,7 @@ class ArrowBindingUtils {
     required ElementState target,
     required double snapDistance,
     DrawPoint? referencePoint,
+    ArrowBinding? oppositeBinding,
     bool angleLocked = false,
     bool altKey = false,
     core.EngineContext? coreEngineContext,
@@ -306,6 +318,7 @@ class ArrowBindingUtils {
       ),
       snapDistance: snapDistance,
       referencePoint: referencePoint,
+      oppositeBinding: oppositeBinding,
       angleLocked: angleLocked,
       altKey: altKey,
       coreEngineContext: coreEngineContext,
@@ -320,6 +333,8 @@ class ArrowBindingUtils {
     required ElementState target,
     required double snapDistance,
     required bool hasArrowhead,
+    ArrowBinding? oppositeBinding,
+    DrawPoint? referencePoint,
     bool angleLocked = false,
     bool altKey = false,
     core.EngineContext? coreEngineContext,
@@ -339,6 +354,8 @@ class ArrowBindingUtils {
       ),
       snapDistance: snapDistance,
       hasArrowhead: hasArrowhead,
+      oppositeBinding: oppositeBinding,
+      referencePoint: referencePoint,
       angleLocked: angleLocked,
       altKey: altKey,
       coreEngineContext: coreEngineContext,
@@ -417,6 +434,7 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
   required ArrowCoreBindableCandidates candidates,
   required double snapDistance,
   required ArrowBinding? preferredBinding,
+  required ArrowBinding? oppositeBinding,
   required bool allowNewBinding,
   required DrawPoint? referencePoint,
   required bool elbowed,
@@ -435,6 +453,7 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
   }
 
   final preferredElementId = preferredBinding?.elementId;
+  final oppositeElementId = oppositeBinding?.elementId;
   if (!allowNewBinding && preferredElementId == null) {
     return null;
   }
@@ -453,7 +472,8 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     }
     if (!allowNewBinding &&
         preferredElementId != null &&
-        bindable.id != preferredElementId) {
+        bindable.id != preferredElementId &&
+        bindable.id != oppositeElementId) {
       continue;
     }
     bindables.add(bindable);
@@ -492,6 +512,16 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
           ],
           mode: _toCoreBindingMode(preferredBinding.mode),
         );
+  final oppositeCoreBinding = oppositeBinding == null
+      ? null
+      : core.FixedPointBinding(
+          elementId: oppositeBinding.elementId,
+          fixedPoint: <double>[
+            oppositeBinding.anchor.x,
+            oppositeBinding.anchor.y,
+          ],
+          mode: _toCoreBindingMode(oppositeBinding.mode),
+        );
 
   final previewArrow = core.ArrowState(
     id: '__binding-preview__',
@@ -500,8 +530,8 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     width: normalized.width,
     height: normalized.height,
     points: normalized.points,
-    startBinding: dragStart ? preferredCoreBinding : null,
-    endBinding: dragStart ? null : preferredCoreBinding,
+    startBinding: dragStart ? preferredCoreBinding : oppositeCoreBinding,
+    endBinding: dragStart ? oppositeCoreBinding : preferredCoreBinding,
     startArrowhead: elbowed && hasArrowhead && dragStart ? 'arrow' : null,
     endArrowhead: elbowed && hasArrowhead && !dragStart ? 'arrow' : null,
     elbowed: elbowed,
