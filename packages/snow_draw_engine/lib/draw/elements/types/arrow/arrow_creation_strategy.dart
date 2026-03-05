@@ -24,6 +24,7 @@ import '../line/line_data.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_endpoint_drag.dart';
 import 'arrow_core_geometry_adapter.dart';
+import 'arrow_core_ops.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
 import 'elbow/elbow_fixed_segment.dart';
@@ -422,8 +423,7 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
     return result;
   }
 
-  final bindingDistance = resolveZoomAdjustedDistance(
-    distance: config.snap.arrowBindingDistance,
+  final bindingDistance = resolveCoreMaxBindingDistance(
     zoom: state.application.view.camera.zoom,
   );
   final previewElement = ElementState(
@@ -823,10 +823,7 @@ _BindingSnapResult _snapBindingPoint({
     snappingMode: snappingMode,
   );
   final bindingDistance = shouldLookupBindings
-      ? resolveZoomAdjustedDistance(
-          distance: snapConfig.arrowBindingDistance,
-          zoom: state.application.view.camera.zoom,
-        )
+      ? resolveCoreMaxBindingDistance(zoom: state.application.view.camera.zoom)
       : 0.0;
   if (!shouldLookupBindings || bindingDistance <= 0) {
     return _BindingSnapResult(position: position);
@@ -986,10 +983,7 @@ _BindingSnapResult _resolveStartBindingPoint({
     snappingMode: snappingMode,
   );
   final bindingDistance = bindingEnabled
-      ? resolveZoomAdjustedDistance(
-          distance: snapConfig.arrowBindingDistance,
-          zoom: state.application.view.camera.zoom,
-        )
+      ? resolveCoreMaxBindingDistance(zoom: state.application.view.camera.zoom)
       : 0.0;
   final shouldReusePreferredBinding =
       preferredBinding != null &&

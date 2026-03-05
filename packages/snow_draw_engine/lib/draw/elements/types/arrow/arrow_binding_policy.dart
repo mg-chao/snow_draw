@@ -3,24 +3,21 @@ import '../../../utils/snapping_mode.dart';
 
 /// Returns whether arrow binding interactions should run for this pointer mode.
 ///
-/// Binding is disabled when grid snapping is active, when bindings are turned
-/// off in config, or when snapping is globally enabled but the current snapping
-/// mode is explicitly `none`.
+/// Excalidraw parity:
+/// - binding depends only on the explicit arrow-binding toggle
+/// - pointer snap override (Ctrl/Cmd) temporarily disables binding
 bool shouldAttemptArrowBinding({
   required SnapConfig snapConfig,
   required SnappingMode snappingMode,
   bool snapOverrideActive = false,
 }) {
+  // Keep signature stable for existing callsites; snapping mode does not gate
+  // arrow binding behavior.
+  final _ = snappingMode;
   if (snapOverrideActive) {
     return false;
   }
   if (!snapConfig.enableArrowBinding) {
-    return false;
-  }
-  if (snappingMode == SnappingMode.grid) {
-    return false;
-  }
-  if (snapConfig.enabled && snappingMode == SnappingMode.none) {
     return false;
   }
   return true;

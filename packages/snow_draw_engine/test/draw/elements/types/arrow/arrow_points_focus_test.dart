@@ -49,6 +49,46 @@ void main() {
       expect(hit!.kind, ArrowPointKind.focusStart);
       expect(hit.index, 0);
     });
+
+    test('buildOverlay hides focus handles when binding disabled', () {
+      final bindable = _bindableElement();
+      final arrow = _boundArrowElement();
+
+      final overlay = ArrowPointUtils.buildOverlay(
+        element: arrow,
+        loopThreshold: 16,
+        handleSize: 10,
+        elements: <ElementState>[bindable, arrow],
+        isBindingEnabled: false,
+      );
+
+      expect(overlay.focusPoints, isEmpty);
+      expect(overlay.turningPoints.any((handle) => handle.index == 0), isTrue);
+    });
+
+    test('hitTest ignores focus handles when binding disabled', () {
+      final bindable = _bindableElement();
+      final arrow = _boundArrowElement();
+      final overlay = ArrowPointUtils.buildOverlay(
+        element: arrow,
+        loopThreshold: 16,
+        handleSize: 10,
+        elements: <ElementState>[bindable, arrow],
+      );
+      final focusPoint = overlay.focusPoints.single.position;
+
+      final hit = ArrowPointUtils.hitTest(
+        element: arrow,
+        position: focusPoint,
+        hitRadius: 12,
+        loopThreshold: 16,
+        handleSize: 10,
+        elements: <ElementState>[bindable, arrow],
+        isBindingEnabled: false,
+      );
+
+      expect(hit, isNull);
+    });
   });
 }
 

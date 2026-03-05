@@ -89,6 +89,7 @@ class SelectPlugin extends DrawInputPlugin {
         isShiftPressed: modifiers.shift,
         config: selectionConfig,
         registry: drawContext.elementRegistry,
+        isBindingEnabled: drawContext.config.snap.enableArrowBinding,
         filterTypeId: currentToolTypeId,
       ),
     );

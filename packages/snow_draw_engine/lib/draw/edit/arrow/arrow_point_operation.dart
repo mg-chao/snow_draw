@@ -292,8 +292,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       snapOverrideActive: modifiers.snapOverride,
     );
     final bindingDistance = shouldLookupBindings
-        ? resolveZoomAdjustedDistance(
-            distance: snapConfig.arrowBindingDistance,
+        ? resolveCoreMaxBindingDistance(
             zoom: state.application.view.camera.zoom,
           )
         : 0.0;

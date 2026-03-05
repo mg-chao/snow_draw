@@ -31,12 +31,14 @@ class EditIntentDetector {
     required bool isShiftPressed,
     required SelectionConfig config,
     required DefaultElementRegistry registry,
+    bool isBindingEnabled = true,
     ElementTypeId<ElementData>? filterTypeId,
   }) {
     final arrowPointIntent = _detectArrowPointIntent(
       stateView: stateView,
       position: position,
       config: config,
+      isBindingEnabled: isBindingEnabled,
     );
     if (arrowPointIntent != null) {
       return arrowPointIntent;
@@ -146,6 +148,7 @@ class EditIntentDetector {
     required DrawStateView stateView,
     required DrawPoint position,
     required SelectionConfig config,
+    required bool isBindingEnabled,
   }) {
     final selectedIds = stateView.state.domain.selection.selectedIds;
     if (selectedIds.length != 1) {
@@ -171,6 +174,7 @@ class EditIntentDetector {
       handleSize: handleSize,
       elements: stateView.elements,
       zoom: stateView.state.application.view.camera.zoom,
+      isBindingEnabled: isBindingEnabled,
     );
     if (handle == null) {
       return null;

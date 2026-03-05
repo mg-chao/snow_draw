@@ -14,7 +14,7 @@ import 'package:test/test.dart';
 
 void main() {
   group('arrow_binding_preview_policy', () {
-    test('shouldPreviewArrowBinding follows snap-mode policy', () {
+    test('shouldPreviewArrowBinding follows binding-enabled policy', () {
       final enabled = DrawConfig.defaultConfig.snap;
       expect(
         shouldPreviewArrowBinding(
@@ -28,7 +28,7 @@ void main() {
           snapConfig: enabled,
           snappingMode: SnappingMode.grid,
         ),
-        isFalse,
+        isTrue,
       );
 
       final objectSnapEnabled = enabled.copyWith(enabled: true);
@@ -37,7 +37,7 @@ void main() {
           snapConfig: objectSnapEnabled,
           snappingMode: SnappingMode.none,
         ),
-        isFalse,
+        isTrue,
       );
 
       final bindingDisabled = enabled.copyWith(enableArrowBinding: false);
