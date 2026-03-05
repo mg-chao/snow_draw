@@ -519,7 +519,6 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     bindables: bindables,
     context: coreEngineContext ?? core.defaultEngineContext,
     options: <String, dynamic>{
-      'complexBindings': true,
       if (newArrow) 'newArrow': true,
       if (initialBinding) 'initialBinding': true,
       if (preserveOppositeInsideBinding) 'preserveOppositeInsideBinding': true,

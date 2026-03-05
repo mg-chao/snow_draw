@@ -63,12 +63,12 @@ void main() {
       );
 
       final orbit = ArrowBindingUtils.resolveBindingCandidate(
-        worldPoint: const DrawPoint(x: 160, y: 160),
+        worldPoint: const DrawPoint(x: 95, y: 160),
         targets: <ElementState>[target],
         snapDistance: 48,
       );
       final inside = ArrowBindingUtils.resolveBindingCandidate(
-        worldPoint: const DrawPoint(x: 160, y: 160),
+        worldPoint: const DrawPoint(x: 95, y: 160),
         targets: <ElementState>[target],
         snapDistance: 48,
         altKey: true,

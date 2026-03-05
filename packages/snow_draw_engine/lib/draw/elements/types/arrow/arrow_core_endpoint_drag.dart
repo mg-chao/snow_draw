@@ -183,7 +183,7 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
     worldPointer.x - arrow.x,
     worldPointer.y - arrow.y,
   ];
-  final mergedOptions = <String, dynamic>{'complexBindings': true, ...?options};
+  final mergedOptions = <String, dynamic>{...?options};
   final engineResult = finalize
       ? finalizeCoreEndpointDrag(
           arrow: arrow,
