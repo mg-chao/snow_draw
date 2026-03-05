@@ -42,9 +42,16 @@ class AppLocalizations {
   String get arrowheadNone => 'None';
   String get arrowheadStandard => 'Standard';
   String get arrowheadTriangle => 'Triangle';
+  String get arrowheadTriangleOutline => 'Triangle Outline';
   String get arrowheadSquare => 'Square';
+  String get arrowheadDot => 'Dot';
   String get arrowheadCircle => 'Circle';
+  String get arrowheadCircleOutline => 'Circle Outline';
   String get arrowheadDiamond => 'Diamond';
+  String get arrowheadDiamondOutline => 'Diamond Outline';
+  String get arrowheadCrowfootOne => 'Crowfoot One';
+  String get arrowheadCrowfootMany => 'Crowfoot Many';
+  String get arrowheadCrowfootOneOrMany => 'Crowfoot One Or Many';
   String get arrowheadInvertedTriangle => 'Inverted Triangle';
   String get arrowheadVerticalLine => 'Vertical Line';
   String get textStrokeWidth => 'Text Stroke Width';

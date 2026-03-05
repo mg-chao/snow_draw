@@ -221,6 +221,7 @@ List<ArrowheadRenderPrimitiveData> _resolveFallbackPrimitives({
       final right = base - perp * (width / 2);
       return <ArrowheadRenderPrimitiveData>[line(tip, left), line(tip, right)];
     case ArrowheadStyle.triangle:
+    case ArrowheadStyle.triangleOutline:
     case ArrowheadStyle.invertedTriangle:
       final base = tip - direction * length;
       final left = base + perp * (width / 2);
@@ -228,7 +229,9 @@ List<ArrowheadRenderPrimitiveData> _resolveFallbackPrimitives({
       return <ArrowheadRenderPrimitiveData>[
         ArrowheadPolygonPrimitiveData(
           points: List<DrawPoint>.unmodifiable(<DrawPoint>[tip, left, right]),
-          fillMode: ArrowheadPrimitiveFillMode.stroke,
+          fillMode: style == ArrowheadStyle.triangleOutline
+              ? ArrowheadPrimitiveFillMode.background
+              : ArrowheadPrimitiveFillMode.stroke,
         ),
       ];
     case ArrowheadStyle.square:
@@ -250,17 +253,22 @@ List<ArrowheadRenderPrimitiveData> _resolveFallbackPrimitives({
           fillMode: ArrowheadPrimitiveFillMode.stroke,
         ),
       ];
+    case ArrowheadStyle.dot:
     case ArrowheadStyle.circle:
+    case ArrowheadStyle.circleOutline:
       final radius = length * 0.3;
       final center = tip - direction * radius;
       return <ArrowheadRenderPrimitiveData>[
         ArrowheadCirclePrimitiveData(
           center: center,
           radius: radius,
-          fillMode: ArrowheadPrimitiveFillMode.stroke,
+          fillMode: style == ArrowheadStyle.circleOutline
+              ? ArrowheadPrimitiveFillMode.background
+              : ArrowheadPrimitiveFillMode.stroke,
         ),
       ];
     case ArrowheadStyle.diamond:
+    case ArrowheadStyle.diamondOutline:
       final base = tip - direction * length;
       final mid = tip - direction * (length / 2);
       final left = mid + perp * (width / 2);
@@ -273,8 +281,29 @@ List<ArrowheadRenderPrimitiveData> _resolveFallbackPrimitives({
             base,
             right,
           ]),
-          fillMode: ArrowheadPrimitiveFillMode.stroke,
+          fillMode: style == ArrowheadStyle.diamondOutline
+              ? ArrowheadPrimitiveFillMode.background
+              : ArrowheadPrimitiveFillMode.stroke,
         ),
+      ];
+    case ArrowheadStyle.crowfootOne:
+      final base = tip - direction * length;
+      final left = base + perp * (width / 2);
+      final right = base - perp * (width / 2);
+      return <ArrowheadRenderPrimitiveData>[line(left, right)];
+    case ArrowheadStyle.crowfootMany:
+      final base = tip - direction * length;
+      final left = base + perp * (width / 2);
+      final right = base - perp * (width / 2);
+      return <ArrowheadRenderPrimitiveData>[line(left, tip), line(right, tip)];
+    case ArrowheadStyle.crowfootOneOrMany:
+      final base = tip - direction * length;
+      final left = base + perp * (width / 2);
+      final right = base - perp * (width / 2);
+      return <ArrowheadRenderPrimitiveData>[
+        line(left, tip),
+        line(right, tip),
+        line(left, right),
       ];
     case ArrowheadStyle.verticalLine:
       final half = width / 2;
@@ -290,9 +319,16 @@ core.Arrowhead? _toCoreRenderableArrowhead(ArrowheadStyle style) {
       return null;
     case ArrowheadStyle.standard:
     case ArrowheadStyle.triangle:
+    case ArrowheadStyle.triangleOutline:
     case ArrowheadStyle.square:
+    case ArrowheadStyle.dot:
     case ArrowheadStyle.circle:
+    case ArrowheadStyle.circleOutline:
     case ArrowheadStyle.diamond:
+    case ArrowheadStyle.diamondOutline:
+    case ArrowheadStyle.crowfootOne:
+    case ArrowheadStyle.crowfootMany:
+    case ArrowheadStyle.crowfootOneOrMany:
     case ArrowheadStyle.invertedTriangle:
     case ArrowheadStyle.verticalLine:
       return toCoreArrowhead(style);

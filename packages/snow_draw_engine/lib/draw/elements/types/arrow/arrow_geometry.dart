@@ -215,10 +215,17 @@ class ArrowGeometry {
     final length = resolveArrowheadLength(strokeWidth);
 
     return switch (style) {
+      ArrowheadStyle.dot => length * 0.6,
       ArrowheadStyle.circle => length * 0.6,
+      ArrowheadStyle.circleOutline => length * 0.6,
       ArrowheadStyle.square => length * 0.6,
       ArrowheadStyle.triangle => length,
+      ArrowheadStyle.triangleOutline => length,
       ArrowheadStyle.diamond => length,
+      ArrowheadStyle.diamondOutline => length,
+      ArrowheadStyle.crowfootOne => 0,
+      ArrowheadStyle.crowfootMany => 0,
+      ArrowheadStyle.crowfootOneOrMany => 0,
       ArrowheadStyle.invertedTriangle => 0,
       ArrowheadStyle.standard => 0,
       ArrowheadStyle.verticalLine => 0,
@@ -237,11 +244,18 @@ class ArrowGeometry {
     final length = resolveArrowheadLength(strokeWidth);
 
     return switch (style) {
+      ArrowheadStyle.dot => length * 0.6,
       ArrowheadStyle.circle => length * 0.6,
+      ArrowheadStyle.circleOutline => length * 0.6,
       ArrowheadStyle.square => length * 0.6,
       ArrowheadStyle.standard => length,
       ArrowheadStyle.triangle => length,
+      ArrowheadStyle.triangleOutline => length,
       ArrowheadStyle.diamond => length,
+      ArrowheadStyle.diamondOutline => length,
+      ArrowheadStyle.crowfootOne => length,
+      ArrowheadStyle.crowfootMany => length,
+      ArrowheadStyle.crowfootOneOrMany => length,
       ArrowheadStyle.invertedTriangle => length,
       ArrowheadStyle.verticalLine => length * 0.6,
       ArrowheadStyle.none => 0,

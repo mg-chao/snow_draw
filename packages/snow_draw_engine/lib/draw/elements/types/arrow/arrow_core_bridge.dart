@@ -100,12 +100,26 @@ String? toCoreArrowhead(ArrowheadStyle style) {
       return 'arrow';
     case ArrowheadStyle.triangle:
       return 'triangle';
+    case ArrowheadStyle.triangleOutline:
+      return 'triangle_outline';
     case ArrowheadStyle.square:
       return 'square';
-    case ArrowheadStyle.circle:
+    case ArrowheadStyle.dot:
       return 'dot';
+    case ArrowheadStyle.circle:
+      return 'circle';
+    case ArrowheadStyle.circleOutline:
+      return 'circle_outline';
     case ArrowheadStyle.diamond:
       return 'diamond';
+    case ArrowheadStyle.diamondOutline:
+      return 'diamond_outline';
+    case ArrowheadStyle.crowfootOne:
+      return 'crowfoot_one';
+    case ArrowheadStyle.crowfootMany:
+      return 'crowfoot_many';
+    case ArrowheadStyle.crowfootOneOrMany:
+      return 'crowfoot_one_or_many';
     case ArrowheadStyle.invertedTriangle:
       return 'inverted_triangle';
     case ArrowheadStyle.verticalLine:

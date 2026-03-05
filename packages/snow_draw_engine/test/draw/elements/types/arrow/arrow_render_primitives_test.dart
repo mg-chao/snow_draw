@@ -80,5 +80,54 @@ void main() {
         isTrue,
       );
     });
+
+    test(
+      'resolves triangle outline into background-filled polygon primitive',
+      () {
+        final primitives = ArrowRenderPrimitives.resolveArrowheadPrimitives(
+          points: points,
+          arrowType: ArrowType.straight,
+          style: ArrowheadStyle.triangleOutline,
+          strokeStyle: StrokeStyle.solid,
+          strokeWidth: 2,
+          position: ArrowEndpointPosition.end,
+        );
+
+        final polygon = primitives.whereType<ArrowheadPolygonPrimitiveData>();
+        expect(polygon, hasLength(1));
+        expect(polygon.single.fillMode, ArrowheadPrimitiveFillMode.background);
+        expect(polygon.single.points.length, greaterThanOrEqualTo(3));
+      },
+    );
+
+    test('resolves circle outline into background-filled circle primitive', () {
+      final primitives = ArrowRenderPrimitives.resolveArrowheadPrimitives(
+        points: points,
+        arrowType: ArrowType.straight,
+        style: ArrowheadStyle.circleOutline,
+        strokeStyle: StrokeStyle.solid,
+        strokeWidth: 2,
+        position: ArrowEndpointPosition.end,
+      );
+
+      final circles = primitives.whereType<ArrowheadCirclePrimitiveData>();
+      expect(circles, hasLength(1));
+      expect(circles.single.fillMode, ArrowheadPrimitiveFillMode.background);
+      expect(circles.single.radius, greaterThan(0));
+    });
+
+    test('resolves crowfoot one-or-many into three line primitives', () {
+      final primitives = ArrowRenderPrimitives.resolveArrowheadPrimitives(
+        points: points,
+        arrowType: ArrowType.straight,
+        style: ArrowheadStyle.crowfootOneOrMany,
+        strokeStyle: StrokeStyle.solid,
+        strokeWidth: 2,
+        position: ArrowEndpointPosition.end,
+      );
+
+      final lines = primitives.whereType<ArrowheadLinePrimitiveData>();
+      expect(lines, hasLength(3));
+    });
   });
 }
