@@ -145,10 +145,28 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     return elements;
   }
 
-  final orderedElementIds = elements
+  final duplicatedElementIdSet = idMap.values.toSet();
+  if (duplicatedElementIdSet.isEmpty) {
+    return elements;
+  }
+
+  // Excalidraw parity: duplication lifecycle sync applies only to duplicated
+  // snapshots. Passing a broader scene snapshot must not remap bindings on
+  // non-duplicated source arrows.
+  final duplicatedElements = <ElementState>[
+    for (final element in elements)
+      if (duplicatedElementIdSet.contains(element.id)) element,
+  ];
+  if (duplicatedElements.isEmpty) {
+    return elements;
+  }
+
+  final orderedElementIds = duplicatedElements
       .map((element) => element.id)
       .toList(growable: false);
-  final elementsById = {for (final element in elements) element.id: element};
+  final elementsById = {
+    for (final element in duplicatedElements) element.id: element,
+  };
   final bindableIdMap = <String, String>{};
   final arrowIdMap = <String, String>{};
   for (final entry in idMap.entries) {
@@ -167,7 +185,7 @@ List<ElementState> syncArrowBindingsAfterDuplication({
   }
 
   final session = ArrowCoreSession.fromElements(
-    elements,
+    duplicatedElements,
     orderedElementIds: orderedElementIds,
     context: engineContext,
   );
@@ -184,9 +202,9 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     context: session.context,
   );
   final patchedById = session.applyArrowPatches(syncResult.arrowPatches);
-  final reorderedElementIds = session.reduceEventsToOrderedElementIds(
-    syncResult.events,
-  );
+  final reorderedElementIds = duplicatedElements.length == elements.length
+      ? session.reduceEventsToOrderedElementIds(syncResult.events)
+      : null;
   if (patchedById.isEmpty && reorderedElementIds == null) {
     return elements;
   }
