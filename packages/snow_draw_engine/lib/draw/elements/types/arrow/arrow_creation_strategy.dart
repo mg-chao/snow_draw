@@ -1009,11 +1009,13 @@ _BindingSnapResult _resolveStartBindingPoint({
               binding: stableBinding,
               target: target,
               hasArrowhead: startArrowheadStyle != ArrowheadStyle.none,
+              bindables: state.domain.document.arrowCoreBindables,
             )
           : ArrowBindingUtils.resolveBoundPoint(
               binding: stableBinding,
               target: target,
               referencePoint: oppositePoint,
+              bindables: state.domain.document.arrowCoreBindables,
             );
       if (boundPoint != null) {
         return _BindingSnapResult(position: boundPoint, binding: stableBinding);
@@ -1162,11 +1164,13 @@ class _ArrowCreationSessionData {
             binding: cachedBinding,
             target: target,
             hasArrowhead: startArrowheadStyle != ArrowheadStyle.none,
+            bindables: state.domain.document.arrowCoreBindables,
           )
         : ArrowBindingUtils.resolveBoundPoint(
             binding: cachedBinding,
             target: target,
             referencePoint: oppositePoint,
+            bindables: state.domain.document.arrowCoreBindables,
           );
     if (boundPoint == null) {
       return null;

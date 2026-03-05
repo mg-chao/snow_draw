@@ -1238,7 +1238,9 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
     endBinding: endBinding,
     excludedElementId: context.elementId,
     shouldLookupBindings: true,
-    allowNewBinding: false,
+    // Excalidraw parity: pointer-up finalize still runs full endpoint
+    // reconciliation against current bindables, allowing rebind on release.
+    allowNewBinding: true,
     bindingDistance: 0,
     coreEngineContext: coreEngineContext,
     options: <String, dynamic>{if (preserveInsideBinding) 'altKey': true},

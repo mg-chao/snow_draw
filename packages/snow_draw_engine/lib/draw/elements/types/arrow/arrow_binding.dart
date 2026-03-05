@@ -349,22 +349,26 @@ class ArrowBindingUtils {
     required ArrowBinding binding,
     required ElementState target,
     DrawPoint? referencePoint,
+    Iterable<core.BindableState>? bindables,
   }) => _resolveBoundPointViaCore(
     binding: binding,
     target: target,
     elbowed: false,
     referencePoint: referencePoint,
+    bindables: bindables,
   );
 
   static DrawPoint? resolveElbowBoundPoint({
     required ArrowBinding binding,
     required ElementState target,
     required bool hasArrowhead,
+    Iterable<core.BindableState>? bindables,
   }) => _resolveBoundPointViaCore(
     binding: binding,
     target: target,
     elbowed: true,
     hasArrowhead: hasArrowhead,
+    bindables: bindables,
   );
 
   static DrawPoint? resolveElbowAnchorPoint({
@@ -567,11 +571,17 @@ DrawPoint? _resolveBoundPointViaCore({
   required bool elbowed,
   DrawPoint? referencePoint,
   bool hasArrowhead = false,
+  Iterable<core.BindableState>? bindables,
 }) {
-  final bindable = toCoreBindableState(target);
+  final bindableList = <core.BindableState>[...?bindables];
+  final bindablesById = <String, core.BindableState>{
+    for (final candidate in bindableList) candidate.id: candidate,
+  };
+  final bindable = bindablesById[target.id] ?? toCoreBindableState(target);
   if (bindable == null || binding.elementId != bindable.id) {
     return null;
   }
+  bindablesById.putIfAbsent(bindable.id, () => bindable);
 
   final coreBinding = core.FixedPointBinding(
     elementId: binding.elementId,
@@ -613,7 +623,7 @@ DrawPoint? _resolveBoundPointViaCore({
     edge: 'startBinding',
     binding: coreBinding,
     bindable: bindable,
-    bindablesById: <String, core.BindableState>{bindable.id: bindable},
+    bindablesById: bindablesById,
   );
   if (local == null) {
     return focusPoint;
