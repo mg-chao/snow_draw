@@ -965,19 +965,30 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
   }
 
   var localPoints = dragResult.localPoints;
-  final nextStartBinding = dragResult.startBinding;
-  final nextEndBinding = dragResult.endBinding;
+  var nextStartBinding = dragResult.startBinding;
+  var nextEndBinding = dragResult.endBinding;
   var nextFixedSegments = dragResult.fixedSegments;
 
   if (data.arrowType == ArrowType.elbow && data is ArrowData) {
+    final draggedStart = draggedIndex == 0;
+    final draggedEnd = draggedIndex == basePoints.length - 1;
+    if (draggedStart) {
+      // Excalidraw parity: dragging one elbow endpoint must not mutate the
+      // opposite endpoint binding.
+      nextEndBinding = endBinding;
+    } else if (draggedEnd) {
+      nextStartBinding = startBinding;
+    }
+
     final draggedEndpoint =
         draggedIndex >= 0 && draggedIndex < dragResult.localPoints.length
         ? dragResult.localPoints[draggedIndex]
         : target;
-    final elbowInputPoints = List<DrawPoint>.from(basePoints);
-    if (draggedIndex >= 0 && draggedIndex < elbowInputPoints.length) {
-      elbowInputPoints[draggedIndex] = draggedEndpoint;
-    }
+    // Re-route elbow arrows from endpoints only so stale intermediate bends
+    // cannot survive endpoint re-binding drags.
+    final startPoint = draggedStart ? draggedEndpoint : basePoints.first;
+    final endPoint = draggedEnd ? draggedEndpoint : basePoints.last;
+    final elbowInputPoints = <DrawPoint>[startPoint, endPoint];
 
     final elbowData = data.copyWith(
       startBinding: nextStartBinding,

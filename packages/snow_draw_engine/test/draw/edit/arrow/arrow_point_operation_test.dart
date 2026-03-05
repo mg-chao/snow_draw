@@ -2,6 +2,7 @@ import 'package:snow_draw_engine/draw/config/draw_config.dart';
 import 'package:snow_draw_engine/draw/edit/arrow/arrow_point_operation.dart';
 import 'package:snow_draw_engine/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_engine/draw/edit/core/edit_operation_params.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_creation_strategy.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
@@ -12,12 +13,14 @@ import 'package:snow_draw_engine/draw/models/document_state.dart';
 import 'package:snow_draw_engine/draw/models/domain_state.dart';
 import 'package:snow_draw_engine/draw/models/draw_state.dart';
 import 'package:snow_draw_engine/draw/models/element_state.dart';
+import 'package:snow_draw_engine/draw/models/interaction_state.dart';
 import 'package:snow_draw_engine/draw/models/selection_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
 import 'package:snow_draw_engine/draw/types/edit_context.dart';
 import 'package:snow_draw_engine/draw/types/edit_transform.dart';
 import 'package:snow_draw_engine/draw/types/element_style.dart';
+import 'package:snow_draw_engine/draw/utils/snapping_mode.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -620,6 +623,161 @@ void main() {
         expect(updatedData.fixedSegments![1].end.y, closeTo(260, 1e-6));
       },
     );
+
+    test(
+      'dragging elbow end endpoint keeps existing start binding element',
+      () {
+        final startTarget = _rectangleElement(
+          id: 'elbow-start-target',
+          rect: const DrawRect(minX: 40, minY: 40, maxX: 140, maxY: 140),
+          zIndex: 1,
+        );
+        final endTarget = _rectangleElement(
+          id: 'elbow-end-target',
+          rect: const DrawRect(minX: 320, minY: 40, maxX: 420, maxY: 140),
+          zIndex: 2,
+        );
+        final arrow = _elbowArrowElement(
+          id: 'elbow-bound-end-drag',
+          points: const <DrawPoint>[
+            DrawPoint(x: 130, y: 60),
+            DrawPoint(x: 260, y: 90),
+          ],
+          zIndex: 3,
+          startBinding: const ArrowBinding(
+            elementId: 'elbow-start-target',
+            anchor: DrawPoint(x: 0.9, y: 0.2),
+          ),
+        );
+        final state = _stateWithElements(
+          <ElementState>[startTarget, endTarget, arrow],
+          selectedIds: <String>{arrow.id},
+        );
+
+        final session = _dragArrowHandleSession(
+          state: state,
+          elementId: arrow.id,
+          pointKind: ArrowPointKind.turning,
+          pointIndex: 1,
+          startPosition: const DrawPoint(x: 260, y: 90),
+          currentPosition: const DrawPoint(x: 330, y: 90),
+        );
+        final next = const ArrowPointOperation().finish(
+          state: state,
+          context: session.context,
+          transform: session.transform,
+        );
+        final updatedArrow = next.domain.document.getElementById(arrow.id)!;
+        final updatedData = updatedArrow.data as ArrowData;
+
+        expect(updatedData.startBinding, isNotNull);
+        expect(updatedData.startBinding!.elementId, startTarget.id);
+        expect(updatedData.startBinding!.anchor.x, closeTo(0.9, 1e-6));
+        expect(updatedData.startBinding!.anchor.y, closeTo(0.2, 1e-6));
+        expect(updatedData.endBinding, isNotNull);
+        expect(updatedData.endBinding!.elementId, endTarget.id);
+      },
+    );
+
+    test(
+      'rebinding endpoint after dual-bound elbow creation avoids zig-zag route',
+      () {
+        final startTarget = _rectangleElement(
+          id: 'rebind-start-target',
+          rect: const DrawRect(minX: 100, minY: 100, maxX: 240, maxY: 220),
+          zIndex: 1,
+        );
+        final currentEndTarget = _rectangleElement(
+          id: 'rebind-current-end-target',
+          rect: const DrawRect(minX: 420, minY: 120, maxX: 560, maxY: 260),
+          zIndex: 2,
+        );
+        final nextEndTarget = _rectangleElement(
+          id: 'rebind-next-end-target',
+          rect: const DrawRect(minX: 700, minY: 80, maxX: 860, maxY: 240),
+          zIndex: 3,
+        );
+        final creationState = _stateWithElements(<ElementState>[
+          startTarget,
+          currentEndTarget,
+          nextEndTarget,
+        ]);
+        final createdArrow = _createElbowArrowViaCreation(
+          state: creationState,
+          id: 'elbow-created-rebind',
+          startPosition: const DrawPoint(x: 240, y: 160),
+          midPosition: const DrawPoint(x: 320, y: 160),
+          endPosition: const DrawPoint(x: 420, y: 190),
+          zIndex: 4,
+        );
+        final createdData = createdArrow.data as ArrowData;
+        final createdPoints = ArrowGeometry.resolveWorldPoints(
+          rect: createdArrow.rect,
+          normalizedPoints: createdData.points,
+        );
+        final rebindingState = _stateWithElements(
+          <ElementState>[
+            startTarget,
+            currentEndTarget,
+            nextEndTarget,
+            createdArrow,
+          ],
+          selectedIds: <String>{createdArrow.id},
+        );
+
+        final session = _dragArrowHandleSession(
+          state: rebindingState,
+          elementId: createdArrow.id,
+          pointKind: ArrowPointKind.turning,
+          pointIndex: createdPoints.length - 1,
+          startPosition: createdPoints.last,
+          currentPosition: const DrawPoint(x: 700, y: 160),
+        );
+        final next = const ArrowPointOperation().finish(
+          state: rebindingState,
+          context: session.context,
+          transform: session.transform,
+        );
+        final updatedArrow = next.domain.document.getElementById(
+          createdArrow.id,
+        )!;
+        final updatedData = updatedArrow.data as ArrowData;
+        final updatedPoints = ArrowGeometry.resolveWorldPoints(
+          rect: updatedArrow.rect,
+          normalizedPoints: updatedData.points,
+        );
+
+        expect(updatedData.startBinding, isNotNull);
+        expect(updatedData.startBinding!.elementId, startTarget.id);
+        expect(updatedData.endBinding, isNotNull);
+        expect(updatedData.endBinding!.elementId, nextEndTarget.id);
+        for (var index = 1; index < updatedPoints.length; index += 1) {
+          final dx = (updatedPoints[index].x - updatedPoints[index - 1].x)
+              .abs();
+          final dy = (updatedPoints[index].y - updatedPoints[index - 1].y)
+              .abs();
+          expect(dx <= 1e-6 || dy <= 1e-6, isTrue);
+        }
+        for (var index = 2; index < updatedPoints.length; index += 1) {
+          final prevDx =
+              updatedPoints[index - 1].x - updatedPoints[index - 2].x;
+          final prevDy =
+              updatedPoints[index - 1].y - updatedPoints[index - 2].y;
+          final nextDx = updatedPoints[index].x - updatedPoints[index - 1].x;
+          final nextDy = updatedPoints[index].y - updatedPoints[index - 1].y;
+          final prevVertical = prevDx.abs() <= 1e-6 && prevDy.abs() > 1e-6;
+          final nextVertical = nextDx.abs() <= 1e-6 && nextDy.abs() > 1e-6;
+          final prevHorizontal = prevDy.abs() <= 1e-6 && prevDx.abs() > 1e-6;
+          final nextHorizontal = nextDy.abs() <= 1e-6 && nextDx.abs() > 1e-6;
+          if (prevVertical && nextVertical) {
+            expect(prevDy * nextDy, greaterThanOrEqualTo(0));
+          }
+          if (prevHorizontal && nextHorizontal) {
+            expect(prevDx * nextDx, greaterThanOrEqualTo(0));
+          }
+        }
+      },
+    );
   });
 }
 
@@ -755,5 +913,84 @@ ElementState _arrowElement({
       startBinding: startBinding,
       endBinding: endBinding,
     ),
+  );
+}
+
+ElementState _createElbowArrowViaCreation({
+  required DrawState state,
+  required String id,
+  required DrawPoint startPosition,
+  required DrawPoint midPosition,
+  required DrawPoint endPosition,
+  required int zIndex,
+}) {
+  const strategy = ArrowCreationStrategy();
+  final start = strategy.start(
+    data: const ArrowData(arrowType: ArrowType.elbow),
+    startPosition: startPosition,
+  );
+  var creating = CreatingState(
+    element: ElementState(
+      id: 'draft-$id',
+      rect: start.rect,
+      rotation: 0,
+      opacity: 1,
+      zIndex: zIndex,
+      data: start.data,
+    ),
+    startPosition: startPosition,
+    currentRect: start.rect,
+    creationMode: start.creationMode,
+  );
+
+  final firstUpdate = strategy.update(
+    state: state,
+    config: DrawConfig.defaultConfig,
+    creatingState: creating,
+    currentPosition: midPosition,
+    maintainAspectRatio: false,
+    createFromCenter: false,
+    snappingMode: SnappingMode.none,
+  );
+  creating = creating.copyWith(
+    element: creating.element.copyWith(
+      rect: firstUpdate.rect,
+      data: firstUpdate.data,
+    ),
+    currentRect: firstUpdate.rect,
+    creationMode: firstUpdate.creationMode,
+  );
+  final secondUpdate = strategy.update(
+    state: state,
+    config: DrawConfig.defaultConfig,
+    creatingState: creating,
+    currentPosition: endPosition,
+    maintainAspectRatio: false,
+    createFromCenter: false,
+    snappingMode: SnappingMode.none,
+  );
+  creating = creating.copyWith(
+    element: creating.element.copyWith(
+      rect: secondUpdate.rect,
+      data: secondUpdate.data,
+    ),
+    currentRect: secondUpdate.rect,
+    creationMode: secondUpdate.creationMode,
+  );
+  final finish = strategy.finish(
+    state: state,
+    config: DrawConfig.defaultConfig,
+    creatingState: creating,
+  );
+  if (!finish.shouldCommit) {
+    throw StateError('expected elbow creation to commit');
+  }
+  return ElementState(
+    id: id,
+    rect: finish.rect,
+    rotation: 0,
+    opacity: 1,
+    zIndex: zIndex,
+    data: finish.data,
   );
 }

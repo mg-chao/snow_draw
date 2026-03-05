@@ -403,6 +403,81 @@ void main() {
       expect(finishedData.startBinding!.mode, ArrowBindingMode.inside);
     });
 
+    test('elbow creation preserves existing start binding when end binds '
+        'to another element', () {
+      const startPosition = DrawPoint(x: 260, y: 60);
+      final state = _stateWithElements(<ElementState>[
+        _rectangleElement(
+          id: 'rect-start',
+          rect: const DrawRect(minX: 220, maxX: 320, maxY: 120),
+          zIndex: 1,
+        ),
+        _rectangleElement(
+          id: 'rect-end',
+          rect: const DrawRect(minX: 420, maxX: 520, maxY: 120),
+          zIndex: 2,
+        ),
+      ]);
+      final creatingState = _startCreating(
+        strategy: strategy,
+        startPosition: startPosition,
+        data: const ArrowData(arrowType: ArrowType.elbow),
+      );
+
+      final startBoundUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creatingState,
+        currentPosition: const DrawPoint(x: 340, y: 60),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      final startBoundData = startBoundUpdate.data as ArrowData;
+      expect(startBoundData.startBinding, isNotNull);
+      expect(startBoundData.startBinding!.elementId, 'rect-start');
+
+      final nextCreating = creatingState.copyWith(
+        element: creatingState.element.copyWith(
+          rect: startBoundUpdate.rect,
+          data: startBoundUpdate.data,
+        ),
+        currentRect: startBoundUpdate.rect,
+        creationMode: startBoundUpdate.creationMode,
+      );
+      final endBoundUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: nextCreating,
+        currentPosition: const DrawPoint(x: 460, y: 60),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      final endBoundData = endBoundUpdate.data as ArrowData;
+      expect(endBoundData.startBinding, equals(startBoundData.startBinding));
+      expect(endBoundData.endBinding, isNotNull);
+      expect(endBoundData.endBinding!.elementId, 'rect-end');
+
+      final finish = strategy.finish(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: nextCreating.copyWith(
+          element: nextCreating.element.copyWith(
+            rect: endBoundUpdate.rect,
+            data: endBoundUpdate.data,
+          ),
+          currentRect: endBoundUpdate.rect,
+          creationMode: endBoundUpdate.creationMode,
+        ),
+      );
+      final finishedData = finish.data as ArrowData;
+      expect(finish.shouldCommit, isTrue);
+      expect(finishedData.startBinding, equals(startBoundData.startBinding));
+      expect(finishedData.endBinding, isNotNull);
+      expect(finishedData.endBinding!.elementId, 'rect-end');
+    });
+
     test('update honors zoom-aware core binding distance', () {
       const startPosition = DrawPoint(x: 20, y: 60);
       const currentPosition = DrawPoint(x: 82, y: 60);

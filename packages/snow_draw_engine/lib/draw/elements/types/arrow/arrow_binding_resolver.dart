@@ -2,9 +2,15 @@ import 'package:meta/meta.dart';
 import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../models/element_state.dart';
+import '../../../types/draw_point.dart';
+import '../../../types/element_style.dart';
 import '../../../utils/combined_element_lookup.dart';
+import 'arrow_core_bridge.dart';
+import 'arrow_core_geometry_adapter.dart';
 import 'arrow_core_ops.dart';
 import 'arrow_core_session.dart';
+import 'arrow_data.dart';
+import 'elbow/elbow_editing.dart';
 
 /// Resolves arrow bindings when bindable elements change position.
 ///
@@ -62,13 +68,88 @@ final class ArrowBindingResolver {
     );
 
     final updates = session.applyArrowPatches(result.arrowPatches);
+    final normalizedUpdates = _normalizeUpdatedElbowArrows(
+      baseElements: baseElements,
+      updatedElements: updatedElements,
+      patchedUpdates: updates,
+      context: session.context,
+    );
     final reorderedElementIds = session.reduceEventsToOrderedElementIds(
       result.events,
     );
 
     return ArrowBindingResolutionResult(
-      updatedElements: updates,
+      updatedElements: normalizedUpdates,
       orderedElementIds: reorderedElementIds,
     );
   }
+}
+
+Map<String, ElementState> _normalizeUpdatedElbowArrows({
+  required Map<String, ElementState> baseElements,
+  required Map<String, ElementState> updatedElements,
+  required Map<String, ElementState> patchedUpdates,
+  required core.EngineContext context,
+}) {
+  if (patchedUpdates.isEmpty) {
+    return patchedUpdates;
+  }
+
+  final overlay = <String, ElementState>{...updatedElements, ...patchedUpdates};
+  final normalized = Map<String, ElementState>.of(patchedUpdates);
+  final lookup = CombinedElementLookup(base: baseElements, overlay: overlay);
+
+  for (final entry in patchedUpdates.entries) {
+    final element = entry.value;
+    final data = element.data;
+    if (data is! ArrowData || data.arrowType != ArrowType.elbow) {
+      continue;
+    }
+
+    final worldPoints = resolveArrowWorldPoints(
+      rect: element.rect,
+      normalizedPoints: data.points,
+    );
+    if (worldPoints.length < 2) {
+      continue;
+    }
+    final localEndpoints = worldToLocalPoints(element, <DrawPoint>[
+      worldPoints.first,
+      worldPoints.last,
+    ]);
+    final normalizedEdit = computeElbowEdit(
+      element: element,
+      data: data,
+      lookup: lookup,
+      localPointsOverride: localEndpoints,
+      engineContext: context,
+      finalize: true,
+    );
+    final geometry = resolveArrowGeometryUpdate(
+      localPoints: normalizedEdit.localPoints,
+      oldRect: element.rect,
+      rotation: element.rotation,
+      arrowType: data.arrowType,
+    );
+    final transformedFixedSegments = transformFixedSegments(
+      segments: normalizedEdit.fixedSegments,
+      oldRect: element.rect,
+      newRect: geometry.rect,
+      rotation: element.rotation,
+    );
+    final normalizedData = data.copyWith(
+      points: geometry.normalizedPoints,
+      fixedSegments: transformedFixedSegments,
+      startIsSpecial: normalizedEdit.startIsSpecial,
+      endIsSpecial: normalizedEdit.endIsSpecial,
+    );
+    final normalizedElement = element.copyWith(
+      rect: geometry.rect,
+      data: normalizedData,
+    );
+    normalized[entry.key] = normalizedElement;
+    overlay[entry.key] = normalizedElement;
+  }
+
+  return Map<String, ElementState>.unmodifiable(normalized);
 }
