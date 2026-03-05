@@ -100,6 +100,48 @@ void main() {
         expect(result!.orderedElementIds, <String>['rect-target', 'arrow-1']);
       },
     );
+
+    test('new-arrow drag keeps dragged endpoint anchor at pointer focus', () {
+      final bindable = _rectangleElement(
+        id: 'rect-target',
+        rect: const DrawRect(minX: 300, minY: 100, maxX: 500, maxY: 200),
+        zIndex: 0,
+      );
+      final arrow = _arrowElement(
+        id: 'arrow-1',
+        points: const <DrawPoint>[
+          DrawPoint(x: 0, y: 0),
+          DrawPoint(x: 200, y: 0),
+        ],
+        zIndex: 1,
+      );
+      final state = _stateWithElements(<ElementState>[bindable, arrow]);
+      final data = arrow.data as ArrowData;
+
+      final result = computeArrowCoreEndpointDragResult(
+        state: state,
+        element: arrow,
+        data: data,
+        localPoints: _resolveLocalPoints(arrow, data),
+        draggedIndex: 1,
+        worldPointer: const DrawPoint(x: 350, y: 120),
+        startBinding: data.startBinding,
+        endBinding: data.endBinding,
+        excludedElementId: arrow.id,
+        shouldLookupBindings: true,
+        allowNewBinding: true,
+        bindingDistance: 80,
+        coreEngineContext: buildCoreEngineContext(),
+        options: const <String, dynamic>{'newArrow': true},
+      );
+
+      expect(result, isNotNull);
+      final binding = result!.endBinding;
+      expect(binding, isNotNull);
+      expect(binding!.elementId, bindable.id);
+      expect(binding.anchor.x, closeTo(0.25, 1e-6));
+      expect(binding.anchor.y, closeTo(0.2, 1e-6));
+    });
   });
 }
 
