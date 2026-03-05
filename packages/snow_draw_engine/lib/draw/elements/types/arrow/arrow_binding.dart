@@ -138,6 +138,11 @@ class ArrowBindingUtils {
     ArrowBinding? preferredBinding,
     bool allowNewBinding = true,
     DrawPoint? referencePoint,
+    bool dragStart = false,
+    bool newArrow = false,
+    bool initialBinding = false,
+    bool preserveOppositeInsideBinding = false,
+    DrawPoint? oppositeOrbitFocusPoint,
     bool angleLocked = false,
     bool altKey = false,
   }) => _resolveBindingCandidateViaCore(
@@ -148,6 +153,11 @@ class ArrowBindingUtils {
     allowNewBinding: allowNewBinding,
     referencePoint: referencePoint,
     elbowed: false,
+    dragStart: dragStart,
+    newArrow: newArrow,
+    initialBinding: initialBinding,
+    preserveOppositeInsideBinding: preserveOppositeInsideBinding,
+    oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
     angleLocked: angleLocked,
     altKey: altKey,
   );
@@ -159,6 +169,11 @@ class ArrowBindingUtils {
     required bool hasArrowhead,
     ArrowBinding? preferredBinding,
     bool allowNewBinding = true,
+    bool dragStart = false,
+    bool newArrow = false,
+    bool initialBinding = false,
+    bool preserveOppositeInsideBinding = false,
+    DrawPoint? oppositeOrbitFocusPoint,
     bool angleLocked = false,
     bool altKey = false,
   }) => _resolveBindingCandidateViaCore(
@@ -170,6 +185,11 @@ class ArrowBindingUtils {
     referencePoint: null,
     elbowed: true,
     hasArrowhead: hasArrowhead,
+    dragStart: dragStart,
+    newArrow: newArrow,
+    initialBinding: initialBinding,
+    preserveOppositeInsideBinding: preserveOppositeInsideBinding,
+    oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
     angleLocked: angleLocked,
     altKey: altKey,
   );
@@ -196,6 +216,7 @@ class ArrowBindingUtils {
       allowNewBinding: true,
       referencePoint: referencePoint,
       elbowed: false,
+      dragStart: false,
       angleLocked: angleLocked,
       altKey: altKey,
     );
@@ -224,6 +245,7 @@ class ArrowBindingUtils {
       referencePoint: null,
       elbowed: true,
       hasArrowhead: hasArrowhead,
+      dragStart: false,
       angleLocked: angleLocked,
       altKey: altKey,
     );
@@ -300,6 +322,11 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
   required bool allowNewBinding,
   required DrawPoint? referencePoint,
   required bool elbowed,
+  required bool dragStart,
+  bool newArrow = false,
+  bool initialBinding = false,
+  bool preserveOppositeInsideBinding = false,
+  DrawPoint? oppositeOrbitFocusPoint,
   bool hasArrowhead = false,
   bool angleLocked = false,
   bool altKey = false,
@@ -347,10 +374,13 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
         x: worldPoint.x - math.max(1, snapDistance * _previewSpanMultiplier),
         y: worldPoint.y,
       );
-  final normalized = core.normalizeArrowFromGlobalPoints(<core.Point>[
-    _toCorePoint(oppositePoint),
-    _toCorePoint(worldPoint),
-  ], _defaultMaxCoordinate);
+  final normalizedPoints = dragStart
+      ? <core.Point>[_toCorePoint(worldPoint), _toCorePoint(oppositePoint)]
+      : <core.Point>[_toCorePoint(oppositePoint), _toCorePoint(worldPoint)];
+  final normalized = core.normalizeArrowFromGlobalPoints(
+    normalizedPoints,
+    _defaultMaxCoordinate,
+  );
 
   final preferredCoreBinding = preferredBinding == null
       ? null
@@ -370,10 +400,10 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     width: normalized.width,
     height: normalized.height,
     points: normalized.points,
-    startBinding: null,
-    endBinding: preferredCoreBinding,
-    startArrowhead: null,
-    endArrowhead: elbowed && hasArrowhead ? 'arrow' : null,
+    startBinding: dragStart ? preferredCoreBinding : null,
+    endBinding: dragStart ? null : preferredCoreBinding,
+    startArrowhead: elbowed && hasArrowhead && dragStart ? 'arrow' : null,
+    endArrowhead: elbowed && hasArrowhead && !dragStart ? 'arrow' : null,
     elbowed: elbowed,
     fixedSegments: null,
     startIsSpecial: null,
@@ -387,21 +417,25 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
   final result = computeCoreSimpleBindingPatch(
     arrow: previewArrow,
     draggedPoints: <int, core.Point>{
-      previewArrow.points.length - 1: localPointer,
+      dragStart ? 0 : previewArrow.points.length - 1: localPointer,
     },
     pointer: _toCorePoint(worldPoint),
     bindables: bindables,
     context: core.defaultEngineContext,
     options: <String, dynamic>{
       'complexBindings': true,
-      if (referencePoint == null) 'newArrow': true,
+      if (newArrow) 'newArrow': true,
+      if (initialBinding) 'initialBinding': true,
+      if (preserveOppositeInsideBinding) 'preserveOppositeInsideBinding': true,
+      if (oppositeOrbitFocusPoint != null)
+        'oppositeOrbitFocusPoint': _toCorePoint(oppositeOrbitFocusPoint),
       if (angleLocked) 'angleLocked': true,
       if (altKey) 'altKey': true,
     },
   );
 
   final nextArrow = core.applyArrowPatch(previewArrow, result.arrowPatch);
-  final nextBinding = nextArrow.endBinding;
+  final nextBinding = dragStart ? nextArrow.startBinding : nextArrow.endBinding;
   if (nextBinding == null) {
     return null;
   }
@@ -416,7 +450,7 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     return null;
   }
 
-  final endpoint = _arrowWorldEndpoint(nextArrow);
+  final endpoint = _arrowWorldEndpoint(nextArrow, dragStart: dragStart);
   return ArrowBindingResult(
     binding: ArrowBinding(
       elementId: nextBinding.elementId,
@@ -505,11 +539,14 @@ ArrowBindingMode _fromCoreBindingMode(String mode) =>
 String _toCoreBindingMode(ArrowBindingMode mode) =>
     mode == ArrowBindingMode.inside ? core.bindModeInside : core.bindModeOrbit;
 
-DrawPoint _arrowWorldEndpoint(core.ArrowState arrow) {
+DrawPoint _arrowWorldEndpoint(
+  core.ArrowState arrow, {
+  required bool dragStart,
+}) {
   if (arrow.points.isEmpty) {
     return DrawPoint(x: arrow.x, y: arrow.y);
   }
-  final endpoint = arrow.points.last;
+  final endpoint = dragStart ? arrow.points.first : arrow.points.last;
   return DrawPoint(x: arrow.x + endpoint[0], y: arrow.y + endpoint[1]);
 }
 

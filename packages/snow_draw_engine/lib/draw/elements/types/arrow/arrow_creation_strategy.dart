@@ -427,8 +427,14 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
   );
   final dragIndex = worldPoints.length - 1;
   final pointer = worldPoints.last;
-  final preserveInsideBinding =
+  final preserveDraggedInsideBinding =
       result.data.endBinding?.mode == ArrowBindingMode.inside;
+  final preserveOppositeInsideBinding =
+      result.data.startBinding?.mode == ArrowBindingMode.inside;
+  final oppositeOrbitFocusPoint =
+      result.data.startBinding?.mode == ArrowBindingMode.orbit
+      ? worldPoints.first
+      : null;
   final coreContext = buildCoreEngineContext(
     zoom: state.application.view.camera.zoom,
     isBindingEnabled: config.snap.enableArrowBinding,
@@ -454,7 +460,13 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
     orderedElementIds: orderedElementIds,
     options: <String, dynamic>{
       'newArrow': true,
-      if (preserveInsideBinding) 'altKey': true,
+      if (preserveDraggedInsideBinding) 'altKey': true,
+      if (preserveOppositeInsideBinding) 'preserveOppositeInsideBinding': true,
+      if (oppositeOrbitFocusPoint != null)
+        'oppositeOrbitFocusPoint': <double>[
+          oppositeOrbitFocusPoint.x,
+          oppositeOrbitFocusPoint.y,
+        ],
     },
   );
   if (finalized == null) {
@@ -820,6 +832,10 @@ _BindingSnapResult _snapBindingPoint({
   final hasArrowhead = dragStart
       ? startArrowheadStyle != ArrowheadStyle.none
       : endArrowheadStyle != ArrowheadStyle.none;
+  final preserveOppositeInsideBinding =
+      oppositeBinding?.mode == ArrowBindingMode.inside;
+  final oppositeOrbitFocusPoint =
+      oppositeBinding?.mode == ArrowBindingMode.orbit ? oppositePoint : null;
   final bindingCandidate = arrowType == ArrowType.elbow
       ? ArrowBindingUtils.resolveElbowBindingCandidate(
           worldPoint: position,
@@ -828,6 +844,11 @@ _BindingSnapResult _snapBindingPoint({
           hasArrowhead: hasArrowhead,
           preferredBinding: preferredBinding,
           allowNewBinding: shouldLookupBindings,
+          dragStart: dragStart,
+          newArrow: true,
+          initialBinding: dragStart,
+          preserveOppositeInsideBinding: preserveOppositeInsideBinding,
+          oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
           angleLocked: angleLocked,
           altKey: altKey,
         )
@@ -838,6 +859,11 @@ _BindingSnapResult _snapBindingPoint({
           preferredBinding: preferredBinding,
           allowNewBinding: shouldLookupBindings,
           referencePoint: oppositePoint,
+          dragStart: dragStart,
+          newArrow: true,
+          initialBinding: dragStart,
+          preserveOppositeInsideBinding: preserveOppositeInsideBinding,
+          oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
           angleLocked: angleLocked,
           altKey: altKey,
         );

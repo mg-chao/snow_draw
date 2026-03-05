@@ -54,6 +54,29 @@ void main() {
       expect(inside!.binding.mode, ArrowBindingMode.inside);
     });
 
+    test('resolveBindingCandidate supports new-arrow initial binding '
+        'for start drag', () {
+      final target = _rectangleElement(
+        id: 'rect-1',
+        rect: const DrawRect(minX: 100, minY: 100, maxX: 220, maxY: 220),
+        zIndex: 3,
+      );
+
+      final result = ArrowBindingUtils.resolveBindingCandidate(
+        worldPoint: const DrawPoint(x: 160, y: 160),
+        targets: <ElementState>[target],
+        snapDistance: 48,
+        referencePoint: const DrawPoint(x: 280, y: 160),
+        dragStart: true,
+        newArrow: true,
+        initialBinding: true,
+      );
+
+      expect(result, isNotNull);
+      expect(result!.binding.elementId, target.id);
+      expect(result.binding.mode, ArrowBindingMode.inside);
+    });
+
     test('resolveBindingCandidate supports highlight ellipse bindables', () {
       final target = _highlightElement(
         id: 'highlight-1',

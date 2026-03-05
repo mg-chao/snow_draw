@@ -215,6 +215,78 @@ void main() {
       expect(finishedData.endBinding, isNotNull);
       expect(finishedData.endBinding!.mode, ArrowBindingMode.inside);
     });
+
+    test('finish keeps start inside binding after alt-key release', () {
+      const startPosition = DrawPoint(x: 260, y: 60);
+      final state = _stateWithElements(<ElementState>[
+        _rectangleElement(
+          id: 'rect-start',
+          rect: const DrawRect(minX: 220, maxX: 320, maxY: 120),
+          zIndex: 1,
+        ),
+        _rectangleElement(
+          id: 'rect-end',
+          rect: const DrawRect(minX: 420, maxX: 520, maxY: 120),
+          zIndex: 2,
+        ),
+      ]);
+      final creatingState = _startCreatingArrow(
+        strategy: strategy,
+        startPosition: startPosition,
+      );
+
+      final insideStartUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creatingState,
+        currentPosition: const DrawPoint(x: 340, y: 60),
+        maintainAspectRatio: false,
+        createFromCenter: true,
+        snappingMode: SnappingMode.none,
+      );
+      final insideStartData = insideStartUpdate.data as ArrowData;
+      expect(insideStartData.startBinding, isNotNull);
+      expect(insideStartData.startBinding!.mode, ArrowBindingMode.inside);
+
+      final insideStartCreating = creatingState.copyWith(
+        element: creatingState.element.copyWith(
+          rect: insideStartUpdate.rect,
+          data: insideStartUpdate.data,
+        ),
+        currentRect: insideStartUpdate.rect,
+        creationMode: insideStartUpdate.creationMode,
+      );
+      final endUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: insideStartCreating,
+        currentPosition: const DrawPoint(x: 440, y: 60),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      final endUpdateData = endUpdate.data as ArrowData;
+      expect(endUpdateData.startBinding, isNotNull);
+      expect(endUpdateData.startBinding!.mode, ArrowBindingMode.inside);
+
+      final finish = strategy.finish(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: insideStartCreating.copyWith(
+          element: insideStartCreating.element.copyWith(
+            rect: endUpdate.rect,
+            data: endUpdate.data,
+          ),
+          currentRect: endUpdate.rect,
+          creationMode: endUpdate.creationMode,
+        ),
+      );
+      final finishedData = finish.data as ArrowData;
+
+      expect(finish.shouldCommit, isTrue);
+      expect(finishedData.startBinding, isNotNull);
+      expect(finishedData.startBinding!.mode, ArrowBindingMode.inside);
+    });
   });
 }
 
