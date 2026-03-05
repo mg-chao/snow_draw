@@ -514,7 +514,7 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     worldPoint.y - previewArrow.y,
   ];
 
-  final result = computeCoreSimpleBindingPatch(
+  final strategies = resolveCoreEndpointBindingStrategy(
     arrow: previewArrow,
     draggedPoints: <int, core.Point>{
       dragStart ? 0 : previewArrow.points.length - 1: localPointer,
@@ -532,8 +532,25 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
       if (altKey) 'altKey': true,
     },
   );
+  final strategy = dragStart ? strategies.start : strategies.end;
+  final edge = dragStart ? core.arrowEndpointStart : core.arrowEndpointEnd;
 
-  final nextArrow = core.applyArrowPatch(previewArrow, result.arrowPatch);
+  core.ArrowState nextArrow = previewArrow;
+  if (strategy != null) {
+    if (strategy.mode == null) {
+      final mutation = unbindCoreArrowEndpoint(arrow: previewArrow, edge: edge);
+      nextArrow = core.applyArrowPatch(previewArrow, mutation.arrowPatch);
+    } else if (strategy.element != null && strategy.focusPoint != null) {
+      final mutation = bindCoreArrowEndpoint(
+        arrow: previewArrow,
+        edge: edge,
+        bindable: strategy.element!,
+        mode: strategy.mode,
+        focusPoint: strategy.focusPoint,
+      );
+      nextArrow = core.applyArrowPatch(previewArrow, mutation.arrowPatch);
+    }
+  }
   final nextBinding = dragStart ? nextArrow.startBinding : nextArrow.endBinding;
   if (nextBinding == null) {
     return null;
