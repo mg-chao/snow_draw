@@ -546,6 +546,58 @@ void main() {
     });
 
     test(
+      'dragging bound elbow endpoint along same bindable edge updates anchor',
+      () {
+        final bindTarget = _rectangleElement(
+          id: 'elbow-bind-target',
+          rect: const DrawRect(minX: 100, minY: 100, maxX: 200, maxY: 200),
+          zIndex: 1,
+        );
+        final arrow = _elbowArrowElement(
+          id: 'elbow-bound-slide',
+          points: const <DrawPoint>[
+            DrawPoint(x: 100, y: 150),
+            DrawPoint(x: 300, y: 150),
+          ],
+          zIndex: 2,
+          startBinding: const ArrowBinding(
+            elementId: 'elbow-bind-target',
+            anchor: DrawPoint(x: 0, y: 0.5),
+          ),
+        );
+        final state = _stateWithElements(
+          <ElementState>[bindTarget, arrow],
+          selectedIds: <String>{arrow.id},
+        );
+
+        final session = _dragArrowHandleSession(
+          state: state,
+          elementId: arrow.id,
+          pointKind: ArrowPointKind.turning,
+          pointIndex: 0,
+          startPosition: const DrawPoint(x: 100, y: 150),
+          currentPosition: const DrawPoint(x: 100, y: 190),
+        );
+        final next = const ArrowPointOperation().finish(
+          state: state,
+          context: session.context,
+          transform: session.transform,
+        );
+        final updatedArrow = next.domain.document.getElementById(arrow.id)!;
+        final updatedData = updatedArrow.data as ArrowData;
+        final updatedPoints = ArrowGeometry.resolveWorldPoints(
+          rect: updatedArrow.rect,
+          normalizedPoints: updatedData.points,
+        );
+
+        expect(updatedData.startBinding, isNotNull);
+        expect(updatedData.startBinding!.elementId, bindTarget.id);
+        expect(updatedData.startBinding!.anchor.y, greaterThan(0.7));
+        expect(updatedPoints.first.y, greaterThan(180));
+      },
+    );
+
+    test(
       'dragging elbow endpoint keeps connected segment routing consistent',
       () {
         final arrow = _elbowArrowElement(

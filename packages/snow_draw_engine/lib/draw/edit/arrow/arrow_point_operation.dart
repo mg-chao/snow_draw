@@ -5,6 +5,7 @@ import '../../config/draw_config.dart';
 import '../../core/coordinates/element_space.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_binding_policy.dart';
+import '../../elements/types/arrow/arrow_core_bindable_query.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_endpoint_drag.dart';
 import '../../elements/types/arrow/arrow_core_geometry_adapter.dart';
@@ -933,6 +934,25 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
   required bool altKey,
 }) {
   final data = context.baseElement.data as ArrowLikeData;
+  if (data.arrowType == ArrowType.elbow && data is ArrowData) {
+    return _computeElbowEndpointDragComputation(
+      state: state,
+      context: context,
+      data: data,
+      basePoints: basePoints,
+      baseFixedSegments: baseFixedSegments,
+      draggedIndex: draggedIndex,
+      target: target,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      shouldLookupBindings: shouldLookupBindings,
+      allowNewBinding: allowNewBinding,
+      bindingDistance: bindingDistance,
+      coreEngineContext: coreEngineContext,
+      angleLocked: angleLocked,
+      altKey: altKey,
+    );
+  }
   final worldTarget = context.toWorld(target);
   final dragResult = computeArrowCoreEndpointDragResult(
     state: state,
@@ -969,42 +989,6 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
   var nextEndBinding = dragResult.endBinding;
   var nextFixedSegments = dragResult.fixedSegments;
 
-  if (data.arrowType == ArrowType.elbow && data is ArrowData) {
-    final draggedStart = draggedIndex == 0;
-    final draggedEnd = draggedIndex == basePoints.length - 1;
-    if (draggedStart) {
-      // Excalidraw parity: dragging one elbow endpoint must not mutate the
-      // opposite endpoint binding.
-      nextEndBinding = endBinding;
-    } else if (draggedEnd) {
-      nextStartBinding = startBinding;
-    }
-
-    final draggedEndpoint =
-        draggedIndex >= 0 && draggedIndex < dragResult.localPoints.length
-        ? dragResult.localPoints[draggedIndex]
-        : target;
-    // Re-route elbow arrows from endpoints only so stale intermediate bends
-    // cannot survive endpoint re-binding drags.
-    final startPoint = draggedStart ? draggedEndpoint : basePoints.first;
-    final endPoint = draggedEnd ? draggedEndpoint : basePoints.last;
-    final elbowInputPoints = <DrawPoint>[startPoint, endPoint];
-
-    final elbowData = data.copyWith(
-      startBinding: nextStartBinding,
-      endBinding: nextEndBinding,
-    );
-    final elbowResult = computeElbowEdit(
-      element: context.baseElement,
-      data: elbowData,
-      lookup: CombinedElementLookup(base: state.domain.document.elementMap),
-      localPointsOverride: elbowInputPoints,
-      engineContext: coreEngineContext,
-    );
-    localPoints = elbowResult.localPoints;
-    nextFixedSegments = elbowResult.fixedSegments;
-  }
-
   final pointsChanged = !pointListEquals(basePoints, localPoints);
   final bindingsChanged =
       nextStartBinding != startBinding || nextEndBinding != endBinding;
@@ -1020,6 +1004,157 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
       ? localPoints.length - 1
       : draggedIndex;
   final orderedElementIds = dragResult.orderedElementIds;
+  final orderChanged = orderedElementIds != null;
+
+  return _ArrowPointComputation(
+    points: List<DrawPoint>.unmodifiable(localPoints),
+    didInsert: false,
+    shouldDelete: false,
+    activeIndex: activeIndex,
+    hasChanges:
+        pointsChanged || bindingsChanged || segmentsChanged || orderChanged,
+    startBinding: nextStartBinding,
+    endBinding: nextEndBinding,
+    fixedSegments: nextFixedSegments,
+    orderedElementIds: orderedElementIds,
+  );
+}
+
+_ArrowPointComputation _computeElbowEndpointDragComputation({
+  required DrawState state,
+  required ArrowPointEditContext context,
+  required ArrowData data,
+  required List<DrawPoint> basePoints,
+  required List<ElbowFixedSegment>? baseFixedSegments,
+  required int draggedIndex,
+  required DrawPoint target,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required bool shouldLookupBindings,
+  required bool allowNewBinding,
+  required double bindingDistance,
+  required core.EngineContext coreEngineContext,
+  required bool angleLocked,
+  required bool altKey,
+}) {
+  if (basePoints.length < 2) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+
+  final draggedStart = draggedIndex == 0;
+  final draggedEnd = draggedIndex == basePoints.length - 1;
+  if (!draggedStart && !draggedEnd) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+
+  var nextStartBinding = startBinding;
+  var nextEndBinding = endBinding;
+  var draggedEndpoint = target;
+  String? hoveredBindableId;
+
+  if (shouldLookupBindings) {
+    final worldTarget = context.toWorld(target);
+    final activeBinding = draggedStart ? startBinding : endBinding;
+    final oppositeBinding = draggedStart ? endBinding : startBinding;
+    final candidates = resolveCoreBindableCandidates(
+      document: state.domain.document,
+      worldPoint: worldTarget,
+      distance: bindingDistance,
+      preferredBinding: activeBinding,
+      oppositeBinding: oppositeBinding,
+      excludedElementId: context.elementId,
+      includeNearby: allowNewBinding,
+    );
+    final hasArrowhead = draggedStart
+        ? context.startArrowhead != ArrowheadStyle.none
+        : context.endArrowhead != ArrowheadStyle.none;
+    final bindingResult = candidates.isEmpty
+        ? null
+        : ArrowBindingUtils.resolveElbowBindingCandidateFromCoreCandidates(
+            worldPoint: worldTarget,
+            candidates: candidates,
+            snapDistance: bindingDistance,
+            hasArrowhead: hasArrowhead,
+            preferredBinding: activeBinding,
+            allowNewBinding: allowNewBinding,
+            dragStart: draggedStart,
+            angleLocked: angleLocked,
+            altKey: altKey,
+            coreEngineContext: coreEngineContext,
+          );
+    if (bindingResult != null) {
+      hoveredBindableId = bindingResult.binding.elementId;
+      draggedEndpoint = context.toLocal(bindingResult.snapPoint);
+      if (draggedStart) {
+        nextStartBinding = bindingResult.binding;
+      } else {
+        nextEndBinding = bindingResult.binding;
+      }
+    } else if (draggedStart) {
+      nextStartBinding = null;
+    } else {
+      nextEndBinding = null;
+    }
+  }
+
+  if (draggedStart) {
+    // Excalidraw parity: dragging one elbow endpoint must not mutate the
+    // opposite endpoint binding.
+    nextEndBinding = endBinding;
+  } else {
+    nextStartBinding = startBinding;
+  }
+
+  // Re-route elbow arrows from endpoints only so stale intermediate bends
+  // cannot survive endpoint re-binding drags.
+  final startPoint = draggedStart ? draggedEndpoint : basePoints.first;
+  final endPoint = draggedEnd ? draggedEndpoint : basePoints.last;
+  final elbowResult = computeElbowEdit(
+    element: context.baseElement,
+    data: data.copyWith(
+      startBinding: nextStartBinding,
+      endBinding: nextEndBinding,
+    ),
+    lookup: CombinedElementLookup(base: state.domain.document.elementMap),
+    localPointsOverride: <DrawPoint>[startPoint, endPoint],
+    engineContext: coreEngineContext,
+  );
+  final localPoints = elbowResult.localPoints;
+  final nextFixedSegments = elbowResult.fixedSegments;
+  final pointsChanged = !pointListEquals(basePoints, localPoints);
+  final bindingsChanged =
+      nextStartBinding != startBinding || nextEndBinding != endBinding;
+  final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
+    baseFixedSegments,
+    nextFixedSegments,
+  );
+  final activeIndex = draggedStart ? 0 : localPoints.length - 1;
+
+  List<String>? orderedElementIds;
+  if (hoveredBindableId != null) {
+    final reorderResult = reorderCoreArrowAboveHoveredBindable(
+      orderedElementIds: state.domain.document.orderedElementIds,
+      arrowId: context.elementId,
+      hoveredBindableId: hoveredBindableId,
+      anchorElementIdsByBindableId:
+          state.domain.document.arrowCoreAnchorElementIdsByBindableId,
+    );
+    orderedElementIds = reorderedElementIdsFromCoreHoveredReorder(
+      reorderResult,
+    );
+  }
   final orderChanged = orderedElementIds != null;
 
   return _ArrowPointComputation(
