@@ -208,11 +208,12 @@ ArrowCoreRuntime get _runtime => ArrowCoreRuntime.instance;
 Map<String, dynamic> _composeEndpointBindingOptionsPayload(
   Map<String, dynamic>? options,
 ) {
-  if (options == null || options.isEmpty) {
-    return const <String, dynamic>{};
-  }
+  final composedOptions = <String, dynamic>{
+    'complexBindings': true,
+    ...?options,
+  };
   return <String, dynamic>{
-    'options': <String, dynamic>{...?options},
+    'options': composedOptions,
   };
 }
 
