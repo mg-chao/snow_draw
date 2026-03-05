@@ -207,11 +207,17 @@ ArrowCoreRuntime get _runtime => ArrowCoreRuntime.instance;
 
 Map<String, dynamic> _composeEndpointBindingOptionsPayload(
   Map<String, dynamic>? options,
-) => options == null
-    ? const <String, dynamic>{}
-    : <String, dynamic>{
-        'options': <String, dynamic>{...options},
-      };
+) {
+  final normalizedOptions = <String, dynamic>{
+    ...?options,
+  };
+  // Excalidraw parity: endpoint strategy/drag integrations run with complex
+  // binding behavior enabled by default.
+  normalizedOptions.putIfAbsent('complexBindings', () => true);
+  return <String, dynamic>{
+    'options': normalizedOptions,
+  };
+}
 
 /// Typed wrapper around `snow_draw_arrow_core` endpoint-drag computation.
 core.EngineResult computeCoreEndpointDrag({
