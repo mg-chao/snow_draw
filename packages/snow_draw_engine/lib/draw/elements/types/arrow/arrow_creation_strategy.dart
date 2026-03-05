@@ -21,7 +21,6 @@ import '../../../utils/visible_elements.dart';
 import '../arrow/arrow_binding.dart';
 import '../arrow/arrow_binding_policy.dart';
 import '../line/line_data.dart';
-import 'arrow_core_bindable_query.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_endpoint_drag.dart';
 import 'arrow_core_geometry_adapter.dart';
@@ -835,7 +834,6 @@ _BindingSnapResult _snapBindingPoint({
 
   final coreEngineContext = buildCoreEngineContext(
     zoom: state.application.view.camera.zoom,
-    bindMode: altKey ? core.bindModeInside : core.bindModeOrbit,
   );
   final shouldPreserveOppositeInsideBinding =
       preserveOppositeInsideBinding ??
@@ -895,7 +893,6 @@ _CorePreviewBindingResult? _resolveBindingWithCoreEndpointPreview({
   required core.EngineContext coreEngineContext,
   Map<String, dynamic>? options,
 }) {
-  final newArrow = options?['newArrow'] == true;
   final startPoint = dragStart ? worldPointer : oppositePoint;
   final endPoint = dragStart ? oppositePoint : worldPointer;
   final previewLayout = computeArrowTwoPointLayout(
@@ -915,237 +912,55 @@ _CorePreviewBindingResult? _resolveBindingWithCoreEndpointPreview({
     zIndex: 0,
     data: previewData,
   );
-  final previewArrow = toCoreArrowState(
+  final draggedIndex = dragStart ? 0 : 1;
+  final dragResult = computeArrowCoreEndpointDragResult(
+    state: state,
     element: previewElement,
     data: previewData,
-    localPointsOverride: <DrawPoint>[startPoint, endPoint],
-    startBindingOverride: previewData.startBinding,
-    endBindingOverride: previewData.endBinding,
+    localPoints: <DrawPoint>[startPoint, endPoint],
+    draggedIndex: draggedIndex,
+    worldPointer: worldPointer,
+    startBinding: previewData.startBinding,
+    endBinding: previewData.endBinding,
+    excludedElementId: previewElement.id,
+    shouldLookupBindings: shouldLookupBindings,
+    allowNewBinding: allowNewBinding,
+    bindingDistance: bindingDistance,
+    coreEngineContext: coreEngineContext,
+    options: options,
   );
-  final draggedIndex = dragStart ? 0 : 1;
-  final activeBinding = dragStart
-      ? previewData.startBinding
-      : previewData.endBinding;
-  final otherBinding = dragStart
-      ? previewData.endBinding
-      : previewData.startBinding;
-  final bindables = shouldLookupBindings
-      ? resolveCoreBindableCandidatesForEndpointStrategy(
-          document: state.domain.document,
-          activeBinding: activeBinding,
-          oppositeBinding: otherBinding,
-          excludedElementId: previewElement.id,
-          allowNewBinding: allowNewBinding,
-        ).bindables
-      : const <core.BindableState>[];
-  final bindablesById = <String, core.BindableState>{
-    for (final bindable in bindables) bindable.id: bindable,
-  };
-  final strategyContext = shouldLookupBindings
-      ? coreEngineContext
-      : buildCoreEngineContext(
-          zoom: coreEngineContext.zoom,
-          isBindingEnabled: false,
-          bindMode: coreEngineContext.bindMode,
-          maxCoordinate: coreEngineContext.maxCoordinate,
-        );
-  final localPointer = <double>[
-    worldPointer.x - previewArrow.x,
-    worldPointer.y - previewArrow.y,
-  ];
-  final strategies = core.getEndpointBindingStrategy(<String, dynamic>{
-    'arrow': previewArrow,
-    'draggedPoints': <core.PointUpdate>[
-      core.PointUpdate(index: draggedIndex, point: localPointer),
-    ],
-    'pointer': toCorePoint(worldPointer),
-    'bindables': bindables,
-    'context': strategyContext,
-    'options': <String, dynamic>{'complexBindings': true, ...?options},
-  });
-
-  final draggedStrategy = dragStart ? strategies.start : strategies.end;
-  final oppositeStrategy = dragStart ? strategies.end : strategies.start;
-  final startStrategy = dragStart ? draggedStrategy : oppositeStrategy;
-  final endStrategy = dragStart ? oppositeStrategy : draggedStrategy;
-  var nextArrow = previewArrow;
-  final nextStartBinding = _bindingFromStrategy(
-    arrow: nextArrow,
-    strategy: startStrategy,
-    currentBinding: nextArrow.startBinding,
-    bindablesById: bindablesById,
-    edge: 'start',
-    draggedEdge: dragStart,
-    newArrow: newArrow,
-    pointer: worldPointer,
-  );
-  nextArrow = nextArrow.copyWith(
-    startBinding: nextStartBinding,
-    setStartBinding: true,
-  );
-  final nextEndBinding = _bindingFromStrategy(
-    arrow: nextArrow,
-    strategy: endStrategy,
-    currentBinding: nextArrow.endBinding,
-    bindablesById: bindablesById,
-    edge: 'end',
-    draggedEdge: !dragStart,
-    newArrow: newArrow,
-    pointer: worldPointer,
-  );
-  nextArrow = nextArrow.copyWith(
-    endBinding: nextEndBinding,
-    setEndBinding: true,
-  );
-
-  final startFocusPoint = _resolveStrategyFocusPoint(
-    strategy: strategies.start,
-    draggedEdge: dragStart,
-    newArrow: newArrow,
-    elbowed: data.arrowType == ArrowType.elbow,
-    pointer: worldPointer,
-  );
-  final endFocusPoint = _resolveStrategyFocusPoint(
-    strategy: strategies.end,
-    draggedEdge: !dragStart,
-    newArrow: newArrow,
-    elbowed: data.arrowType == ArrowType.elbow,
-    pointer: worldPointer,
-  );
-  if (startFocusPoint != null || endFocusPoint != null) {
-    final points = nextArrow.points
-        .map((point) => <double>[point[0], point[1]])
-        .toList(growable: true);
-    if (startFocusPoint != null) {
-      final startBinding = nextArrow.startBinding;
-      final startBindable = startBinding == null
-          ? null
-          : bindablesById[startBinding.elementId];
-      if (startBinding != null && startBindable != null) {
-        final updated = core.updateBoundPoint(
-          arrow: nextArrow,
-          edge: 'startBinding',
-          binding: startBinding,
-          bindable: startBindable,
-          bindablesById: bindablesById,
-        );
-        if (updated != null) {
-          points[0] = <double>[updated[0], updated[1]];
-        }
-      }
-    }
-    if (endFocusPoint != null) {
-      final endBinding = nextArrow.endBinding;
-      final endBindable = endBinding == null
-          ? null
-          : bindablesById[endBinding.elementId];
-      if (endBinding != null && endBindable != null) {
-        final updated = core.updateBoundPoint(
-          arrow: nextArrow,
-          edge: 'endBinding',
-          binding: endBinding,
-          bindable: endBindable,
-          bindablesById: bindablesById,
-        );
-        if (updated != null) {
-          points[points.length - 1] = <double>[updated[0], updated[1]];
-        }
-      }
-    }
-    nextArrow = nextArrow.copyWith(points: points);
+  if (dragResult == null) {
+    return null;
   }
 
-  final binding = dragStart
-      ? fromCoreBinding(nextArrow.startBinding)
-      : fromCoreBinding(nextArrow.endBinding);
+  var resolvedStartBinding = dragResult.startBinding;
+  var resolvedEndBinding = dragResult.endBinding;
+  if (dragStart && oppositeBinding != null) {
+    resolvedEndBinding = oppositeBinding;
+  } else if (!dragStart && oppositeBinding != null) {
+    resolvedStartBinding = oppositeBinding;
+  }
+
+  final binding = dragStart ? resolvedStartBinding : resolvedEndBinding;
   if (binding == null) {
     return null;
   }
 
+  final preferredElementId = preferredBinding?.elementId;
+  if (!allowNewBinding &&
+      preferredElementId != null &&
+      binding.elementId != preferredElementId) {
+    return null;
+  }
+
   final snappedPoint = dragStart
-      ? DrawPoint(
-          x: nextArrow.x + nextArrow.points.first[0],
-          y: nextArrow.y + nextArrow.points.first[1],
-        )
-      : DrawPoint(
-          x: nextArrow.x + nextArrow.points.last[0],
-          y: nextArrow.y + nextArrow.points.last[1],
-        );
+      ? dragResult.worldPoints.first
+      : dragResult.worldPoints.last;
   return _CorePreviewBindingResult(
     binding: binding,
     snapPoint: snappedPoint,
-    startBinding: fromCoreBinding(nextArrow.startBinding),
-    endBinding: fromCoreBinding(nextArrow.endBinding),
-  );
-}
-
-core.Point? _resolveStrategyFocusPoint({
-  required core.EndpointBindingStrategy? strategy,
-  required bool draggedEdge,
-  required bool newArrow,
-  required bool elbowed,
-  required DrawPoint pointer,
-}) {
-  if (strategy == null || strategy.mode == null) {
-    return null;
-  }
-  if (newArrow && draggedEdge && !elbowed) {
-    return <double>[pointer.x, pointer.y];
-  }
-  return strategy.focusPoint;
-}
-
-core.FixedPointBinding? _bindingFromStrategy({
-  required core.ArrowState arrow,
-  required core.EndpointBindingStrategy? strategy,
-  required core.FixedPointBinding? currentBinding,
-  required Map<String, core.BindableState> bindablesById,
-  required core.ArrowEndpointEdge edge,
-  required bool draggedEdge,
-  required bool newArrow,
-  required DrawPoint pointer,
-}) {
-  if (strategy == null) {
-    return currentBinding;
-  }
-  final mode = strategy.mode;
-  if (mode == null) {
-    return null;
-  }
-
-  final focusPoint = _resolveStrategyFocusPoint(
-    strategy: strategy,
-    draggedEdge: draggedEdge,
-    newArrow: newArrow,
-    elbowed: arrow.elbowed,
-    pointer: pointer,
-  );
-  final strategyElement = strategy.element;
-  final bindableId = strategyElement?.id ?? strategy.bindableId;
-  if (bindableId == null || focusPoint == null) {
-    return currentBinding;
-  }
-  final bindable = bindablesById[bindableId];
-  // Excalidraw parity: if a strategy resolves to a concrete bindable id but
-  // that element is missing from the element map, the binding should break.
-  if (bindable == null) {
-    return null;
-  }
-
-  final fixedPoint = arrow.elbowed
-      ? core.calculateFixedPointForElbowArrowBinding(
-          arrow: arrow,
-          bindable: bindable,
-          edge: edge,
-        )
-      : core.calculateFixedPointForBinding(
-          bindable: bindable,
-          point: focusPoint,
-        );
-  return core.FixedPointBinding(
-    elementId: bindable.id,
-    fixedPoint: fixedPoint,
-    mode: mode,
+    startBinding: resolvedStartBinding,
+    endBinding: resolvedEndBinding,
   );
 }
 
@@ -1176,30 +991,32 @@ _BindingSnapResult _resolveStartBindingPoint({
           zoom: state.application.view.camera.zoom,
         )
       : 0.0;
-  if (preferredBinding?.mode == ArrowBindingMode.inside &&
-      sessionData.preserveStartInsideBinding) {
+  final shouldReusePreferredBinding =
+      preferredBinding != null &&
+      (preferredBinding.mode == ArrowBindingMode.orbit ||
+          (preferredBinding.mode == ArrowBindingMode.inside &&
+              sessionData.preserveStartInsideBinding));
+  if (shouldReusePreferredBinding) {
+    final stableBinding = preferredBinding;
     final target = state.domain.document.getElementById(
-      preferredBinding!.elementId,
+      stableBinding.elementId,
     );
     if (target != null &&
         target.opacity > 0 &&
         ArrowBindingUtils.isBindableTarget(target)) {
       final boundPoint = arrowType == ArrowType.elbow
           ? ArrowBindingUtils.resolveElbowBoundPoint(
-              binding: preferredBinding,
+              binding: stableBinding,
               target: target,
               hasArrowhead: startArrowheadStyle != ArrowheadStyle.none,
             )
           : ArrowBindingUtils.resolveBoundPoint(
-              binding: preferredBinding,
+              binding: stableBinding,
               target: target,
               referencePoint: oppositePoint,
             );
       if (boundPoint != null) {
-        return _BindingSnapResult(
-          position: boundPoint,
-          binding: preferredBinding,
-        );
+        return _BindingSnapResult(position: boundPoint, binding: stableBinding);
       }
     }
   }
