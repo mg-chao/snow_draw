@@ -4,9 +4,8 @@ import '../../actions/draw_actions.dart';
 import '../../core/draw_context.dart';
 import '../../elements/core/element_style_updatable_data.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
+import '../../elements/types/arrow/arrow_core_geometry_adapter.dart';
 import '../../elements/types/arrow/arrow_data.dart';
-import '../../elements/types/arrow/arrow_geometry.dart';
-import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
 import '../../elements/types/arrow/elbow/elbow_router.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
@@ -401,15 +400,15 @@ bool _hasSelectionGeometryChanges({
     return (rect: geometry.rect, data: updatedData);
   }
 
-  final worldPoints = ArrowGeometry.resolveWorldPoints(
+  final worldPoints = resolveArrowWorldPoints(
     rect: element.rect,
     normalizedPoints: sanitizedData.points,
   );
-  final rect = ArrowGeometry.calculatePathBounds(
+  final rect = calculateArrowPathBoundsViaCore(
     worldPoints: worldPoints,
     arrowType: sanitizedData.arrowType,
   );
-  final normalizedPoints = ArrowGeometry.normalizePoints(
+  final normalizedPoints = normalizeArrowPoints(
     worldPoints: worldPoints,
     rect: rect,
   );

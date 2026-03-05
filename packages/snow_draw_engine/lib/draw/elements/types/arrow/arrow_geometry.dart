@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../types/draw_point.dart';
@@ -7,65 +5,35 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../shared/hit_test_geometry.dart';
 import 'arrow_core_codec.dart';
-import 'arrow_core_elbow_path.dart';
+import 'arrow_core_geometry_adapter.dart' as core_geometry_adapter;
 import 'arrow_like_data.dart';
 
 class ArrowGeometry {
   const ArrowGeometry._();
 
-  static const _defaultPoints = <DrawPoint>[
-    DrawPoint.zero,
-    DrawPoint(x: 1, y: 1),
-  ];
-
   static List<DrawPoint> resolveLocalPoints({
     required DrawRect rect,
     required List<DrawPoint> normalizedPoints,
-  }) {
-    final points = _ensureMinPoints(normalizedPoints);
-    final width = rect.width;
-    final height = rect.height;
-    return points
-        .map((point) => DrawPoint(x: point.x * width, y: point.y * height))
-        .toList(growable: false);
-  }
+  }) => core_geometry_adapter.resolveArrowLocalPoints(
+    rect: rect,
+    normalizedPoints: normalizedPoints,
+  );
 
   static List<DrawPoint> resolveWorldPoints({
     required DrawRect rect,
     required List<DrawPoint> normalizedPoints,
-  }) {
-    final points = _ensureMinPoints(normalizedPoints);
-    final width = rect.width;
-    final height = rect.height;
-    return points
-        .map(
-          (point) => DrawPoint(
-            x: rect.minX + point.x * width,
-            y: rect.minY + point.y * height,
-          ),
-        )
-        .toList(growable: false);
-  }
+  }) => core_geometry_adapter.resolveArrowWorldPoints(
+    rect: rect,
+    normalizedPoints: normalizedPoints,
+  );
 
   static List<DrawPoint> normalizePoints({
     required List<DrawPoint> worldPoints,
     required DrawRect rect,
-  }) {
-    final points = _ensureMinPoints(worldPoints);
-    final width = rect.width;
-    final height = rect.height;
-    return List<DrawPoint>.unmodifiable(
-      points.map((point) {
-        final x = width == 0 ? 0.0 : (point.x - rect.minX) / width;
-        final y = height == 0 ? 0.0 : (point.y - rect.minY) / height;
-        return DrawPoint(
-          x: _clamp01(x),
-          y: _clamp01(y),
-          pressure: point.pressure,
-        );
-      }),
-    );
-  }
+  }) => core_geometry_adapter.normalizeArrowPoints(
+    worldPoints: worldPoints,
+    rect: rect,
+  );
 
   /// Generates a rounded elbow SVG path from [points] using arrow-core.
   static String generateElbowPathData({
@@ -158,18 +126,10 @@ class ArrowGeometry {
   static DrawRect calculatePathBounds({
     required List<DrawPoint> worldPoints,
     required ArrowType arrowType,
-  }) {
-    final bounds = core.calculateArrowPathBounds(
-      points: encodeArrowCorePoints(worldPoints),
-      curved: arrowType == ArrowType.curved,
-    );
-    return DrawRect(
-      minX: bounds[0],
-      minY: bounds[1],
-      maxX: bounds[2],
-      maxY: bounds[3],
-    );
-  }
+  }) => core_geometry_adapter.calculateArrowPathBoundsViaCore(
+    worldPoints: worldPoints,
+    arrowType: arrowType,
+  );
 
   static List<DrawPoint> applyInsets({
     required List<DrawPoint> points,
@@ -206,112 +166,16 @@ class ArrowGeometry {
     }
 
     if (arrowType == ArrowType.elbow && points.length > 2) {
-      return _sampleElbowPathForHitTest(
-        points: points,
-        strokeWidth: strokeWidth,
+      return decodeArrowCorePoints(
+        core.sampleElbowPathForHitTest(
+          points: encodeArrowCorePoints(points),
+          strokeWidth: strokeWidth,
+        ),
       );
     }
 
     return points;
   }
-
-  static List<DrawPoint> _ensureMinPoints(List<DrawPoint> points) {
-    if (points.length >= 2) {
-      return points;
-    }
-    if (points.isEmpty) {
-      return _defaultPoints;
-    }
-    return [points.first, points.first];
-  }
-
-  static double _clamp01(double value) {
-    if (!value.isFinite) {
-      return 0;
-    }
-    if (value < 0) {
-      return 0;
-    }
-    if (value > 1) {
-      return 1;
-    }
-    return value;
-  }
-}
-
-List<DrawPoint> _sampleElbowPathForHitTest({
-  required List<DrawPoint> points,
-  required double strokeWidth,
-}) {
-  final pathData = ArrowGeometry.generateElbowPathData(points: points);
-  if (pathData.isEmpty) {
-    return points;
-  }
-  final commands = parseArrowCoreElbowPathCommands(pathData);
-  if (commands == null || commands.isEmpty) {
-    return points;
-  }
-
-  final flattened = <DrawPoint>[];
-  DrawPoint? current;
-  for (final command in commands) {
-    switch (command) {
-      case ArrowCoreElbowMoveTo():
-        _appendPointIfDistinct(flattened, command.point);
-        current = command.point;
-      case ArrowCoreElbowLineTo():
-        _appendPointIfDistinct(flattened, command.point);
-        current = command.point;
-      case ArrowCoreElbowQuadraticTo():
-        final start = current;
-        if (start == null) {
-          return points;
-        }
-        final chordLength = (command.end - start).distance(DrawPoint.zero);
-        final roughLength =
-            chordLength +
-            (command.control - start).distance(DrawPoint.zero) * 0.5;
-        final stepSize = math.max(1.5, strokeWidth * 0.7);
-        final steps = roughLength <= 0 ? 6 : roughLength ~/ stepSize + 1;
-        final clampedSteps = steps.clamp(6, 32);
-        for (var i = 1; i <= clampedSteps; i++) {
-          final t = i / clampedSteps;
-          final point = _quadraticPoint(start, command.control, command.end, t);
-          _appendPointIfDistinct(flattened, point);
-        }
-        current = command.end;
-    }
-  }
-
-  return flattened.length >= 2 ? flattened : points;
-}
-
-void _appendPointIfDistinct(List<DrawPoint> points, DrawPoint point) {
-  if (points.isEmpty) {
-    points.add(point);
-    return;
-  }
-  final previous = points.last;
-  if ((previous.x - point.x).abs() <= 1e-6 &&
-      (previous.y - point.y).abs() <= 1e-6) {
-    return;
-  }
-  points.add(point);
-}
-
-DrawPoint _quadraticPoint(
-  DrawPoint start,
-  DrawPoint control,
-  DrawPoint end,
-  double t,
-) {
-  final oneMinusT = 1 - t;
-  final oneMinusTSq = oneMinusT * oneMinusT;
-  final tSq = t * t;
-  return DrawPoint(
-    x: oneMinusTSq * start.x + 2 * oneMinusT * t * control.x + tSq * end.x,
-    y: oneMinusTSq * start.y + 2 * oneMinusT * t * control.y + tSq * end.y,
-  );
 }
 
 class ArrowGeometryDescriptor {

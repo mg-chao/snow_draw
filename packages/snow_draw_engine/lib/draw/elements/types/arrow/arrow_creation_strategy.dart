@@ -23,9 +23,9 @@ import '../arrow/arrow_binding_policy.dart';
 import '../line/line_data.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_endpoint_drag.dart';
+import 'arrow_core_geometry_adapter.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
-import 'arrow_two_point_layout.dart';
 import 'elbow/elbow_fixed_segment.dart';
 import 'elbow/elbow_router.dart';
 
@@ -49,7 +49,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       points: [startPosition, startPosition],
       arrowType: arrowData.arrowType,
     );
-    final normalizedPoints = ArrowGeometry.normalizePoints(
+    final normalizedPoints = normalizeArrowPoints(
       worldPoints: [startPosition, startPosition],
       rect: arrowRect,
     );
@@ -166,7 +166,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
         points: routedPoints,
         arrowType: elementData.arrowType,
       );
-      normalizedPoints = ArrowGeometry.normalizePoints(
+      normalizedPoints = normalizeArrowPoints(
         worldPoints: routedPoints,
         rect: arrowRect,
       );
@@ -187,7 +187,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
         points: allPoints,
         arrowType: elementData.arrowType,
       );
-      normalizedPoints = ArrowGeometry.normalizePoints(
+      normalizedPoints = normalizeArrowPoints(
         worldPoints: allPoints,
         rect: arrowRect,
       );
@@ -284,7 +284,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       points: allPoints,
       arrowType: elementData.arrowType,
     );
-    final normalizedPoints = ArrowGeometry.normalizePoints(
+    final normalizedPoints = normalizeArrowPoints(
       worldPoints: allPoints,
       rect: arrowRect,
     );
@@ -320,7 +320,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
 
     final minSize = config.element.minCreateSize;
     final finishTolerance = config.selection.interaction.handleTolerance;
-    final worldPoints = ArrowGeometry.resolveWorldPoints(
+    final worldPoints = resolveArrowWorldPoints(
       rect: creatingState.currentRect,
       normalizedPoints: data.points,
     );
@@ -347,7 +347,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       points: closedPoints,
       arrowType: data.arrowType,
     );
-    final normalizedPoints = ArrowGeometry.normalizePoints(
+    final normalizedPoints = normalizeArrowPoints(
       worldPoints: closedPoints,
       rect: arrowRect,
     );
@@ -365,7 +365,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       );
     }
 
-    final points = ArrowGeometry.resolveWorldPoints(
+    final points = resolveArrowWorldPoints(
       rect: finalizedResult.rect,
       normalizedPoints: finalizedResult.data.points,
     );
@@ -402,7 +402,7 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
   required String elementId,
   required _ArrowCreationFinishResult result,
 }) {
-  final worldPoints = ArrowGeometry.resolveWorldPoints(
+  final worldPoints = resolveArrowWorldPoints(
     rect: result.rect,
     normalizedPoints: result.data.points,
   );
@@ -561,7 +561,7 @@ CreationUpdateResult _updateLine({
       points: worldPoints,
       arrowType: data.arrowType,
     );
-    normalizedPoints = ArrowGeometry.normalizePoints(
+    normalizedPoints = normalizeArrowPoints(
       worldPoints: worldPoints,
       rect: lineRect,
     );
@@ -664,10 +664,8 @@ DrawPoint _snapPointToGridIfNeeded({
 DrawRect _calculateArrowRect({
   required List<DrawPoint> points,
   required ArrowType arrowType,
-}) => ArrowGeometry.calculatePathBounds(
-  worldPoints: points,
-  arrowType: arrowType,
-);
+}) =>
+    calculateArrowPathBoundsViaCore(worldPoints: points, arrowType: arrowType);
 
 List<DrawPoint> _appendCurrentPoint({
   required List<DrawPoint> fixedPoints,

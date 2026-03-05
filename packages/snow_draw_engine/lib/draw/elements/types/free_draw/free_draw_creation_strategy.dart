@@ -12,7 +12,7 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/snapping_mode.dart';
-import '../arrow/arrow_geometry.dart';
+import '../arrow/arrow_core_geometry_adapter.dart';
 import 'free_draw_data.dart';
 
 /// Creation strategy for freehand drawing.
@@ -335,10 +335,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     }
 
     final rect = _boundsFromPoints(points);
-    final normalized = ArrowGeometry.normalizePoints(
-      worldPoints: points,
-      rect: rect,
-    );
+    final normalized = normalizeArrowPoints(worldPoints: points, rect: rect);
     final baked = _buildBakedNormalizedPoints(worldPoints: points, rect: rect);
     final finalizedPoints = baked ?? normalized;
 
@@ -433,10 +430,7 @@ List<DrawPoint> _resolveCreationWorldPoints({
   required List<DrawPoint> normalizedPoints,
 }) =>
     mode.worldPoints ??
-    ArrowGeometry.resolveWorldPoints(
-      rect: rect,
-      normalizedPoints: normalizedPoints,
-    );
+    resolveArrowWorldPoints(rect: rect, normalizedPoints: normalizedPoints);
 
 List<DrawPoint>? _resolvePreviewPointsIfNeeded({
   required List<DrawPoint> worldPoints,
@@ -546,10 +540,7 @@ List<DrawPoint>? _buildBakedNormalizedPoints({
     return null;
   }
 
-  return ArrowGeometry.normalizePoints(
-    worldPoints: bakedWorldPoints,
-    rect: rect,
-  );
+  return normalizeArrowPoints(worldPoints: bakedWorldPoints, rect: rect);
 }
 
 List<DrawPoint> _smoothStrokePointsForBake(

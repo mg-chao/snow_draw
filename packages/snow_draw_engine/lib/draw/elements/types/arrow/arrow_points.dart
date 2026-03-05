@@ -5,6 +5,7 @@ import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import 'arrow_core_bridge.dart';
+import 'arrow_core_geometry_adapter.dart';
 import 'arrow_focus.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
@@ -557,7 +558,7 @@ class ArrowPointUtils {
   static List<DrawPoint> _resolveWorldPoints(
     ElementState element,
     ArrowLikeData data,
-  ) => ArrowGeometry.resolveWorldPoints(
+  ) => resolveArrowWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
   );

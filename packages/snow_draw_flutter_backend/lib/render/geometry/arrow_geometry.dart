@@ -1,5 +1,7 @@
 import 'dart:ui';
 
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_geometry_adapter.dart'
+    as core_geometry;
 import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 class FlutterArrowGeometry {
@@ -9,7 +11,7 @@ class FlutterArrowGeometry {
     required DrawRect rect,
     required List<DrawPoint> normalizedPoints,
   }) => _toOffsets(
-    ArrowGeometry.resolveWorldPoints(
+    core_geometry.resolveArrowWorldPoints(
       rect: rect,
       normalizedPoints: normalizedPoints,
     ),
@@ -18,7 +20,8 @@ class FlutterArrowGeometry {
   static List<DrawPoint> normalizePoints({
     required List<DrawPoint> worldPoints,
     required DrawRect rect,
-  }) => ArrowGeometry.normalizePoints(worldPoints: worldPoints, rect: rect);
+  }) =>
+      core_geometry.normalizeArrowPoints(worldPoints: worldPoints, rect: rect);
 
   static Path buildShaftPathFromResolvedPoints({
     required List<Offset> points,
@@ -149,29 +152,63 @@ class FlutterArrowGeometry {
     if (pathData.isEmpty) {
       return Path();
     }
-    final commands = parseArrowCoreElbowPathCommands(pathData);
-    if (commands == null) {
-      return null;
-    }
-    if (commands.isEmpty) {
+
+    final tokens = pathData
+        .replaceAll(',', ' ')
+        .trim()
+        .split(RegExp(r'\s+'))
+        .where((token) => token.isNotEmpty)
+        .toList(growable: false);
+    if (tokens.isEmpty) {
       return Path();
     }
+
     final path = Path();
-    for (final command in commands) {
-      switch (command) {
-        case ArrowCoreElbowMoveTo():
-          path.moveTo(command.point.x, command.point.y);
-        case ArrowCoreElbowLineTo():
-          path.lineTo(command.point.x, command.point.y);
-        case ArrowCoreElbowQuadraticTo():
-          path.quadraticBezierTo(
-            command.control.x,
-            command.control.y,
-            command.end.x,
-            command.end.y,
-          );
+    var index = 0;
+
+    double? readNumber() {
+      if (index >= tokens.length) {
+        return null;
       }
+      return double.tryParse(tokens[index++]);
     }
+
+    while (index < tokens.length) {
+      final commandToken = tokens[index++];
+      if (commandToken.length != 1) {
+        return null;
+      }
+      final command = commandToken.toUpperCase();
+
+      if (command == 'M' || command == 'L') {
+        final x = readNumber();
+        final y = readNumber();
+        if (x == null || y == null) {
+          return null;
+        }
+        if (command == 'M') {
+          path.moveTo(x, y);
+        } else {
+          path.lineTo(x, y);
+        }
+        continue;
+      }
+
+      if (command == 'Q') {
+        final cx = readNumber();
+        final cy = readNumber();
+        final x = readNumber();
+        final y = readNumber();
+        if (cx == null || cy == null || x == null || y == null) {
+          return null;
+        }
+        path.quadraticBezierTo(cx, cy, x, y);
+        continue;
+      }
+
+      return null;
+    }
+
     return path;
   }
 

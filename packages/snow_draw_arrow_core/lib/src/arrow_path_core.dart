@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'arrow_geom.dart';
+import 'arrow_render_core.dart';
 import 'arrow_types.dart';
 
 class _CubicSegment {
@@ -17,11 +18,205 @@ class _CubicSegment {
   final Point end;
 }
 
+typedef RectNormalizedPoints = ({Bounds rect, List<Point> normalizedPoints});
+typedef RectAndLocalPoints = ({Bounds rect, List<Point> localPoints});
+
 /// Resolves the canonical arrowhead length from [strokeWidth].
 ///
 /// Keep this formula stable so host rendering, hit-testing, and geometry
 /// updates remain aligned across integrations.
 double resolveArrowheadLength(double strokeWidth) => strokeWidth * 4 + 12.0;
+
+const _defaultArrowPoints = <Point>[
+  <double>[0, 0],
+  <double>[1, 1],
+];
+
+List<Point> ensureMinimumArrowPoints(List<Point> points) {
+  if (points.length >= 2) {
+    return points;
+  }
+  if (points.isEmpty) {
+    return _defaultArrowPoints;
+  }
+  final first = points.first;
+  return <Point>[
+    <double>[first[0], first[1]],
+    <double>[first[0], first[1]],
+  ];
+}
+
+List<Point> denormalizeRectPoints({
+  required Bounds rect,
+  required List<Point> normalizedPoints,
+}) {
+  final points = ensureMinimumArrowPoints(normalizedPoints);
+  final width = rect[2] - rect[0];
+  final height = rect[3] - rect[1];
+  return points
+      .map(
+        (point) => <double>[
+          rect[0] + point[0] * width,
+          rect[1] + point[1] * height,
+        ],
+      )
+      .toList(growable: false);
+}
+
+List<Point> normalizeRectPoints({
+  required Bounds rect,
+  required List<Point> worldPoints,
+  bool clamp = true,
+}) {
+  final points = ensureMinimumArrowPoints(worldPoints);
+  final width = rect[2] - rect[0];
+  final height = rect[3] - rect[1];
+  return points
+      .map((point) {
+        final x = width == 0 ? 0.0 : (point[0] - rect[0]) / width;
+        final y = height == 0 ? 0.0 : (point[1] - rect[1]) / height;
+        if (!clamp) {
+          return <double>[x, y];
+        }
+        return <double>[_clamp01(x), _clamp01(y)];
+      })
+      .toList(growable: false);
+}
+
+RectNormalizedPoints computeRectNormalizedPoints({
+  required List<Point> worldPoints,
+  required bool curved,
+}) {
+  final points = ensureMinimumArrowPoints(worldPoints);
+  final rect = calculateArrowPathBounds(points: points, curved: curved);
+  final normalizedPoints = normalizeRectPoints(rect: rect, worldPoints: points);
+  return (rect: rect, normalizedPoints: normalizedPoints);
+}
+
+RectNormalizedPoints computeTwoPointRectNormalizedPoints({
+  required Point first,
+  required Point second,
+}) {
+  final rect = <double>[
+    math.min(first[0], second[0]),
+    math.min(first[1], second[1]),
+    math.max(first[0], second[0]),
+    math.max(first[1], second[1]),
+  ];
+  final normalizedPoints = normalizeRectPoints(
+    rect: rect,
+    worldPoints: <Point>[first, second],
+  );
+  return (rect: rect, normalizedPoints: normalizedPoints);
+}
+
+RectAndLocalPoints computeRotatedRectAndLocalPoints({
+  required List<Point> localPoints,
+  required Bounds oldRect,
+  required double rotation,
+  required bool curved,
+}) {
+  final points = ensureMinimumArrowPoints(localPoints);
+  if (rotation == 0) {
+    return (
+      rect: calculateArrowPathBounds(points: points, curved: curved),
+      localPoints: points,
+    );
+  }
+
+  final oldCenter = <double>[
+    (oldRect[0] + oldRect[2]) / 2,
+    (oldRect[1] + oldRect[3]) / 2,
+  ];
+  final worldPoints = points
+      .map((point) => rotatePoint(point, oldCenter, rotation))
+      .toList(growable: false);
+
+  final cosTheta = math.cos(rotation);
+  final sinTheta = math.sin(rotation);
+  final rotatedWorldPoints = worldPoints
+      .map(
+        (point) => <double>[
+          point[0] * cosTheta + point[1] * sinTheta,
+          -point[0] * sinTheta + point[1] * cosTheta,
+        ],
+      )
+      .toList(growable: false);
+  final rotatedBounds = calculateArrowPathBounds(
+    points: rotatedWorldPoints,
+    curved: curved,
+  );
+  final rotatedCenter = <double>[
+    (rotatedBounds[0] + rotatedBounds[2]) / 2,
+    (rotatedBounds[1] + rotatedBounds[3]) / 2,
+  ];
+
+  final newCenter = <double>[
+    rotatedCenter[0] * cosTheta - rotatedCenter[1] * sinTheta,
+    rotatedCenter[0] * sinTheta + rotatedCenter[1] * cosTheta,
+  ];
+  final nextLocalPoints = worldPoints
+      .map((point) => unrotatePoint(point, newCenter, rotation))
+      .toList(growable: false);
+  final rect = calculateArrowPathBounds(
+    points: nextLocalPoints,
+    curved: curved,
+  );
+  return (rect: rect, localPoints: nextLocalPoints);
+}
+
+List<Point> sampleElbowPathForHitTest({
+  required List<Point> points,
+  required double strokeWidth,
+  double radius = 16,
+}) {
+  if (points.length < 2) {
+    return points;
+  }
+
+  final safeRadius = (radius.isFinite && radius > 0) ? radius : 0.0;
+  final pathData = generateElbowArrowPath(points, safeRadius);
+  if (pathData.isEmpty) {
+    return points;
+  }
+
+  final commands = _parseElbowPathCommands(pathData);
+  if (commands == null || commands.isEmpty) {
+    return points;
+  }
+
+  final flattened = <Point>[];
+  Point? current;
+  for (final command in commands) {
+    switch (command) {
+      case _ElbowMoveTo():
+        _appendPointIfDistinct(flattened, command.point);
+        current = command.point;
+      case _ElbowLineTo():
+        _appendPointIfDistinct(flattened, command.point);
+        current = command.point;
+      case _ElbowQuadraticTo():
+        final start = current;
+        if (start == null) {
+          return points;
+        }
+        final chordLength = distance(command.end, start);
+        final roughLength =
+            chordLength + distance(command.control, start) * 0.5;
+        final stepSize = math.max(1.5, strokeWidth * 0.7);
+        final steps = roughLength <= 0 ? 6 : roughLength ~/ stepSize + 1;
+        final clampedSteps = steps.clamp(6, 32);
+        for (var i = 1; i <= clampedSteps; i++) {
+          final t = i / clampedSteps;
+          final point = _quadraticPoint(start, command.control, command.end, t);
+          _appendPointIfDistinct(flattened, point);
+        }
+        current = command.end;
+    }
+  }
+
+  return flattened.length >= 2 ? flattened : points;
+}
 
 /// Resolves the shaft inset needed for [arrowhead] at [strokeWidth].
 double calculateArrowheadInset({
@@ -242,6 +437,124 @@ Point? resolveArrowEndDirection({
     workingPoints.last[0] - workingPoints[workingPoints.length - 2][0],
     workingPoints.last[1] - workingPoints[workingPoints.length - 2][1],
   ]);
+}
+
+double _clamp01(double value) {
+  if (!value.isFinite) {
+    return 0;
+  }
+  if (value < 0) {
+    return 0;
+  }
+  if (value > 1) {
+    return 1;
+  }
+  return value;
+}
+
+sealed class _ElbowPathCommand {
+  const _ElbowPathCommand();
+}
+
+final class _ElbowMoveTo extends _ElbowPathCommand {
+  const _ElbowMoveTo(this.point);
+
+  final Point point;
+}
+
+final class _ElbowLineTo extends _ElbowPathCommand {
+  const _ElbowLineTo(this.point);
+
+  final Point point;
+}
+
+final class _ElbowQuadraticTo extends _ElbowPathCommand {
+  const _ElbowQuadraticTo({required this.control, required this.end});
+
+  final Point control;
+  final Point end;
+}
+
+List<_ElbowPathCommand>? _parseElbowPathCommands(String pathData) {
+  final normalized = pathData.trim();
+  if (normalized.isEmpty) {
+    return const <_ElbowPathCommand>[];
+  }
+
+  final tokens = normalized
+      .replaceAllMapped(RegExp('([MLQ])'), (match) => ' ${match.group(1)} ')
+      .trim()
+      .split(RegExp(r'[\s,]+'))
+      .where((token) => token.isNotEmpty)
+      .toList(growable: false);
+  if (tokens.isEmpty) {
+    return const <_ElbowPathCommand>[];
+  }
+
+  final commands = <_ElbowPathCommand>[];
+  var index = 0;
+  while (index < tokens.length) {
+    final token = tokens[index++];
+    switch (token) {
+      case 'M':
+      case 'L':
+        if (index + 1 >= tokens.length) {
+          return null;
+        }
+        final x = double.tryParse(tokens[index++]);
+        final y = double.tryParse(tokens[index++]);
+        if (x == null || y == null) {
+          return null;
+        }
+        final point = <double>[x, y];
+        if (token == 'M') {
+          commands.add(_ElbowMoveTo(point));
+        } else {
+          commands.add(_ElbowLineTo(point));
+        }
+      case 'Q':
+        if (index + 3 >= tokens.length) {
+          return null;
+        }
+        final cx = double.tryParse(tokens[index++]);
+        final cy = double.tryParse(tokens[index++]);
+        final ex = double.tryParse(tokens[index++]);
+        final ey = double.tryParse(tokens[index++]);
+        if (cx == null || cy == null || ex == null || ey == null) {
+          return null;
+        }
+        commands.add(
+          _ElbowQuadraticTo(control: <double>[cx, cy], end: <double>[ex, ey]),
+        );
+      default:
+        return null;
+    }
+  }
+
+  return commands;
+}
+
+void _appendPointIfDistinct(List<Point> points, Point point) {
+  if (points.isEmpty) {
+    points.add(point);
+    return;
+  }
+  final previous = points.last;
+  if ((previous[0] - point[0]).abs() <= 1e-6 &&
+      (previous[1] - point[1]).abs() <= 1e-6) {
+    return;
+  }
+  points.add(point);
+}
+
+Point _quadraticPoint(Point start, Point control, Point end, double t) {
+  final oneMinusT = 1 - t;
+  final oneMinusTSq = oneMinusT * oneMinusT;
+  final tSq = t * t;
+  return <double>[
+    oneMinusTSq * start[0] + 2 * oneMinusT * t * control[0] + tSq * end[0],
+    oneMinusTSq * start[1] + 2 * oneMinusT * t * control[1] + tSq * end[1],
+  ];
 }
 
 Bounds _boundsFromPoints(List<Point> points) {

@@ -13,8 +13,7 @@ import '../serial_number/serial_number_layout.dart';
 import '../text/text_data.dart';
 import 'arrow_binding.dart';
 import 'arrow_core_codec.dart';
-import 'arrow_geometry.dart';
-import 'arrow_layout.dart';
+import 'arrow_core_geometry_adapter.dart';
 import 'arrow_like_data.dart';
 import 'elbow/elbow_fixed_segment.dart';
 
@@ -339,10 +338,7 @@ List<DrawPoint> resolveArrowLocalPoints(
   List<DrawPoint>? localPointsOverride,
 ]) =>
     localPointsOverride ??
-    ArrowGeometry.resolveWorldPoints(
-      rect: element.rect,
-      normalizedPoints: data.points,
-    );
+    resolveArrowWorldPoints(rect: element.rect, normalizedPoints: data.points);
 
 List<DrawPoint> localToWorldPoints(
   ElementState element,

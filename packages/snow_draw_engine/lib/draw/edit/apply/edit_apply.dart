@@ -6,8 +6,8 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import '../../core/coordinates/overlay_space.dart';
 import '../../core/coordinates/world_space.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
+import '../../elements/types/arrow/arrow_core_geometry_adapter.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
-import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
@@ -481,7 +481,7 @@ ElementState _applyArrowResize({
       ? _flipNormalizedArrowPoints(data.points, flipX: flipX, flipY: flipY)
       : data.points;
 
-  final worldPoints = ArrowGeometry.resolveWorldPoints(
+  final worldPoints = resolveArrowWorldPoints(
     rect: element.rect,
     normalizedPoints: nextPoints,
   );

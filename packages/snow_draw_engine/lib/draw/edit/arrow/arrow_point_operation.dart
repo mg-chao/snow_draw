@@ -7,14 +7,13 @@ import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_binding_policy.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_endpoint_drag.dart';
+import '../../elements/types/arrow/arrow_core_geometry_adapter.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_focus.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
-import '../../elements/types/arrow/arrow_layout.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_points.dart';
-import '../../elements/types/arrow/arrow_two_point_layout.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import '../../elements/types/line/line_data.dart';
@@ -83,7 +82,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       );
     }
     final data = element.data as ArrowLikeData;
-    final resolved = ArrowGeometry.resolveWorldPoints(
+    final resolved = resolveArrowWorldPoints(
       rect: element.rect,
       normalizedPoints: data.points,
     );
@@ -859,7 +858,7 @@ _ArrowPointComputation _computeFocusComputation({
     );
   }
 
-  final worldPoints = ArrowGeometry.resolveWorldPoints(
+  final worldPoints = resolveArrowWorldPoints(
     rect: dragResult.element.rect,
     normalizedPoints: nextData.points,
   );

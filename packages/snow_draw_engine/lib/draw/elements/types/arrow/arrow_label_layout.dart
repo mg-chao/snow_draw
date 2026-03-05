@@ -3,7 +3,7 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
-import 'arrow_geometry.dart';
+import 'arrow_core_geometry_adapter.dart';
 import 'arrow_like_data.dart';
 
 /// Result of resolving max label dimensions for a bound arrow text block.
@@ -68,7 +68,7 @@ DrawPoint? resolveArrowLabelAnchorPointForElement({
   required ArrowLikeData data,
   DrawPoint? middleSegmentMidPoint,
 }) => resolveArrowLabelAnchorPoint(
-  worldPoints: ArrowGeometry.resolveWorldPoints(
+  worldPoints: resolveArrowWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
   ),
@@ -106,7 +106,7 @@ DrawPoint? resolveArrowBoundTextPositionForElement({
   required double boundTextHeight,
   DrawPoint? middleSegmentMidPoint,
 }) => resolveArrowBoundTextPosition(
-  worldPoints: ArrowGeometry.resolveWorldPoints(
+  worldPoints: resolveArrowWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
   ),

@@ -20,7 +20,6 @@ export 'draw/elements/types/arrow/arrow_data.dart';
 export 'draw/elements/types/arrow/arrow_binding.dart';
 export 'draw/elements/types/arrow/arrow_core_bindable_candidates.dart';
 export 'draw/elements/types/arrow/arrow_core_bridge.dart';
-export 'draw/elements/types/arrow/arrow_core_elbow_path.dart';
 export 'draw/elements/types/arrow/arrow_core_ops.dart';
 export 'draw/elements/types/arrow/arrow_core_session.dart';
 export 'draw/elements/types/arrow/arrow_engine_events.dart';

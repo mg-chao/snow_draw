@@ -5,8 +5,8 @@ import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import 'arrow_core_bridge.dart';
+import 'arrow_core_geometry_adapter.dart';
 import 'arrow_core_ops.dart';
-import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
 
 /// Repairs arrow payloads restored from persisted snapshots.
@@ -105,11 +105,11 @@ createDirectionalArrowLayout({
     padding: padding,
     endpointDelta: endpointDelta,
   );
-  final rect = ArrowGeometry.calculatePathBounds(
+  final rect = calculateArrowPathBoundsViaCore(
     worldPoints: worldPoints,
     arrowType: arrowType,
   );
-  final normalizedPoints = ArrowGeometry.normalizePoints(
+  final normalizedPoints = normalizeArrowPoints(
     worldPoints: worldPoints,
     rect: rect,
   );
