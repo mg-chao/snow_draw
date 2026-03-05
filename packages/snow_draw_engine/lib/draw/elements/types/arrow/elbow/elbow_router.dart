@@ -1,18 +1,16 @@
 import 'package:meta/meta.dart';
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../../core/coordinates/element_space.dart';
 import '../../../../models/element_state.dart';
 import '../../../../types/draw_point.dart';
 import '../../../../types/element_style.dart';
 import '../arrow_binding.dart';
-import '../arrow_core.dart' as core;
 import '../arrow_core_bridge.dart';
 import '../arrow_core_ops.dart';
 import '../arrow_data.dart';
 import '../arrow_geometry.dart';
 import 'elbow_fixed_segment.dart';
-
-export 'elbow_heading.dart';
 
 /// Elbow arrow routing entry points.
 ///

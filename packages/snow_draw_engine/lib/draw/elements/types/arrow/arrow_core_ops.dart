@@ -1,4 +1,4 @@
-import 'arrow_core.dart' as core;
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 /// Singleton runtime boundary for `snow_draw_arrow_core`.
 ///

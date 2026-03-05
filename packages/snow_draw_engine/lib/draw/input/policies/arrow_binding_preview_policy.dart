@@ -1,6 +1,7 @@
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+
 import '../../config/draw_config.dart';
 import '../../elements/types/arrow/arrow_binding_policy.dart';
-import '../../elements/types/arrow/arrow_core.dart' as core;
 import '../../elements/types/arrow/arrow_core_bindable_query.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';

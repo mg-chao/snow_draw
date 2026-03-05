@@ -1,7 +1,8 @@
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
-import 'arrow_core.dart' as core;
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
 

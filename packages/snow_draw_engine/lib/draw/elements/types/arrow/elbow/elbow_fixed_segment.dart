@@ -1,8 +1,18 @@
 import 'package:meta/meta.dart';
 
 import '../../../../types/draw_point.dart';
-import 'elbow_constants.dart';
-import 'elbow_geometry.dart';
+
+/// Internal axis tagging for fixed elbow segments.
+enum ElbowAxis {
+  horizontal,
+  vertical;
+
+  /// Whether this axis is horizontal.
+  bool get isHorizontal => this == ElbowAxis.horizontal;
+
+  /// Whether this axis is vertical.
+  bool get isVertical => this == ElbowAxis.vertical;
+}
 
 /// A fixed (pinned) segment of an elbow path whose direction and axis are
 /// preserved.
@@ -32,7 +42,7 @@ final class ElbowFixedSegment {
   final DrawPoint end;
 
   /// The [ElbowAxis] of this segment.
-  ElbowAxis get axis => ElbowGeometry.axisForSegment(start, end);
+  ElbowAxis get axis => _resolveAxis(start, end);
 
   /// Whether this segment runs horizontally.
   bool get isHorizontal => axis.isHorizontal;
@@ -40,13 +50,14 @@ final class ElbowFixedSegment {
   /// The shared coordinate along the perpendicular axis.
   ///
   /// For a horizontal segment this is the Y midpoint; for vertical, the X.
-  double get axisValue => ElbowGeometry.axisValue(start, end, axis: axis);
+  double get axisValue =>
+      axis.isHorizontal ? (start.y + end.y) / 2 : (start.x + end.x) / 2;
 
   /// Manhattan length of this segment.
-  double get length => ElbowGeometry.manhattanDistance(start, end);
+  double get length => (start.x - end.x).abs() + (start.y - end.y).abs();
 
   /// Whether this segment has meaningful length.
-  bool get isSignificant => length > ElbowConstants.dedupThreshold;
+  bool get isSignificant => length > _significantThreshold;
 
   ElbowFixedSegment copyWith({int? index, DrawPoint? start, DrawPoint? end}) =>
       ElbowFixedSegment(
@@ -90,3 +101,19 @@ final class ElbowFixedSegment {
   String toString() =>
       'ElbowFixedSegment(index: $index, start: $start, end: $end)';
 }
+
+const _significantThreshold = 1.0;
+
+ElbowAxis _resolveAxis(DrawPoint start, DrawPoint end) {
+  final dx = (start.x - end.x).abs();
+  final dy = (start.y - end.y).abs();
+  if (dy <= _axisEpsilon) {
+    return ElbowAxis.horizontal;
+  }
+  if (dx <= _axisEpsilon) {
+    return ElbowAxis.vertical;
+  }
+  return dx >= dy ? ElbowAxis.horizontal : ElbowAxis.vertical;
+}
+
+const _axisEpsilon = 1e-6;

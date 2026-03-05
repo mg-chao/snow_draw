@@ -1,4 +1,5 @@
 import 'package:meta/meta.dart';
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../config/draw_config.dart';
 import '../../../elements/core/creation_strategy.dart';
@@ -20,7 +21,6 @@ import '../../../utils/visible_elements.dart';
 import '../arrow/arrow_binding.dart';
 import '../arrow/arrow_binding_policy.dart';
 import '../line/line_data.dart';
-import 'arrow_core.dart' as core;
 import 'arrow_core_bridge.dart';
 import 'arrow_core_endpoint_drag.dart';
 import 'arrow_geometry.dart';

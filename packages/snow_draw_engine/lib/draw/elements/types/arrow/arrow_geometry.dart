@@ -1,10 +1,11 @@
 import 'dart:math' as math;
 
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../shared/hit_test_geometry.dart';
-import 'arrow_core.dart' as core;
 import 'arrow_core_codec.dart';
 import 'arrow_core_elbow_path.dart';
 import 'arrow_like_data.dart';

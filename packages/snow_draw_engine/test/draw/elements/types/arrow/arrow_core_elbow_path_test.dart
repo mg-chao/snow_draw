@@ -17,7 +17,7 @@ void main() {
 
       final move = commands[0] as ArrowCoreElbowMoveTo;
       final quad = commands[2] as ArrowCoreElbowQuadraticTo;
-      expect(move.point, const DrawPoint(x: 0, y: 0));
+      expect(move.point, DrawPoint.zero);
       expect(quad.control, const DrawPoint(x: 10, y: 5));
       expect(quad.end, const DrawPoint(x: 15, y: 5));
     });

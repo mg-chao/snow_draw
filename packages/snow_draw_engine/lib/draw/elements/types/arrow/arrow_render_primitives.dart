@@ -1,12 +1,8 @@
-import 'dart:math' as math;
-
 import 'package:meta/meta.dart';
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
-import 'arrow_core.dart' as core;
-import 'arrow_core_bridge.dart';
-import 'arrow_geometry.dart';
 
 /// Endpoint position for arrowhead primitive resolution.
 enum ArrowEndpointPosition { start, end }
@@ -63,10 +59,7 @@ final class ArrowheadCirclePrimitiveData extends ArrowheadRenderPrimitiveData {
   final ArrowheadPrimitiveFillMode fillMode;
 }
 
-/// Resolves arrowhead primitives via arrow-core first, then engine fallback.
-///
-/// The fallback path is retained as a defensive safety net for unknown or
-/// malformed host styles.
+/// Resolves arrowhead primitives strictly via arrow-core.
 final class ArrowRenderPrimitives {
   const ArrowRenderPrimitives._();
 
@@ -80,29 +73,19 @@ final class ArrowRenderPrimitives {
     required ArrowEndpointPosition position,
     DrawPoint? directionOverride,
   }) {
+    // Keep API shape stable while forcing all geometry onto arrow-core.
+    final _ = directionOverride;
     if (style == ArrowheadStyle.none || strokeWidth <= 0 || points.length < 2) {
       return const <ArrowheadRenderPrimitiveData>[];
     }
 
-    final corePrimitives = _resolveCoreArrowheadPrimitives(
+    return _resolveCoreArrowheadPrimitives(
       points: points,
       arrowType: arrowType,
       style: style,
       strokeStyle: strokeStyle,
       strokeWidth: strokeWidth,
       position: position,
-    );
-    if (corePrimitives.isNotEmpty) {
-      return corePrimitives;
-    }
-
-    return _resolveFallbackPrimitives(
-      points: points,
-      arrowType: arrowType,
-      style: style,
-      strokeWidth: strokeWidth,
-      position: position,
-      directionOverride: directionOverride,
     );
   }
 }
@@ -177,142 +160,6 @@ List<ArrowheadRenderPrimitiveData> _resolveCoreArrowheadPrimitives({
   return List<ArrowheadRenderPrimitiveData>.unmodifiable(converted);
 }
 
-List<ArrowheadRenderPrimitiveData> _resolveFallbackPrimitives({
-  required List<DrawPoint> points,
-  required ArrowType arrowType,
-  required ArrowheadStyle style,
-  required double strokeWidth,
-  required ArrowEndpointPosition position,
-  DrawPoint? directionOverride,
-}) {
-  final tip = position == ArrowEndpointPosition.start
-      ? points.first
-      : points.last;
-  final resolvedDirection =
-      directionOverride ??
-      _resolveEndpointDirection(points, arrowType, position);
-  final normalizedDirection = _normalizeDirection(resolvedDirection);
-  if (normalizedDirection == null) {
-    return const <ArrowheadRenderPrimitiveData>[];
-  }
-
-  var direction = normalizedDirection;
-  if (style == ArrowheadStyle.invertedTriangle) {
-    direction = DrawPoint(x: -direction.x, y: -direction.y);
-  }
-
-  final length = ArrowGeometry.resolveArrowheadLength(strokeWidth);
-  final width = length * 0.6;
-  final perp = DrawPoint(x: -direction.y, y: direction.x);
-
-  ArrowheadLinePrimitiveData line(DrawPoint from, DrawPoint to) =>
-      ArrowheadLinePrimitiveData(
-        from: from,
-        to: to,
-        dashMode: ArrowheadPrimitiveDashMode.solid,
-      );
-
-  switch (style) {
-    case ArrowheadStyle.none:
-      return const <ArrowheadRenderPrimitiveData>[];
-    case ArrowheadStyle.standard:
-      final base = tip - direction * length;
-      final left = base + perp * (width / 2);
-      final right = base - perp * (width / 2);
-      return <ArrowheadRenderPrimitiveData>[line(tip, left), line(tip, right)];
-    case ArrowheadStyle.triangle:
-    case ArrowheadStyle.triangleOutline:
-    case ArrowheadStyle.invertedTriangle:
-      final base = tip - direction * length;
-      final left = base + perp * (width / 2);
-      final right = base - perp * (width / 2);
-      return <ArrowheadRenderPrimitiveData>[
-        ArrowheadPolygonPrimitiveData(
-          points: List<DrawPoint>.unmodifiable(<DrawPoint>[tip, left, right]),
-          fillMode: style == ArrowheadStyle.triangleOutline
-              ? ArrowheadPrimitiveFillMode.background
-              : ArrowheadPrimitiveFillMode.stroke,
-        ),
-      ];
-    case ArrowheadStyle.square:
-      final side = length * 0.6;
-      final half = side / 2;
-      final center = tip - direction * half;
-      final corner1 = center + perp * half + direction * half;
-      final corner2 = center - perp * half + direction * half;
-      final corner3 = center - perp * half - direction * half;
-      final corner4 = center + perp * half - direction * half;
-      return <ArrowheadRenderPrimitiveData>[
-        ArrowheadPolygonPrimitiveData(
-          points: List<DrawPoint>.unmodifiable(<DrawPoint>[
-            corner1,
-            corner2,
-            corner3,
-            corner4,
-          ]),
-          fillMode: ArrowheadPrimitiveFillMode.stroke,
-        ),
-      ];
-    case ArrowheadStyle.dot:
-    case ArrowheadStyle.circle:
-    case ArrowheadStyle.circleOutline:
-      final radius = length * 0.3;
-      final center = tip - direction * radius;
-      return <ArrowheadRenderPrimitiveData>[
-        ArrowheadCirclePrimitiveData(
-          center: center,
-          radius: radius,
-          fillMode: style == ArrowheadStyle.circleOutline
-              ? ArrowheadPrimitiveFillMode.background
-              : ArrowheadPrimitiveFillMode.stroke,
-        ),
-      ];
-    case ArrowheadStyle.diamond:
-    case ArrowheadStyle.diamondOutline:
-      final base = tip - direction * length;
-      final mid = tip - direction * (length / 2);
-      final left = mid + perp * (width / 2);
-      final right = mid - perp * (width / 2);
-      return <ArrowheadRenderPrimitiveData>[
-        ArrowheadPolygonPrimitiveData(
-          points: List<DrawPoint>.unmodifiable(<DrawPoint>[
-            tip,
-            left,
-            base,
-            right,
-          ]),
-          fillMode: style == ArrowheadStyle.diamondOutline
-              ? ArrowheadPrimitiveFillMode.background
-              : ArrowheadPrimitiveFillMode.stroke,
-        ),
-      ];
-    case ArrowheadStyle.crowfootOne:
-      final base = tip - direction * length;
-      final left = base + perp * (width / 2);
-      final right = base - perp * (width / 2);
-      return <ArrowheadRenderPrimitiveData>[line(left, right)];
-    case ArrowheadStyle.crowfootMany:
-      final base = tip - direction * length;
-      final left = base + perp * (width / 2);
-      final right = base - perp * (width / 2);
-      return <ArrowheadRenderPrimitiveData>[line(left, tip), line(right, tip)];
-    case ArrowheadStyle.crowfootOneOrMany:
-      final base = tip - direction * length;
-      final left = base + perp * (width / 2);
-      final right = base - perp * (width / 2);
-      return <ArrowheadRenderPrimitiveData>[
-        line(left, tip),
-        line(right, tip),
-        line(left, right),
-      ];
-    case ArrowheadStyle.verticalLine:
-      final half = width / 2;
-      final left = tip + perp * half;
-      final right = tip - perp * half;
-      return <ArrowheadRenderPrimitiveData>[line(left, right)];
-  }
-}
-
 core.Arrowhead? _toCoreRenderableArrowhead(ArrowheadStyle style) {
   switch (style) {
     case ArrowheadStyle.none:
@@ -331,38 +178,43 @@ core.Arrowhead? _toCoreRenderableArrowhead(ArrowheadStyle style) {
     case ArrowheadStyle.crowfootOneOrMany:
     case ArrowheadStyle.invertedTriangle:
     case ArrowheadStyle.verticalLine:
-      return toCoreArrowhead(style);
+      return _toCoreArrowhead(style);
   }
 }
 
-DrawPoint? _resolveEndpointDirection(
-  List<DrawPoint> points,
-  ArrowType arrowType,
-  ArrowEndpointPosition position,
-) {
-  if (points.length < 2) {
-    return null;
+core.Arrowhead _toCoreArrowhead(ArrowheadStyle style) {
+  switch (style) {
+    case ArrowheadStyle.standard:
+      return 'arrow';
+    case ArrowheadStyle.triangle:
+      return 'triangle';
+    case ArrowheadStyle.triangleOutline:
+      return 'triangle_outline';
+    case ArrowheadStyle.square:
+      return 'square';
+    case ArrowheadStyle.dot:
+      return 'dot';
+    case ArrowheadStyle.circle:
+      return 'circle';
+    case ArrowheadStyle.circleOutline:
+      return 'circle_outline';
+    case ArrowheadStyle.diamond:
+      return 'diamond';
+    case ArrowheadStyle.diamondOutline:
+      return 'diamond_outline';
+    case ArrowheadStyle.crowfootOne:
+      return 'crowfoot_one';
+    case ArrowheadStyle.crowfootMany:
+      return 'crowfoot_many';
+    case ArrowheadStyle.crowfootOneOrMany:
+      return 'crowfoot_one_or_many';
+    case ArrowheadStyle.invertedTriangle:
+      return 'inverted_triangle';
+    case ArrowheadStyle.verticalLine:
+      return 'bar';
+    case ArrowheadStyle.none:
+      return 'arrow';
   }
-  if (position == ArrowEndpointPosition.start) {
-    final resolved = ArrowGeometry.resolveStartDirection(points, arrowType);
-    return resolved ?? _normalizeDirection(points.first - points[1]);
-  }
-  final resolved = ArrowGeometry.resolveEndDirection(points, arrowType);
-  return resolved ??
-      _normalizeDirection(points.last - points[points.length - 2]);
-}
-
-DrawPoint? _normalizeDirection(DrawPoint? direction) {
-  if (direction == null) {
-    return null;
-  }
-  final length = math.sqrt(
-    direction.x * direction.x + direction.y * direction.y,
-  );
-  if (!length.isFinite || length <= 1e-6) {
-    return null;
-  }
-  return DrawPoint(x: direction.x / length, y: direction.y / length);
 }
 
 core.ArrowEndpointPosition _toCoreEndpointPosition(
