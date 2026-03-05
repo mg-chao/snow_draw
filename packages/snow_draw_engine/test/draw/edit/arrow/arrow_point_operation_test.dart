@@ -211,61 +211,61 @@ void main() {
       expect(updatedData.endBinding, isNull);
     });
 
-    test('finish finalizes endpoint drag and keeps same-target bindings '
-        'in legacy mode', () {
-      final bindTarget = _rectangleElement(
-        id: 'rect-shared',
-        rect: const DrawRect(maxX: 120, maxY: 120),
-        zIndex: 1,
-      );
-      final arrow = _arrowElement(
-        id: 'arrow-shared',
-        points: const <DrawPoint>[
-          DrawPoint(x: 100, y: 60),
-          DrawPoint(x: 80, y: 60),
-        ],
-        zIndex: 2,
-        startBinding: const ArrowBinding(
-          elementId: 'rect-shared',
-          anchor: DrawPoint(x: 1, y: 0.5),
-        ),
-        endBinding: const ArrowBinding(
-          elementId: 'rect-shared',
-          anchor: DrawPoint(x: 0.8, y: 0.5),
-        ),
-      );
-      final state = _stateWithElements(
-        <ElementState>[bindTarget, arrow],
-        selectedIds: <String>{arrow.id},
-      );
+    test(
+      'finish finalizes endpoint drag with complex same-target behavior',
+      () {
+        final bindTarget = _rectangleElement(
+          id: 'rect-shared',
+          rect: const DrawRect(maxX: 120, maxY: 120),
+          zIndex: 1,
+        );
+        final arrow = _arrowElement(
+          id: 'arrow-shared',
+          points: const <DrawPoint>[
+            DrawPoint(x: 100, y: 60),
+            DrawPoint(x: 80, y: 60),
+          ],
+          zIndex: 2,
+          startBinding: const ArrowBinding(
+            elementId: 'rect-shared',
+            anchor: DrawPoint(x: 1, y: 0.5),
+          ),
+          endBinding: const ArrowBinding(
+            elementId: 'rect-shared',
+            anchor: DrawPoint(x: 0.8, y: 0.5),
+          ),
+        );
+        final state = _stateWithElements(
+          <ElementState>[bindTarget, arrow],
+          selectedIds: <String>{arrow.id},
+        );
 
-      final session = _dragArrowHandleSession(
-        state: state,
-        elementId: arrow.id,
-        pointKind: ArrowPointKind.turning,
-        pointIndex: 0,
-        startPosition: const DrawPoint(x: 100, y: 60),
-        currentPosition: const DrawPoint(x: 92, y: 60),
-      );
+        final session = _dragArrowHandleSession(
+          state: state,
+          elementId: arrow.id,
+          pointKind: ArrowPointKind.turning,
+          pointIndex: 0,
+          startPosition: const DrawPoint(x: 100, y: 60),
+          currentPosition: const DrawPoint(x: 92, y: 60),
+        );
 
-      expect(session.transform.startBinding, isNotNull);
-      expect(session.transform.endBinding, isNotNull);
+        expect(session.transform.startBinding, isNotNull);
+        expect(session.transform.endBinding, isNotNull);
 
-      final next = const ArrowPointOperation().finish(
-        state: state,
-        context: session.context,
-        transform: session.transform,
-      );
-      final updatedArrow = next.domain.document.getElementById(arrow.id)!;
-      final updatedData = updatedArrow.data as ArrowData;
+        final next = const ArrowPointOperation().finish(
+          state: state,
+          context: session.context,
+          transform: session.transform,
+        );
+        final updatedArrow = next.domain.document.getElementById(arrow.id)!;
+        final updatedData = updatedArrow.data as ArrowData;
 
-      expect(updatedData.startBinding, isNotNull);
-      expect(updatedData.endBinding, isNotNull);
-      expect(updatedData.startBinding!.elementId, bindTarget.id);
-      expect(updatedData.endBinding!.elementId, bindTarget.id);
-      expect(updatedData.startBinding!.mode, ArrowBindingMode.inside);
-      expect(updatedData.endBinding!.mode, ArrowBindingMode.inside);
-    });
+        expect(updatedData.startBinding, isNotNull);
+        expect(updatedData.startBinding!.elementId, bindTarget.id);
+        expect(updatedData.startBinding!.mode, ArrowBindingMode.orbit);
+        expect(updatedData.endBinding, isNull);
+      },
+    );
 
     test('finish applies reorder event and moves bound arrow above target', () {
       final bindTarget = _rectangleElement(

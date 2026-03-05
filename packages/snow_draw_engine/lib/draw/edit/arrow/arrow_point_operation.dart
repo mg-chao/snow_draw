@@ -1317,10 +1317,6 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   final worldTarget = context.toWorld(releaseLocalPointer);
   final activeBinding = activeIndex == 0 ? startBinding : endBinding;
   final preserveInsideBinding = activeBinding?.mode == ArrowBindingMode.inside;
-  final hasSameTargetDualBinding =
-      startBinding != null &&
-      endBinding != null &&
-      startBinding.elementId == endBinding.elementId;
   final dragResult = finalizeArrowCoreEndpointDragResult(
     state: state,
     element: context.baseElement,
@@ -1339,10 +1335,7 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
     allowNewBinding: transform.allowBindingOnFinalize,
     bindingDistance: 0,
     coreEngineContext: coreEngineContext,
-    options: <String, dynamic>{
-      if (preserveInsideBinding) 'altKey': true,
-      if (hasSameTargetDualBinding) 'complexBindings': false,
-    },
+    options: <String, dynamic>{if (preserveInsideBinding) 'altKey': true},
   );
   if (dragResult == null) {
     return null;
