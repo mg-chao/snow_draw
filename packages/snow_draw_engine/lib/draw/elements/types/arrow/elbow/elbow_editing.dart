@@ -19,12 +19,16 @@ final class ElbowEditResult {
   const ElbowEditResult({
     required this.localPoints,
     required this.fixedSegments,
+    required this.startBinding,
+    required this.endBinding,
     required this.startIsSpecial,
     required this.endIsSpecial,
   });
 
   final List<DrawPoint> localPoints;
   final List<ElbowFixedSegment>? fixedSegments;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
   final bool? startIsSpecial;
   final bool? endIsSpecial;
 }
@@ -104,6 +108,8 @@ ElbowEditResult computeElbowEdit({
     fixedSegments: fixedSegments == null
         ? null
         : List<ElbowFixedSegment>.unmodifiable(fixedSegments),
+    startBinding: fromCoreBinding(nextArrow.startBinding),
+    endBinding: fromCoreBinding(nextArrow.endBinding),
     startIsSpecial: nextArrow.startIsSpecial,
     endIsSpecial: nextArrow.endIsSpecial,
   );

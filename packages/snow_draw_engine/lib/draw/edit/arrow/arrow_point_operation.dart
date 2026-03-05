@@ -173,14 +173,16 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
     final data = baseElement.data as ArrowLikeData;
     var points = typedContext.initialPoints;
     var fixedSegments = data.fixedSegments;
+    var startBinding = data.startBinding;
+    var endBinding = data.endBinding;
     var hasChanges = false;
     if (typedContext.deletePointOnStart) {
       return ArrowPointTransform(
         currentPosition: startPosition,
         points: points,
         fixedSegments: fixedSegments,
-        startBinding: data.startBinding,
-        endBinding: data.endBinding,
+        startBinding: startBinding,
+        endBinding: endBinding,
         activeIndex: typedContext.pointIndex,
         shouldDelete: true,
         hasChanges: true,
@@ -222,14 +224,16 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       );
       points = updated.localPoints;
       fixedSegments = updated.fixedSegments;
+      startBinding = updated.startBinding;
+      endBinding = updated.endBinding;
       hasChanges = true;
     }
     return ArrowPointTransform(
       currentPosition: startPosition,
       points: points,
       fixedSegments: fixedSegments,
-      startBinding: data.startBinding,
-      endBinding: data.endBinding,
+      startBinding: startBinding,
+      endBinding: endBinding,
       hasChanges: hasChanges,
     );
   }
@@ -507,6 +511,20 @@ ElementState _buildUpdatedElement({
       engineContext: coreEngineContext,
       finalize: finalize,
     );
+    var resolvedStartBinding = updated.startBinding;
+    var resolvedEndBinding = updated.endBinding;
+    final activeIndex = transform.activeIndex;
+    final isEndpointTurningDrag =
+        context.pointKind == ArrowPointKind.turning &&
+        activeIndex != null &&
+        (activeIndex == 0 || activeIndex == localPoints.length - 1);
+    if (isEndpointTurningDrag) {
+      if (activeIndex == 0) {
+        resolvedEndBinding = transform.endBinding;
+      } else {
+        resolvedStartBinding = transform.startBinding;
+      }
+    }
     final geometry = resolveArrowGeometryUpdate(
       localPoints: updated.localPoints,
       oldRect: context.elementRect,
@@ -521,6 +539,8 @@ ElementState _buildUpdatedElement({
     );
     final updatedData = dataWithBindings.copyWith(
       points: geometry.normalizedPoints,
+      startBinding: resolvedStartBinding,
+      endBinding: resolvedEndBinding,
       fixedSegments: transformedFixedSegments,
       startIsSpecial: updated.startIsSpecial,
       endIsSpecial: updated.endIsSpecial,
@@ -1216,14 +1236,12 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   }
 
   final data = context.baseElement.data as ArrowLikeData;
-  if (data.arrowType == ArrowType.elbow) {
-    // Excalidraw parity: elbow endpoint finalization is handled through elbow
-    // point normalization, not endpoint-drag finalize.
-    return null;
-  }
   final startBinding = transform.startBinding;
   final endBinding = transform.endBinding;
-  final worldTarget = context.toWorld(localPoints[activeIndex]);
+  final releaseLocalPointer = transform.currentPosition.translate(
+    context.dragOffset,
+  );
+  final worldTarget = context.toWorld(releaseLocalPointer);
   final activeBinding = activeIndex == 0 ? startBinding : endBinding;
   final preserveInsideBinding = activeBinding?.mode == ArrowBindingMode.inside;
   final dragResult = finalizeArrowCoreEndpointDragResult(
@@ -1250,8 +1268,15 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   }
 
   final nextPoints = dragResult.localPoints;
-  final nextStartBinding = dragResult.startBinding;
-  final nextEndBinding = dragResult.endBinding;
+  var nextStartBinding = dragResult.startBinding;
+  var nextEndBinding = dragResult.endBinding;
+  if (data.arrowType == ArrowType.elbow) {
+    if (activeIndex == 0) {
+      nextEndBinding = endBinding;
+    } else {
+      nextStartBinding = startBinding;
+    }
+  }
   final nextFixedSegments = dragResult.fixedSegments;
   final orderedElementIds = dragResult.orderedElementIds;
 
@@ -1335,6 +1360,10 @@ _ArrowPointComputation _computeElbowAddableComputation({
   );
 
   final pointsChanged = !pointListEquals(basePoints, updated.localPoints);
+  final nextStartBinding = updated.startBinding;
+  final nextEndBinding = updated.endBinding;
+  final bindingsChanged =
+      nextStartBinding != startBinding || nextEndBinding != endBinding;
   final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
     baseFixedSegments,
     updated.fixedSegments,
@@ -1349,9 +1378,9 @@ _ArrowPointComputation _computeElbowAddableComputation({
       segmentIndex: dragResult.activeSegmentIndex ?? segmentIndex,
       pointCount: updated.localPoints.length,
     ),
-    hasChanges: pointsChanged || segmentsChanged,
-    startBinding: startBinding,
-    endBinding: endBinding,
+    hasChanges: pointsChanged || bindingsChanged || segmentsChanged,
+    startBinding: nextStartBinding,
+    endBinding: nextEndBinding,
     fixedSegments: updated.fixedSegments,
     orderedElementIds: null,
   );

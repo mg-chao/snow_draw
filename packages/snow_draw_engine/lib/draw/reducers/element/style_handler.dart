@@ -456,6 +456,8 @@ bool _shouldRecomputeElbowAfterStyleChange(ArrowData previous, ArrowData next) {
 
   final updatedData = data.copyWith(
     points: geometry.normalizedPoints,
+    startBinding: edited.startBinding,
+    endBinding: edited.endBinding,
     fixedSegments: transformedFixedSegments,
     startIsSpecial: edited.startIsSpecial,
     endIsSpecial: edited.endIsSpecial,

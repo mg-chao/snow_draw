@@ -139,6 +139,8 @@ Map<String, ElementState> _normalizeUpdatedElbowArrows({
     );
     final normalizedData = data.copyWith(
       points: geometry.normalizedPoints,
+      startBinding: normalizedEdit.startBinding,
+      endBinding: normalizedEdit.endBinding,
       fixedSegments: transformedFixedSegments,
       startIsSpecial: normalizedEdit.startIsSpecial,
       endIsSpecial: normalizedEdit.endIsSpecial,
