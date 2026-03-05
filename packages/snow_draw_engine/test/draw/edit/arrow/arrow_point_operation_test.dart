@@ -430,6 +430,67 @@ void main() {
       );
     });
 
+    test(
+      'dragging start-adjacent fixed segment inserts a free segment at start',
+      () {
+        final arrow = _elbowArrowElement(
+          id: 'elbow-start-segment',
+          points: const <DrawPoint>[
+            DrawPoint(x: 0, y: 0),
+            DrawPoint(x: 125, y: 0),
+            DrawPoint(x: 125, y: 200),
+            DrawPoint(x: 250, y: 200),
+          ],
+          zIndex: 1,
+        );
+        final state = _stateWithElements(
+          <ElementState>[arrow],
+          selectedIds: <String>{arrow.id},
+        );
+
+        final session = _dragArrowHandleSession(
+          state: state,
+          elementId: arrow.id,
+          pointKind: ArrowPointKind.addable,
+          pointIndex: 0,
+          startPosition: const DrawPoint(x: 62.5, y: 0),
+          currentPosition: const DrawPoint(x: 62.5, y: 20),
+        );
+        final next = const ArrowPointOperation().finish(
+          state: state,
+          context: session.context,
+          transform: session.transform,
+        );
+
+        final updatedArrow = next.domain.document.getElementById(arrow.id)!;
+        final updatedData = updatedArrow.data as ArrowData;
+        final updatedPoints = ArrowGeometry.resolveWorldPoints(
+          rect: updatedArrow.rect,
+          normalizedPoints: updatedData.points,
+        );
+
+        expect(updatedPoints, hasLength(5));
+        expect(updatedPoints[0].x, closeTo(0, 1e-6));
+        expect(updatedPoints[0].y, closeTo(0, 1e-6));
+        expect(updatedPoints[1].x, closeTo(0, 1e-6));
+        expect(updatedPoints[1].y, closeTo(20, 1e-6));
+        expect(updatedPoints[2].x, closeTo(125, 1e-6));
+        expect(updatedPoints[2].y, closeTo(20, 1e-6));
+        expect(updatedPoints[3].x, closeTo(125, 1e-6));
+        expect(updatedPoints[3].y, closeTo(200, 1e-6));
+        expect(updatedPoints[4].x, closeTo(250, 1e-6));
+        expect(updatedPoints[4].y, closeTo(200, 1e-6));
+
+        expect(updatedData.fixedSegments, isNotNull);
+        expect(updatedData.fixedSegments, hasLength(1));
+        expect(updatedData.fixedSegments!.first.index, 2);
+        expect(updatedData.fixedSegments!.first.start.x, closeTo(0, 1e-6));
+        expect(updatedData.fixedSegments!.first.start.y, closeTo(20, 1e-6));
+        expect(updatedData.fixedSegments!.first.end.x, closeTo(125, 1e-6));
+        expect(updatedData.fixedSegments!.first.end.y, closeTo(20, 1e-6));
+      },
+    );
+
     test('dragging elbow endpoint preserves existing fixed segment lock', () {
       final arrow = _elbowArrowElement(
         id: 'elbow-endpoint',
@@ -480,6 +541,85 @@ void main() {
       expect(updatedData.fixedSegments!.first.start.x, closeTo(130, 1e-6));
       expect(updatedData.fixedSegments!.first.end.x, closeTo(130, 1e-6));
     });
+
+    test(
+      'dragging elbow endpoint keeps connected segment routing consistent',
+      () {
+        final arrow = _elbowArrowElement(
+          id: 'elbow-endpoint-connected-segment',
+          points: const <DrawPoint>[
+            DrawPoint(x: 0, y: 0),
+            DrawPoint(x: 120, y: 0),
+            DrawPoint(x: 120, y: 120),
+            DrawPoint(x: 220, y: 120),
+            DrawPoint(x: 220, y: 220),
+          ],
+          zIndex: 1,
+          fixedSegments: const <ElbowFixedSegment>[
+            ElbowFixedSegment(
+              index: 2,
+              start: DrawPoint(x: 120, y: 0),
+              end: DrawPoint(x: 120, y: 120),
+            ),
+            ElbowFixedSegment(
+              index: 4,
+              start: DrawPoint(x: 220, y: 120),
+              end: DrawPoint(x: 220, y: 220),
+            ),
+          ],
+        );
+        final state = _stateWithElements(
+          <ElementState>[arrow],
+          selectedIds: <String>{arrow.id},
+        );
+
+        final session = _dragArrowHandleSession(
+          state: state,
+          elementId: arrow.id,
+          pointKind: ArrowPointKind.turning,
+          pointIndex: 4,
+          startPosition: const DrawPoint(x: 220, y: 220),
+          currentPosition: const DrawPoint(x: 300, y: 260),
+        );
+        final next = const ArrowPointOperation().finish(
+          state: state,
+          context: session.context,
+          transform: session.transform,
+        );
+
+        final updatedArrow = next.domain.document.getElementById(arrow.id)!;
+        final updatedData = updatedArrow.data as ArrowData;
+        final updatedPoints = ArrowGeometry.resolveWorldPoints(
+          rect: updatedArrow.rect,
+          normalizedPoints: updatedData.points,
+        );
+
+        expect(updatedPoints, hasLength(5));
+        expect(updatedPoints[0].x, closeTo(0, 1e-6));
+        expect(updatedPoints[0].y, closeTo(0, 1e-6));
+        expect(updatedPoints[1].x, closeTo(120, 1e-6));
+        expect(updatedPoints[1].y, closeTo(0, 1e-6));
+        expect(updatedPoints[2].x, closeTo(120, 1e-6));
+        expect(updatedPoints[2].y, closeTo(120, 1e-6));
+        expect(updatedPoints[3].x, closeTo(300, 1e-6));
+        expect(updatedPoints[3].y, closeTo(120, 1e-6));
+        expect(updatedPoints[4].x, closeTo(300, 1e-6));
+        expect(updatedPoints[4].y, closeTo(260, 1e-6));
+
+        expect(updatedData.fixedSegments, isNotNull);
+        expect(updatedData.fixedSegments, hasLength(2));
+        expect(updatedData.fixedSegments![0].index, 2);
+        expect(updatedData.fixedSegments![0].start.x, closeTo(120, 1e-6));
+        expect(updatedData.fixedSegments![0].start.y, closeTo(0, 1e-6));
+        expect(updatedData.fixedSegments![0].end.x, closeTo(120, 1e-6));
+        expect(updatedData.fixedSegments![0].end.y, closeTo(120, 1e-6));
+        expect(updatedData.fixedSegments![1].index, 4);
+        expect(updatedData.fixedSegments![1].start.x, closeTo(300, 1e-6));
+        expect(updatedData.fixedSegments![1].start.y, closeTo(120, 1e-6));
+        expect(updatedData.fixedSegments![1].end.x, closeTo(300, 1e-6));
+        expect(updatedData.fixedSegments![1].end.y, closeTo(260, 1e-6));
+      },
+    );
   });
 }
 

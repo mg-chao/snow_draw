@@ -964,10 +964,35 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
     );
   }
 
-  final localPoints = dragResult.localPoints;
+  var localPoints = dragResult.localPoints;
   final nextStartBinding = dragResult.startBinding;
   final nextEndBinding = dragResult.endBinding;
-  final nextFixedSegments = dragResult.fixedSegments;
+  var nextFixedSegments = dragResult.fixedSegments;
+
+  if (data.arrowType == ArrowType.elbow && data is ArrowData) {
+    final draggedEndpoint =
+        draggedIndex >= 0 && draggedIndex < dragResult.localPoints.length
+        ? dragResult.localPoints[draggedIndex]
+        : target;
+    final elbowInputPoints = List<DrawPoint>.from(basePoints);
+    if (draggedIndex >= 0 && draggedIndex < elbowInputPoints.length) {
+      elbowInputPoints[draggedIndex] = draggedEndpoint;
+    }
+
+    final elbowData = data.copyWith(
+      startBinding: nextStartBinding,
+      endBinding: nextEndBinding,
+    );
+    final elbowResult = computeElbowEdit(
+      element: context.baseElement,
+      data: elbowData,
+      lookup: CombinedElementLookup(base: state.domain.document.elementMap),
+      localPointsOverride: elbowInputPoints,
+      engineContext: coreEngineContext,
+    );
+    localPoints = elbowResult.localPoints;
+    nextFixedSegments = elbowResult.fixedSegments;
+  }
 
   final pointsChanged = !pointListEquals(basePoints, localPoints);
   final bindingsChanged =
@@ -1148,10 +1173,6 @@ _ArrowPointComputation _computeElbowAddableComputation({
     movedArrow,
     context.baseElement,
   );
-  final movedPoints = _applyMovedFixedSegmentsToPoints(
-    points: basePoints,
-    fixedSegments: movedFixedSegments,
-  );
   final editData = data.copyWith(
     startBinding: startBinding,
     endBinding: endBinding,
@@ -1160,9 +1181,9 @@ _ArrowPointComputation _computeElbowAddableComputation({
     element: context.baseElement,
     data: editData,
     lookup: CombinedElementLookup(base: state.domain.document.elementMap),
-    // Keep points + fixed segments in sync so arrow-core can treat this as an
-    // active fixed-segment move even when the segment is newly created.
-    localPointsOverride: movedPoints,
+    // Excalidraw parity: fixed-segment drag must go through the
+    // `fixedSegments`-only elbow update path so core can insert/release
+    // bridging free segments near endpoints when needed.
     fixedSegmentsOverride: movedFixedSegments,
     engineContext: coreEngineContext,
   );
@@ -1188,25 +1209,6 @@ _ArrowPointComputation _computeElbowAddableComputation({
     fixedSegments: updated.fixedSegments,
     orderedElementIds: null,
   );
-}
-
-List<DrawPoint> _applyMovedFixedSegmentsToPoints({
-  required List<DrawPoint> points,
-  required List<ElbowFixedSegment>? fixedSegments,
-}) {
-  if (fixedSegments == null || fixedSegments.isEmpty || points.length < 2) {
-    return points;
-  }
-  final updated = List<DrawPoint>.from(points);
-  for (final segment in fixedSegments) {
-    final endIndex = segment.index;
-    if (endIndex <= 0 || endIndex >= updated.length) {
-      continue;
-    }
-    updated[endIndex - 1] = segment.start;
-    updated[endIndex] = segment.end;
-  }
-  return List<DrawPoint>.unmodifiable(updated);
 }
 
 _ArrowPointComputation _noOpComputation({

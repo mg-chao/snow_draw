@@ -1805,8 +1805,11 @@ int? _activelyModifiedFixedSegmentPosition(
   List<FixedSegment>? previous,
   List<FixedSegment> next,
 ) {
-  if (previous == null || previous.isEmpty) {
+  if (next.isEmpty) {
     return null;
+  }
+  if (previous == null || previous.isEmpty) {
+    return 0;
   }
   for (var index = 0; index < next.length; index += 1) {
     final current = next[index];
@@ -2580,7 +2583,7 @@ ArrowPatch _updateElbowArrowPointsPort(
 
   if ((arrow.fixedSegments?.length ?? 0) > fixedSegments.length) {
     return _handleSegmentReleasePort(
-      arrow: nextArrow,
+      arrow: arrow,
       bindablesById: bindablesById,
       fixedSegments: fixedSegments,
       zoom: zoom,
@@ -2603,7 +2606,7 @@ ArrowPatch _updateElbowArrowPointsPort(
       zoom: zoom,
     );
     return _handleSegmentMovePort(
-      arrow: nextArrow,
+      arrow: arrow,
       fixedSegments: fixedSegments
           .map(
             (segment) => segment.copyWith(
