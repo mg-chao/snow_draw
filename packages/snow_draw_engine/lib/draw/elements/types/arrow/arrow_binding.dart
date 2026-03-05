@@ -37,14 +37,17 @@ final class ArrowBinding {
     );
     return ArrowBinding(
       elementId: elementId,
-      anchor: DrawPoint(x: _clamp01(anchor.x), y: _clamp01(anchor.y)),
+      anchor: _normalizeFixedPoint(anchor),
       mode: mode,
     );
   }
 
   final String elementId;
 
-  /// Normalized anchor in the target element's unrotated rect (0..1).
+  /// Fixed-point ratio in the target element's unrotated rect space.
+  ///
+  /// Values are typically within `0..1`, but can be outside that range for
+  /// some repaired or transformed bindings, matching Excalidraw semantics.
   final DrawPoint anchor;
   final ArrowBindingMode mode;
 
@@ -374,10 +377,7 @@ class ArrowBindingUtils {
     }
     final coreBinding = core.FixedPointBinding(
       elementId: binding.elementId,
-      fixedPoint: <double>[
-        _clamp01(binding.anchor.x),
-        _clamp01(binding.anchor.y),
-      ],
+      fixedPoint: <double>[binding.anchor.x, binding.anchor.y],
       mode: _toCoreBindingMode(binding.mode),
     );
     final global = resolveCoreGlobalFixedPoint(
@@ -402,7 +402,7 @@ class ArrowBindingUtils {
     );
     return ArrowBinding(
       elementId: target.id,
-      anchor: DrawPoint(x: _clamp01(normalized.x), y: _clamp01(normalized.y)),
+      anchor: _normalizeFixedPoint(normalized),
       mode: mode,
     );
   }
@@ -483,8 +483,8 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
       : core.FixedPointBinding(
           elementId: preferredBinding.elementId,
           fixedPoint: <double>[
-            _clamp01(preferredBinding.anchor.x),
-            _clamp01(preferredBinding.anchor.y),
+            preferredBinding.anchor.x,
+            preferredBinding.anchor.y,
           ],
           mode: _toCoreBindingMode(preferredBinding.mode),
         );
@@ -551,8 +551,8 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     binding: ArrowBinding(
       elementId: nextBinding.elementId,
       anchor: DrawPoint(
-        x: _clamp01(nextBinding.fixedPoint[0]),
-        y: _clamp01(nextBinding.fixedPoint[1]),
+        x: nextBinding.fixedPoint[0],
+        y: nextBinding.fixedPoint[1],
       ),
       mode: _fromCoreBindingMode(nextBinding.mode),
     ),
@@ -576,10 +576,7 @@ DrawPoint? _resolveBoundPointViaCore({
 
   final coreBinding = core.FixedPointBinding(
     elementId: binding.elementId,
-    fixedPoint: <double>[
-      _clamp01(binding.anchor.x),
-      _clamp01(binding.anchor.y),
-    ],
+    fixedPoint: <double>[binding.anchor.x, binding.anchor.y],
     mode: _toCoreBindingMode(binding.mode),
   );
   final focus = core.getGlobalFixedPoint(coreBinding, bindable);
@@ -646,15 +643,18 @@ DrawPoint _arrowWorldEndpoint(
   return DrawPoint(x: arrow.x + endpoint[0], y: arrow.y + endpoint[1]);
 }
 
-double _clamp01(double value) {
+DrawPoint _normalizeFixedPoint(DrawPoint point) => DrawPoint(
+  x: _normalizeFixedRatio(point.x),
+  y: _normalizeFixedRatio(point.y),
+);
+
+double _normalizeFixedRatio(double value) {
   if (!value.isFinite) {
-    return 0;
+    return 0.5001;
   }
-  if (value < 0) {
-    return 0;
-  }
-  if (value > 1) {
-    return 1;
+  const epsilon = 0.0001;
+  if ((value - 0.5).abs() < epsilon) {
+    return 0.5001;
   }
   return value;
 }

@@ -85,10 +85,7 @@ ArrowBinding? fromCoreBinding(core.FixedPointBinding? binding) {
   }
   return ArrowBinding(
     elementId: binding.elementId,
-    anchor: DrawPoint(
-      x: _clamp01(binding.fixedPoint[0]),
-      y: _clamp01(binding.fixedPoint[1]),
-    ),
+    anchor: DrawPoint(x: binding.fixedPoint[0], y: binding.fixedPoint[1]),
     mode: _fromCoreBindingMode(binding.mode),
   );
 }
@@ -174,11 +171,9 @@ core.BindableState _buildCoreBindableState({
 );
 
 List<core.BindableState> collectCoreBindables(Iterable<ElementState> elements) {
-  final orderedElements = elements.toList(growable: false)
-    ..sort(_compareByZIndexThenId);
   final bindables = <core.BindableState>[];
   var orderIndex = 0;
-  for (final element in orderedElements) {
+  for (final element in elements) {
     final bindable = toCoreBindableState(element, zIndex: orderIndex);
     orderIndex += 1;
     if (bindable == null) {
@@ -192,20 +187,20 @@ List<core.BindableState> collectCoreBindables(Iterable<ElementState> elements) {
 List<core.BindableRelationState> collectCoreBindableRelations(
   Iterable<ElementState> elements,
 ) {
-  final orderedElements = elements.toList(growable: false)
-    ..sort(_compareByZIndexThenId);
   final orderedBindableIds = <String>[];
   final bindableIdSet = <String>{};
-  final boundArrowIdsByBindable = <String, Set<String>>{};
+  final boundArrowIdsByBindable = <String, List<String>>{};
+  final seenArrowIdsByBindable = <String, Set<String>>{};
 
-  for (final element in orderedElements) {
+  for (final element in elements) {
     if (isArrowBindableElement(element) && bindableIdSet.add(element.id)) {
       orderedBindableIds.add(element.id);
-      boundArrowIdsByBindable[element.id] = <String>{};
+      boundArrowIdsByBindable[element.id] = <String>[];
+      seenArrowIdsByBindable[element.id] = <String>{};
     }
   }
 
-  for (final element in orderedElements) {
+  for (final element in elements) {
     final data = element.data;
     if (data is! ArrowLikeData) {
       continue;
@@ -220,6 +215,10 @@ List<core.BindableRelationState> collectCoreBindableRelations(
       if (boundArrowIds == null) {
         return;
       }
+      final seenArrowIds = seenArrowIdsByBindable[bindableId];
+      if (seenArrowIds == null || !seenArrowIds.add(arrowId)) {
+        return;
+      }
       boundArrowIds.add(arrowId);
     }
 
@@ -232,8 +231,7 @@ List<core.BindableRelationState> collectCoreBindableRelations(
         (bindableId) => core.BindableRelationState(
           id: bindableId,
           boundArrowIds: List<String>.unmodifiable(
-            (boundArrowIdsByBindable[bindableId] ?? <String>{}).toList()
-              ..sort(),
+            boundArrowIdsByBindable[bindableId] ?? const <String>[],
           ),
         ),
       )
@@ -646,25 +644,4 @@ List<ElbowFixedSegment>? transformArrowLocalFixedSegments({
   return transformed.isEmpty
       ? null
       : List<ElbowFixedSegment>.unmodifiable(transformed);
-}
-
-double _clamp01(double value) {
-  if (value.isNaN) {
-    return 0;
-  }
-  if (value < 0) {
-    return 0;
-  }
-  if (value > 1) {
-    return 1;
-  }
-  return value;
-}
-
-int _compareByZIndexThenId(ElementState left, ElementState right) {
-  final zOrder = left.zIndex.compareTo(right.zIndex);
-  if (zOrder != 0) {
-    return zOrder;
-  }
-  return left.id.compareTo(right.id);
 }

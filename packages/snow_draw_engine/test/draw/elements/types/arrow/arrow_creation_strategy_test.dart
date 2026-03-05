@@ -455,7 +455,23 @@ void main() {
         snappingMode: SnappingMode.none,
       );
       final endBoundData = endBoundUpdate.data as ArrowData;
-      expect(endBoundData.startBinding, equals(startBoundData.startBinding));
+      expect(endBoundData.startBinding, isNotNull);
+      expect(
+        endBoundData.startBinding!.elementId,
+        startBoundData.startBinding!.elementId,
+      );
+      expect(
+        endBoundData.startBinding!.mode,
+        startBoundData.startBinding!.mode,
+      );
+      expect(
+        endBoundData.startBinding!.anchor.x,
+        closeTo(startBoundData.startBinding!.anchor.x, 1e-3),
+      );
+      expect(
+        endBoundData.startBinding!.anchor.y,
+        closeTo(startBoundData.startBinding!.anchor.y, 1e-3),
+      );
       expect(endBoundData.endBinding, isNotNull);
       expect(endBoundData.endBinding!.elementId, 'rect-end');
 
@@ -473,7 +489,23 @@ void main() {
       );
       final finishedData = finish.data as ArrowData;
       expect(finish.shouldCommit, isTrue);
-      expect(finishedData.startBinding, equals(startBoundData.startBinding));
+      expect(finishedData.startBinding, isNotNull);
+      expect(
+        finishedData.startBinding!.elementId,
+        startBoundData.startBinding!.elementId,
+      );
+      expect(
+        finishedData.startBinding!.mode,
+        startBoundData.startBinding!.mode,
+      );
+      expect(
+        finishedData.startBinding!.anchor.x,
+        closeTo(startBoundData.startBinding!.anchor.x, 1e-3),
+      );
+      expect(
+        finishedData.startBinding!.anchor.y,
+        closeTo(startBoundData.startBinding!.anchor.y, 1e-3),
+      );
       expect(finishedData.endBinding, isNotNull);
       expect(finishedData.endBinding!.elementId, 'rect-end');
     });

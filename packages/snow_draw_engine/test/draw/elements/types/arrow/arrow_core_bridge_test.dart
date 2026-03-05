@@ -10,6 +10,7 @@ import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
 import 'package:snow_draw_engine/draw/types/element_style.dart';
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import 'package:test/test.dart';
 
 void main() {
@@ -83,10 +84,52 @@ void main() {
       expect(relations[1].id, 'rect-2');
       expect(relations[1].boundArrowIds, isEmpty);
     });
+
+    test('collectCoreBindableRelations preserves arrow order from input', () {
+      final target = _rectangleElement(
+        id: 'rect-1',
+        rect: const DrawRect(maxX: 100, maxY: 100),
+        zIndex: 0,
+      );
+      final arrowB = _arrowElement(
+        id: 'arrow-b',
+        points: const <DrawPoint>[
+          DrawPoint(x: 20, y: 20),
+          DrawPoint(x: 140, y: 20),
+        ],
+        zIndex: 2,
+        startBinding: const ArrowBinding(
+          elementId: 'rect-1',
+          anchor: DrawPoint(x: 1, y: 0.5),
+        ),
+      );
+      final arrowA = _arrowElement(
+        id: 'arrow-a',
+        points: const <DrawPoint>[
+          DrawPoint(x: 30, y: 30),
+          DrawPoint(x: 130, y: 30),
+        ],
+        zIndex: 1,
+        endBinding: const ArrowBinding(
+          elementId: 'rect-1',
+          anchor: DrawPoint(x: 0, y: 0.5),
+        ),
+      );
+
+      final relations = collectCoreBindableRelations(<ElementState>[
+        target,
+        arrowB,
+        arrowA,
+      ]);
+
+      expect(relations, hasLength(1));
+      expect(relations.first.id, 'rect-1');
+      expect(relations.first.boundArrowIds, <String>['arrow-b', 'arrow-a']);
+    });
   });
 
   group('arrow_core_bridge document projection', () {
-    test('collectCoreBindables normalizes z-order from element zIndex', () {
+    test('collectCoreBindables preserves input order for z-order', () {
       final top = _rectangleElement(
         id: 'top',
         rect: const DrawRect(minX: 200, minY: 0, maxX: 260, maxY: 60),
@@ -110,9 +153,9 @@ void main() {
       ]);
 
       expect(bindables.map((bindable) => bindable.id).toList(), <String>[
+        'top',
         'bottom',
         'middle',
-        'top',
       ]);
       expect(bindables.map((bindable) => bindable.zIndex).toList(), <double>[
         0,
@@ -223,6 +266,20 @@ void main() {
       expect(bindable!.shape, 'ellipse');
       expect(bindable.strokeWidth, 2);
       expect(bindable.zIndex, 5);
+    });
+
+    test('fromCoreBinding preserves out-of-range fixed-point ratios', () {
+      final binding = fromCoreBinding(
+        core.FixedPointBinding(
+          elementId: 'rect-1',
+          fixedPoint: const <double>[-0.2, 1.25],
+          mode: core.bindModeOrbit,
+        ),
+      );
+
+      expect(binding, isNotNull);
+      expect(binding!.anchor.x, closeTo(-0.2, 1e-9));
+      expect(binding.anchor.y, closeTo(1.25, 1e-9));
     });
   });
 }
