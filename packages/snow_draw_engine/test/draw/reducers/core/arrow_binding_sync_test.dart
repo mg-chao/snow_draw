@@ -70,6 +70,37 @@ void main() {
       expect(duplicateArrow.endBinding?.elementId, 'dup-r2');
     });
   });
+
+  group('arrow_binding_sync deletion parity', () {
+    test('repairs bindings when only deleted ids are provided', () {
+      const retainedBindable = ElementState(
+        id: 'r2',
+        rect: DrawRect(minX: 300, maxX: 400, maxY: 100),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      );
+      final retainedArrow = _buildArrow(
+        id: 'a1',
+        startTargetId: 'deleted-r1',
+        endTargetId: 'r2',
+        offsetX: 0,
+        offsetY: 0,
+        zIndex: 1,
+      );
+
+      final synced = syncArrowBindingsAfterDeletion(
+        elements: <ElementState>[retainedBindable, retainedArrow],
+        deletedIds: const <String>{'deleted-r1'},
+        deletedElementsById: const <String, ElementState>{},
+      );
+      final syncedArrow = _arrowDataById(synced, 'a1');
+
+      expect(syncedArrow.startBinding, isNull);
+      expect(syncedArrow.endBinding?.elementId, 'r2');
+    });
+  });
 }
 
 List<ElementState> _buildBaseElements() {

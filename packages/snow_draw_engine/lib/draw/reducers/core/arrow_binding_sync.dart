@@ -102,21 +102,32 @@ List<ElementState> syncArrowBindingsAfterDeletion({
     return elements;
   }
 
-  final deletedArrowIds = <String>[
-    for (final element in deletedElementsById.values)
-      if (element.data is ArrowLikeData) element.id,
-  ];
-  final deletedBindableIds = <String>[
-    for (final element in deletedElementsById.values)
-      if (isArrowBindableElement(element)) element.id,
-  ];
+  final deletedArrowIdSet = <String>{};
+  final deletedBindableIdSet = <String>{};
+  final allDeletedIds = <String>{...deletedIds, ...deletedElementsById.keys};
+  for (final deletedId in allDeletedIds) {
+    final deletedElement = deletedElementsById[deletedId];
+    if (deletedElement == null) {
+      // When callers only provide ids, keep lifecycle repair conservative by
+      // treating unknown deleted ids as both arrow and bindable candidates.
+      deletedArrowIdSet.add(deletedId);
+      deletedBindableIdSet.add(deletedId);
+      continue;
+    }
+    if (deletedElement.data is ArrowLikeData) {
+      deletedArrowIdSet.add(deletedId);
+    }
+    if (isArrowBindableElement(deletedElement)) {
+      deletedBindableIdSet.add(deletedId);
+    }
+  }
 
   final syncResult = syncCoreBindingsAfterDeletion(
     arrows: session.arrows,
     bindables: session.bindableRelations,
     geometryBindables: session.bindables,
-    deletedArrowIds: deletedArrowIds,
-    deletedBindableIds: deletedBindableIds,
+    deletedArrowIds: deletedArrowIdSet.toList(growable: false),
+    deletedBindableIds: deletedBindableIdSet.toList(growable: false),
     context: session.context,
   );
   final patchedById = session.applyArrowPatches(syncResult.arrowPatches);
