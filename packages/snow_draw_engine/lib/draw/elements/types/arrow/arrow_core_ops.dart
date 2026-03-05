@@ -533,6 +533,33 @@ core.ApplyEngineResultValue applyCoreEngineResult({
   ),
 );
 
+/// Typed wrapper around hover-target based arrow reordering.
+core.ReorderArrowAboveHoveredBindableResult
+reorderCoreArrowAboveHoveredBindable({
+  required List<String> orderedElementIds,
+  required String arrowId,
+  String? hoveredBindableId,
+  core.Point? point,
+  List<core.BindableState>? bindables,
+  double? tolerance,
+  Map<String, List<String>>? anchorElementIdsByBindableId,
+}) => core.reorderArrowAboveHoveredBindable(
+  core.ReorderArrowAboveHoveredBindableInput(
+    orderedElementIds: orderedElementIds,
+    arrowId: arrowId,
+    hoveredBindableId: hoveredBindableId,
+    point: point,
+    bindables: bindables,
+    tolerance: tolerance,
+    anchorElementIdsByBindableId: anchorElementIdsByBindableId,
+  ),
+);
+
+/// Returns reordered ids only when hovered-bindable reordering moved arrow.
+List<String>? reorderedElementIdsFromCoreHoveredReorder(
+  core.ReorderArrowAboveHoveredBindableResult result,
+) => result.moved ? List<String>.unmodifiable(result.orderedElementIds) : null;
+
 /// Returns `true` when applying an engine result changed document order.
 bool didCoreEngineResultReorder(core.ApplyEngineResultValue value) =>
     value.orderChanged ?? false;

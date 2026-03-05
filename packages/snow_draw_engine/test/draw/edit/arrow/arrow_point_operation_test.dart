@@ -251,6 +251,44 @@ void main() {
       expect(orderedIds, <String>[bindTarget.id, arrow.id]);
     });
 
+    test(
+      'dragging already-bound endpoint can reorder using suggested bindable',
+      () {
+        final bindTarget = _rectangleElement(
+          id: 'rect-suggested',
+          rect: const DrawRect(maxX: 100, maxY: 100),
+          zIndex: 1,
+        );
+        final arrow = _arrowElement(
+          id: 'arrow-suggested',
+          points: const <DrawPoint>[
+            DrawPoint(x: -120, y: 50),
+            DrawPoint(x: 0, y: 50),
+          ],
+          zIndex: 0,
+          endBinding: const ArrowBinding(
+            elementId: 'rect-suggested',
+            anchor: DrawPoint(x: 0, y: 0.5),
+          ),
+        );
+        final state = _stateWithElements(
+          <ElementState>[arrow, bindTarget],
+          selectedIds: <String>{arrow.id},
+        );
+
+        final transform = _dragArrowEndpoint(
+          state: state,
+          elementId: arrow.id,
+          endpointIndex: 1,
+          startPosition: const DrawPoint(x: 0, y: 50),
+          currentPosition: const DrawPoint(x: 0, y: 50),
+        );
+
+        expect(transform.hasChanges, isTrue);
+        expect(transform.orderedElementIds, <String>[bindTarget.id, arrow.id]);
+      },
+    );
+
     test('dragging focus handle routes through core focus drag '
         'and can switch to inside', () {
       final bindTarget = _rectangleElement(

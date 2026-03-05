@@ -76,6 +76,28 @@ final class ArrowCoreSession {
     anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
   );
 
+  /// Reorders [arrowId] above a hovered/suggested bindable when possible.
+  ///
+  /// Returns reordered ids only when a move occurred.
+  List<String>? reorderArrowAboveHoveredBindable({
+    required String arrowId,
+    String? hoveredBindableId,
+    core.Point? point,
+    List<String>? orderedElementIds,
+    double? tolerance,
+  }) {
+    final reorder = reorderCoreArrowAboveHoveredBindable(
+      orderedElementIds: orderedElementIds ?? projection.orderedElementIds,
+      arrowId: arrowId,
+      hoveredBindableId: hoveredBindableId,
+      point: point,
+      bindables: projection.bindables,
+      tolerance: tolerance,
+      anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
+    );
+    return reorderedElementIdsFromCoreHoveredReorder(reorder);
+  }
+
   /// Applies an arrow-core engine [result] to [arrow] with session projection.
   ///
   /// This ensures every caller uses the same relation graph, anchor mapping,

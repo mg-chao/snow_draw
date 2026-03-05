@@ -1000,8 +1000,14 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
       : draggedIndex >= localPoints.length
       ? localPoints.length - 1
       : draggedIndex;
-  final orderedElementIds = reorderedElementIdsFromCoreResult(applied);
-  final orderChanged = didCoreEngineResultReorder(applied);
+  var orderedElementIds = reorderedElementIdsFromCoreResult(applied);
+  if (orderedElementIds == null) {
+    orderedElementIds = session.reorderArrowAboveHoveredBindable(
+      arrowId: arrow.id,
+      hoveredBindableId: dragResult.suggestedBinding?.bindableId,
+    );
+  }
+  final orderChanged = orderedElementIds != null;
 
   return _ArrowPointComputation(
     points: List<DrawPoint>.unmodifiable(localPoints),
@@ -1104,7 +1110,9 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
       if (preserveInsideBinding) 'altKey': true,
     },
   );
-  if (dragResult.arrowPatch.isEmpty && dragResult.events.isEmpty) {
+  if (dragResult.arrowPatch.isEmpty &&
+      dragResult.events.isEmpty &&
+      dragResult.suggestedBinding == null) {
     return null;
   }
 
@@ -1121,7 +1129,13 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   final nextFixedSegments = data.arrowType == ArrowType.elbow
       ? toLocalFixedSegmentsFromCoreArrow(finalizedArrow, context.baseElement)
       : transform.fixedSegments;
-  final orderedElementIds = reorderedElementIdsFromCoreResult(applied);
+  var orderedElementIds = reorderedElementIdsFromCoreResult(applied);
+  if (orderedElementIds == null) {
+    orderedElementIds = session.reorderArrowAboveHoveredBindable(
+      arrowId: arrow.id,
+      hoveredBindableId: dragResult.suggestedBinding?.bindableId,
+    );
+  }
 
   final pointsChanged = !pointListEquals(localPoints, nextPoints);
   final bindingsChanged =

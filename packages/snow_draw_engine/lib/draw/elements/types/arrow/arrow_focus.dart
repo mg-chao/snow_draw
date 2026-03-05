@@ -214,7 +214,14 @@ ArrowFocusDragResult dragArrowFocusPoint({
     result: result,
     orderedElementIds: orderedElementIds,
   );
-  final reorderedElementIds = reorderedElementIdsFromCoreResult(applied);
+  var reorderedElementIds = reorderedElementIdsFromCoreResult(applied);
+  if (reorderedElementIds == null) {
+    reorderedElementIds = session.reorderArrowAboveHoveredBindable(
+      arrowId: arrow.id,
+      hoveredBindableId: result.suggestedBinding?.bindableId,
+      orderedElementIds: orderedElementIds,
+    );
+  }
   final patchedElement = applied.arrow == arrow
       ? element
       : applyCoreArrowStateToElement(

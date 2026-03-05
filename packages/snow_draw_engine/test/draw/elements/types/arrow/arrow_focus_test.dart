@@ -80,6 +80,31 @@ void main() {
         expect(result.suggestedBindableId, bindable.id);
       },
     );
+
+    test('dragArrowFocusPoint reorders arrow above suggested bindable', () {
+      final bindable = _bindableElement();
+      final arrow = _boundArrowElement().copyWith(zIndex: 0);
+      final data = arrow.data as ArrowData;
+      final focusPoint = listVisibleArrowFocusPoints(
+        element: arrow,
+        data: data,
+        elements: <ElementState>[arrow, bindable],
+      ).single;
+      final result = dragArrowFocusPoint(
+        element: arrow,
+        data: data,
+        elementsById: <String, ElementState>{
+          arrow.id: arrow,
+          bindable.id: bindable,
+        },
+        draggedEndpoint: ArrowFocusEndpoint.start,
+        pointer: focusPoint.position,
+        orderedElementIds: const <String>['arrow-1', 'bindable-1'],
+      );
+
+      expect(result.suggestedBindableId, bindable.id);
+      expect(result.orderedElementIds, <String>['bindable-1', 'arrow-1']);
+    });
   });
 }
 

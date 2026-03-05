@@ -98,6 +98,33 @@ void main() {
 
       expect(ordered, <String>['serial-1', 'arrow-1', 'text-1']);
     });
+
+    test(
+      'reorderArrowAboveHoveredBindable reorders with suggested bindable',
+      () {
+        final serial = _serialElement(id: 'serial-1', textElementId: 'text-1');
+        final text = _textElement(id: 'text-1');
+        final arrow = _arrowElement(
+          id: 'arrow-1',
+          points: const <DrawPoint>[
+            DrawPoint(x: 20, y: 20),
+            DrawPoint(x: 140, y: 20),
+          ],
+          zIndex: 2,
+        );
+
+        final session = ArrowCoreSession.fromElements(
+          <ElementState>[arrow, serial, text],
+          orderedElementIds: const <String>['arrow-1', 'serial-1', 'text-1'],
+        );
+        final ordered = session.reorderArrowAboveHoveredBindable(
+          arrowId: 'arrow-1',
+          hoveredBindableId: 'serial-1',
+        );
+
+        expect(ordered, <String>['serial-1', 'arrow-1', 'text-1']);
+      },
+    );
   });
 }
 
