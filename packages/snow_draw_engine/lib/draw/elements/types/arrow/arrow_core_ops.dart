@@ -25,7 +25,7 @@ final class ArrowCoreRuntime {
     'pointer': pointer,
     'bindables': bindables,
     'context': context,
-    ...?(options == null ? null : <String, dynamic>{'options': options}),
+    ..._composeEndpointBindingOptionsPayload(options),
   });
 
   core.EngineResult finalizeEndpointDrag({
@@ -41,7 +41,7 @@ final class ArrowCoreRuntime {
     'pointer': pointer,
     'bindables': bindables,
     'context': context,
-    ...?(options == null ? null : <String, dynamic>{'options': options}),
+    ..._composeEndpointBindingOptionsPayload(options),
   });
 
   core.EngineResult recomputeAfterBindableChange({
@@ -205,6 +205,20 @@ final class ArrowCoreRuntime {
 
 ArrowCoreRuntime get _runtime => ArrowCoreRuntime.instance;
 
+const _complexBindingsOptionKey = 'complexBindings';
+
+Map<String, dynamic> _withDefaultComplexBindings(
+  Map<String, dynamic>? options,
+) {
+  final normalized = <String, dynamic>{...?options};
+  normalized.putIfAbsent(_complexBindingsOptionKey, () => true);
+  return normalized;
+}
+
+Map<String, dynamic> _composeEndpointBindingOptionsPayload(
+  Map<String, dynamic>? options,
+) => <String, dynamic>{'options': _withDefaultComplexBindings(options)};
+
 /// Typed wrapper around `snow_draw_arrow_core` endpoint-drag computation.
 core.EngineResult computeCoreEndpointDrag({
   required core.ArrowState arrow,
@@ -253,7 +267,7 @@ core.EngineResult computeCoreSimpleBindingPatch({
   'pointer': pointer,
   'bindables': bindables,
   'context': context,
-  ...?(options == null ? null : <String, dynamic>{'options': options}),
+  ..._composeEndpointBindingOptionsPayload(options),
 });
 
 /// Typed wrapper around endpoint-binding strategy resolution.
@@ -270,7 +284,7 @@ core.EndpointBindingStrategies resolveCoreEndpointBindingStrategy({
   'pointer': pointer,
   'bindables': bindables,
   'context': context,
-  ...?(options == null ? null : <String, dynamic>{'options': options}),
+  ..._composeEndpointBindingOptionsPayload(options),
 });
 
 /// Typed wrapper around core binding-gap calculation.

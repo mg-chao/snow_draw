@@ -21,9 +21,15 @@ void main() {
     });
 
     test(
-      'resolveCoreEndpointBindingStrategy delegates strategy resolution',
+      'resolveCoreEndpointBindingStrategy defaults to complex-binding parity',
       () {
-        final arrow = _arrowState();
+        final arrow = _arrowState(
+          startBinding: const core.FixedPointBinding(
+            elementId: 'bindable-1',
+            fixedPoint: <double>[0.75, 0.5],
+            mode: core.bindModeOrbit,
+          ),
+        );
         final bindable = _bindableState();
         final strategies = resolveCoreEndpointBindingStrategy(
           arrow: arrow,
@@ -33,16 +39,12 @@ void main() {
           pointer: const <double>[60, 0],
           bindables: <core.BindableState>[bindable],
           context: buildCoreEngineContext(),
-          options: const <String, dynamic>{'complexBindings': true},
         );
 
         expect(strategies.start, isNull);
         expect(strategies.end, isNotNull);
         expect(strategies.end!.bindableId, bindable.id);
-        expect(
-          strategies.end!.mode,
-          anyOf(core.bindModeInside, core.bindModeOrbit),
-        );
+        expect(strategies.end!.mode, core.bindModeOrbit);
       },
     );
 
