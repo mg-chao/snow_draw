@@ -2,6 +2,7 @@ import 'package:snow_draw_engine/draw/config/draw_config.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_creation_strategy.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
+import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/models/document_state.dart';
 import 'package:snow_draw_engine/draw/models/domain_state.dart';
@@ -10,6 +11,7 @@ import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/models/interaction_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
+import 'package:snow_draw_engine/draw/types/element_style.dart';
 import 'package:snow_draw_engine/draw/utils/snapping_mode.dart';
 import 'package:test/test.dart';
 
@@ -75,6 +77,36 @@ void main() {
       final data = update.data as ArrowData;
       expect(data.startBinding, isNotNull);
       expect(data.startBinding!.elementId, 'rect-start');
+    });
+
+    test('update binds endpoint to nearby highlight ellipse via core', () {
+      const startPosition = DrawPoint(x: 20, y: 140);
+      const currentPosition = DrawPoint(x: 220, y: 140);
+      final state = _stateWithElements(<ElementState>[
+        _highlightElement(
+          id: 'highlight-target',
+          rect: const DrawRect(minX: 180, minY: 80, maxX: 300, maxY: 220),
+          zIndex: 2,
+        ),
+      ]);
+      final creatingState = _startCreatingArrow(
+        strategy: strategy,
+        startPosition: startPosition,
+      );
+
+      final update = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creatingState,
+        currentPosition: currentPosition,
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+
+      final data = update.data as ArrowData;
+      expect(data.endBinding, isNotNull);
+      expect(data.endBinding!.elementId, 'highlight-target');
     });
 
     test('disabling arrow binding keeps endpoints unbound', () {
@@ -224,4 +256,17 @@ ElementState _rectangleElement({
   opacity: 1,
   zIndex: zIndex,
   data: const RectangleData(),
+);
+
+ElementState _highlightElement({
+  required String id,
+  required DrawRect rect,
+  required int zIndex,
+}) => ElementState(
+  id: id,
+  rect: rect,
+  rotation: 0,
+  opacity: 1,
+  zIndex: zIndex,
+  data: const HighlightData(shape: HighlightShape.ellipse),
 );

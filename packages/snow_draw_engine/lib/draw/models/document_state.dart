@@ -67,7 +67,7 @@ class DocumentState {
   /// Whether the document currently contains any bindable arrow targets.
   ///
   /// This lets arrow create/edit flows skip spatial queries entirely when no
-  /// rectangle/text/serial-number elements are present.
+  /// bindable shapes are present.
   late final bool hasArrowBindableElements = _arrowBindableElements.isNotEmpty;
 
   /// Cached highlight elements in document z-order.

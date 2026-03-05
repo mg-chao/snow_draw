@@ -6,6 +6,7 @@ import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
+import '../highlight/highlight_data.dart';
 import '../rectangle/rectangle_data.dart';
 import '../serial_number/serial_number_data.dart';
 import '../serial_number/serial_number_layout.dart';
@@ -129,64 +130,75 @@ String? toCoreArrowhead(ArrowheadStyle style) {
 
 bool isArrowBindableElement(ElementState element) {
   final data = element.data;
-  return data is RectangleData || data is TextData || data is SerialNumberData;
+  return data is RectangleData ||
+      data is TextData ||
+      data is SerialNumberData ||
+      data is HighlightData;
 }
 
 core.BindableState? toCoreBindableState(ElementState element) {
   final data = element.data;
   if (data is RectangleData) {
-    return core.BindableState(
-      id: element.id,
+    return _buildCoreBindableState(
+      element: element,
       shape: 'rectangle',
-      x: element.rect.minX,
-      y: element.rect.minY,
-      width: element.rect.width,
-      height: element.rect.height,
-      angle: element.rotation,
       strokeWidth: data.strokeWidth,
-      roundness: data.cornerRadius > 0
-          ? core.BindableRoundness(type: 'adaptive', value: data.cornerRadius)
-          : null,
-      zIndex: element.zIndex.toDouble(),
+      roundness: _adaptiveRoundness(data.cornerRadius),
       backgroundOpaque: data.fillColor.a > 0,
-      bindingEnabled: true,
-      interiorHitEnabled: true,
     );
   }
   if (data is TextData) {
-    return core.BindableState(
-      id: element.id,
+    return _buildCoreBindableState(
+      element: element,
       shape: 'rectangle',
-      x: element.rect.minX,
-      y: element.rect.minY,
-      width: element.rect.width,
-      height: element.rect.height,
-      angle: element.rotation,
       strokeWidth: data.strokeWidth,
-      zIndex: element.zIndex.toDouble(),
+      roundness: _adaptiveRoundness(data.cornerRadius),
       backgroundOpaque: data.fillColor.a > 0,
-      bindingEnabled: true,
-      interiorHitEnabled: true,
     );
   }
   if (data is SerialNumberData) {
-    return core.BindableState(
-      id: element.id,
+    return _buildCoreBindableState(
+      element: element,
       shape: 'ellipse',
-      x: element.rect.minX,
-      y: element.rect.minY,
-      width: element.rect.width,
-      height: element.rect.height,
-      angle: element.rotation,
       strokeWidth: resolveSerialNumberStrokeWidth(data: data),
-      zIndex: element.zIndex.toDouble(),
       backgroundOpaque: data.fillColor.a > 0,
-      bindingEnabled: true,
-      interiorHitEnabled: true,
+    );
+  }
+  if (data is HighlightData) {
+    return _buildCoreBindableState(
+      element: element,
+      shape: data.shape == HighlightShape.ellipse ? 'ellipse' : 'rectangle',
+      strokeWidth: data.strokeWidth,
+      backgroundOpaque: data.color.a > 0,
     );
   }
   return null;
 }
+
+core.BindableRoundness? _adaptiveRoundness(double radius) =>
+    radius > 0 ? core.BindableRoundness(type: 'adaptive', value: radius) : null;
+
+core.BindableState _buildCoreBindableState({
+  required ElementState element,
+  required String shape,
+  required double strokeWidth,
+  required bool backgroundOpaque,
+  core.BindableRoundness? roundness,
+}) => core.BindableState(
+  id: element.id,
+  shape: shape,
+  x: element.rect.minX,
+  y: element.rect.minY,
+  width: element.rect.width,
+  height: element.rect.height,
+  angle: element.rotation,
+  strokeWidth: strokeWidth,
+  roundness: roundness,
+  zIndex: element.zIndex.toDouble(),
+  backgroundOpaque: backgroundOpaque,
+  bindingEnabled: true,
+  interiorHitEnabled: true,
+);
 
 List<core.BindableState> collectCoreBindables(
   Iterable<ElementState> elements,

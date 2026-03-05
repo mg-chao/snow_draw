@@ -2,12 +2,14 @@ import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
+import 'package:snow_draw_engine/draw/types/element_style.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -142,6 +144,47 @@ void main() {
         expect(projection.arrowSources.keys, contains('arrow-1'));
       },
     );
+
+    test(
+      'toCoreBindableState maps text corner radius to adaptive roundness',
+      () {
+        const text = ElementState(
+          id: 'text-1',
+          rect: DrawRect(minX: 100, minY: 60, maxX: 260, maxY: 140),
+          rotation: 0,
+          opacity: 1,
+          zIndex: 2,
+          data: TextData(text: 'rounded', cornerRadius: 14, strokeWidth: 3),
+        );
+
+        final bindable = toCoreBindableState(text);
+
+        expect(bindable, isNotNull);
+        expect(bindable!.shape, 'rectangle');
+        expect(bindable.strokeWidth, 3);
+        expect(bindable.roundness, isNotNull);
+        expect(bindable.roundness!.type, 'adaptive');
+        expect(bindable.roundness!.value, 14);
+      },
+    );
+
+    test('toCoreBindableState maps highlight ellipse as ellipse bindable', () {
+      const highlight = ElementState(
+        id: 'highlight-1',
+        rect: DrawRect(minX: 80, minY: 40, maxX: 200, maxY: 160),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 5,
+        data: HighlightData(shape: HighlightShape.ellipse, strokeWidth: 2),
+      );
+
+      final bindable = toCoreBindableState(highlight);
+
+      expect(bindable, isNotNull);
+      expect(bindable!.shape, 'ellipse');
+      expect(bindable.strokeWidth, 2);
+      expect(bindable.zIndex, 5);
+    });
   });
 }
 

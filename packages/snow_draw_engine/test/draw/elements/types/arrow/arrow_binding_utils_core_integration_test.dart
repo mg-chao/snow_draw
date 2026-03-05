@@ -1,10 +1,12 @@
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
+import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/serial_number/serial_number_layout.dart';
 import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
+import 'package:snow_draw_engine/draw/types/element_style.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -50,6 +52,24 @@ void main() {
       expect(inside, isNotNull);
       expect(orbit!.binding.mode, ArrowBindingMode.orbit);
       expect(inside!.binding.mode, ArrowBindingMode.inside);
+    });
+
+    test('resolveBindingCandidate supports highlight ellipse bindables', () {
+      final target = _highlightElement(
+        id: 'highlight-1',
+        rect: const DrawRect(minX: 80, minY: 80, maxX: 240, maxY: 220),
+        zIndex: 7,
+      );
+
+      final result = ArrowBindingUtils.resolveBindingCandidate(
+        worldPoint: const DrawPoint(x: 160, y: 150),
+        targets: <ElementState>[target],
+        snapDistance: 56,
+      );
+
+      expect(result, isNotNull);
+      expect(result!.binding.elementId, target.id);
+      expect(result.zIndex, target.zIndex);
     });
 
     test('resolveBindingCandidate respects allowNewBinding=false '
@@ -150,4 +170,17 @@ ElementState _rectangleElement({
   opacity: 1,
   zIndex: zIndex,
   data: const RectangleData(),
+);
+
+ElementState _highlightElement({
+  required String id,
+  required DrawRect rect,
+  required int zIndex,
+}) => ElementState(
+  id: id,
+  rect: rect,
+  rotation: 0,
+  opacity: 1,
+  zIndex: zIndex,
+  data: const HighlightData(shape: HighlightShape.ellipse),
 );
