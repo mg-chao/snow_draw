@@ -968,6 +968,8 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
       allowNewBinding: allowNewBinding,
       bindingDistance: bindingDistance,
       coreEngineContext: coreEngineContext,
+      angleLocked: angleLocked,
+      altKey: altKey,
     );
   }
   final worldTarget = context.toWorld(target);
@@ -1001,10 +1003,10 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
     );
   }
 
-  var localPoints = dragResult.localPoints;
-  var nextStartBinding = dragResult.startBinding;
-  var nextEndBinding = dragResult.endBinding;
-  var nextFixedSegments = dragResult.fixedSegments;
+  final localPoints = dragResult.localPoints;
+  final nextStartBinding = dragResult.startBinding;
+  final nextEndBinding = dragResult.endBinding;
+  final nextFixedSegments = dragResult.fixedSegments;
 
   final pointsChanged = !pointListEquals(basePoints, localPoints);
   final bindingsChanged =
@@ -1051,6 +1053,8 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
   required bool allowNewBinding,
   required double bindingDistance,
   required core.EngineContext coreEngineContext,
+  required bool angleLocked,
+  required bool altKey,
 }) {
   if (basePoints.length < 2) {
     return _noOpComputation(
@@ -1076,7 +1080,7 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
 
   var nextStartBinding = startBinding;
   var nextEndBinding = endBinding;
-  var draggedEndpoint = target;
+  final draggedEndpoint = target;
   String? hoveredBindableId;
 
   if (!allowNewBinding) {
@@ -1096,51 +1100,71 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
       excludedElementId: context.elementId,
       allowNewBinding: allowNewBinding,
     );
-    final hoveredBindable = candidates.isEmpty
-        ? null
-        : core.getHoveredBindable(
-            toCorePoint(worldTarget),
-            candidates.bindables,
-            bindingDistance,
-          );
-    if (hoveredBindable != null) {
-      hoveredBindableId = hoveredBindable.id;
-      final nextEndpointPoints = List<DrawPoint>.of(
-        basePoints,
-        growable: false,
-      );
-      if (draggedStart) {
-        nextEndpointPoints[0] = target;
-      } else {
-        nextEndpointPoints[nextEndpointPoints.length - 1] = target;
-      }
-      final previewArrow = toCoreArrowState(
-        element: context.baseElement,
-        data: data,
-        localPointsOverride: nextEndpointPoints,
-        fixedSegmentsOverride: baseFixedSegments,
-        startBindingOverride: startBinding,
-        endBindingOverride: endBinding,
-      );
-      final fixedPoint = calculateCoreFixedPointForElbowBinding(
-        arrow: previewArrow,
-        bindable: hoveredBindable,
-        edge: draggedStart ? core.arrowEndpointStart : core.arrowEndpointEnd,
-      );
-      final nextBinding = ArrowBinding(
-        elementId: hoveredBindable.id,
-        anchor: DrawPoint(x: fixedPoint[0], y: fixedPoint[1]),
-        mode: ArrowBindingMode.orbit,
-      );
-      if (draggedStart) {
-        nextStartBinding = nextBinding;
-      } else {
-        nextEndBinding = nextBinding;
-      }
-    } else if (draggedStart) {
-      nextStartBinding = null;
+    final nextEndpointPoints = List<DrawPoint>.of(basePoints, growable: false);
+    if (draggedStart) {
+      nextEndpointPoints[0] = target;
     } else {
-      nextEndBinding = null;
+      nextEndpointPoints[nextEndpointPoints.length - 1] = target;
+    }
+    final previewArrow = toCoreArrowState(
+      element: context.baseElement,
+      data: data,
+      localPointsOverride: nextEndpointPoints,
+      fixedSegmentsOverride: baseFixedSegments,
+      startBindingOverride: startBinding,
+      endBindingOverride: endBinding,
+    );
+    final dragContext = shouldLookupBindings && allowNewBinding
+        ? coreEngineContext
+        : buildCoreEngineContext(
+            zoom: coreEngineContext.zoom,
+            isBindingEnabled: false,
+            bindMode: coreEngineContext.bindMode,
+            maxCoordinate: coreEngineContext.maxCoordinate,
+          );
+    final strategies = resolveCoreEndpointBindingStrategy(
+      arrow: previewArrow,
+      draggedPoints: <int, core.Point>{
+        draggedIndex: <double>[
+          worldTarget.x - previewArrow.x,
+          worldTarget.y - previewArrow.y,
+        ],
+      },
+      pointer: toCorePoint(worldTarget),
+      bindables: candidates.bindables,
+      context: dragContext,
+      options: <String, dynamic>{
+        if (angleLocked) 'angleLocked': true,
+        if (altKey) 'altKey': true,
+      },
+    );
+    final draggedStrategy = draggedStart ? strategies.start : strategies.end;
+    final bindableIdFromStrategy = draggedStrategy?.bindableId;
+    hoveredBindableId =
+        (bindableIdFromStrategy != null && bindableIdFromStrategy.isNotEmpty)
+        ? bindableIdFromStrategy
+        : draggedStrategy?.element?.id;
+
+    final edge = draggedStart ? core.arrowEndpointStart : core.arrowEndpointEnd;
+    final strategyArrow = _applyCoreEndpointStrategyToArrow(
+      arrow: previewArrow,
+      edge: edge,
+      strategy: draggedStrategy,
+    );
+    nextStartBinding = fromCoreBinding(strategyArrow.startBinding);
+    nextEndBinding = fromCoreBinding(strategyArrow.endBinding);
+
+    if (!allowNewBinding && activeBinding != null) {
+      final activeBindingId = activeBinding.elementId;
+      final resolvedBinding = draggedStart ? nextStartBinding : nextEndBinding;
+      if (resolvedBinding == null ||
+          resolvedBinding.elementId != activeBindingId) {
+        if (draggedStart) {
+          nextStartBinding = null;
+        } else {
+          nextEndBinding = null;
+        }
+      }
     }
   }
 
@@ -1204,6 +1228,35 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
     fixedSegments: nextFixedSegments,
     orderedElementIds: orderedElementIds,
   );
+}
+
+core.ArrowState _applyCoreEndpointStrategyToArrow({
+  required core.ArrowState arrow,
+  required core.ArrowEndpointEdge edge,
+  required core.EndpointBindingStrategy? strategy,
+}) {
+  if (strategy == null) {
+    return arrow;
+  }
+  if (strategy.mode == null) {
+    final mutation = unbindCoreArrowEndpoint(arrow: arrow, edge: edge);
+    return core.applyArrowPatch(arrow, mutation.arrowPatch);
+  }
+
+  final bindable = strategy.element;
+  final focusPoint = strategy.focusPoint;
+  if (bindable == null || focusPoint == null) {
+    return arrow;
+  }
+
+  final mutation = bindCoreArrowEndpoint(
+    arrow: arrow,
+    edge: edge,
+    bindable: bindable,
+    mode: strategy.mode,
+    focusPoint: focusPoint,
+  );
+  return core.applyArrowPatch(arrow, mutation.arrowPatch);
 }
 
 @immutable
