@@ -15,6 +15,21 @@ import 'arrow_like_data.dart';
 /// - applying arrow patches back onto engine elements
 /// - reducing arrow-core events into document ordering
 @immutable
+final class ArrowCoreAppliedResult {
+  const ArrowCoreAppliedResult({
+    required this.value,
+    required this.orderedElementIds,
+  });
+
+  final core.ApplyEngineResultValue value;
+  final List<String>? orderedElementIds;
+
+  core.ArrowState get arrow => value.arrow;
+
+  bool get orderChanged => orderedElementIds != null;
+}
+
+@immutable
 final class ArrowCoreSession {
   const ArrowCoreSession({required this.projection, required this.context});
 
@@ -113,4 +128,47 @@ final class ArrowCoreSession {
     orderedElementIds: orderedElementIds ?? projection.orderedElementIds,
     anchorElementIdsByBindableId: projection.anchorElementIdsByBindableId,
   );
+
+  /// Applies [result] and resolves element ordering with hovered/suggested
+  /// bindable fallback when the engine result does not emit reorder events.
+  ///
+  /// This keeps reorder behavior consistent across creation, drag, and focus
+  /// flows.
+  ArrowCoreAppliedResult applyEngineResultWithOrderFallback({
+    required core.ArrowState arrow,
+    required core.EngineResult result,
+    String? hoveredBindableId,
+    core.Point? point,
+    List<String>? orderedElementIds,
+    double? tolerance,
+  }) {
+    final applied = applyEngineResult(
+      arrow: arrow,
+      result: result,
+      orderedElementIds: orderedElementIds,
+    );
+
+    var nextOrderedElementIds = reorderedElementIdsFromCoreResult(applied);
+    if (nextOrderedElementIds == null) {
+      final suggestedBindableId =
+          hoveredBindableId ?? result.suggestedBinding?.bindableId;
+      final canFallbackReorder =
+          (suggestedBindableId != null && suggestedBindableId.isNotEmpty) ||
+          point != null;
+      if (canFallbackReorder) {
+        nextOrderedElementIds = reorderArrowAboveHoveredBindable(
+          arrowId: arrow.id,
+          hoveredBindableId: suggestedBindableId,
+          point: point,
+          orderedElementIds: orderedElementIds,
+          tolerance: tolerance,
+        );
+      }
+    }
+
+    return ArrowCoreAppliedResult(
+      value: applied,
+      orderedElementIds: nextOrderedElementIds,
+    );
+  }
 }

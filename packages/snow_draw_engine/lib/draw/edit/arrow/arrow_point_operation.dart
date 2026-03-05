@@ -966,7 +966,10 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
     },
   );
   final session = ArrowCoreSession.fromElements(state.domain.document.elements);
-  final applied = session.applyEngineResult(arrow: arrow, result: dragResult);
+  final applied = session.applyEngineResultWithOrderFallback(
+    arrow: arrow,
+    result: dragResult,
+  );
   final draggedArrow = applied.arrow;
   final worldPoints = coreArrowWorldPoints(draggedArrow);
   if (worldPoints.length < 2) {
@@ -1000,13 +1003,7 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
       : draggedIndex >= localPoints.length
       ? localPoints.length - 1
       : draggedIndex;
-  var orderedElementIds = reorderedElementIdsFromCoreResult(applied);
-  if (orderedElementIds == null) {
-    orderedElementIds = session.reorderArrowAboveHoveredBindable(
-      arrowId: arrow.id,
-      hoveredBindableId: dragResult.suggestedBinding?.bindableId,
-    );
-  }
+  final orderedElementIds = applied.orderedElementIds;
   final orderChanged = orderedElementIds != null;
 
   return _ArrowPointComputation(
@@ -1117,7 +1114,10 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   }
 
   final session = ArrowCoreSession.fromElements(state.domain.document.elements);
-  final applied = session.applyEngineResult(arrow: arrow, result: dragResult);
+  final applied = session.applyEngineResultWithOrderFallback(
+    arrow: arrow,
+    result: dragResult,
+  );
   final finalizedArrow = applied.arrow;
   final worldPoints = coreArrowWorldPoints(finalizedArrow);
   if (worldPoints.length < 2) {
@@ -1129,13 +1129,7 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   final nextFixedSegments = data.arrowType == ArrowType.elbow
       ? toLocalFixedSegmentsFromCoreArrow(finalizedArrow, context.baseElement)
       : transform.fixedSegments;
-  var orderedElementIds = reorderedElementIdsFromCoreResult(applied);
-  if (orderedElementIds == null) {
-    orderedElementIds = session.reorderArrowAboveHoveredBindable(
-      arrowId: arrow.id,
-      hoveredBindableId: dragResult.suggestedBinding?.bindableId,
-    );
-  }
+  final orderedElementIds = applied.orderedElementIds;
 
   final pointsChanged = !pointListEquals(localPoints, nextPoints);
   final bindingsChanged =

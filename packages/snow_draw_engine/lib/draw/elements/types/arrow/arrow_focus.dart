@@ -209,19 +209,11 @@ ArrowFocusDragResult dragArrowFocusPoint({
     gridSize: gridSize,
   );
 
-  final applied = session.applyEngineResult(
+  final applied = session.applyEngineResultWithOrderFallback(
     arrow: arrow,
     result: result,
     orderedElementIds: orderedElementIds,
   );
-  var reorderedElementIds = reorderedElementIdsFromCoreResult(applied);
-  if (reorderedElementIds == null) {
-    reorderedElementIds = session.reorderArrowAboveHoveredBindable(
-      arrowId: arrow.id,
-      hoveredBindableId: result.suggestedBinding?.bindableId,
-      orderedElementIds: orderedElementIds,
-    );
-  }
   final patchedElement = applied.arrow == arrow
       ? element
       : applyCoreArrowStateToElement(
@@ -236,7 +228,7 @@ ArrowFocusDragResult dragArrowFocusPoint({
     bindablePatches: List<core.BindablePatch>.unmodifiable(
       result.bindablePatches,
     ),
-    orderedElementIds: reorderedElementIds,
+    orderedElementIds: applied.orderedElementIds,
     suggestedBindableId: result.suggestedBinding?.bindableId,
   );
 }

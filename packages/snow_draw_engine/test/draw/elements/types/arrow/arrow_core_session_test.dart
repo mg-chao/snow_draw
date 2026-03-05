@@ -125,6 +125,50 @@ void main() {
         expect(ordered, <String>['serial-1', 'arrow-1', 'text-1']);
       },
     );
+
+    test(
+      'applyEngineResultWithOrderFallback reorders using suggested binding',
+      () {
+        final serial = _serialElement(id: 'serial-1', textElementId: 'text-1');
+        final text = _textElement(id: 'text-1');
+        final arrow = _arrowElement(
+          id: 'arrow-1',
+          points: const <DrawPoint>[
+            DrawPoint(x: 20, y: 20),
+            DrawPoint(x: 140, y: 20),
+          ],
+          zIndex: 2,
+        );
+
+        final session = ArrowCoreSession.fromElements(
+          <ElementState>[arrow, serial, text],
+          orderedElementIds: const <String>['arrow-1', 'serial-1', 'text-1'],
+        );
+        final suggestedBindable = session.bindables.firstWhere(
+          (bindable) => bindable.id == 'serial-1',
+        );
+        final applied = session.applyEngineResultWithOrderFallback(
+          arrow: session.arrows.single,
+          result: core.EngineResult(
+            arrowPatch: const <String, dynamic>{},
+            bindablePatches: const <core.BindablePatch>[],
+            suggestedBinding: core.SuggestedBinding(
+              bindableId: 'serial-1',
+              element: suggestedBindable,
+            ),
+            events: const <core.ArrowEngineEvent>[],
+          ),
+        );
+
+        expect(applied.arrow.id, 'arrow-1');
+        expect(applied.orderChanged, isTrue);
+        expect(applied.orderedElementIds, <String>[
+          'serial-1',
+          'arrow-1',
+          'text-1',
+        ]);
+      },
+    );
   });
 }
 

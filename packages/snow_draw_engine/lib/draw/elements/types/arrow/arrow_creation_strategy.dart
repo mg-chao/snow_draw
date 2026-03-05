@@ -475,7 +475,11 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
       isBindingEnabled: config.snap.enableArrowBinding,
     ),
   );
-  final applied = session.applyEngineResult(arrow: arrow, result: finalized);
+  final applied = session.applyEngineResultWithOrderFallback(
+    arrow: arrow,
+    result: finalized,
+    orderedElementIds: orderedElementIds,
+  );
   final patchedElement = applied.arrow == arrow
       ? previewElement
       : applyCoreArrowStateToElement(
@@ -490,7 +494,7 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
   return (
     rect: patchedElement.rect,
     data: patchedData,
-    orderedElementIds: reorderedElementIdsFromCoreResult(applied),
+    orderedElementIds: applied.orderedElementIds,
   );
 }
 
