@@ -202,8 +202,8 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
           context: dragContext,
           options: mergedOptions,
         );
-  final session = ArrowCoreSession.fromElements(
-    state.domain.document.elements,
+  final session = ArrowCoreSession.fromDocument(
+    state.domain.document,
     orderedElementIds: orderedElementIds,
     context: coreEngineContext,
   );

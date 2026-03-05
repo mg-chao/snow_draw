@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
 import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
+import '../../../models/document_state.dart';
 import '../../../models/element_state.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
@@ -57,6 +58,44 @@ final class ArrowCoreSession {
           maxCoordinate: maxCoordinate,
         ),
   );
+
+  factory ArrowCoreSession.fromDocument(
+    DocumentState document, {
+    bool onlyBoundArrows = false,
+    List<String>? orderedElementIds,
+    core.EngineContext? context,
+    double zoom = 1,
+    bool isBindingEnabled = true,
+    String bindMode = core.bindModeOrbit,
+    double maxCoordinate = 1e6,
+  }) {
+    final arrowsWithSources = collectCoreArrowStatesWithSources(
+      document.elements,
+      onlyBoundArrows: onlyBoundArrows,
+    );
+
+    return ArrowCoreSession(
+      projection: ArrowCoreDocumentProjection(
+        bindables: document.arrowCoreBindables,
+        bindableRelations: document.arrowCoreBindableRelations,
+        arrows: arrowsWithSources.arrows,
+        arrowSources: arrowsWithSources.sources,
+        orderedElementIds: List<String>.unmodifiable(
+          orderedElementIds ?? document.orderedElementIds,
+        ),
+        anchorElementIdsByBindableId:
+            document.arrowCoreAnchorElementIdsByBindableId,
+      ),
+      context:
+          context ??
+          buildCoreEngineContext(
+            zoom: zoom,
+            isBindingEnabled: isBindingEnabled,
+            bindMode: bindMode,
+            maxCoordinate: maxCoordinate,
+          ),
+    );
+  }
 
   final ArrowCoreDocumentProjection projection;
   final core.EngineContext context;

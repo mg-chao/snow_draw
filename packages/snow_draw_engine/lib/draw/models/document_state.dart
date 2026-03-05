@@ -1,6 +1,7 @@
 import 'package:meta/meta.dart';
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
-import '../elements/types/arrow/arrow_binding.dart';
+import '../elements/types/arrow/arrow_core_bridge.dart';
 import '../elements/types/arrow/arrow_like_data.dart';
 import '../elements/types/highlight/highlight_data.dart';
 import '../elements/types/serial_number/serial_number_data.dart';
@@ -40,6 +41,13 @@ class DocumentState {
     for (var i = 0; i < elements.length; i++) elements[i].id: i,
   });
 
+  /// Ordered element ids mirroring [elements] z-order.
+  ///
+  /// Useful for arrow-core reorder reductions without rebuilding id lists.
+  late final orderedElementIds = List<String>.unmodifiable(
+    elements.map((element) => element.id),
+  );
+
   late final _spatialIndex = SpatialIndex.fromElements(elements);
 
   late final _arrowBindableElements = List<ElementState>.unmodifiable(
@@ -70,6 +78,30 @@ class DocumentState {
   /// bindable shapes are present.
   late final bool hasArrowBindableElements = _arrowBindableElements.isNotEmpty;
 
+  /// Cached bindable snapshots projected for arrow-core operations.
+  ///
+  /// Reused by high-frequency arrow interactions to avoid repeatedly
+  /// re-projecting static bindable geometry for the same document version.
+  late final _arrowCoreBindables = List<core.BindableState>.unmodifiable(
+    collectCoreBindables(_arrowBindableElements),
+  );
+
+  /// Cached bindable relation snapshots projected for arrow-core operations.
+  ///
+  /// The relation graph is derived from current arrow endpoint bindings and
+  /// reused across interactive arrow sessions within the same document state.
+  late final _arrowCoreBindableRelations =
+      List<core.BindableRelationState>.unmodifiable(
+        collectCoreBindableRelations(elements),
+      );
+
+  /// Cached bindable anchor-id lookup used for stable reorder reductions.
+  ///
+  /// This includes bindable ids and any additional anchor element ids that
+  /// should remain below bound arrows (for example serial-number labels).
+  late final Map<String, List<String>> _arrowCoreAnchorElementIdsByBindableId =
+      collectCoreAnchorElementIdsByBindableId(elements);
+
   /// Cached highlight elements in document z-order.
   ///
   /// The list is computed lazily once per [DocumentState] instance and reused
@@ -78,6 +110,17 @@ class DocumentState {
   late final highlightElements = List<ElementState>.unmodifiable(
     _buildHighlightElements(),
   );
+
+  /// Arrow-core bindable projections for this document snapshot.
+  List<core.BindableState> get arrowCoreBindables => _arrowCoreBindables;
+
+  /// Arrow-core bindable relation projections for this document snapshot.
+  List<core.BindableRelationState> get arrowCoreBindableRelations =>
+      _arrowCoreBindableRelations;
+
+  /// Bindable id -> anchor element ids used by arrow-core reorder reductions.
+  Map<String, List<String>> get arrowCoreAnchorElementIdsByBindableId =>
+      _arrowCoreAnchorElementIdsByBindableId;
 
   Map<String, ElementState> get elementMap => _elementMap;
 
@@ -124,8 +167,12 @@ class DocumentState {
   int warmCaches() =>
       _elementMap.length +
       _orderIndex.length +
+      orderedElementIds.length +
       _spatialIndex.size +
       _arrowBindableSpatialIndex.size +
+      _arrowCoreBindables.length +
+      _arrowCoreBindableRelations.length +
+      _arrowCoreAnchorElementIdsByBindableId.length +
       boundArrowTargetIds.length +
       highlightElements.length;
 
@@ -241,8 +288,7 @@ class DocumentState {
 
   List<ElementState> _buildArrowBindableElements() => [
     for (final element in elements)
-      if (element.opacity > 0 && ArrowBindingUtils.isBindableTarget(element))
-        element,
+      if (element.opacity > 0 && isArrowBindableElement(element)) element,
   ];
 
   List<ElementState> _buildHighlightElements() => [

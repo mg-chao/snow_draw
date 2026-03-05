@@ -5,6 +5,7 @@ import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_engine/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/text/text_data.dart';
+import 'package:snow_draw_engine/draw/models/document_state.dart';
 import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
@@ -36,6 +37,59 @@ void main() {
       expect(session.context.isBindingEnabled, isFalse);
       expect(session.context.bindMode, core.bindModeInside);
       expect(session.context.maxCoordinate, 1234);
+    });
+
+    test('fromDocument reuses cached projections for bound-only arrows', () {
+      final serial = _serialElement(id: 'serial-1', textElementId: 'text-1');
+      final text = _textElement(id: 'text-1');
+      final boundArrow = _arrowElement(
+        id: 'arrow-bound',
+        points: const <DrawPoint>[
+          DrawPoint(x: 10, y: 10),
+          DrawPoint(x: 110, y: 10),
+        ],
+        zIndex: 2,
+        startBinding: const ArrowBinding(
+          elementId: 'serial-1',
+          anchor: DrawPoint(x: 1, y: 0.5),
+        ),
+      );
+      final unboundArrow = _arrowElement(
+        id: 'arrow-unbound',
+        points: const <DrawPoint>[
+          DrawPoint(x: 20, y: 40),
+          DrawPoint(x: 160, y: 40),
+        ],
+        zIndex: 3,
+      );
+
+      final document = DocumentState(
+        elements: <ElementState>[serial, text, boundArrow, unboundArrow],
+      );
+      final session = ArrowCoreSession.fromDocument(
+        document,
+        onlyBoundArrows: true,
+        zoom: 1.5,
+      );
+
+      expect(identical(session.bindables, document.arrowCoreBindables), isTrue);
+      expect(
+        identical(
+          session.bindableRelations,
+          document.arrowCoreBindableRelations,
+        ),
+        isTrue,
+      );
+      expect(
+        identical(
+          session.anchorElementIdsByBindableId,
+          document.arrowCoreAnchorElementIdsByBindableId,
+        ),
+        isTrue,
+      );
+      expect(session.orderedElementIds, document.orderedElementIds);
+      expect(session.arrows.map((arrow) => arrow.id), <String>['arrow-bound']);
+      expect(session.context.zoom, 1.5);
     });
 
     test('applyArrowPatches maps core patches onto source elements', () {
