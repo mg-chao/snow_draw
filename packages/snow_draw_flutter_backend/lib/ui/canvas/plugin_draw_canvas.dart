@@ -1641,11 +1641,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             targets: targets,
             snapDistance: bindingDistance,
             hasArrowhead: arrowStyle.startArrowhead != ArrowheadStyle.none,
+            coreEngineContext: buildCoreEngineContext(
+              zoom: zoom,
+              isBindingEnabled: config.snap.enableArrowBinding,
+            ),
           )
         : ArrowBindingUtils.resolveBindingCandidate(
             worldPoint: position,
             targets: targets,
             snapDistance: bindingDistance,
+            coreEngineContext: buildCoreEngineContext(
+              zoom: zoom,
+              isBindingEnabled: config.snap.enableArrowBinding,
+            ),
           );
     if (candidate == null) {
       return null;

@@ -256,6 +256,139 @@ core.EngineResult computeCoreSimpleBindingPatch({
   ...?(options == null ? null : <String, dynamic>{'options': options}),
 });
 
+/// Typed wrapper around endpoint-binding strategy resolution.
+core.EndpointBindingStrategies resolveCoreEndpointBindingStrategy({
+  required core.ArrowState arrow,
+  required Map<int, core.Point> draggedPoints,
+  required core.Point pointer,
+  required List<core.BindableState> bindables,
+  required core.EngineContext context,
+  Map<String, dynamic>? options,
+}) => core.getEndpointBindingStrategy(<String, dynamic>{
+  'arrow': arrow,
+  'draggedPoints': draggedPoints,
+  'pointer': pointer,
+  'bindables': bindables,
+  'context': context,
+  ...?(options == null ? null : <String, dynamic>{'options': options}),
+});
+
+/// Typed wrapper around core binding-gap calculation.
+double resolveCoreBindingGap({
+  required core.BindableState bindable,
+  required bool elbowed,
+}) => core.getBindingGap(bindable, elbowed);
+
+/// Typed wrapper around core max-binding-distance resolution.
+double resolveCoreMaxBindingDistance({required double zoom}) =>
+    core.maxBindingDistance(zoom);
+
+/// Typed wrapper around snap-outline midpoint projection.
+core.Point? resolveCoreSnapOutlineMidPoint({
+  required core.Point point,
+  required core.BindableState bindable,
+  double zoom = 1,
+}) => core.getSnapOutlineMidPoint(point, bindable, zoom);
+
+/// Typed wrapper around diagonal fixed-point projection.
+core.Point? projectCoreFixedPointOntoDiagonal({
+  required core.ArrowState arrow,
+  required core.Point point,
+  required core.BindableState bindable,
+  required core.ArrowEndpointEdge edge,
+  required List<core.BindableState> bindables,
+  required double zoom,
+}) => core.projectFixedPointOntoDiagonal(
+  arrow,
+  point,
+  bindable,
+  edge,
+  bindables,
+  zoom,
+);
+
+/// Typed wrapper around fixed-point normalization for non-elbow bindings.
+core.Point calculateCoreFixedPointForBinding({
+  required core.BindableState bindable,
+  required core.Point point,
+}) => core.calculateFixedPointForBinding(bindable: bindable, point: point);
+
+/// Typed wrapper around fixed-point normalization for elbow bindings.
+core.Point calculateCoreFixedPointForElbowBinding({
+  required core.ArrowState arrow,
+  required core.BindableState bindable,
+  required core.ArrowEndpointEdge edge,
+}) => core.calculateFixedPointForElbowArrowBinding(
+  arrow: arrow,
+  bindable: bindable,
+  edge: edge,
+);
+
+/// Typed wrapper around outline snapping for elbow endpoints.
+core.Point bindCorePointToSnapOutline({
+  required core.ArrowState arrow,
+  required core.BindableState bindable,
+  required core.ArrowEndpointEdge edge,
+  List<core.Point>? customIntersector,
+}) => core.bindPointToSnapToElementOutline(
+  arrow: arrow,
+  bindable: bindable,
+  edge: edge,
+  customIntersector: customIntersector,
+);
+
+/// Typed wrapper around elbow heading resolution.
+String resolveCoreHeadingForElbowSnap({
+  required core.Point point,
+  required core.Point otherPoint,
+  core.BindableState? bindable,
+  core.Bounds? aabb,
+  core.Point? originPoint,
+  double? zoom,
+}) => core.getHeadingForElbowArrowSnap(
+  point: point,
+  otherPoint: otherPoint,
+  bindable: bindable,
+  aabb: aabb,
+  originPoint: originPoint,
+  zoom: zoom,
+);
+
+/// Typed wrapper around bound-point projection updates.
+core.Point? updateCoreBoundPoint({
+  required core.ArrowState arrow,
+  required core.ArrowEndpointSelector edge,
+  required core.FixedPointBinding? binding,
+  required core.BindableState bindable,
+  required core.BindableLookupInput bindablesById,
+  bool dragging = false,
+}) => core.updateBoundPoint(
+  arrow: arrow,
+  edge: edge,
+  binding: binding,
+  bindable: bindable,
+  bindablesById: bindablesById,
+  dragging: dragging,
+);
+
+/// Typed wrapper around resolving a single global fixed point.
+core.Point resolveCoreGlobalFixedPoint({
+  required core.FixedPointBinding binding,
+  required core.BindableState bindable,
+}) => core.getGlobalFixedPoint(binding, bindable);
+
+/// Typed wrapper around resolving global fixed points for an arrow.
+List<core.Point?> resolveCoreGlobalFixedPoints({
+  required core.ArrowState arrow,
+  required List<core.BindableState> bindables,
+}) => core.getGlobalFixedPoints(arrow, bindables);
+
+/// Typed wrapper around resolving local fixed points for an arrow.
+List<core.Point?> resolveCoreArrowLocalFixedPoints({
+  required core.ArrowState arrow,
+  required List<core.BindableState> bindables,
+}) => core.getArrowLocalFixedPoints(arrow, bindables);
+
 /// Typed wrapper around bindable-change recomputation.
 core.EngineResult recomputeCoreBindingsAfterBindableChange({
   required core.ArrowState arrow,
@@ -401,6 +534,80 @@ core.LifecycleSyncResult syncCoreBindingsAfterBindablePrune({
   'context': context,
   ...?(options == null ? null : <String, dynamic>{'options': options}),
 });
+
+/// Typed wrapper around explicit endpoint binding mutation.
+core.EndpointBindingMutationResult bindCoreArrowEndpoint({
+  required core.ArrowState arrow,
+  required core.ArrowEndpointEdge edge,
+  required core.BindableState bindable,
+  core.BindMode? mode,
+  core.Point? focusPoint,
+}) => core.bindArrowEndpoint(
+  arrow: arrow,
+  edge: edge,
+  bindable: bindable,
+  mode: mode,
+  focusPoint: focusPoint,
+);
+
+/// Typed wrapper around explicit endpoint unbinding mutation.
+core.EndpointBindingMutationResult unbindCoreArrowEndpoint({
+  required core.ArrowState arrow,
+  required core.ArrowEndpointEdge edge,
+}) => core.unbindArrowEndpoint(arrow: arrow, edge: edge);
+
+/// Typed wrapper around relation-aware endpoint binding mutation.
+core.EndpointBindingMutationWithRelationsResult
+bindCoreArrowEndpointWithRelations({
+  required core.ArrowState arrow,
+  required core.ArrowEndpointEdge edge,
+  required core.BindableState bindable,
+  required List<core.BindableRelationState> relations,
+  core.BindMode? mode,
+  core.Point? focusPoint,
+}) => core.bindArrowEndpointWithRelations(
+  arrow: arrow,
+  edge: edge,
+  bindable: bindable,
+  relations: relations,
+  mode: mode,
+  focusPoint: focusPoint,
+);
+
+/// Typed wrapper around relation-aware endpoint unbinding mutation.
+core.EndpointBindingMutationWithRelationsResult
+unbindCoreArrowEndpointWithRelations({
+  required core.ArrowState arrow,
+  required core.ArrowEndpointEdge edge,
+  required List<core.BindableRelationState> relations,
+}) => core.unbindArrowEndpointWithRelations(
+  arrow: arrow,
+  edge: edge,
+  relations: relations,
+);
+
+/// Typed wrapper around relation patch derivation from binding transitions.
+List<core.BindableRelationPatch>
+deriveCoreBindableRelationPatchesForBindingChange({
+  required core.DeriveBindableRelationPatchesForBindingChangeInput input,
+}) => core.deriveBindableRelationPatchesForBindingChange(input);
+
+/// Typed wrapper around relation patch reconciliation for an arrow snapshot.
+List<core.BindablePatch> reconcileCoreBindablePatchesForArrow({
+  required core.ArrowBindingState arrow,
+  required List<core.BindableRelationState> bindables,
+}) => core.reconcileBindablePatchesForArrow(arrow: arrow, bindables: bindables);
+
+/// Typed wrapper around relation patch resolution for endpoint mutations.
+core.ResolvedBindableRelationPatches resolveCoreEndpointBindingMutation({
+  required core.ArrowBindingState arrow,
+  required List<core.BindableRelationState> bindables,
+  required core.EndpointBindingMutationResult mutation,
+}) => core.resolveEndpointBindingMutation(
+  arrow: arrow,
+  bindables: bindables,
+  mutation: mutation,
+);
 
 /// Typed wrapper around focus-point visibility resolution.
 List<core.FocusPointDescriptor> listCoreVisibleFocusPoints({

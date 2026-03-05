@@ -125,7 +125,7 @@ class ArrowBindingUtils {
     if (bindable == null) {
       return core.baseBindingGap;
     }
-    return core.getBindingGap(bindable, false);
+    return resolveCoreBindingGap(bindable: bindable, elbowed: false);
   }
 
   static double resolveBindingSearchDistance(double snapDistance) =>
@@ -297,7 +297,10 @@ class ArrowBindingUtils {
       ],
       mode: _toCoreBindingMode(binding.mode),
     );
-    final global = core.getGlobalFixedPoint(coreBinding, bindable);
+    final global = resolveCoreGlobalFixedPoint(
+      binding: coreBinding,
+      bindable: bindable,
+    );
     return DrawPoint(x: global[0], y: global[1]);
   }
 
@@ -525,7 +528,7 @@ DrawPoint? _resolveBoundPointViaCore({
     endIsSpecial: null,
   );
 
-  final local = core.updateBoundPoint(
+  final local = updateCoreBoundPoint(
     arrow: arrow,
     edge: 'startBinding',
     binding: coreBinding,
