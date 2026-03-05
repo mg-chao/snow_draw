@@ -12,6 +12,7 @@ import '../serial_number/serial_number_data.dart';
 import '../serial_number/serial_number_layout.dart';
 import '../text/text_data.dart';
 import 'arrow_binding.dart';
+import 'arrow_core_codec.dart';
 import 'arrow_geometry.dart';
 import 'arrow_layout.dart';
 import 'arrow_like_data.dart';
@@ -50,15 +51,15 @@ core.EngineContext buildCoreEngineContext({
   'maxCoordinate': maxCoordinate,
 });
 
-core.Point toCorePoint(DrawPoint point) => <double>[point.x, point.y];
+core.Point toCorePoint(DrawPoint point) => encodeArrowCorePoint(point);
 
-DrawPoint toDrawPoint(core.Point point) => DrawPoint(x: point[0], y: point[1]);
+DrawPoint toDrawPoint(core.Point point) => decodeArrowCorePoint(point);
 
 List<core.Point> toCorePoints(Iterable<DrawPoint> points) =>
-    points.map(toCorePoint).toList(growable: false);
+    encodeArrowCorePoints(points);
 
 List<DrawPoint> toDrawPoints(Iterable<core.Point> points) =>
-    points.map(toDrawPoint).toList(growable: false);
+    decodeArrowCorePoints(points);
 
 String _toCoreBindingMode(ArrowBindingMode mode) =>
     mode == ArrowBindingMode.inside ? core.bindModeInside : core.bindModeOrbit;
@@ -93,40 +94,8 @@ ArrowBinding? fromCoreBinding(core.FixedPointBinding? binding) {
   );
 }
 
-String? toCoreArrowhead(ArrowheadStyle style) {
-  switch (style) {
-    case ArrowheadStyle.none:
-      return null;
-    case ArrowheadStyle.standard:
-      return 'arrow';
-    case ArrowheadStyle.triangle:
-      return 'triangle';
-    case ArrowheadStyle.triangleOutline:
-      return 'triangle_outline';
-    case ArrowheadStyle.square:
-      return 'square';
-    case ArrowheadStyle.dot:
-      return 'dot';
-    case ArrowheadStyle.circle:
-      return 'circle';
-    case ArrowheadStyle.circleOutline:
-      return 'circle_outline';
-    case ArrowheadStyle.diamond:
-      return 'diamond';
-    case ArrowheadStyle.diamondOutline:
-      return 'diamond_outline';
-    case ArrowheadStyle.crowfootOne:
-      return 'crowfoot_one';
-    case ArrowheadStyle.crowfootMany:
-      return 'crowfoot_many';
-    case ArrowheadStyle.crowfootOneOrMany:
-      return 'crowfoot_one_or_many';
-    case ArrowheadStyle.invertedTriangle:
-      return 'inverted_triangle';
-    case ArrowheadStyle.verticalLine:
-      return 'bar';
-  }
-}
+String? toCoreArrowhead(ArrowheadStyle style) =>
+    encodeArrowCoreArrowhead(style);
 
 bool isArrowBindableElement(ElementState element) {
   final data = element.data;

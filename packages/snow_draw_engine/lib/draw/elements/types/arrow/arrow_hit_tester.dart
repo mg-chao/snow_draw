@@ -242,7 +242,44 @@ double _arrowheadLength(double strokeWidth) => strokeWidth * 4 + 12.0;
 List<DrawPoint> _flattenCurvedShaft(
   List<DrawPoint> points,
   double strokeWidth,
-) => flattenCatmullRomDrawPoints(points: points, strokeWidth: strokeWidth);
+) {
+  if (points.length < 3) {
+    return points;
+  }
+
+  final flattened = <DrawPoint>[points.first];
+  final stepSize = math.max(1.5, strokeWidth * 0.6);
+
+  for (var segmentIndex = 0; segmentIndex < points.length - 1; segmentIndex++) {
+    final start = points[segmentIndex];
+    final end = points[segmentIndex + 1];
+    final segmentLength = start.distance(end);
+    var steps = (segmentLength / stepSize).ceil();
+    if (steps < 4) {
+      steps = 4;
+    } else if (steps > 24) {
+      steps = 24;
+    }
+
+    for (var step = 1; step <= steps; step++) {
+      final t = step / steps;
+      final curvePoint = ArrowGeometry.calculateCurveDrawPoint(
+        points: points,
+        segmentIndex: segmentIndex,
+        t: t,
+      );
+      final sampled =
+          curvePoint ??
+          DrawPoint(
+            x: start.x + (end.x - start.x) * t,
+            y: start.y + (end.y - start.y) * t,
+          );
+      _appendPointIfDistinct(flattened, sampled);
+    }
+  }
+
+  return flattened.length >= 2 ? flattened : points;
+}
 
 List<DrawPoint> _flattenElbowShaft(List<DrawPoint> points, double strokeWidth) {
   if (points.length < 3) {

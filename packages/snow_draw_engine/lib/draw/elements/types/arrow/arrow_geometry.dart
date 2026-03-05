@@ -3,6 +3,7 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
+import 'arrow_core_codec.dart';
 import 'arrow_like_data.dart';
 
 class ArrowGeometry {
@@ -68,14 +69,17 @@ class ArrowGeometry {
     double radius = 16,
   }) {
     final safeRadius = (radius.isFinite && radius > 0) ? radius : 0.0;
-    return core.generateElbowArrowPath(_toCorePoints(points), safeRadius);
+    return core.generateElbowArrowPath(
+      encodeArrowCorePoints(points),
+      safeRadius,
+    );
   }
 
   static double calculateShaftLength({
     required List<DrawPoint> points,
     required ArrowType arrowType,
   }) => core.calculateArrowShaftLength(
-    points: _toCorePoints(points),
+    points: encodeArrowCorePoints(points),
     curved: arrowType == ArrowType.curved,
   );
 
@@ -87,7 +91,7 @@ class ArrowGeometry {
     double directionOffset = 0,
   }) {
     final direction = core.resolveArrowStartDirection(
-      points: _toCorePoints(points),
+      points: encodeArrowCorePoints(points),
       curved: arrowType == ArrowType.curved,
       startInset: startInset,
       endInset: endInset,
@@ -104,7 +108,7 @@ class ArrowGeometry {
     double directionOffset = 0,
   }) {
     final direction = core.resolveArrowEndDirection(
-      points: _toCorePoints(points),
+      points: encodeArrowCorePoints(points),
       curved: arrowType == ArrowType.curved,
       startInset: startInset,
       endInset: endInset,
@@ -120,7 +124,7 @@ class ArrowGeometry {
     required double t,
   }) {
     final point = core.calculateCurvePoint(
-      points: _toCorePoints(points),
+      points: encodeArrowCorePoints(points),
       segmentIndex: segmentIndex,
       t: t,
     );
@@ -131,7 +135,7 @@ class ArrowGeometry {
     required ArrowheadStyle style,
     required double strokeWidth,
   }) => core.calculateArrowheadInset(
-    arrowhead: _toCoreArrowhead(style),
+    arrowhead: encodeArrowCoreArrowhead(style),
     strokeWidth: strokeWidth,
   );
 
@@ -139,7 +143,7 @@ class ArrowGeometry {
     required ArrowheadStyle style,
     required double strokeWidth,
   }) => core.calculateArrowheadDirectionOffset(
-    arrowhead: _toCoreArrowhead(style),
+    arrowhead: encodeArrowCoreArrowhead(style),
     strokeWidth: strokeWidth,
   );
 
@@ -152,7 +156,7 @@ class ArrowGeometry {
     required ArrowType arrowType,
   }) {
     final bounds = core.calculateArrowPathBounds(
-      points: _toCorePoints(worldPoints),
+      points: encodeArrowCorePoints(worldPoints),
       curved: arrowType == ArrowType.curved,
     );
     return DrawRect(
@@ -167,9 +171,9 @@ class ArrowGeometry {
     required List<DrawPoint> points,
     required double startInset,
     required double endInset,
-  }) => _toDrawPoints(
+  }) => decodeArrowCorePoints(
     core.applyArrowEndpointInsets(
-      points: _toCorePoints(points),
+      points: encodeArrowCorePoints(points),
       startInset: startInset,
       endInset: endInset,
     ),
@@ -278,52 +282,5 @@ class ArrowGeometryDescriptor {
       );
 }
 
-core.Arrowhead? _toCoreArrowhead(ArrowheadStyle style) {
-  switch (style) {
-    case ArrowheadStyle.none:
-      return null;
-    case ArrowheadStyle.standard:
-      return 'arrow';
-    case ArrowheadStyle.triangle:
-      return 'triangle';
-    case ArrowheadStyle.triangleOutline:
-      return 'triangle_outline';
-    case ArrowheadStyle.square:
-      return 'square';
-    case ArrowheadStyle.dot:
-      return 'dot';
-    case ArrowheadStyle.circle:
-      return 'circle';
-    case ArrowheadStyle.circleOutline:
-      return 'circle_outline';
-    case ArrowheadStyle.diamond:
-      return 'diamond';
-    case ArrowheadStyle.diamondOutline:
-      return 'diamond_outline';
-    case ArrowheadStyle.crowfootOne:
-      return 'crowfoot_one';
-    case ArrowheadStyle.crowfootMany:
-      return 'crowfoot_many';
-    case ArrowheadStyle.crowfootOneOrMany:
-      return 'crowfoot_one_or_many';
-    case ArrowheadStyle.invertedTriangle:
-      return 'inverted_triangle';
-    case ArrowheadStyle.verticalLine:
-      return 'bar';
-  }
-}
-
-List<core.Point> _toCorePoints(List<DrawPoint> points) => List<core.Point>.of(
-  points.map((point) => <double>[point.x, point.y]),
-  growable: false,
-);
-
-List<DrawPoint> _toDrawPoints(List<core.Point> points) =>
-    List<DrawPoint>.unmodifiable(
-      points
-          .map((point) => DrawPoint(x: point[0], y: point[1]))
-          .toList(growable: false),
-    );
-
 DrawPoint? _toDrawPointOrNull(core.Point? point) =>
-    point == null ? null : DrawPoint(x: point[0], y: point[1]);
+    point == null ? null : decodeArrowCorePoint(point);
