@@ -163,6 +163,54 @@ void main() {
       },
     );
 
+    test('finish keeps endpoint unbound when snap override is active', () {
+      final initialTarget = _rectangleElement(
+        id: 'rect-initial-finish',
+        rect: const DrawRect(minX: 180, maxX: 260, maxY: 120),
+        zIndex: 1,
+      );
+      final nextTarget = _rectangleElement(
+        id: 'rect-next-finish',
+        rect: const DrawRect(minX: 340, maxX: 440, maxY: 120),
+        zIndex: 2,
+      );
+      final arrow = _arrowElement(
+        id: 'arrow-snap-finish',
+        points: const <DrawPoint>[
+          DrawPoint(x: 80, y: 60),
+          DrawPoint(x: 220, y: 60),
+        ],
+        zIndex: 3,
+        endBinding: const ArrowBinding(
+          elementId: 'rect-initial-finish',
+          anchor: DrawPoint(x: 0, y: 0.5),
+        ),
+      );
+      final state = _stateWithElements(
+        <ElementState>[initialTarget, nextTarget, arrow],
+        selectedIds: <String>{arrow.id},
+      );
+
+      final session = _dragArrowHandleSession(
+        state: state,
+        elementId: arrow.id,
+        pointKind: ArrowPointKind.turning,
+        pointIndex: 1,
+        startPosition: const DrawPoint(x: 220, y: 60),
+        currentPosition: const DrawPoint(x: 360, y: 60),
+        modifiers: const EditModifiers(snapOverride: true),
+      );
+      final next = const ArrowPointOperation().finish(
+        state: state,
+        context: session.context,
+        transform: session.transform,
+      );
+      final updatedArrow = next.domain.document.getElementById(arrow.id)!;
+      final updatedData = updatedArrow.data as ArrowData;
+
+      expect(updatedData.endBinding, isNull);
+    });
+
     test('finish finalizes endpoint drag and keeps same-target bindings '
         'in legacy mode', () {
       final bindTarget = _rectangleElement(
@@ -679,6 +727,14 @@ void main() {
         );
 
         expect(session.transform.endBinding, isNull);
+        final next = const ArrowPointOperation().finish(
+          state: state,
+          context: session.context,
+          transform: session.transform,
+        );
+        final updatedArrow = next.domain.document.getElementById(arrow.id)!;
+        final updatedData = updatedArrow.data as ArrowData;
+        expect(updatedData.endBinding, isNull);
       },
     );
 

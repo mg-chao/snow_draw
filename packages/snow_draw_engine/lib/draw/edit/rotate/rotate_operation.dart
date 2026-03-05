@@ -160,10 +160,18 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
       return null;
     }
 
+    final rotatableSelectedIds = _resolveRotatableSelectionIds(
+      state: state,
+      selectedIds: typedContext.selectedIdsAtStart,
+    );
+    if (rotatableSelectedIds.isEmpty) {
+      return null;
+    }
+
     final pivot = typedContext.startBounds.center;
     final updatedById = EditApply.applyRotateToElements(
       snapshots: typedContext.elementSnapshots,
-      selectedIds: typedContext.selectedIdsAtStart,
+      selectedIds: rotatableSelectedIds,
       pivot: pivot,
       deltaAngle: typedTransform.appliedAngle,
       currentElementsById: state.domain.document.elementMap,
@@ -175,8 +183,7 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
       multiSelectRotation:
           typedContext.baseRotation + typedTransform.appliedAngle,
       skipBindingUpdate: (id, element) =>
-          typedContext.selectedIdsAtStart.contains(id) &&
-          _isElbowArrow(element),
+          rotatableSelectedIds.contains(id) && _isElbowArrow(element),
     );
   }
 
@@ -194,5 +201,20 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
   bool _isElbowArrow(ElementState element) {
     final data = element.data;
     return data is ArrowLikeData && data.arrowType == ArrowType.elbow;
+  }
+
+  Set<String> _resolveRotatableSelectionIds({
+    required DrawState state,
+    required Set<String> selectedIds,
+  }) {
+    final result = <String>{};
+    for (final id in selectedIds) {
+      final element = state.domain.document.elementMap[id];
+      if (element == null || _isElbowArrow(element)) {
+        continue;
+      }
+      result.add(id);
+    }
+    return result;
   }
 }

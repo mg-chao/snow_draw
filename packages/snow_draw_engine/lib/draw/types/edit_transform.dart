@@ -244,6 +244,7 @@ final class ArrowPointTransform extends EditTransform {
     this.didInsert = false,
     this.shouldDelete = false,
     this.hasChanges = false,
+    this.allowBindingOnFinalize = true,
   });
 
   final DrawPoint currentPosition;
@@ -256,6 +257,7 @@ final class ArrowPointTransform extends EditTransform {
   final bool didInsert;
   final bool shouldDelete;
   final bool hasChanges;
+  final bool allowBindingOnFinalize;
 
   ArrowPointTransform copyWith({
     DrawPoint? currentPosition,
@@ -268,6 +270,7 @@ final class ArrowPointTransform extends EditTransform {
     bool? didInsert,
     bool? shouldDelete,
     bool? hasChanges,
+    bool? allowBindingOnFinalize,
   }) => ArrowPointTransform(
     currentPosition: currentPosition ?? this.currentPosition,
     points: points ?? this.points,
@@ -287,6 +290,8 @@ final class ArrowPointTransform extends EditTransform {
     didInsert: didInsert ?? this.didInsert,
     shouldDelete: shouldDelete ?? this.shouldDelete,
     hasChanges: hasChanges ?? this.hasChanges,
+    allowBindingOnFinalize:
+        allowBindingOnFinalize ?? this.allowBindingOnFinalize,
   );
 
   @override
@@ -311,7 +316,8 @@ final class ArrowPointTransform extends EditTransform {
           other.activeIndex == activeIndex &&
           other.didInsert == didInsert &&
           other.shouldDelete == shouldDelete &&
-          other.hasChanges == hasChanges;
+          other.hasChanges == hasChanges &&
+          other.allowBindingOnFinalize == allowBindingOnFinalize;
 
   @override
   int get hashCode => Object.hash(
@@ -325,6 +331,7 @@ final class ArrowPointTransform extends EditTransform {
     didInsert,
     shouldDelete,
     hasChanges,
+    allowBindingOnFinalize,
   );
 }
 

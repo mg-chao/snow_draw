@@ -319,7 +319,9 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
     );
 
     if (_isNoOpArrowTransformUpdate(previous: typedTransform, next: result)) {
-      return EditUpdateResult<EditTransform>(transform: typedTransform);
+      if (typedTransform.allowBindingOnFinalize == allowNewBinding) {
+        return EditUpdateResult<EditTransform>(transform: typedTransform);
+      }
     }
 
     final nextTransform = typedTransform.copyWith(
@@ -333,6 +335,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       startBinding: result.startBinding,
       endBinding: result.endBinding,
       orderedElementIds: result.orderedElementIds,
+      allowBindingOnFinalize: allowNewBinding,
     );
 
     return EditUpdateResult<EditTransform>(transform: nextTransform);
@@ -1330,9 +1333,10 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
     endBinding: endBinding,
     excludedElementId: context.elementId,
     shouldLookupBindings: true,
-    // Excalidraw parity: pointer-up finalize still runs full endpoint
-    // reconciliation against current bindables, allowing rebind on release.
-    allowNewBinding: true,
+    // Excalidraw parity: pointer-up finalize still runs endpoint
+    // reconciliation, while respecting the active drag-time binding policy
+    // (for example snap-override disables rebinding).
+    allowNewBinding: transform.allowBindingOnFinalize,
     bindingDistance: 0,
     coreEngineContext: coreEngineContext,
     options: <String, dynamic>{

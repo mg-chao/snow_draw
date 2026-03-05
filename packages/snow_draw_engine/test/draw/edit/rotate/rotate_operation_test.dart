@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:snow_draw_engine/draw/config/draw_config.dart';
 import 'package:snow_draw_engine/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_engine/draw/edit/core/edit_operation_params.dart';
@@ -18,7 +16,7 @@ import 'package:test/test.dart';
 
 void main() {
   group('RotateOperation elbow arrows', () {
-    test('rotates selected elbow arrows', () {
+    test('does not rotate selected elbow arrows', () {
       final arrow = _elbowArrowElement(
         id: 'arrow-elbow',
         points: const <DrawPoint>[
@@ -60,7 +58,9 @@ void main() {
       );
 
       final rotated = nextState.domain.document.getElementById(arrow.id)!;
-      expect(rotated.rotation, closeTo(math.pi / 2, 1e-6));
+      expect(rotated.rotation, equals(0));
+      expect(rotated.rect, equals(arrow.rect));
+      expect(rotated.data, equals(arrow.data));
     });
   });
 }
