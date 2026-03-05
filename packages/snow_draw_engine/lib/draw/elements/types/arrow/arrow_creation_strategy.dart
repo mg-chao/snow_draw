@@ -1,6 +1,4 @@
 import 'package:meta/meta.dart';
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
-
 import '../../../config/draw_config.dart';
 import '../../../elements/core/creation_strategy.dart';
 import '../../../elements/core/element_data.dart';
@@ -23,8 +21,7 @@ import '../arrow/arrow_binding_policy.dart';
 import '../line/line_data.dart';
 import 'arrow_core_bindable_query.dart';
 import 'arrow_core_bridge.dart';
-import 'arrow_core_ops.dart';
-import 'arrow_core_session.dart';
+import 'arrow_core_endpoint_drag.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
 import 'arrow_two_point_layout.dart';
@@ -420,19 +417,6 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
     distance: config.snap.arrowBindingDistance,
     zoom: state.application.view.camera.zoom,
   );
-  final bindables = _resolveCoreBindingSnapBindables(
-    state: state,
-    worldPoint: worldPoints.last,
-    bindingDistance: bindingDistance,
-    preferredBinding: result.data.endBinding,
-    oppositeBinding: result.data.startBinding,
-  );
-  if (bindables.isEmpty &&
-      result.data.startBinding == null &&
-      result.data.endBinding == null) {
-    return result;
-  }
-
   final previewElement = ElementState(
     id: elementId,
     rect: result.rect,
@@ -441,51 +425,51 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
     zIndex: 0,
     data: result.data,
   );
-  final arrow = toCoreArrowState(element: previewElement, data: result.data);
-  final dragIndex = arrow.points.length - 1;
+  final dragIndex = worldPoints.length - 1;
   final pointer = worldPoints.last;
-  final dragPoint = <double>[pointer.x - arrow.x, pointer.y - arrow.y];
   final preserveInsideBinding =
       result.data.endBinding?.mode == ArrowBindingMode.inside;
-
-  final finalized = finalizeCoreEndpointDrag(
-    arrow: arrow,
-    draggedPoints: <int, core.Point>{dragIndex: dragPoint},
-    pointer: toCorePoint(pointer),
-    bindables: bindables,
-    context: buildCoreEngineContext(
-      zoom: state.application.view.camera.zoom,
-      isBindingEnabled: config.snap.enableArrowBinding,
-    ),
-    options: <String, dynamic>{
-      'newArrow': true,
-      'complexBindings': true,
-      if (preserveInsideBinding) 'altKey': true,
-    },
+  final coreContext = buildCoreEngineContext(
+    zoom: state.application.view.camera.zoom,
+    isBindingEnabled: config.snap.enableArrowBinding,
   );
   final orderedElementIds = <String>[
     ...state.domain.document.elements.map((element) => element.id),
     elementId,
   ];
-  final session = ArrowCoreSession.fromElements(
-    state.domain.document.elements,
+  final finalized = finalizeArrowCoreEndpointDragResult(
+    state: state,
+    element: previewElement,
+    data: result.data,
+    localPoints: worldPoints,
+    draggedIndex: dragIndex,
+    worldPointer: pointer,
+    startBinding: result.data.startBinding,
+    endBinding: result.data.endBinding,
+    excludedElementId: elementId,
+    shouldLookupBindings: true,
+    allowNewBinding: true,
+    bindingDistance: bindingDistance,
+    coreEngineContext: coreContext,
     orderedElementIds: orderedElementIds,
-    context: buildCoreEngineContext(
-      zoom: state.application.view.camera.zoom,
-      isBindingEnabled: config.snap.enableArrowBinding,
-    ),
+    options: <String, dynamic>{
+      'newArrow': true,
+      if (preserveInsideBinding) 'altKey': true,
+    },
   );
-  final applied = session.applyEngineResultWithOrderFallback(
-    arrow: arrow,
-    result: finalized,
-    orderedElementIds: orderedElementIds,
+  if (finalized == null) {
+    return result;
+  }
+  final currentArrow = toCoreArrowState(
+    element: previewElement,
+    data: result.data,
   );
-  final patchedElement = applied.arrow == arrow
+  final patchedElement = finalized.arrow == currentArrow
       ? previewElement
       : applyCoreArrowStateToElement(
           element: previewElement,
           data: result.data,
-          nextArrow: applied.arrow,
+          nextArrow: finalized.arrow,
         );
   final patchedData = patchedElement.data;
   if (patchedData is! ArrowLikeData) {
@@ -494,7 +478,7 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
   return (
     rect: patchedElement.rect,
     data: patchedData,
-    orderedElementIds: applied.orderedElementIds,
+    orderedElementIds: finalized.orderedElementIds,
   );
 }
 
@@ -952,26 +936,6 @@ bool _shouldAttemptBinding({
   snapConfig: snapConfig,
   snappingMode: snappingMode,
 );
-
-List<core.BindableState> _resolveCoreBindingSnapBindables({
-  required DrawState state,
-  required DrawPoint worldPoint,
-  required double bindingDistance,
-  required ArrowBinding? preferredBinding,
-  required ArrowBinding? oppositeBinding,
-}) {
-  final resolved = resolveCoreBindableCandidates(
-    document: state.domain.document,
-    worldPoint: worldPoint,
-    distance: bindingDistance,
-    preferredBinding: preferredBinding,
-    oppositeBinding: oppositeBinding,
-  );
-  if (resolved.isEmpty) {
-    return const <core.BindableState>[];
-  }
-  return resolved.bindables;
-}
 
 _ArrowCreationSessionData _resolveSessionData(CreationMode mode) {
   if (mode case PointCreationMode(:final sessionData)) {

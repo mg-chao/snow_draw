@@ -5,10 +5,9 @@ import '../../config/draw_config.dart';
 import '../../core/coordinates/element_space.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_binding_policy.dart';
-import '../../elements/types/arrow/arrow_core_bindable_query.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
+import '../../elements/types/arrow/arrow_core_endpoint_drag.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
-import '../../elements/types/arrow/arrow_core_session.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_focus.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
@@ -923,56 +922,28 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
   required bool altKey,
 }) {
   final data = context.baseElement.data as ArrowLikeData;
-  final fixedSegmentsForCore = data.arrowType == ArrowType.elbow
-      ? (baseFixedSegments ?? const <ElbowFixedSegment>[])
-      : null;
-
-  final arrow = toCoreArrowState(
+  final worldTarget = context.toWorld(target);
+  final dragResult = computeArrowCoreEndpointDragResult(
+    state: state,
     element: context.baseElement,
     data: data,
-    localPointsOverride: basePoints,
-    fixedSegmentsOverride: fixedSegmentsForCore,
-    startBindingOverride: startBinding,
-    endBindingOverride: endBinding,
-  );
-  final worldTarget = context.toWorld(target);
-  final activeBinding = draggedIndex == 0 ? startBinding : endBinding;
-  final oppositeBinding = draggedIndex == 0 ? endBinding : startBinding;
-  final bindables = _resolveCoreEndpointBindables(
-    state: state,
-    worldTarget: worldTarget,
+    localPoints: basePoints,
+    fixedSegments: baseFixedSegments,
+    draggedIndex: draggedIndex,
+    worldPointer: worldTarget,
+    startBinding: startBinding,
+    endBinding: endBinding,
     excludedElementId: context.elementId,
     shouldLookupBindings: shouldLookupBindings,
     allowNewBinding: allowNewBinding,
     bindingDistance: bindingDistance,
-    activeBinding: activeBinding,
-    oppositeBinding: oppositeBinding,
-  );
-  final dragContext = shouldLookupBindings
-      ? coreEngineContext
-      : _coreContextWithBindingDisabled(coreEngineContext);
-
-  final dragPoint = <double>[worldTarget.x - arrow.x, worldTarget.y - arrow.y];
-  final dragResult = computeCoreEndpointDrag(
-    arrow: arrow,
-    draggedPoints: <int, core.Point>{draggedIndex: dragPoint},
-    pointer: toCorePoint(worldTarget),
-    bindables: bindables,
-    context: dragContext,
+    coreEngineContext: coreEngineContext,
     options: <String, dynamic>{
-      'complexBindings': true,
       if (angleLocked) 'angleLocked': true,
       if (altKey) 'altKey': true,
     },
   );
-  final session = ArrowCoreSession.fromElements(state.domain.document.elements);
-  final applied = session.applyEngineResultWithOrderFallback(
-    arrow: arrow,
-    result: dragResult,
-  );
-  final draggedArrow = applied.arrow;
-  final worldPoints = coreArrowWorldPoints(draggedArrow);
-  if (worldPoints.length < 2) {
+  if (dragResult == null) {
     return _noOpComputation(
       points: basePoints,
       didInsert: false,
@@ -982,12 +953,10 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
     );
   }
 
-  final localPoints = worldToLocalPoints(context.baseElement, worldPoints);
-  final nextFixedSegments = data.arrowType == ArrowType.elbow
-      ? toLocalFixedSegmentsFromCoreArrow(draggedArrow, context.baseElement)
-      : baseFixedSegments;
-  final nextStartBinding = fromCoreBinding(draggedArrow.startBinding);
-  final nextEndBinding = fromCoreBinding(draggedArrow.endBinding);
+  final localPoints = dragResult.localPoints;
+  final nextStartBinding = dragResult.startBinding;
+  final nextEndBinding = dragResult.endBinding;
+  final nextFixedSegments = dragResult.fixedSegments;
 
   final pointsChanged = !pointListEquals(basePoints, localPoints);
   final bindingsChanged =
@@ -1003,7 +972,7 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
       : draggedIndex >= localPoints.length
       ? localPoints.length - 1
       : draggedIndex;
-  final orderedElementIds = applied.orderedElementIds;
+  final orderedElementIds = dragResult.orderedElementIds;
   final orderChanged = orderedElementIds != null;
 
   return _ArrowPointComputation(
@@ -1067,69 +1036,37 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   }
 
   final data = context.baseElement.data as ArrowLikeData;
-  final fixedSegmentsForCore = data.arrowType == ArrowType.elbow
-      ? (transform.fixedSegments ?? const <ElbowFixedSegment>[])
-      : null;
   final startBinding = transform.startBinding;
   final endBinding = transform.endBinding;
-  final arrow = toCoreArrowState(
-    element: context.baseElement,
-    data: data,
-    localPointsOverride: localPoints,
-    fixedSegmentsOverride: fixedSegmentsForCore,
-    startBindingOverride: startBinding,
-    endBindingOverride: endBinding,
-  );
   final worldTarget = context.toWorld(localPoints[activeIndex]);
   final activeBinding = activeIndex == 0 ? startBinding : endBinding;
-  final oppositeBinding = activeIndex == 0 ? endBinding : startBinding;
   final preserveInsideBinding = activeBinding?.mode == ArrowBindingMode.inside;
-  final bindables = _resolveCoreEndpointBindables(
+  final dragResult = finalizeArrowCoreEndpointDragResult(
     state: state,
-    worldTarget: worldTarget,
+    element: context.baseElement,
+    data: data,
+    localPoints: localPoints,
+    fixedSegments: transform.fixedSegments,
+    draggedIndex: activeIndex,
+    worldPointer: worldTarget,
+    startBinding: startBinding,
+    endBinding: endBinding,
     excludedElementId: context.elementId,
     shouldLookupBindings: true,
     allowNewBinding: false,
     bindingDistance: 0,
-    activeBinding: activeBinding,
-    oppositeBinding: oppositeBinding,
+    coreEngineContext: coreEngineContext,
+    options: <String, dynamic>{if (preserveInsideBinding) 'altKey': true},
   );
-
-  final dragPoint = <double>[worldTarget.x - arrow.x, worldTarget.y - arrow.y];
-  final dragResult = finalizeCoreEndpointDrag(
-    arrow: arrow,
-    draggedPoints: <int, core.Point>{activeIndex: dragPoint},
-    pointer: toCorePoint(worldTarget),
-    bindables: bindables,
-    context: coreEngineContext,
-    options: <String, dynamic>{
-      'complexBindings': true,
-      if (preserveInsideBinding) 'altKey': true,
-    },
-  );
-  if (dragResult.arrowPatch.isEmpty &&
-      dragResult.events.isEmpty &&
-      dragResult.suggestedBinding == null) {
+  if (dragResult == null) {
     return null;
   }
 
-  final session = ArrowCoreSession.fromElements(state.domain.document.elements);
-  final applied = session.applyEngineResultWithOrderFallback(
-    arrow: arrow,
-    result: dragResult,
-  );
-  final finalizedArrow = applied.arrow;
-  final worldPoints = coreArrowWorldPoints(finalizedArrow);
-  if (worldPoints.length < 2) {
-    return null;
-  }
-  final nextPoints = worldToLocalPoints(context.baseElement, worldPoints);
-  final nextStartBinding = fromCoreBinding(finalizedArrow.startBinding);
-  final nextEndBinding = fromCoreBinding(finalizedArrow.endBinding);
-  final nextFixedSegments = data.arrowType == ArrowType.elbow
-      ? toLocalFixedSegmentsFromCoreArrow(finalizedArrow, context.baseElement)
-      : transform.fixedSegments;
-  final orderedElementIds = applied.orderedElementIds;
+  final nextPoints = dragResult.localPoints;
+  final nextStartBinding = dragResult.startBinding;
+  final nextEndBinding = dragResult.endBinding;
+  final nextFixedSegments = dragResult.fixedSegments;
+  final orderedElementIds = dragResult.orderedElementIds;
 
   final pointsChanged = !pointListEquals(localPoints, nextPoints);
   final bindingsChanged =
@@ -1153,44 +1090,6 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
     orderedElementIds: orderedElementIds,
   );
 }
-
-List<core.BindableState> _resolveCoreEndpointBindables({
-  required DrawState state,
-  required DrawPoint worldTarget,
-  required String excludedElementId,
-  required bool shouldLookupBindings,
-  required bool allowNewBinding,
-  required double bindingDistance,
-  required ArrowBinding? activeBinding,
-  required ArrowBinding? oppositeBinding,
-}) {
-  if (!shouldLookupBindings) {
-    return const <core.BindableState>[];
-  }
-
-  final resolved = resolveCoreBindableCandidates(
-    document: state.domain.document,
-    worldPoint: worldTarget,
-    distance: bindingDistance,
-    preferredBinding: activeBinding,
-    oppositeBinding: oppositeBinding,
-    excludedElementId: excludedElementId,
-    includeNearby: allowNewBinding,
-  );
-  if (resolved.isEmpty) {
-    return const <core.BindableState>[];
-  }
-  return resolved.bindables;
-}
-
-core.EngineContext _coreContextWithBindingDisabled(
-  core.EngineContext context,
-) => buildCoreEngineContext(
-  zoom: context.zoom,
-  isBindingEnabled: false,
-  bindMode: context.bindMode,
-  maxCoordinate: context.maxCoordinate,
-);
 
 _ArrowPointComputation _computeElbowAddableComputation({
   required DrawState state,
