@@ -216,8 +216,11 @@ core.ArrowState _buildCoreRouteArrow({
     startArrowhead: toCoreArrowhead(startArrowhead),
     endArrowhead: toCoreArrowhead(endArrowhead),
     elbowed: true,
-    fixedSegments: null,
-    startIsSpecial: null,
-    endIsSpecial: null,
+    // Excalidraw parity: new elbow arrows initialize with an empty fixed
+    // segment list and explicit non-special endpoint flags. Passing `null`
+    // here collapses the default route into a 3-point L-shape.
+    fixedSegments: const <core.FixedSegment>[],
+    startIsSpecial: false,
+    endIsSpecial: false,
   );
 }
