@@ -243,6 +243,10 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
     return null;
   }
 
+  final endpointIndex = arrow.points.length - 1;
+  final bindablesById = <String, core.BindableState>{
+    for (final bindable in bindables) bindable.id: bindable,
+  };
   final draggedPoints = <int, core.Point>{
     draggedIndex: <double>[worldPointer.x - arrow.x, worldPointer.y - arrow.y],
   };
@@ -258,8 +262,6 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
     context: dragContext,
     options: mergedOptions,
   );
-
-  final endpointIndex = arrow.points.length - 1;
   var startStrategy = strategies.start;
   var endStrategy = strategies.end;
 
@@ -280,52 +282,37 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
     }
   }
 
-  var nextArrow = arrow.copyWith(
-    points: _applyDraggedPointsToArrowPoints(arrow.points, draggedPoints),
-  );
-  final bindablesById = <String, core.BindableState>{
-    for (final bindable in bindables) bindable.id: bindable,
-  };
+  final result = finalize
+      ? finalizeCoreEndpointDrag(
+          arrow: arrow,
+          draggedPoints: draggedPoints,
+          pointer: toCorePoint(worldPointer),
+          bindables: bindables,
+          context: dragContext,
+          options: mergedOptions,
+        )
+      : computeCoreEndpointDrag(
+          arrow: arrow,
+          draggedPoints: draggedPoints,
+          pointer: toCorePoint(worldPointer),
+          bindables: bindables,
+          context: dragContext,
+          options: mergedOptions,
+        );
 
-  nextArrow = _applyStrategyMutation(
-    arrow: nextArrow,
-    edge: core.arrowEndpointStart,
-    strategy: startStrategy,
-  );
-  nextArrow = _applyStrategyMutation(
-    arrow: nextArrow,
-    edge: core.arrowEndpointEnd,
-    strategy: endStrategy,
-  );
-
-  nextArrow = _applyStrategyBoundPoint(
-    arrow: nextArrow,
-    endpoint: core.arrowEndpointStart,
-    strategy: startStrategy,
-    bindablesById: bindablesById,
-  );
-  nextArrow = _applyStrategyBoundPoint(
-    arrow: nextArrow,
-    endpoint: core.arrowEndpointEnd,
-    strategy: endStrategy,
-    bindablesById: bindablesById,
-  );
-
-  nextArrow = _normalizeArrowState(nextArrow, dragContext.maxCoordinate);
-  if (nextArrow.elbowed) {
-    final elbowPatch = recomputeCoreElbowPatch(
-      arrow: nextArrow,
-      bindables: bindables,
-      context: dragContext,
-    );
-    if (elbowPatch.isNotEmpty) {
-      nextArrow = core.applyArrowPatch(nextArrow, elbowPatch);
-    }
-  }
-
+  var nextArrow = core.applyArrowPatch(arrow, result.arrowPatch);
   final draggedStrategy = draggedIndex == 0 ? startStrategy : endStrategy;
-  final suggestedBindableId = _strategyBindableId(draggedStrategy);
+  nextArrow = _applyLegacyNewArrowDraggedFocusPointOverride(
+    arrow: nextArrow,
+    draggedIndex: draggedIndex,
+    draggedGlobalPoint: toCorePoint(worldPointer),
+    draggedStrategy: draggedStrategy,
+    bindablesById: bindablesById,
+    maxCoordinate: dragContext.maxCoordinate,
+    isNewArrow: isNewArrow,
+  );
 
+  final suggestedBindableId = _strategyBindableId(draggedStrategy);
   List<String>? nextOrderedElementIds;
   if (dragContext.isBindingEnabled &&
       suggestedBindableId != null &&
@@ -345,6 +332,80 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
   );
 }
 
+core.ArrowState _applyLegacyNewArrowDraggedFocusPointOverride({
+  required core.ArrowState arrow,
+  required int draggedIndex,
+  required core.Point draggedGlobalPoint,
+  required core.EndpointBindingStrategy? draggedStrategy,
+  required Map<String, core.BindableState> bindablesById,
+  required double maxCoordinate,
+  required bool isNewArrow,
+}) {
+  if (!isNewArrow || arrow.elbowed || arrow.points.isEmpty) {
+    return arrow;
+  }
+  if (draggedIndex != 0 && draggedIndex != arrow.points.length - 1) {
+    return arrow;
+  }
+  if (draggedStrategy == null ||
+      draggedStrategy.mode == null ||
+      draggedStrategy.element == null) {
+    return arrow;
+  }
+
+  final isStart = draggedIndex == 0;
+  final binding = isStart ? arrow.startBinding : arrow.endBinding;
+  if (binding == null) {
+    return arrow;
+  }
+
+  final bindable = bindablesById[binding.elementId] ?? draggedStrategy.element!;
+  final fixedPoint = calculateCoreFixedPointForBinding(
+    bindable: bindable,
+    point: draggedGlobalPoint,
+  );
+  final nextBinding = binding.copyWith(fixedPoint: fixedPoint);
+
+  var nextArrow = isStart
+      ? arrow.copyWith(startBinding: nextBinding, setStartBinding: true)
+      : arrow.copyWith(endBinding: nextBinding, setEndBinding: true);
+
+  final localPoint = updateCoreBoundPoint(
+    arrow: nextArrow,
+    edge: isStart
+        ? core.arrowEndpointPositionStart
+        : core.arrowEndpointPositionEnd,
+    binding: nextBinding,
+    bindable: bindable,
+    bindablesById: bindablesById,
+    dragging: true,
+  );
+  if (localPoint != null) {
+    nextArrow = _replaceArrowEndpointLocalPoint(
+      arrow: nextArrow,
+      isStart: isStart,
+      localPoint: localPoint,
+    );
+  }
+  return _normalizeArrowState(nextArrow, maxCoordinate);
+}
+
+core.ArrowState _replaceArrowEndpointLocalPoint({
+  required core.ArrowState arrow,
+  required bool isStart,
+  required core.Point localPoint,
+}) {
+  final nextPoints = arrow.points
+      .map((point) => <double>[point[0], point[1]])
+      .toList(growable: true);
+  final pointIndex = isStart ? 0 : nextPoints.length - 1;
+  if (pointIndex < 0 || pointIndex >= nextPoints.length) {
+    return arrow;
+  }
+  nextPoints[pointIndex] = <double>[localPoint[0], localPoint[1]];
+  return arrow.copyWith(points: List<core.Point>.unmodifiable(nextPoints));
+}
+
 core.EndpointBindingStrategy? _withStrategyFocusPoint(
   core.EndpointBindingStrategy? strategy,
   core.Point focusPoint,
@@ -359,98 +420,6 @@ core.EndpointBindingStrategy? _withStrategyFocusPoint(
     element: strategy.element,
     focusPoint: focusPoint,
   );
-}
-
-List<core.Point> _applyDraggedPointsToArrowPoints(
-  List<core.Point> points,
-  Map<int, core.Point> draggedPoints,
-) {
-  final nextPoints = points
-      .map((point) => <double>[point[0], point[1]])
-      .toList(growable: true);
-  draggedPoints.forEach((index, point) {
-    if (index < 0 || index >= nextPoints.length) {
-      return;
-    }
-    nextPoints[index] = <double>[point[0], point[1]];
-  });
-  return List<core.Point>.unmodifiable(nextPoints);
-}
-
-core.ArrowState _applyStrategyMutation({
-  required core.ArrowState arrow,
-  required core.ArrowEndpointEdge edge,
-  required core.EndpointBindingStrategy? strategy,
-}) {
-  if (strategy == null) {
-    return arrow;
-  }
-
-  if (strategy.mode == null) {
-    final mutation = unbindCoreArrowEndpoint(arrow: arrow, edge: edge);
-    return core.applyArrowPatch(arrow, mutation.arrowPatch);
-  }
-
-  final bindable = strategy.element;
-  final focusPoint = strategy.focusPoint;
-  if (bindable == null || focusPoint == null) {
-    return arrow;
-  }
-
-  final mutation = bindCoreArrowEndpoint(
-    arrow: arrow,
-    edge: edge,
-    bindable: bindable,
-    mode: strategy.mode,
-    focusPoint: focusPoint,
-  );
-  return core.applyArrowPatch(arrow, mutation.arrowPatch);
-}
-
-core.ArrowState _applyStrategyBoundPoint({
-  required core.ArrowState arrow,
-  required core.ArrowEndpointEdge endpoint,
-  required core.EndpointBindingStrategy? strategy,
-  required Map<String, core.BindableState> bindablesById,
-}) {
-  if (strategy == null || strategy.focusPoint == null) {
-    return arrow;
-  }
-
-  final isStart = endpoint == core.arrowEndpointStart;
-  final binding = isStart ? arrow.startBinding : arrow.endBinding;
-  if (binding == null) {
-    return arrow;
-  }
-
-  final bindable = bindablesById[binding.elementId];
-  if (bindable == null) {
-    return arrow;
-  }
-
-  final localPoint = updateCoreBoundPoint(
-    arrow: arrow,
-    edge: isStart
-        ? core.arrowEndpointPositionStart
-        : core.arrowEndpointPositionEnd,
-    binding: binding,
-    bindable: bindable,
-    bindablesById: bindablesById,
-  );
-  if (localPoint == null) {
-    return arrow;
-  }
-
-  final nextPoints = arrow.points
-      .map((point) => <double>[point[0], point[1]])
-      .toList(growable: true);
-  final pointIndex = isStart ? 0 : nextPoints.length - 1;
-  if (pointIndex < 0 || pointIndex >= nextPoints.length) {
-    return arrow;
-  }
-  nextPoints[pointIndex] = <double>[localPoint[0], localPoint[1]];
-
-  return arrow.copyWith(points: List<core.Point>.unmodifiable(nextPoints));
 }
 
 core.ArrowState _normalizeArrowState(

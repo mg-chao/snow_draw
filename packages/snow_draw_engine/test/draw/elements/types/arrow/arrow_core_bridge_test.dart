@@ -1,3 +1,4 @@
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
@@ -11,7 +12,6 @@ import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
 import 'package:snow_draw_engine/draw/types/element_style.dart';
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import 'package:test/test.dart';
 
 void main() {
@@ -225,6 +225,37 @@ void main() {
         ]);
         expect(projection.arrows, hasLength(1));
         expect(projection.arrowSources.keys, contains('arrow-1'));
+      },
+    );
+
+    test(
+      'projectCoreDocument appends missing ids from element snapshot order',
+      () {
+        final serial = _serialElement(
+          id: 'serial-1',
+          textElementId: 'text-1',
+          zIndex: 0,
+        );
+        final text = _textElement(id: 'text-1', zIndex: 1);
+        final arrow = _arrowElement(
+          id: 'arrow-1',
+          points: const <DrawPoint>[
+            DrawPoint(x: 30, y: 30),
+            DrawPoint(x: 130, y: 30),
+          ],
+          zIndex: 2,
+        );
+
+        final projection = projectCoreDocument(
+          <ElementState>[arrow, text, serial],
+          orderedElementIds: const <String>['serial-1'],
+        );
+
+        expect(projection.orderedElementIds, const <String>[
+          'serial-1',
+          'arrow-1',
+          'text-1',
+        ]);
       },
     );
 

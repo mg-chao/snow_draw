@@ -1,6 +1,9 @@
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bindable_query.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_endpoint_drag.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_ops.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
@@ -354,6 +357,120 @@ void main() {
         expect(result, isNotNull);
         expect(result!.startBinding?.elementId, 'rect-start');
         expect(result.endBinding, isNull);
+      },
+    );
+
+    test(
+      'computeArrowCoreEndpointDragResult mirrors core endpoint patch application for complex overlap drag',
+      () {
+        final startTarget = _rectangleElement(
+          id: 'rect-start',
+          rect: const DrawRect(minX: 20, minY: 20, maxX: 120, maxY: 120),
+          zIndex: 1,
+        );
+        final endTarget = _rectangleElement(
+          id: 'rect-end',
+          rect: const DrawRect(minX: 240, minY: 20, maxX: 340, maxY: 120),
+          zIndex: 2,
+        );
+        final arrow = _arrowElement(
+          id: 'arrow-1',
+          points: const <DrawPoint>[
+            DrawPoint(x: 70, y: 70),
+            DrawPoint(x: 290, y: 70),
+          ],
+          zIndex: 0,
+          startBinding: const ArrowBinding(
+            elementId: 'rect-start',
+            anchor: DrawPoint(x: 0.5001, y: 0.5001),
+          ),
+          endBinding: const ArrowBinding(
+            elementId: 'rect-end',
+            anchor: DrawPoint(x: 0.5001, y: 0.5001),
+          ),
+        );
+        final state = _stateWithElements(<ElementState>[
+          arrow,
+          startTarget,
+          endTarget,
+        ]);
+        final data = arrow.data as ArrowData;
+        const worldPointer = DrawPoint(x: 90, y: 70);
+
+        final result = computeArrowCoreEndpointDragResult(
+          state: state,
+          element: arrow,
+          data: data,
+          localPoints: _resolveLocalPoints(arrow, data),
+          draggedIndex: 1,
+          worldPointer: worldPointer,
+          startBinding: data.startBinding,
+          endBinding: data.endBinding,
+          excludedElementId: arrow.id,
+          shouldLookupBindings: true,
+          allowNewBinding: true,
+          bindingDistance: 80,
+          coreEngineContext: buildCoreEngineContext(),
+          options: const <String, dynamic>{'complexBindings': true},
+        );
+
+        expect(result, isNotNull);
+
+        final coreArrow = toCoreArrowState(
+          element: arrow,
+          data: data,
+          localPointsOverride: _resolveLocalPoints(arrow, data),
+          startBindingOverride: data.startBinding,
+          endBindingOverride: data.endBinding,
+        );
+        final candidates = resolveCoreBindableCandidatesForEndpointStrategy(
+          document: state.domain.document,
+          allowNewBinding: true,
+          activeBinding: data.endBinding,
+          oppositeBinding: data.startBinding,
+          excludedElementId: arrow.id,
+        );
+        final engineResult = computeCoreEndpointDrag(
+          arrow: coreArrow,
+          draggedPoints: <int, core.Point>{
+            1: <double>[
+              worldPointer.x - coreArrow.x,
+              worldPointer.y - coreArrow.y,
+            ],
+          },
+          pointer: <double>[worldPointer.x, worldPointer.y],
+          bindables: candidates.bindables,
+          context: buildCoreEngineContext(),
+          options: const <String, dynamic>{'complexBindings': true},
+        );
+        final expectedArrow = core.applyArrowPatch(
+          coreArrow,
+          engineResult.arrowPatch,
+        );
+
+        expect(result!.arrow.x, closeTo(expectedArrow.x, 1e-9));
+        expect(result.arrow.y, closeTo(expectedArrow.y, 1e-9));
+        expect(result.arrow.width, closeTo(expectedArrow.width, 1e-9));
+        expect(result.arrow.height, closeTo(expectedArrow.height, 1e-9));
+        expect(result.arrow.points.length, expectedArrow.points.length);
+        for (var index = 0; index < expectedArrow.points.length; index += 1) {
+          expect(
+            result.arrow.points[index][0],
+            closeTo(expectedArrow.points[index][0], 1e-9),
+          );
+          expect(
+            result.arrow.points[index][1],
+            closeTo(expectedArrow.points[index][1], 1e-9),
+          );
+        }
+        expect(
+          result.arrow.startBinding?.elementId,
+          expectedArrow.startBinding?.elementId,
+        );
+        expect(
+          result.arrow.endBinding?.elementId,
+          expectedArrow.endBinding?.elementId,
+        );
       },
     );
   });

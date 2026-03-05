@@ -325,16 +325,16 @@ ArrowCoreDocumentProjection projectCoreDocument(
   };
   final orderedMaterialized = <ElementState>[];
   if (orderedElementIds != null && orderedElementIds.isNotEmpty) {
-    final orderedIdSet = orderedElementIds.toSet();
+    final orderedIdSet = <String>{};
     for (final id in orderedElementIds) {
       final element = elementById[id];
-      if (element == null) {
+      if (element == null || !orderedIdSet.add(id)) {
         continue;
       }
       orderedMaterialized.add(element);
     }
     for (final element in materialized) {
-      if (orderedIdSet.contains(element.id)) {
+      if (!orderedIdSet.add(element.id)) {
         continue;
       }
       orderedMaterialized.add(element);
@@ -361,10 +361,7 @@ ArrowCoreDocumentProjection projectCoreDocument(
     arrows: arrowsWithSources.arrows,
     arrowSources: arrowsWithSources.sources,
     orderedElementIds: List<String>.unmodifiable(
-      orderedElementIds ??
-          materializedSnapshot
-              .map((element) => element.id)
-              .toList(growable: false),
+      materializedSnapshot.map((element) => element.id).toList(growable: false),
     ),
     anchorElementIdsByBindableId: collectCoreAnchorElementIdsByBindableId(
       materializedSnapshot,
