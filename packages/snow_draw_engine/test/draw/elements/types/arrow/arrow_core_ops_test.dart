@@ -20,7 +20,7 @@ void main() {
       );
     });
 
-    test('resolveCoreEndpointBindingStrategy defaults to complex parity', () {
+    test('resolveCoreEndpointBindingStrategy mirrors core default options', () {
       final arrow = _arrowState(
         startBinding: const core.FixedPointBinding(
           elementId: 'bindable-1',
@@ -29,7 +29,18 @@ void main() {
         ),
       );
       final bindable = _bindableState();
-      final strategies = resolveCoreEndpointBindingStrategy(
+      final payload = <String, dynamic>{
+        'arrow': arrow,
+        'draggedPoints': const <int, core.Point>{
+          1: <double>[60, 0],
+        },
+        'pointer': const <double>[60, 0],
+        'bindables': <core.BindableState>[bindable],
+        'context': buildCoreEngineContext(),
+      };
+
+      final expected = core.getEndpointBindingStrategy(payload);
+      final actual = resolveCoreEndpointBindingStrategy(
         arrow: arrow,
         draggedPoints: const <int, core.Point>{
           1: <double>[60, 0],
@@ -39,13 +50,20 @@ void main() {
         context: buildCoreEngineContext(),
       );
 
-      expect(strategies.start, isNull);
-      expect(strategies.end, isNotNull);
-      expect(strategies.end!.bindableId, bindable.id);
-      expect(strategies.end!.mode, core.bindModeOrbit);
+      final expectedStart = expected.start;
+      final actualStart = actual.start;
+      expect(actualStart?.bindableId, expectedStart?.bindableId);
+      expect(actualStart?.mode, expectedStart?.mode);
+      expect(actualStart?.focusPoint, expectedStart?.focusPoint);
+
+      final expectedEnd = expected.end;
+      final actualEnd = actual.end;
+      expect(actualEnd?.bindableId, expectedEnd?.bindableId);
+      expect(actualEnd?.mode, expectedEnd?.mode);
+      expect(actualEnd?.focusPoint, expectedEnd?.focusPoint);
     });
 
-    test('computeCoreSimpleBindingPatch defaults to complex parity', () {
+    test('computeCoreSimpleBindingPatch mirrors core default options', () {
       final arrow = _arrowState(
         startBinding: const core.FixedPointBinding(
           elementId: 'bindable-1',
@@ -54,7 +72,17 @@ void main() {
         ),
       );
       final bindable = _bindableState();
-      final result = computeCoreSimpleBindingPatch(
+      final payload = <String, dynamic>{
+        'arrow': arrow,
+        'draggedPoints': const <int, core.Point>{
+          1: <double>[60, 0],
+        },
+        'pointer': const <double>[60, 0],
+        'bindables': <core.BindableState>[bindable],
+        'context': buildCoreEngineContext(),
+      };
+      final expected = core.computeSimpleBindingPatch(payload);
+      final actual = computeCoreSimpleBindingPatch(
         arrow: arrow,
         draggedPoints: const <int, core.Point>{
           1: <double>[60, 0],
@@ -64,13 +92,21 @@ void main() {
         context: buildCoreEngineContext(),
       );
 
-      final start =
-          result.arrowPatch['startBinding'] as core.FixedPointBinding?;
-      final end = result.arrowPatch['endBinding'] as core.FixedPointBinding?;
-      expect(start, isNotNull);
-      expect(start!.mode, core.bindModeOrbit);
-      expect(end, isNotNull);
-      expect(end!.mode, core.bindModeOrbit);
+      final expectedStart =
+          expected.arrowPatch['startBinding'] as core.FixedPointBinding?;
+      final actualStart =
+          actual.arrowPatch['startBinding'] as core.FixedPointBinding?;
+      expect(actualStart?.elementId, expectedStart?.elementId);
+      expect(actualStart?.mode, expectedStart?.mode);
+      expect(actualStart?.fixedPoint, expectedStart?.fixedPoint);
+
+      final expectedEnd =
+          expected.arrowPatch['endBinding'] as core.FixedPointBinding?;
+      final actualEnd =
+          actual.arrowPatch['endBinding'] as core.FixedPointBinding?;
+      expect(actualEnd?.elementId, expectedEnd?.elementId);
+      expect(actualEnd?.mode, expectedEnd?.mode);
+      expect(actualEnd?.fixedPoint, expectedEnd?.fixedPoint);
     });
 
     test('bind/unbind relation wrappers preserve relation patches', () {

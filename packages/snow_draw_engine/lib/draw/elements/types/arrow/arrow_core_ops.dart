@@ -208,13 +208,8 @@ ArrowCoreRuntime get _runtime => ArrowCoreRuntime.instance;
 Map<String, dynamic> _composeEndpointBindingOptionsPayload(
   Map<String, dynamic>? options,
 ) {
-  final composedOptions = <String, dynamic>{
-    'complexBindings': true,
-    ...?options,
-  };
-  return <String, dynamic>{
-    'options': composedOptions,
-  };
+  final composedOptions = <String, dynamic>{...?options};
+  return <String, dynamic>{'options': composedOptions};
 }
 
 /// Typed wrapper around `snow_draw_arrow_core` endpoint-drag computation.
