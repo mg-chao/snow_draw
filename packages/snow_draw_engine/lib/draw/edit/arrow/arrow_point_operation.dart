@@ -968,8 +968,6 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
       allowNewBinding: allowNewBinding,
       bindingDistance: bindingDistance,
       coreEngineContext: coreEngineContext,
-      angleLocked: angleLocked,
-      altKey: altKey,
     );
   }
   final worldTarget = context.toWorld(target);
@@ -1053,8 +1051,6 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
   required bool allowNewBinding,
   required double bindingDistance,
   required core.EngineContext coreEngineContext,
-  required bool angleLocked,
-  required bool altKey,
 }) {
   if (basePoints.length < 2) {
     return _noOpComputation(
@@ -1094,33 +1090,46 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
       excludedElementId: context.elementId,
       allowNewBinding: allowNewBinding,
     );
-    final hasArrowhead = draggedStart
-        ? context.startArrowhead != ArrowheadStyle.none
-        : context.endArrowhead != ArrowheadStyle.none;
-    final oppositePoint = draggedStart ? basePoints.last : basePoints.first;
-    final bindingResult = candidates.isEmpty
+    final hoveredBindable = candidates.isEmpty
         ? null
-        : ArrowBindingUtils.resolveElbowBindingCandidateFromCoreCandidates(
-            worldPoint: worldTarget,
-            candidates: candidates,
-            snapDistance: bindingDistance,
-            hasArrowhead: hasArrowhead,
-            preferredBinding: activeBinding,
-            oppositeBinding: oppositeBinding,
-            referencePoint: context.toWorld(oppositePoint),
-            allowNewBinding: allowNewBinding,
-            dragStart: draggedStart,
-            angleLocked: angleLocked,
-            altKey: altKey,
-            coreEngineContext: coreEngineContext,
+        : core.getHoveredBindable(
+            toCorePoint(worldTarget),
+            candidates.bindables,
+            bindingDistance,
           );
-    if (bindingResult != null) {
-      hoveredBindableId = bindingResult.binding.elementId;
-      draggedEndpoint = context.toLocal(bindingResult.snapPoint);
+    if (hoveredBindable != null) {
+      hoveredBindableId = hoveredBindable.id;
+      final nextEndpointPoints = List<DrawPoint>.of(
+        basePoints,
+        growable: false,
+      );
       if (draggedStart) {
-        nextStartBinding = bindingResult.binding;
+        nextEndpointPoints[0] = target;
       } else {
-        nextEndBinding = bindingResult.binding;
+        nextEndpointPoints[nextEndpointPoints.length - 1] = target;
+      }
+      final previewArrow = toCoreArrowState(
+        element: context.baseElement,
+        data: data,
+        localPointsOverride: nextEndpointPoints,
+        fixedSegmentsOverride: baseFixedSegments,
+        startBindingOverride: startBinding,
+        endBindingOverride: endBinding,
+      );
+      final fixedPoint = calculateCoreFixedPointForElbowBinding(
+        arrow: previewArrow,
+        bindable: hoveredBindable,
+        edge: draggedStart ? core.arrowEndpointStart : core.arrowEndpointEnd,
+      );
+      final nextBinding = ArrowBinding(
+        elementId: hoveredBindable.id,
+        anchor: DrawPoint(x: fixedPoint[0], y: fixedPoint[1]),
+        mode: ArrowBindingMode.orbit,
+      );
+      if (draggedStart) {
+        nextStartBinding = nextBinding;
+      } else {
+        nextEndBinding = nextBinding;
       }
     } else if (draggedStart) {
       nextStartBinding = null;

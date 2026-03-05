@@ -597,6 +597,47 @@ void main() {
       },
     );
 
+    test('dragging elbow endpoint with alt keeps orbit binding mode', () {
+      final bindTarget = _rectangleElement(
+        id: 'elbow-alt-target',
+        rect: const DrawRect(minX: 300, minY: 120, maxX: 420, maxY: 260),
+        zIndex: 1,
+      );
+      final arrow = _elbowArrowElement(
+        id: 'elbow-alt-mode',
+        points: const <DrawPoint>[
+          DrawPoint(x: 120, y: 180),
+          DrawPoint(x: 220, y: 180),
+        ],
+        zIndex: 2,
+      );
+      final state = _stateWithElements(
+        <ElementState>[bindTarget, arrow],
+        selectedIds: <String>{arrow.id},
+      );
+
+      final session = _dragArrowHandleSession(
+        state: state,
+        elementId: arrow.id,
+        pointKind: ArrowPointKind.turning,
+        pointIndex: 1,
+        startPosition: const DrawPoint(x: 220, y: 180),
+        currentPosition: const DrawPoint(x: 320, y: 180),
+        modifiers: const EditModifiers(fromCenter: true),
+      );
+      final next = const ArrowPointOperation().finish(
+        state: state,
+        context: session.context,
+        transform: session.transform,
+      );
+      final updatedArrow = next.domain.document.getElementById(arrow.id)!;
+      final updatedData = updatedArrow.data as ArrowData;
+
+      expect(updatedData.endBinding, isNotNull);
+      expect(updatedData.endBinding!.elementId, bindTarget.id);
+      expect(updatedData.endBinding!.mode, ArrowBindingMode.orbit);
+    });
+
     test(
       'dragging elbow endpoint keeps connected segment routing consistent',
       () {
