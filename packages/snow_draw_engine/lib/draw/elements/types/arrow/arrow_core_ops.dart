@@ -205,19 +205,13 @@ final class ArrowCoreRuntime {
 
 ArrowCoreRuntime get _runtime => ArrowCoreRuntime.instance;
 
-const _complexBindingsOptionKey = 'complexBindings';
-
-Map<String, dynamic> _withDefaultComplexBindings(
-  Map<String, dynamic>? options,
-) {
-  final normalized = <String, dynamic>{...?options};
-  normalized.putIfAbsent(_complexBindingsOptionKey, () => true);
-  return normalized;
-}
-
 Map<String, dynamic> _composeEndpointBindingOptionsPayload(
   Map<String, dynamic>? options,
-) => <String, dynamic>{'options': _withDefaultComplexBindings(options)};
+) => options == null
+    ? const <String, dynamic>{}
+    : <String, dynamic>{
+        'options': <String, dynamic>{...options},
+      };
 
 /// Typed wrapper around `snow_draw_arrow_core` endpoint-drag computation.
 core.EngineResult computeCoreEndpointDrag({

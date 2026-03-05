@@ -20,33 +20,32 @@ void main() {
       );
     });
 
-    test(
-      'resolveCoreEndpointBindingStrategy defaults to complex-binding parity',
-      () {
-        final arrow = _arrowState(
-          startBinding: const core.FixedPointBinding(
-            elementId: 'bindable-1',
-            fixedPoint: <double>[0.75, 0.5],
-            mode: core.bindModeOrbit,
-          ),
-        );
-        final bindable = _bindableState();
-        final strategies = resolveCoreEndpointBindingStrategy(
-          arrow: arrow,
-          draggedPoints: const <int, core.Point>{
-            1: <double>[60, 0],
-          },
-          pointer: const <double>[60, 0],
-          bindables: <core.BindableState>[bindable],
-          context: buildCoreEngineContext(),
-        );
+    test('resolveCoreEndpointBindingStrategy defaults to legacy parity', () {
+      final arrow = _arrowState(
+        startBinding: const core.FixedPointBinding(
+          elementId: 'bindable-1',
+          fixedPoint: <double>[0.75, 0.5],
+          mode: core.bindModeOrbit,
+        ),
+      );
+      final bindable = _bindableState();
+      final strategies = resolveCoreEndpointBindingStrategy(
+        arrow: arrow,
+        draggedPoints: const <int, core.Point>{
+          1: <double>[60, 0],
+        },
+        pointer: const <double>[60, 0],
+        bindables: <core.BindableState>[bindable],
+        context: buildCoreEngineContext(),
+      );
 
-        expect(strategies.start, isNull);
-        expect(strategies.end, isNotNull);
-        expect(strategies.end!.bindableId, bindable.id);
-        expect(strategies.end!.mode, core.bindModeOrbit);
-      },
-    );
+      expect(strategies.start, isNotNull);
+      expect(strategies.start!.bindableId, bindable.id);
+      expect(strategies.start!.mode, core.bindModeInside);
+      expect(strategies.end, isNotNull);
+      expect(strategies.end!.bindableId, bindable.id);
+      expect(strategies.end!.mode, core.bindModeInside);
+    });
 
     test('bind/unbind relation wrappers preserve relation patches', () {
       final arrow = _arrowState();

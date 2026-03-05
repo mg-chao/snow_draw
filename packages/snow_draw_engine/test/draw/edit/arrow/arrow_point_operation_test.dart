@@ -163,8 +163,8 @@ void main() {
       },
     );
 
-    test('finish finalizes endpoint drag and can clear opposite same-target '
-        'orbit binding', () {
+    test('finish finalizes endpoint drag and keeps same-target bindings '
+        'in legacy mode', () {
       final bindTarget = _rectangleElement(
         id: 'rect-shared',
         rect: const DrawRect(maxX: 120, maxY: 120),
@@ -212,7 +212,11 @@ void main() {
       final updatedData = updatedArrow.data as ArrowData;
 
       expect(updatedData.startBinding, isNotNull);
-      expect(updatedData.endBinding, isNull);
+      expect(updatedData.endBinding, isNotNull);
+      expect(updatedData.startBinding!.elementId, bindTarget.id);
+      expect(updatedData.endBinding!.elementId, bindTarget.id);
+      expect(updatedData.startBinding!.mode, ArrowBindingMode.inside);
+      expect(updatedData.endBinding!.mode, ArrowBindingMode.inside);
     });
 
     test('finish applies reorder event and moves bound arrow above target', () {
