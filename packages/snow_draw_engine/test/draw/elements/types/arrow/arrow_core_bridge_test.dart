@@ -2,6 +2,7 @@ import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/serial_number/serial_number_data.dart';
@@ -359,6 +360,57 @@ void main() {
         expect(patchedData.points, data.points);
       },
     );
+
+    test('applyCoreArrowPatchToElement applies fixed-segment-only patches '
+        'without geometry drift', () {
+      final base = _arrowElement(
+        id: 'arrow-fixed-segment-patch',
+        points: const <DrawPoint>[
+          DrawPoint(x: 40, y: 20),
+          DrawPoint(x: 160, y: 80),
+        ],
+        zIndex: 4,
+      );
+      final data = (base.data as ArrowData).copyWith(
+        arrowType: ArrowType.elbow,
+        fixedSegments: const <ElbowFixedSegment>[
+          ElbowFixedSegment(
+            index: 1,
+            start: DrawPoint(x: 72, y: 20),
+            end: DrawPoint(x: 72, y: 80),
+          ),
+        ],
+      );
+      final element = base.copyWith(rotation: 0.37, data: data);
+      const patch = <String, dynamic>{
+        'fixedSegments': <core.FixedSegment>[
+          core.FixedSegment(
+            index: 1,
+            start: <double>[90, 16],
+            end: <double>[90, 72],
+          ),
+        ],
+      };
+      final expectedArrow = core.applyArrowPatch(
+        toCoreArrowState(element: element, data: data),
+        patch,
+      );
+      final expectedFixedSegments = toLocalFixedSegmentsFromCoreArrow(
+        expectedArrow,
+        element,
+      );
+
+      final patched = applyCoreArrowPatchToElement(
+        element: element,
+        data: data,
+        patch: patch,
+      );
+      final patchedData = patched.data as ArrowData;
+
+      expect(patched.rect, element.rect);
+      expect(patchedData.points, data.points);
+      expect(patchedData.fixedSegments, expectedFixedSegments);
+    });
   });
 }
 

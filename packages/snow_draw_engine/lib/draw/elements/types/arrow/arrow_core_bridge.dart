@@ -590,8 +590,12 @@ ElementState applyCoreArrowPatchToElement({
   if (patch.isEmpty) {
     return element;
   }
-  if (!_patchTouchesGeometryOrSegments(patch)) {
-    final nextData = _applyNonGeometryPatch(data: data, patch: patch);
+  if (!_patchTouchesGeometry(patch)) {
+    final nextData = _applyNonGeometryPatch(
+      element: element,
+      data: data,
+      patch: patch,
+    );
     return nextData == data ? element : element.copyWith(data: nextData);
   }
 
@@ -654,15 +658,15 @@ List<ElbowFixedSegment>? transformArrowLocalFixedSegments({
       : List<ElbowFixedSegment>.unmodifiable(transformed);
 }
 
-bool _patchTouchesGeometryOrSegments(core.ArrowPatch patch) =>
+bool _patchTouchesGeometry(core.ArrowPatch patch) =>
     patch.containsKey('x') ||
     patch.containsKey('y') ||
     patch.containsKey('width') ||
     patch.containsKey('height') ||
-    patch.containsKey('points') ||
-    patch.containsKey('fixedSegments');
+    patch.containsKey('points');
 
 ArrowLikeData _applyNonGeometryPatch({
+  required ElementState element,
   required ArrowLikeData data,
   required core.ArrowPatch patch,
 }) {
@@ -671,6 +675,13 @@ ArrowLikeData _applyNonGeometryPatch({
       : ArrowLikeData.unset;
   final endBindingUpdate = patch.containsKey('endBinding')
       ? _decodeCoreBindingPatchValue(patch['endBinding'])
+      : ArrowLikeData.unset;
+  final fixedSegmentsUpdate = patch.containsKey('fixedSegments')
+      ? _decodeCoreFixedSegmentsPatchValue(
+          element: element,
+          data: data,
+          patch: patch,
+        )
       : ArrowLikeData.unset;
   final startIsSpecialUpdate = patch.containsKey('startIsSpecial')
       ? _decodeNullableBoolPatchValue(patch['startIsSpecial'])
@@ -682,9 +693,22 @@ ArrowLikeData _applyNonGeometryPatch({
   return data.copyWith(
     startBinding: startBindingUpdate,
     endBinding: endBindingUpdate,
+    fixedSegments: fixedSegmentsUpdate,
     startIsSpecial: startIsSpecialUpdate,
     endIsSpecial: endIsSpecialUpdate,
   );
+}
+
+List<ElbowFixedSegment>? _decodeCoreFixedSegmentsPatchValue({
+  required ElementState element,
+  required ArrowLikeData data,
+  required core.ArrowPatch patch,
+}) {
+  final patchedArrow = core.applyArrowPatch(
+    toCoreArrowState(element: element, data: data),
+    patch,
+  );
+  return toLocalFixedSegmentsFromCoreArrow(patchedArrow, element);
 }
 
 ArrowBinding? _decodeCoreBindingPatchValue(Object? raw) {
