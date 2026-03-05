@@ -149,6 +149,42 @@ void main() {
     );
 
     test(
+      'endpoint strategy candidates honor overridden order with normalized z-index',
+      () {
+        final first = _rectangleElement(
+          id: 'first',
+          rect: const DrawRect(minX: 20, minY: 20, maxX: 120, maxY: 120),
+        );
+        final second = _rectangleElement(
+          id: 'second',
+          rect: const DrawRect(minX: 140, minY: 20, maxX: 240, maxY: 120),
+        );
+        final third = _rectangleElement(
+          id: 'third',
+          rect: const DrawRect(minX: 260, minY: 20, maxX: 360, maxY: 120),
+        );
+        final document = DocumentState(
+          elements: <ElementState>[first, second, third],
+        );
+
+        final resolved = resolveCoreBindableCandidatesForEndpointStrategy(
+          document: document,
+          allowNewBinding: true,
+          orderedElementIds: const <String>['third', 'second', 'first'],
+        );
+
+        expect(
+          resolved.elements.map((element) => element.id).toList(),
+          <String>['third', 'second', 'first'],
+        );
+        expect(
+          resolved.bindables.map((bindable) => bindable.zIndex).toList(),
+          <double>[0, 1, 2],
+        );
+      },
+    );
+
+    test(
       'endpoint strategy candidates keep only bound targets when new binding is disabled',
       () {
         final first = _rectangleElement(

@@ -175,6 +175,7 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
     allowNewBinding: allowNewBinding,
     activeBinding: activeBinding,
     oppositeBinding: oppositeBinding,
+    orderedElementIds: orderedElementIds,
   );
   final dragContext = shouldLookupBindings
       ? coreEngineContext
@@ -544,6 +545,7 @@ List<core.BindableState> _resolveCoreEndpointBindables({
   required bool allowNewBinding,
   required ArrowBinding? activeBinding,
   required ArrowBinding? oppositeBinding,
+  required List<String>? orderedElementIds,
 }) {
   if (!shouldLookupBindings) {
     return const <core.BindableState>[];
@@ -555,6 +557,7 @@ List<core.BindableState> _resolveCoreEndpointBindables({
     oppositeBinding: oppositeBinding,
     excludedElementId: excludedElementId,
     allowNewBinding: allowNewBinding,
+    orderedElementIds: orderedElementIds,
   );
   if (resolved.isEmpty) {
     return const <core.BindableState>[];

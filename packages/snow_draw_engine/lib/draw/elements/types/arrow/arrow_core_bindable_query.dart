@@ -1,9 +1,12 @@
+import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+
 import '../../../models/document_state.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import 'arrow_binding.dart';
 import 'arrow_core_bindable_candidates.dart';
 import 'arrow_core_bindable_projector.dart';
+import 'arrow_core_bridge.dart';
 
 /// Resolves bindable lookup candidates for arrow-core binding/focus routines.
 ///
@@ -61,14 +64,24 @@ ArrowCoreBindableCandidates resolveCoreBindableCandidates({
 /// - disallow new binding -> keep only currently bound endpoint targets
 ArrowCoreBindableCandidates resolveCoreBindableCandidatesForEndpointStrategy({
   required DocumentState document,
+  required bool allowNewBinding,
   ArrowBinding? activeBinding,
   ArrowBinding? oppositeBinding,
   String? excludedElementId,
-  required bool allowNewBinding,
+  List<String>? orderedElementIds,
 }) {
+  final hasOrderOverride =
+      orderedElementIds != null && orderedElementIds.isNotEmpty;
+  final orderedIds = hasOrderOverride
+      ? orderedElementIds
+      : document.orderedElementIds;
+  final canReuseCachedBindableProjection =
+      !hasOrderOverride ||
+      _stringListEquals(orderedIds, document.orderedElementIds);
+
   if (allowNewBinding) {
     final allBindableElements = <ElementState>[];
-    for (final elementId in document.orderedElementIds) {
+    for (final elementId in orderedIds) {
       if (excludedElementId != null && elementId == excludedElementId) {
         continue;
       }
@@ -81,9 +94,40 @@ ArrowCoreBindableCandidates resolveCoreBindableCandidatesForEndpointStrategy({
       }
       allBindableElements.add(element);
     }
+
+    if (allBindableElements.isEmpty) {
+      return ArrowCoreBindableCandidates.empty;
+    }
+
+    if (canReuseCachedBindableProjection) {
+      return projectArrowCoreBindableCandidates(
+        elements: allBindableElements,
+        bindablesById: document.arrowCoreBindableById,
+      );
+    }
+
+    final bindablesById = <String, core.BindableState>{};
+    for (var index = 0; index < orderedIds.length; index += 1) {
+      final elementId = orderedIds[index];
+      if (excludedElementId != null && elementId == excludedElementId) {
+        continue;
+      }
+      if (!document.arrowCoreBindableById.containsKey(elementId)) {
+        continue;
+      }
+      final element = document.elementMap[elementId];
+      if (element == null) {
+        continue;
+      }
+      final bindable = toCoreBindableState(element, zIndex: index);
+      if (bindable == null) {
+        continue;
+      }
+      bindablesById[element.id] = bindable;
+    }
     return projectArrowCoreBindableCandidates(
       elements: allBindableElements,
-      bindablesById: document.arrowCoreBindableById,
+      bindablesById: bindablesById,
     );
   }
 
@@ -101,7 +145,7 @@ ArrowCoreBindableCandidates resolveCoreBindableCandidatesForEndpointStrategy({
   }
 
   final boundElements = <ElementState>[];
-  for (final elementId in document.orderedElementIds) {
+  for (final elementId in orderedIds) {
     if (!boundIds.contains(elementId)) {
       continue;
     }
@@ -115,8 +159,54 @@ ArrowCoreBindableCandidates resolveCoreBindableCandidatesForEndpointStrategy({
     boundElements.add(element);
   }
 
+  if (boundElements.isEmpty) {
+    return ArrowCoreBindableCandidates.empty;
+  }
+
+  if (canReuseCachedBindableProjection) {
+    return projectArrowCoreBindableCandidates(
+      elements: boundElements,
+      bindablesById: document.arrowCoreBindableById,
+    );
+  }
+
+  final bindablesById = <String, core.BindableState>{};
+  for (var index = 0; index < orderedIds.length; index += 1) {
+    final elementId = orderedIds[index];
+    if (!boundIds.contains(elementId)) {
+      continue;
+    }
+    if (excludedElementId != null && elementId == excludedElementId) {
+      continue;
+    }
+    final element = document.elementMap[elementId];
+    if (element == null) {
+      continue;
+    }
+    final bindable = toCoreBindableState(element, zIndex: index);
+    if (bindable == null) {
+      continue;
+    }
+    bindablesById[element.id] = bindable;
+  }
+
   return projectArrowCoreBindableCandidates(
     elements: boundElements,
-    bindablesById: document.arrowCoreBindableById,
+    bindablesById: bindablesById,
   );
+}
+
+bool _stringListEquals(List<String> left, List<String> right) {
+  if (identical(left, right)) {
+    return true;
+  }
+  if (left.length != right.length) {
+    return false;
+  }
+  for (var index = 0; index < left.length; index += 1) {
+    if (left[index] != right[index]) {
+      return false;
+    }
+  }
+  return true;
 }

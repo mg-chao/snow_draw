@@ -69,6 +69,30 @@ final class ArrowCoreSession {
     String bindMode = core.bindModeOrbit,
     double maxCoordinate = 1e6,
   }) {
+    final hasOrderedOverride =
+        orderedElementIds != null && orderedElementIds.isNotEmpty;
+    final shouldReuseDocumentProjection =
+        !hasOrderedOverride ||
+        _stringListEquals(orderedElementIds, document.orderedElementIds);
+
+    if (!shouldReuseDocumentProjection) {
+      return ArrowCoreSession(
+        projection: projectCoreDocument(
+          document.elements,
+          onlyBoundArrows: onlyBoundArrows,
+          orderedElementIds: orderedElementIds,
+        ),
+        context:
+            context ??
+            buildCoreEngineContext(
+              zoom: zoom,
+              isBindingEnabled: isBindingEnabled,
+              bindMode: bindMode,
+              maxCoordinate: maxCoordinate,
+            ),
+      );
+    }
+
     final arrowsWithSources = collectCoreArrowStatesWithSources(
       document.elements,
       onlyBoundArrows: onlyBoundArrows,
@@ -81,7 +105,7 @@ final class ArrowCoreSession {
         arrows: arrowsWithSources.arrows,
         arrowSources: arrowsWithSources.sources,
         orderedElementIds: List<String>.unmodifiable(
-          orderedElementIds ?? document.orderedElementIds,
+          hasOrderedOverride ? orderedElementIds : document.orderedElementIds,
         ),
         anchorElementIdsByBindableId:
             document.arrowCoreAnchorElementIdsByBindableId,
@@ -207,4 +231,19 @@ final class ArrowCoreSession {
       orderedElementIds: nextOrderedElementIds,
     );
   }
+}
+
+bool _stringListEquals(List<String> left, List<String> right) {
+  if (identical(left, right)) {
+    return true;
+  }
+  if (left.length != right.length) {
+    return false;
+  }
+  for (var index = 0; index < left.length; index += 1) {
+    if (left[index] != right[index]) {
+      return false;
+    }
+  }
+  return true;
 }

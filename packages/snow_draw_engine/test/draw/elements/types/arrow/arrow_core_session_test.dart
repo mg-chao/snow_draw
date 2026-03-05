@@ -92,6 +92,48 @@ void main() {
       expect(session.context.zoom, 1.5);
     });
 
+    test(
+      'fromDocument reprojects bindables when ordered ids override differs',
+      () {
+        final serial = _serialElement(id: 'serial-1', textElementId: 'text-1');
+        final text = _textElement(id: 'text-1');
+        final arrow = _arrowElement(
+          id: 'arrow-1',
+          points: const <DrawPoint>[
+            DrawPoint(x: 20, y: 20),
+            DrawPoint(x: 140, y: 20),
+          ],
+          zIndex: 2,
+        );
+        final document = DocumentState(
+          elements: <ElementState>[serial, text, arrow],
+        );
+
+        final session = ArrowCoreSession.fromDocument(
+          document,
+          orderedElementIds: const <String>['text-1', 'serial-1', 'arrow-1'],
+        );
+
+        expect(
+          identical(session.bindables, document.arrowCoreBindables),
+          isFalse,
+        );
+        expect(
+          session.bindables.map((bindable) => bindable.id).toList(),
+          <String>['text-1', 'serial-1'],
+        );
+        expect(
+          session.bindables.map((bindable) => bindable.zIndex).toList(),
+          <double>[0, 1],
+        );
+        expect(session.orderedElementIds, const <String>[
+          'text-1',
+          'serial-1',
+          'arrow-1',
+        ]);
+      },
+    );
+
     test('applyArrowPatches maps core patches onto source elements', () {
       final arrow = _arrowElement(
         id: 'arrow-1',
