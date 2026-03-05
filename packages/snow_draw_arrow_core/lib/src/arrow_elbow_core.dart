@@ -1006,28 +1006,20 @@ List<FixedSegment>? _cloneFixedSegments(List<FixedSegment>? segments) {
 
 List<FixedSegment>? _normalizeFixedSegmentsFromPoints(
   List<FixedSegment>? fixedSegments,
-  List<Point> points,
+  List<Point> _points,
 ) {
-  if (fixedSegments == null || fixedSegments.isEmpty || points.length < 2) {
+  if (fixedSegments == null || fixedSegments.isEmpty) {
     return null;
   }
-
-  final normalized = <FixedSegment>[];
-  for (final segment in fixedSegments) {
-    final index = segment.index;
-    if (index <= 0 || index >= points.length) {
-      continue;
-    }
-
-    normalized.add(
-      FixedSegment(
-        index: index,
-        start: <double>[points[index - 1][0], points[index - 1][1]],
-        end: <double>[points[index][0], points[index][1]],
-      ),
-    );
-  }
-  return normalized.isEmpty ? null : normalized;
+  return fixedSegments
+      .map(
+        (segment) => FixedSegment(
+          index: segment.index,
+          start: <double>[segment.start[0], segment.start[1]],
+          end: <double>[segment.end[0], segment.end[1]],
+        ),
+      )
+      .toList(growable: false);
 }
 
 ArrowPatch _normalizePatchWithMetaFromLocalPoints(
@@ -1776,11 +1768,25 @@ ArrowPatch _handleEndpointDrag({
         ),
       )
       .toList(growable: false);
+  final localRebuiltFixedSegments = rebuiltFixedSegments
+      .map(
+        (segment) => segment.copyWith(
+          start: <double>[
+            segment.start[0] - startGlobalPoint[0],
+            segment.start[1] - startGlobalPoint[1],
+          ],
+          end: <double>[
+            segment.end[0] - startGlobalPoint[0],
+            segment.end[1] - startGlobalPoint[1],
+          ],
+        ),
+      )
+      .toList(growable: false);
 
   return _normalizePatchWithMetaFromGlobalPoints(
     newPoints,
     maxCoordinate,
-    fixedSegments: rebuiltFixedSegments,
+    fixedSegments: localRebuiltFixedSegments,
     startIsSpecial: startIsSpecial,
     endIsSpecial: endIsSpecial,
   );

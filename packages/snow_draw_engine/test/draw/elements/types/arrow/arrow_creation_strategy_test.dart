@@ -85,7 +85,7 @@ void main() {
     });
 
     test(
-      'new-arrow start binding defaults to orbit when started outside shape',
+      'new-arrow start binding uses inside mode during initial binding pass',
       () {
         const startPosition = DrawPoint(x: 218, y: 60);
         const currentPosition = DrawPoint(x: 440, y: 60);
@@ -114,7 +114,7 @@ void main() {
         final data = update.data as ArrowData;
         expect(data.startBinding, isNotNull);
         expect(data.startBinding!.elementId, 'rect-start');
-        expect(data.startBinding!.mode, ArrowBindingMode.orbit);
+        expect(data.startBinding!.mode, ArrowBindingMode.inside);
       },
     );
 
@@ -186,6 +186,43 @@ void main() {
       expect(data.endBinding, isNotNull);
       expect(data.endBinding!.elementId, 'highlight-target');
     });
+
+    test(
+      'dragging to same target keeps both endpoints inside-bound (core parity)',
+      () {
+        const startPosition = DrawPoint(x: 218, y: 60);
+        const currentPosition = DrawPoint(x: 322, y: 60);
+        final state = _stateWithElements(<ElementState>[
+          _rectangleElement(
+            id: 'rect-target',
+            rect: const DrawRect(minX: 220, maxX: 320, maxY: 120),
+            zIndex: 1,
+          ),
+        ]);
+        final creatingState = _startCreatingArrow(
+          strategy: strategy,
+          startPosition: startPosition,
+        );
+
+        final update = strategy.update(
+          state: state,
+          config: DrawConfig.defaultConfig,
+          creatingState: creatingState,
+          currentPosition: currentPosition,
+          maintainAspectRatio: false,
+          createFromCenter: false,
+          snappingMode: SnappingMode.none,
+        );
+
+        final data = update.data as ArrowData;
+        expect(data.startBinding, isNotNull);
+        expect(data.endBinding, isNotNull);
+        expect(data.startBinding!.elementId, 'rect-target');
+        expect(data.endBinding!.elementId, 'rect-target');
+        expect(data.startBinding!.mode, ArrowBindingMode.inside);
+        expect(data.endBinding!.mode, ArrowBindingMode.inside);
+      },
+    );
 
     test('disabling arrow binding keeps endpoints unbound', () {
       const startPosition = DrawPoint(x: 20, y: 60);
