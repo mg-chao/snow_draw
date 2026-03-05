@@ -212,7 +212,7 @@ final class ArrowCoreSession {
     );
 
     var nextOrderedElementIds = reorderedElementIdsFromCoreResult(applied);
-    if (nextOrderedElementIds == null) {
+    if (nextOrderedElementIds == null && context.isBindingEnabled) {
       final suggestedBindableId =
           hoveredBindableId ?? result.suggestedBinding?.bindableId;
       if (suggestedBindableId != null && suggestedBindableId.isNotEmpty) {

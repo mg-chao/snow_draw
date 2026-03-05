@@ -372,10 +372,8 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
 
   nextArrow = _normalizeArrowState(nextArrow, dragContext.maxCoordinate);
 
-  final suggestedBindableId =
-      _strategyBindableId(draggedIndex == 0 ? startStrategy : endStrategy) ??
-      _strategyBindableId(startStrategy) ??
-      _strategyBindableId(endStrategy);
+  final draggedStrategy = draggedIndex == 0 ? startStrategy : endStrategy;
+  final suggestedBindableId = _strategyBindableId(draggedStrategy);
 
   List<String>? nextOrderedElementIds;
   if (dragContext.isBindingEnabled &&

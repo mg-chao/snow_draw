@@ -142,6 +142,56 @@ void main() {
       expect(binding.anchor.x, closeTo(0.25, 1e-6));
       expect(binding.anchor.y, closeTo(0.2, 1e-6));
     });
+
+    test(
+      'strategy reorder suggestion ignores opposite endpoint binding strategy',
+      () {
+        final startTarget = _rectangleElement(
+          id: 'rect-start',
+          rect: const DrawRect(minX: 0, minY: 0, maxX: 120, maxY: 120),
+          zIndex: 1,
+        );
+        final arrow = _arrowElement(
+          id: 'arrow-1',
+          points: const <DrawPoint>[
+            DrawPoint(x: 40, y: 40),
+            DrawPoint(x: 220, y: 40),
+          ],
+          zIndex: 0,
+          startBinding: const ArrowBinding(
+            elementId: 'rect-start',
+            anchor: DrawPoint(x: 0.5001, y: 0.5001),
+            mode: ArrowBindingMode.inside,
+          ),
+        );
+        final state = _stateWithElements(<ElementState>[arrow, startTarget]);
+        final data = arrow.data as ArrowData;
+
+        final result = computeArrowCoreEndpointDragResult(
+          state: state,
+          element: arrow,
+          data: data,
+          localPoints: _resolveLocalPoints(arrow, data),
+          draggedIndex: 1,
+          worldPointer: const DrawPoint(x: 420, y: 220),
+          startBinding: data.startBinding,
+          endBinding: data.endBinding,
+          excludedElementId: arrow.id,
+          shouldLookupBindings: true,
+          allowNewBinding: true,
+          bindingDistance: 80,
+          coreEngineContext: buildCoreEngineContext(),
+          orderedElementIds: const <String>['arrow-1', 'rect-start'],
+          options: const <String, dynamic>{
+            'newArrow': true,
+            'preserveOppositeInsideBinding': true,
+          },
+        );
+
+        expect(result, isNotNull);
+        expect(result!.orderedElementIds, isNull);
+      },
+    );
   });
 }
 
