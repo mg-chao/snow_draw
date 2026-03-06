@@ -177,9 +177,7 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
     oppositeBinding: oppositeBinding,
     orderedElementIds: orderedElementIds,
   );
-  final dragContext = shouldLookupBindings && allowNewBinding
-      ? coreEngineContext
-      : _coreContextWithBindingDisabled(coreEngineContext);
+  final dragContext = coreEngineContext;
   final session = ArrowCoreSession.fromDocument(
     state.domain.document,
     orderedElementIds: orderedElementIds,
@@ -191,6 +189,7 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
     bindables: bindables,
     dragContext: dragContext,
     draggedIndex: draggedIndex,
+    allowNewBinding: allowNewBinding,
     worldPointer: worldPointer,
     orderedElementIds: orderedElementIds,
     mergedOptions: mergedOptions,
@@ -233,6 +232,7 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
   required List<core.BindableState> bindables,
   required core.EngineContext dragContext,
   required int draggedIndex,
+  required bool allowNewBinding,
   required DrawPoint worldPointer,
   required List<String>? orderedElementIds,
   required Map<String, dynamic> mergedOptions,
@@ -299,10 +299,7 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
           context: dragContext,
           options: mergedOptions,
         );
-  final suggestedBindableId = _resolveSuggestedBindableId(
-    result: result,
-    strategy: draggedIndex == 0 ? startStrategy : endStrategy,
-  );
+  final suggestedBindableId = _resolveSuggestedBindableId(result: result);
 
   final applied = session.applyEngineResultWithOrderFallback(
     arrow: arrow,
@@ -312,6 +309,14 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
     orderedElementIds: orderedElementIds,
   );
   var nextArrow = applied.arrow;
+  if (!allowNewBinding) {
+    final endpointIndex = nextArrow.points.length - 1;
+    if (draggedIndex == 0) {
+      nextArrow = nextArrow.copyWith(startBinding: null, setStartBinding: true);
+    } else if (draggedIndex == endpointIndex) {
+      nextArrow = nextArrow.copyWith(endBinding: null, setEndBinding: true);
+    }
+  }
   final draggedStrategy = draggedIndex == 0 ? startStrategy : endStrategy;
   nextArrow = _applyLegacyNewArrowDraggedFocusPointOverride(
     arrow: nextArrow,
@@ -441,21 +446,7 @@ core.ArrowState _normalizeArrowState(
   );
 }
 
-String? _strategyBindableId(core.EndpointBindingStrategy? strategy) {
-  if (strategy == null || strategy.mode == null) {
-    return null;
-  }
-  final bindableId = strategy.bindableId;
-  if (bindableId != null && bindableId.isNotEmpty) {
-    return bindableId;
-  }
-  return strategy.element?.id;
-}
-
-String? _resolveSuggestedBindableId({
-  required core.EngineResult result,
-  required core.EndpointBindingStrategy? strategy,
-}) {
+String? _resolveSuggestedBindableId({required core.EngineResult result}) {
   final suggestedBinding = result.suggestedBinding;
   final suggestedBindableId = suggestedBinding?.bindableId;
   if (suggestedBindableId != null && suggestedBindableId.isNotEmpty) {
@@ -465,7 +456,7 @@ String? _resolveSuggestedBindableId({
   if (suggestedElementId != null && suggestedElementId.isNotEmpty) {
     return suggestedElementId;
   }
-  return _strategyBindableId(strategy);
+  return null;
 }
 
 List<core.BindableState> _resolveCoreEndpointBindables({
@@ -494,12 +485,3 @@ List<core.BindableState> _resolveCoreEndpointBindables({
   }
   return resolved.bindables;
 }
-
-core.EngineContext _coreContextWithBindingDisabled(
-  core.EngineContext context,
-) => buildCoreEngineContext(
-  zoom: context.zoom,
-  isBindingEnabled: false,
-  bindMode: context.bindMode,
-  maxCoordinate: context.maxCoordinate,
-);

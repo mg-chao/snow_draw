@@ -213,12 +213,21 @@ final class ArrowCoreSession {
 
     var nextOrderedElementIds = reorderedElementIdsFromCoreResult(applied);
     if (nextOrderedElementIds == null && context.isBindingEnabled) {
-      final suggestedBindableId =
-          hoveredBindableId ?? result.suggestedBinding?.bindableId;
-      if (suggestedBindableId != null && suggestedBindableId.isNotEmpty) {
+      final explicitHoveredId =
+          hoveredBindableId != null && hoveredBindableId.isNotEmpty
+          ? hoveredBindableId
+          : null;
+      final suggestedBindableId = result.suggestedBinding?.bindableId;
+      final suggestedId =
+          suggestedBindableId != null && suggestedBindableId.isNotEmpty
+          ? suggestedBindableId
+          : null;
+      final reorderTargetId = explicitHoveredId ?? suggestedId;
+
+      if (reorderTargetId != null || point != null) {
         nextOrderedElementIds = reorderArrowAboveHoveredBindable(
           arrowId: arrow.id,
-          hoveredBindableId: suggestedBindableId,
+          hoveredBindableId: reorderTargetId,
           point: point,
           orderedElementIds: orderedElementIds,
           tolerance: tolerance,

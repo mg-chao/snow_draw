@@ -72,7 +72,7 @@ void main() {
   });
 
   group('arrow_binding_sync deletion parity', () {
-    test('repairs bindings when only deleted ids are provided', () {
+    test('ignores unknown deleted ids without typed snapshots', () {
       const retainedBindable = ElementState(
         id: 'r2',
         rect: DrawRect(minX: 300, maxX: 400, maxY: 100),
@@ -97,8 +97,45 @@ void main() {
       );
       final syncedArrow = _arrowDataById(synced, 'a1');
 
-      expect(syncedArrow.startBinding, isNull);
+      expect(syncedArrow.startBinding?.elementId, 'deleted-r1');
       expect(syncedArrow.endBinding?.elementId, 'r2');
+    });
+
+    test('repairs bindings when deleted bindable snapshots are provided', () {
+      const deletedBindable = ElementState(
+        id: 'deleted-r1',
+        rect: DrawRect(maxX: 100, maxY: 100),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      );
+      const retainedBindable = ElementState(
+        id: 'r2',
+        rect: DrawRect(minX: 300, maxX: 400, maxY: 100),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 1,
+        data: RectangleData(),
+      );
+      final retainedArrow = _buildArrow(
+        id: 'a1',
+        startTargetId: deletedBindable.id,
+        endTargetId: retainedBindable.id,
+        offsetX: 0,
+        offsetY: 0,
+        zIndex: 2,
+      );
+
+      final synced = syncArrowBindingsAfterDeletion(
+        elements: <ElementState>[retainedBindable, retainedArrow],
+        deletedIds: {deletedBindable.id},
+        deletedElementsById: {deletedBindable.id: deletedBindable},
+      );
+      final syncedArrow = _arrowDataById(synced, 'a1');
+
+      expect(syncedArrow.startBinding, isNull);
+      expect(syncedArrow.endBinding?.elementId, retainedBindable.id);
     });
   });
 }

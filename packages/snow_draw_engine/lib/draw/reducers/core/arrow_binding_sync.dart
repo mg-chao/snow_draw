@@ -108,10 +108,8 @@ List<ElementState> syncArrowBindingsAfterDeletion({
   for (final deletedId in allDeletedIds) {
     final deletedElement = deletedElementsById[deletedId];
     if (deletedElement == null) {
-      // When callers only provide ids, keep lifecycle repair conservative by
-      // treating unknown deleted ids as both arrow and bindable candidates.
-      deletedArrowIdSet.add(deletedId);
-      deletedBindableIdSet.add(deletedId);
+      // Excalidraw parity: deletion sync operates on typed deleted snapshots.
+      // Unknown ids without element metadata are ignored.
       continue;
     }
     if (deletedElement.data is ArrowLikeData) {
@@ -213,9 +211,7 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     context: session.context,
   );
   final patchedById = session.applyArrowPatches(syncResult.arrowPatches);
-  final reorderedElementIds = duplicatedElements.length == elements.length
-      ? session.reduceEventsToOrderedElementIds(syncResult.events)
-      : null;
+  final reorderedElementIds = null;
   if (patchedById.isEmpty && reorderedElementIds == null) {
     return elements;
   }
