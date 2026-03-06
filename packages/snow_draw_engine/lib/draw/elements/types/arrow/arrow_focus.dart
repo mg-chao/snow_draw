@@ -253,7 +253,6 @@ ArrowFocusDragResult dragArrowFocusPoint({
     arrow: arrow,
     result: result,
     hoveredBindableId: suggestedBindableId,
-    point: toCorePoint(pointer),
     orderedElementIds: orderedElementIds,
   );
   final patchedElement = applied.arrow == arrow

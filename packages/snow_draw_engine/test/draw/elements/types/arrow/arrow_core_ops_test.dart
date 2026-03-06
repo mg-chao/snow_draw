@@ -117,7 +117,7 @@ void main() {
     );
 
     test(
-      'resolveCoreEndpointBindingStrategy defaults to complex bindings',
+      'resolveCoreEndpointBindingStrategy mirrors core default options',
       () {
         final arrow = _arrowState(
           endBinding: const core.FixedPointBinding(
@@ -154,13 +154,13 @@ void main() {
           context: buildCoreEngineContext(),
         );
 
-        final defaultStart = expectedComplex.start;
+        final defaultStart = expectedDefault.start;
         final actualStart = actual.start;
         expect(actualStart?.bindableId, defaultStart?.bindableId);
         expect(actualStart?.mode, defaultStart?.mode);
         expect(actualStart?.focusPoint, defaultStart?.focusPoint);
 
-        final defaultEnd = expectedComplex.end;
+        final defaultEnd = expectedDefault.end;
         final actualEnd = actual.end;
         expect(actualEnd?.bindableId, defaultEnd?.bindableId);
         expect(actualEnd?.mode, defaultEnd?.mode);

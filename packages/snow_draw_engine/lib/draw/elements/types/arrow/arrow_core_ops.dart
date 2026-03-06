@@ -214,11 +214,7 @@ Map<String, dynamic> _composeEndpointBindingOptionsPayload(
 
 Map<String, dynamic> _normalizeEndpointBindingOptions(
   Map<String, dynamic>? options,
-) {
-  final normalized = <String, dynamic>{...?options};
-  normalized.putIfAbsent('complexBindings', () => true);
-  return normalized;
-}
+) => <String, dynamic>{...?options};
 
 /// Typed wrapper around `snow_draw_arrow_core` endpoint-drag computation.
 core.EngineResult computeCoreEndpointDrag({
