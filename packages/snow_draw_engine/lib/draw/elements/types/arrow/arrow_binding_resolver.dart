@@ -9,8 +9,7 @@ import 'arrow_core_session.dart';
 
 /// Resolves arrow bindings when bindable elements change position.
 ///
-/// The resolver delegates recomputation to the integrated arrow core module
-/// and maps the resulting patch back into engine element state.
+/// The resolver recomputes arrow patches and maps them back into engine state.
 @immutable
 final class ArrowBindingResolutionResult {
   const ArrowBindingResolutionResult({

@@ -1,7 +1,5 @@
 import 'dart:ui';
 
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_geometry_adapter.dart'
-    as core_geometry;
 import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 class FlutterArrowGeometry {
@@ -11,7 +9,7 @@ class FlutterArrowGeometry {
     required DrawRect rect,
     required List<DrawPoint> normalizedPoints,
   }) => _toOffsets(
-    core_geometry.resolveArrowWorldPoints(
+    ArrowGeometry.resolveWorldPoints(
       rect: rect,
       normalizedPoints: normalizedPoints,
     ),
@@ -20,8 +18,7 @@ class FlutterArrowGeometry {
   static List<DrawPoint> normalizePoints({
     required List<DrawPoint> worldPoints,
     required DrawRect rect,
-  }) =>
-      core_geometry.normalizeArrowPoints(worldPoints: worldPoints, rect: rect);
+  }) => ArrowGeometry.normalizePoints(worldPoints: worldPoints, rect: rect);
 
   static Path buildShaftPathFromResolvedPoints({
     required List<Offset> points,

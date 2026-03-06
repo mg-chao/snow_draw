@@ -11,7 +11,7 @@ import 'arrow_like_data.dart';
 /// Repairs arrow payloads restored from persisted snapshots.
 ///
 /// This normalizes dangling endpoint bindings against [elements], then applies
-/// elbow-specific restore fixes from the integrated arrow core module.
+/// elbow-specific restore fixes through the shared arrow helpers.
 ///
 /// Returns [elements] unchanged when no repair is needed.
 List<ElementState> repairArrowElementsOnRestore({
@@ -56,7 +56,7 @@ List<ElementState> repairArrowElementsOnRestore({
 /// Builds world points for a directional two-point arrow path.
 ///
 /// This delegates direction-aware endpoint placement to
-/// the integrated arrow core module.
+/// the shared arrow helpers.
 List<DrawPoint> createDirectionalArrowWorldPoints({
   required DrawRect startBounds,
   required DrawRect endBounds,

@@ -53,7 +53,7 @@ final class ArrowCoreEndpointDragResult {
   final String? suggestedBindableId;
 }
 
-/// Runs endpoint drag preview through the integrated arrow core module.
+/// Runs endpoint drag preview through the shared arrow helpers.
 ArrowCoreEndpointDragResult? computeArrowCoreEndpointDragResult({
   required DrawState state,
   required ElementState element,
@@ -91,7 +91,7 @@ ArrowCoreEndpointDragResult? computeArrowCoreEndpointDragResult({
   finalize: false,
 );
 
-/// Runs endpoint drag finalization through the integrated arrow core module.
+/// Runs endpoint drag finalization through the shared arrow helpers.
 ArrowCoreEndpointDragResult? finalizeArrowCoreEndpointDragResult({
   required DrawState state,
   required ElementState element,

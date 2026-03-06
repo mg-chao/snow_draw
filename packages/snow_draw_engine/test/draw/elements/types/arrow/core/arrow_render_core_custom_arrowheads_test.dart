@@ -53,20 +53,12 @@ void main() {
       expect(polygon.points.any((point) => point[0] > 100), isTrue);
     });
 
-    test('protocol accepts square and inverted triangle arrowhead values', () {
-      final squareResponse = executeArrowOperationSafe(<String, dynamic>{
-        'type': 'get-arrowhead-size',
-        'input': <String, dynamic>{'arrowhead': 'square'},
-      });
-      final invertedResponse = executeArrowOperationSafe(<String, dynamic>{
-        'type': 'get-arrowhead-size',
-        'input': <String, dynamic>{'arrowhead': 'inverted_triangle'},
-      });
+    test('direct render helpers accept square and inverted triangle', () {
+      final squareSize = getArrowheadSize('square');
+      final invertedTriangleSize = getArrowheadSize('inverted_triangle');
 
-      expect(squareResponse['type'], 'number');
-      expect(invertedResponse['type'], 'number');
-      expect(squareResponse['value'], isA<num>());
-      expect(invertedResponse['value'], isA<num>());
+      expect(squareSize, isA<num>());
+      expect(invertedTriangleSize, isA<num>());
     });
   });
 }

@@ -10,7 +10,6 @@ export 'arrow_hit_test.dart';
 export 'arrow_label_core.dart';
 export 'arrow_order_core.dart';
 export 'arrow_path_core.dart';
-export 'arrow_protocol.dart';
 export 'arrow_relation_core.dart';
 export 'arrow_render_core.dart';
 export 'arrow_resize_core.dart';

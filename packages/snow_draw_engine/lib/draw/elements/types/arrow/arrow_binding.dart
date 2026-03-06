@@ -97,7 +97,7 @@ final class ArrowBindingResult {
 /// Bridge utilities that project engine element state into arrow-core binding
 /// primitives.
 ///
-/// All binding resolution delegates to the integrated arrow core module.
+/// All binding resolution delegates to the shared arrow helpers.
 class ArrowBindingUtils {
   const ArrowBindingUtils._();
 

@@ -8,13 +8,13 @@ import 'arrow_core_ops.dart';
 import 'arrow_engine_events.dart';
 import 'arrow_like_data.dart';
 
-/// Immutable arrow-core projection + context snapshot for a document view.
+/// Immutable arrow projection + context snapshot for a document view.
 ///
-/// This consolidates common host integration work:
-/// - projecting engine elements into arrow-core DTOs
+/// This consolidates common arrow-session work:
+/// - projecting engine elements into arrow helper types
 /// - carrying a normalized engine context
 /// - applying arrow patches back onto engine elements
-/// - reducing arrow-core events into document ordering
+/// - reducing arrow events into document ordering
 @immutable
 final class ArrowCoreAppliedResult {
   const ArrowCoreAppliedResult({

@@ -1,210 +1,5 @@
 import 'arrow_core.dart' as core;
 
-/// Singleton runtime boundary for the integrated arrow core module.
-///
-/// This keeps engine-facing code decoupled from direct static calls and aligns
-/// host integrations around a single arrow-core runtime instance.
-final class ArrowCoreRuntime {
-  ArrowCoreRuntime._({core.ArrowEngine? engine})
-    : _engine = engine ?? core.createArrowEngine();
-
-  static final instance = ArrowCoreRuntime._();
-
-  final core.ArrowEngine _engine;
-
-  core.EngineResult computeEndpointDrag({
-    required core.ArrowState arrow,
-    required Map<int, core.Point> draggedPoints,
-    required core.Point pointer,
-    required List<core.BindableState> bindables,
-    required core.EngineContext context,
-    Map<String, dynamic>? options,
-  }) => _engine.computeEndpointDrag(<String, dynamic>{
-    'arrow': arrow,
-    'draggedPoints': draggedPoints,
-    'pointer': pointer,
-    'bindables': bindables,
-    'context': context,
-    ..._composeEndpointBindingOptionsPayload(options),
-  });
-
-  core.EngineResult finalizeEndpointDrag({
-    required core.ArrowState arrow,
-    required Map<int, core.Point> draggedPoints,
-    required core.Point pointer,
-    required List<core.BindableState> bindables,
-    required core.EngineContext context,
-    Map<String, dynamic>? options,
-  }) => _engine.finalizeEndpointDrag(<String, dynamic>{
-    'arrow': arrow,
-    'draggedPoints': draggedPoints,
-    'pointer': pointer,
-    'bindables': bindables,
-    'context': context,
-    ..._composeEndpointBindingOptionsPayload(options),
-  });
-
-  core.EngineResult recomputeAfterBindableChange({
-    required core.ArrowState arrow,
-    required List<core.BindableState> bindables,
-    required core.EngineContext context,
-    List<String>? changedBindableIds,
-    Map<String, dynamic>? options,
-  }) => _engine.recomputeAfterBindableChange(<String, dynamic>{
-    'arrow': arrow,
-    'bindables': bindables,
-    'context': context,
-    ...?(changedBindableIds == null
-        ? null
-        : <String, dynamic>{'changedBindableIds': changedBindableIds}),
-    ...?(options == null ? null : <String, dynamic>{'options': options}),
-  });
-
-  core.RecomputeBindingsForChangedBindablesResult
-  recomputeBindingsForChangedBindables({
-    required List<core.ArrowState> arrows,
-    required List<core.BindableState> bindables,
-    required List<core.BindableRelationState> relations,
-    required List<String> changedBindableIds,
-    required core.EngineContext context,
-    Map<String, dynamic>? options,
-  }) => _engine.recomputeBindingsForChangedBindables(<String, dynamic>{
-    'arrows': arrows,
-    'bindables': bindables,
-    'relations': relations,
-    'changedBindableIds': changedBindableIds,
-    'context': context,
-    ...?(options == null ? null : <String, dynamic>{'options': options}),
-  });
-
-  core.ArrowPatch recomputeElbow({
-    required core.ArrowState arrow,
-    required List<core.BindableState> bindables,
-    required core.EngineContext context,
-  }) => _engine.recomputeElbow(<String, dynamic>{
-    'arrow': arrow,
-    'bindables': bindables,
-    'context': context,
-  });
-
-  core.EngineResult computeFocusDrag({
-    required core.ArrowState arrow,
-    required core.ArrowEndpointEdge draggedEdge,
-    required core.Point pointer,
-    required List<core.BindableState> bindables,
-    required core.EngineContext context,
-    bool switchToInsideBinding = false,
-    double? gridSize,
-  }) => _engine.computeFocusDrag(<String, dynamic>{
-    'arrow': arrow,
-    'draggedEdge': draggedEdge,
-    'pointer': pointer,
-    'bindables': bindables,
-    'context': context,
-    'options': <String, dynamic>{
-      'switchToInsideBinding': switchToInsideBinding,
-      ...?(gridSize == null ? null : <String, dynamic>{'gridSize': gridSize}),
-    },
-  });
-
-  core.EngineResult finalizeFocusDrag({
-    required String arrowId,
-    required core.FixedPointBinding? startBinding,
-    required core.FixedPointBinding? endBinding,
-    required List<core.BindableRelationState> bindables,
-  }) => _engine.finalizeFocusDrag(<String, dynamic>{
-    'arrow': <String, dynamic>{
-      'id': arrowId,
-      'startBinding': startBinding,
-      'endBinding': endBinding,
-    },
-    'bindables': bindables,
-  });
-
-  List<core.FocusPointDescriptor> resolveVisibleFocusPoints({
-    required core.ArrowState arrow,
-    required List<core.BindableState> bindables,
-    required core.EngineContext context,
-    bool ignoreOverlap = false,
-  }) => _engine.resolveVisibleFocusPoints(<String, dynamic>{
-    'arrow': arrow,
-    'bindables': bindables,
-    'context': context,
-    'options': <String, dynamic>{'ignoreOverlap': ignoreOverlap},
-  });
-
-  core.ArrowEndpointEdge? resolveFocusPointHit({
-    required core.ArrowState arrow,
-    required core.Point pointer,
-    required List<core.BindableState> bindables,
-    required core.EngineContext context,
-    bool ignoreOverlap = false,
-  }) => _engine.resolveFocusPointHit(<String, dynamic>{
-    'arrow': arrow,
-    'pointer': pointer,
-    'bindables': bindables,
-    'context': context,
-    'options': <String, dynamic>{'ignoreOverlap': ignoreOverlap},
-  });
-
-  core.FocusPointHit resolveFocusPointHitWithOffset({
-    required core.ArrowState arrow,
-    required core.Point pointer,
-    required List<core.BindableState> bindables,
-    required core.EngineContext context,
-    bool ignoreOverlap = false,
-  }) => _engine.resolveFocusPointHitWithOffset(<String, dynamic>{
-    'arrow': arrow,
-    'pointer': pointer,
-    'bindables': bindables,
-    'context': context,
-    'options': <String, dynamic>{'ignoreOverlap': ignoreOverlap},
-  });
-
-  core.FixedPointBinding? repairBindingOnRestore({
-    required core.FixedPointBinding? binding,
-    required List<core.BindableState> bindables,
-    core.ArrowState? arrow,
-    core.ArrowEndpointEdge? edge,
-    List<core.BindableState>? existingBindables,
-  }) => _engine.repairBindingOnRestore(<String, dynamic>{
-    'binding': binding,
-    'bindables': bindables,
-    ...?(arrow == null ? null : <String, dynamic>{'arrow': arrow}),
-    ...?(edge == null ? null : <String, dynamic>{'edge': edge}),
-    ...?(existingBindables == null
-        ? null
-        : <String, dynamic>{'existingBindables': existingBindables}),
-  });
-
-  core.ArrowPatch? repairInvalidUnboundElbowArrowOnRestore({
-    required core.ArrowState arrow,
-    required List<core.BindableState> bindables,
-    required core.EngineContext context,
-  }) => _engine.repairInvalidUnboundElbowArrowOnRestore(<String, dynamic>{
-    'arrow': arrow,
-    'bindables': bindables,
-    'context': context,
-  });
-
-  core.ArrowPatch? repairSelfBoundExtremeElbowArrowOnRestore({
-    required core.ArrowState arrow,
-    required core.BindableState bindable,
-    double? maxCoordinate,
-  }) => _engine.repairSelfBoundExtremeElbowArrowOnRestore(<String, dynamic>{
-    'arrow': arrow,
-    'bindable': bindable,
-    ...?(maxCoordinate == null
-        ? null
-        : <String, dynamic>{'maxCoordinate': maxCoordinate}),
-  });
-
-  core.ValidationReport validateArrowInvariant(core.ArrowState arrow) =>
-      _engine.validateArrowInvariant(arrow);
-}
-
-ArrowCoreRuntime get _runtime => ArrowCoreRuntime.instance;
-
 Map<String, dynamic> _composeEndpointBindingOptionsPayload(
   Map<String, dynamic>? options,
 ) {
@@ -224,14 +19,14 @@ core.EngineResult computeCoreEndpointDrag({
   required List<core.BindableState> bindables,
   required core.EngineContext context,
   Map<String, dynamic>? options,
-}) => _runtime.computeEndpointDrag(
-  arrow: arrow,
-  draggedPoints: draggedPoints,
-  pointer: pointer,
-  bindables: bindables,
-  context: context,
-  options: options,
-);
+}) => core.computeEndpointDrag(<String, dynamic>{
+  'arrow': arrow,
+  'draggedPoints': draggedPoints,
+  'pointer': pointer,
+  'bindables': bindables,
+  'context': context,
+  ..._composeEndpointBindingOptionsPayload(options),
+});
 
 /// Typed wrapper around endpoint-drag finalization.
 core.EngineResult finalizeCoreEndpointDrag({
@@ -241,14 +36,14 @@ core.EngineResult finalizeCoreEndpointDrag({
   required List<core.BindableState> bindables,
   required core.EngineContext context,
   Map<String, dynamic>? options,
-}) => _runtime.finalizeEndpointDrag(
-  arrow: arrow,
-  draggedPoints: draggedPoints,
-  pointer: pointer,
-  bindables: bindables,
-  context: context,
-  options: options,
-);
+}) => core.finalizeEndpointDrag(<String, dynamic>{
+  'arrow': arrow,
+  'draggedPoints': draggedPoints,
+  'pointer': pointer,
+  'bindables': bindables,
+  'context': context,
+  ..._composeEndpointBindingOptionsPayload(options),
+});
 
 /// Typed wrapper around integrated arrow core binding preview computation.
 core.EngineResult computeCoreSimpleBindingPatch({
@@ -407,13 +202,15 @@ core.EngineResult recomputeCoreBindingsAfterBindableChange({
   required core.EngineContext context,
   List<String>? changedBindableIds,
   Map<String, dynamic>? options,
-}) => _runtime.recomputeAfterBindableChange(
-  arrow: arrow,
-  bindables: bindables,
-  context: context,
-  changedBindableIds: changedBindableIds,
-  options: options,
-);
+}) => core.recomputeAfterBindableChange(<String, dynamic>{
+  'arrow': arrow,
+  'bindables': bindables,
+  'context': context,
+  ...?(changedBindableIds == null
+      ? null
+      : <String, dynamic>{'changedBindableIds': changedBindableIds}),
+  ...?(options == null ? null : <String, dynamic>{'options': options}),
+});
 
 /// Typed wrapper around bulk bindable-change recomputation.
 core.RecomputeBindingsForChangedBindablesResult
@@ -424,25 +221,25 @@ recomputeCoreBindingsForChangedBindables({
   required List<String> changedBindableIds,
   required core.EngineContext context,
   Map<String, dynamic>? options,
-}) => _runtime.recomputeBindingsForChangedBindables(
-  arrows: arrows,
-  bindables: bindables,
-  relations: relations,
-  changedBindableIds: changedBindableIds,
-  context: context,
-  options: options,
-);
+}) => core.recomputeBindingsForChangedBindables(<String, dynamic>{
+  'arrows': arrows,
+  'bindables': bindables,
+  'relations': relations,
+  'changedBindableIds': changedBindableIds,
+  'context': context,
+  ...?(options == null ? null : <String, dynamic>{'options': options}),
+});
 
 /// Typed wrapper around elbow recomputation.
 core.ArrowPatch recomputeCoreElbowPatch({
   required core.ArrowState arrow,
   required List<core.BindableState> bindables,
   required core.EngineContext context,
-}) => _runtime.recomputeElbow(
-  arrow: arrow,
-  bindables: bindables,
-  context: context,
-);
+}) => core.recomputeElbow(<String, dynamic>{
+  'arrow': arrow,
+  'bindables': bindables,
+  'context': context,
+});
 
 /// Typed wrapper around elbow update/re-normalization.
 core.ArrowPatch updateCoreElbowArrowPatch({
@@ -626,12 +423,12 @@ List<core.FocusPointDescriptor> listCoreVisibleFocusPoints({
   required List<core.BindableState> bindables,
   required core.EngineContext context,
   bool ignoreOverlap = false,
-}) => _runtime.resolveVisibleFocusPoints(
-  arrow: arrow,
-  bindables: bindables,
-  context: context,
-  ignoreOverlap: ignoreOverlap,
-);
+}) => core.resolveVisibleFocusPoints(<String, dynamic>{
+  'arrow': arrow,
+  'bindables': bindables,
+  'context': context,
+  'options': <String, dynamic>{'ignoreOverlap': ignoreOverlap},
+});
 
 /// Typed wrapper around focus-point hit testing.
 core.ArrowEndpointEdge? pickCoreFocusPoint({
@@ -640,13 +437,13 @@ core.ArrowEndpointEdge? pickCoreFocusPoint({
   required List<core.BindableState> bindables,
   required core.EngineContext context,
   bool ignoreOverlap = false,
-}) => _runtime.resolveFocusPointHit(
-  arrow: arrow,
-  pointer: pointer,
-  bindables: bindables,
-  context: context,
-  ignoreOverlap: ignoreOverlap,
-);
+}) => core.resolveFocusPointHit(<String, dynamic>{
+  'arrow': arrow,
+  'pointer': pointer,
+  'bindables': bindables,
+  'context': context,
+  'options': <String, dynamic>{'ignoreOverlap': ignoreOverlap},
+});
 
 /// Typed wrapper around focus-point hit testing with pointer offset.
 core.FocusPointHit pickCoreFocusPointWithOffset({
@@ -655,13 +452,13 @@ core.FocusPointHit pickCoreFocusPointWithOffset({
   required List<core.BindableState> bindables,
   required core.EngineContext context,
   bool ignoreOverlap = false,
-}) => _runtime.resolveFocusPointHitWithOffset(
-  arrow: arrow,
-  pointer: pointer,
-  bindables: bindables,
-  context: context,
-  ignoreOverlap: ignoreOverlap,
-);
+}) => core.resolveFocusPointHitWithOffset(<String, dynamic>{
+  'arrow': arrow,
+  'pointer': pointer,
+  'bindables': bindables,
+  'context': context,
+  'options': <String, dynamic>{'ignoreOverlap': ignoreOverlap},
+});
 
 /// Typed wrapper around focus-point drag.
 core.EngineResult computeCoreFocusPointDrag({
@@ -672,15 +469,17 @@ core.EngineResult computeCoreFocusPointDrag({
   required core.EngineContext context,
   bool switchToInsideBinding = false,
   double? gridSize,
-}) => _runtime.computeFocusDrag(
-  arrow: arrow,
-  draggedEdge: draggedEdge,
-  pointer: pointer,
-  bindables: bindables,
-  context: context,
-  switchToInsideBinding: switchToInsideBinding,
-  gridSize: gridSize,
-);
+}) => core.computeFocusDrag(<String, dynamic>{
+  'arrow': arrow,
+  'draggedEdge': draggedEdge,
+  'pointer': pointer,
+  'bindables': bindables,
+  'context': context,
+  'options': <String, dynamic>{
+    'switchToInsideBinding': switchToInsideBinding,
+    ...?(gridSize == null ? null : <String, dynamic>{'gridSize': gridSize}),
+  },
+});
 
 /// Typed wrapper around focus-point drag finalization.
 core.EngineResult finalizeCoreFocusPointDrag({
@@ -688,12 +487,14 @@ core.EngineResult finalizeCoreFocusPointDrag({
   required core.FixedPointBinding? startBinding,
   required core.FixedPointBinding? endBinding,
   required List<core.BindableRelationState> bindables,
-}) => _runtime.finalizeFocusDrag(
-  arrowId: arrowId,
-  startBinding: startBinding,
-  endBinding: endBinding,
-  bindables: bindables,
-);
+}) => core.finalizeFocusDrag(<String, dynamic>{
+  'arrow': <String, dynamic>{
+    'id': arrowId,
+    'startBinding': startBinding,
+    'endBinding': endBinding,
+  },
+  'bindables': bindables,
+});
 
 /// Typed wrapper around endpoint binding refresh.
 core.EngineResult refreshCoreEndpointBinding({
@@ -794,39 +595,43 @@ core.FixedPointBinding? repairCoreBindingOnRestore({
   core.ArrowState? arrow,
   core.ArrowEndpointEdge? edge,
   List<core.BindableState>? existingBindables,
-}) => _runtime.repairBindingOnRestore(
-  binding: binding,
-  bindables: bindables,
-  arrow: arrow,
-  edge: edge,
-  existingBindables: existingBindables,
-);
+}) => core.repairBindingOnRestore(<String, dynamic>{
+  'binding': binding,
+  'bindables': bindables,
+  ...?(arrow == null ? null : <String, dynamic>{'arrow': arrow}),
+  ...?(edge == null ? null : <String, dynamic>{'edge': edge}),
+  ...?(existingBindables == null
+      ? null
+      : <String, dynamic>{'existingBindables': existingBindables}),
+});
 
 /// Typed wrapper around invalid unbound elbow restore repair.
 core.ArrowPatch? repairCoreInvalidUnboundElbowArrowOnRestore({
   required core.ArrowState arrow,
   required List<core.BindableState> bindables,
   required core.EngineContext context,
-}) => _runtime.repairInvalidUnboundElbowArrowOnRestore(
-  arrow: arrow,
-  bindables: bindables,
-  context: context,
-);
+}) => core.repairInvalidUnboundElbowArrowOnRestore(<String, dynamic>{
+  'arrow': arrow,
+  'bindables': bindables,
+  'context': context,
+});
 
 /// Typed wrapper around extreme self-bound elbow restore repair.
 core.ArrowPatch? repairCoreSelfBoundExtremeElbowArrowOnRestore({
   required core.ArrowState arrow,
   required core.BindableState bindable,
   double? maxCoordinate,
-}) => _runtime.repairSelfBoundExtremeElbowArrowOnRestore(
-  arrow: arrow,
-  bindable: bindable,
-  maxCoordinate: maxCoordinate,
-);
+}) => core.repairSelfBoundExtremeElbowArrowOnRestore(<String, dynamic>{
+  'arrow': arrow,
+  'bindable': bindable,
+  ...?(maxCoordinate == null
+      ? null
+      : <String, dynamic>{'maxCoordinate': maxCoordinate}),
+});
 
 /// Typed wrapper around arrow invariant validation.
 core.ValidationReport validateCoreArrowInvariant(core.ArrowState arrow) =>
-    _runtime.validateArrowInvariant(arrow);
+    core.validateArrowInvariant(arrow);
 
 /// Typed wrapper around directional link-arrow creation.
 core.DirectionalLinkArrow createCoreDirectionalLinkArrow({

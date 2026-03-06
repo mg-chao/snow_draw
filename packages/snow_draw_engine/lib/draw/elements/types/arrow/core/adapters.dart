@@ -1,15 +1,4 @@
-import 'arrow_engine.dart';
 import 'arrow_types.dart';
-
-abstract interface class ArrowEngineAdapter {
-  List<BindableState> zOrderBindables();
-
-  BindableState? resolveBindable(String id) => null;
-
-  void onArrowNeedsReorder(String arrowId, String bindableId) {}
-
-  void onBindingBroken(String arrowId, ArrowEndpointEdge edge) {}
-}
 
 ArrowState applyArrowPatch(ArrowState arrow, ArrowPatch patch) {
   final hasX = patch.containsKey('x');
@@ -66,35 +55,3 @@ ArrowState applyArrowPatch(ArrowState arrow, ArrowPatch patch) {
     setEndIsSpecial: hasEndIsSpecial,
   );
 }
-
-void forwardAdapterEvents(
-  ArrowEngineAdapter adapter,
-  List<ArrowEngineEvent> events,
-) {
-  for (final event in events) {
-    if (event is ReorderArrowEvent) {
-      adapter.onArrowNeedsReorder(event.arrowId, event.bindableId);
-      continue;
-    }
-    if (event is BindingBrokenEvent) {
-      adapter.onBindingBroken(event.arrowId, event.edge);
-      continue;
-    }
-  }
-}
-
-EngineResult executeWithAdapter(
-  ArrowEngineAdapter adapter,
-  EngineResult Function(List<BindableState> bindables) run,
-) {
-  final bindables = adapter.zOrderBindables();
-  final result = run(bindables);
-  forwardAdapterEvents(adapter, result.events);
-  return result;
-}
-
-final ArrowEngineV1 = (
-  create: createArrowEngine,
-  applyArrowPatch: applyArrowPatch,
-  executeWithAdapter: executeWithAdapter,
-);

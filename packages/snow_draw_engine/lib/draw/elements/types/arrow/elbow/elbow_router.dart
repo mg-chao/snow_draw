@@ -14,8 +14,8 @@ import 'elbow_fixed_segment.dart';
 
 /// Elbow arrow routing entry points.
 ///
-/// Routing is delegated to the integrated arrow core module and then
-/// projected back to engine point types.
+/// Routing is delegated to the shared arrow helpers and then projected back to
+/// engine point types.
 @immutable
 final class ElbowRouteResult {
   const ElbowRouteResult({

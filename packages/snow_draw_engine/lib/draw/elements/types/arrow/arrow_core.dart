@@ -1,4 +1,3 @@
-// Low-level arrow geometry, binding, routing, rendering, and protocol APIs.
-// This is the former `snow_draw_arrow_core` module, now hosted inside
-// `snow_draw_engine` so arrow features can evolve inside the engine package.
+// Low-level arrow geometry, binding, routing, rendering, and editing APIs.
+// These helpers live inside `snow_draw_engine` and are tailored to this app.
 export 'core/index.dart';
