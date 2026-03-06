@@ -123,6 +123,8 @@ fn resolve_endpoint_for_context(context: &ArrowPointEditContext) -> Option<Arrow
     match context.point_kind {
         ArrowPointKind::LoopStart => Some(ArrowEndpoint::Start),
         ArrowPointKind::LoopEnd => Some(ArrowEndpoint::End),
+        ArrowPointKind::FocusStart => Some(ArrowEndpoint::Start),
+        ArrowPointKind::FocusEnd => Some(ArrowEndpoint::End),
         ArrowPointKind::Turning => {
             let last_index = context.initial_points.len().checked_sub(1)?;
             if context.point_index == 0 {

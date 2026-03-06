@@ -23,6 +23,8 @@ pub enum ArrowPointKind {
     Addable,
     LoopStart,
     LoopEnd,
+    FocusStart,
+    FocusEnd,
 }
 
 /// Interactive control point metadata for an arrow element.
@@ -112,6 +114,7 @@ pub struct ArrowPointOverlay {
     pub turning_points: Vec<ArrowPointHandle>,
     pub addable_points: Vec<ArrowPointHandle>,
     pub loop_points: Vec<ArrowPointHandle>,
+    pub focus_points: Vec<ArrowPointHandle>,
 }
 
 impl ArrowPointOverlay {
@@ -121,6 +124,10 @@ impl ArrowPointOverlay {
 
     pub fn has_loop(&self) -> bool {
         !self.loop_points.is_empty()
+    }
+
+    pub fn has_focus(&self) -> bool {
+        !self.focus_points.is_empty()
     }
 }
 
@@ -439,6 +446,7 @@ where
         turning_points,
         addable_points,
         loop_points: Vec::new(),
+        focus_points: Vec::new(),
     }
 }
 
@@ -496,6 +504,7 @@ fn build_path_overlay(
         turning_points,
         addable_points,
         loop_points,
+        focus_points: Vec::new(),
     }
 }
 

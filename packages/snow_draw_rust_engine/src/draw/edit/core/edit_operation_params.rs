@@ -60,6 +60,11 @@ impl EditOperationParams {
         };
         Some(value)
     }
+
+    /// Returns connector-point params when this is a connector-point operation.
+    pub fn as_connector_point(&self) -> Option<&ConnectorPointOperationParams> {
+        self.as_arrow_point()
+    }
 }
 
 impl From<MoveOperationParams> for EditOperationParams {
@@ -184,6 +189,8 @@ pub struct ArrowPointOperationParams {
     pub is_double_click: bool,
     pub initial_selection_bounds: Option<DrawRect>,
 }
+
+pub type ConnectorPointOperationParams = ArrowPointOperationParams;
 
 impl ArrowPointOperationParams {
     /// Creates params with Dart-equivalent defaults.

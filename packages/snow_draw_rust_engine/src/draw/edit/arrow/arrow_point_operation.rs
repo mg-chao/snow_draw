@@ -19,6 +19,8 @@ pub enum ArrowPointKind {
     Addable,
     LoopStart,
     LoopEnd,
+    FocusStart,
+    FocusEnd,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -48,6 +50,8 @@ pub struct ArrowPointEditContext {
     pub has_bindable_targets: bool,
     pub released_points: Option<Vec<DrawPoint>>,
     pub released_fixed_segments: Option<Vec<ElbowFixedSegment>>,
+    focus_start_handle_position: Option<DrawPoint>,
+    focus_end_handle_position: Option<DrawPoint>,
     element_space: Option<ElementSpace>,
 }
 
@@ -101,6 +105,8 @@ impl ArrowPointEditContext {
             has_bindable_targets,
             released_points: None,
             released_fixed_segments: None,
+            focus_start_handle_position: None,
+            focus_end_handle_position: None,
             element_space,
         }
     }
@@ -112,6 +118,21 @@ impl ArrowPointEditContext {
     ) -> Self {
         self.released_points = points;
         self.released_fixed_segments = fixed_segments;
+        self
+    }
+
+    pub fn with_focus_handle_positions(
+        mut self,
+        focus_start_handle_position: Option<DrawPoint>,
+        focus_end_handle_position: Option<DrawPoint>,
+    ) -> Self {
+        self.focus_start_handle_position = focus_start_handle_position;
+        self.focus_end_handle_position = focus_end_handle_position;
+        if let Some(endpoint) = resolve_focus_endpoint(self.point_kind) {
+            if let Some(point_position) = resolve_focus_handle_position(&self, endpoint) {
+                self.drag_offset = point_position - self.start_position;
+            }
+        }
         self
     }
 
@@ -285,9 +306,10 @@ impl ArrowPointOperation {
 
         let mut local_position = context.to_local(current_position);
         if options.snap_to_grid && options.grid_size > 0.0 {
-            let target = local_position + context.drag_offset;
+            let drag_offset = resolve_effective_drag_offset(context);
+            let target = local_position + drag_offset;
             let snapped = snap_target_to_grid(target, context, options.grid_size);
-            local_position = snapped - context.drag_offset;
+            local_position = snapped - drag_offset;
         }
 
         let start_binding = transform
@@ -380,13 +402,25 @@ fn compute(
     let base_fixed_segments = context.initial_fixed_segments.clone();
     let base_fixed_segments_result = normalize_segments(base_fixed_segments.clone());
 
-    let mut target = current_position + context.drag_offset;
+    let mut target = current_position + resolve_effective_drag_offset(context);
     let mut updated_points = base_points.clone();
     let mut next_did_insert = did_insert;
     let mut next_start_binding = start_binding.clone();
     let mut next_end_binding = end_binding.clone();
     let threshold_sq = handle_tolerance * handle_tolerance;
     let active_index: usize;
+
+    if let Some(endpoint) = resolve_focus_endpoint(context.point_kind) {
+        return compute_focus(
+            context,
+            base_points,
+            base_fixed_segments_result,
+            target,
+            start_binding,
+            end_binding,
+            endpoint,
+        );
+    }
 
     if context.point_kind == ArrowPointKind::Addable {
         if !is_valid_addable(context.point_index, base_points.len()) {
@@ -491,7 +525,20 @@ fn compute(
             } else {
                 next_end_binding = None;
             }
+            if context.arrow_type == ArrowType::Elbow {
+                return compute_elbow_endpoint_drag(
+                    base_points,
+                    base_fixed_segments_result,
+                    target,
+                    endpoint,
+                    start_binding,
+                    end_binding,
+                    next_start_binding,
+                    next_end_binding,
+                );
+            }
         }
+
         updated_points[index] = target;
         active_index = index;
     }
@@ -530,6 +577,88 @@ fn compute(
         start_binding: next_start_binding,
         end_binding: next_end_binding,
         fixed_segments: base_fixed_segments_result,
+    }
+}
+
+fn compute_focus(
+    context: &ArrowPointEditContext,
+    base_points: Vec<DrawPoint>,
+    base_fixed_segments: Option<Vec<ElbowFixedSegment>>,
+    target: DrawPoint,
+    start_binding: Option<ArrowBinding>,
+    end_binding: Option<ArrowBinding>,
+    endpoint: ArrowEndpoint,
+) -> Computation {
+    if context.arrow_type == ArrowType::Elbow || base_points.is_empty() {
+        return no_op(
+            base_points,
+            false,
+            start_binding,
+            end_binding,
+            base_fixed_segments,
+        );
+    }
+
+    let mut updated_points = base_points.clone();
+    let active_index = match endpoint {
+        ArrowEndpoint::Start => 0,
+        ArrowEndpoint::End => updated_points.len() - 1,
+    };
+    updated_points[active_index] = target;
+
+    Computation {
+        has_changes: !point_list_equals(&base_points, &updated_points),
+        points: updated_points,
+        did_insert: false,
+        should_delete: false,
+        active_index: Some(active_index),
+        start_binding,
+        end_binding,
+        fixed_segments: base_fixed_segments,
+    }
+}
+
+fn compute_elbow_endpoint_drag(
+    base_points: Vec<DrawPoint>,
+    base_fixed_segments: Option<Vec<ElbowFixedSegment>>,
+    target: DrawPoint,
+    endpoint: ArrowEndpoint,
+    start_binding: Option<ArrowBinding>,
+    end_binding: Option<ArrowBinding>,
+    next_start_binding: Option<ArrowBinding>,
+    next_end_binding: Option<ArrowBinding>,
+) -> Computation {
+    if base_points.len() < 2 {
+        return no_op(
+            base_points,
+            false,
+            next_start_binding,
+            next_end_binding,
+            base_fixed_segments,
+        );
+    }
+
+    let updated_points = match endpoint {
+        ArrowEndpoint::Start => vec![target, base_points[base_points.len() - 1]],
+        ArrowEndpoint::End => vec![base_points[0], target],
+    };
+    let bindings_changed = next_start_binding != start_binding || next_end_binding != end_binding;
+    let segments_cleared = base_fixed_segments.is_some();
+
+    Computation {
+        has_changes: !point_list_equals(&base_points, &updated_points)
+            || bindings_changed
+            || segments_cleared,
+        points: updated_points,
+        did_insert: false,
+        should_delete: false,
+        active_index: Some(match endpoint {
+            ArrowEndpoint::Start => 0,
+            ArrowEndpoint::End => 1,
+        }),
+        start_binding: next_start_binding,
+        end_binding: next_end_binding,
+        fixed_segments: None,
     }
 }
 
@@ -855,11 +984,49 @@ fn is_no_op(previous: &ArrowPointTransform, next: &Computation) -> bool {
 fn requires_binding_lookup(context: &ArrowPointEditContext) -> bool {
     match context.point_kind {
         ArrowPointKind::LoopStart | ArrowPointKind::LoopEnd => true,
+        ArrowPointKind::FocusStart | ArrowPointKind::FocusEnd => false,
         ArrowPointKind::Turning => {
             context.point_index == 0 || context.point_index + 1 == context.initial_points.len()
         }
         ArrowPointKind::Addable => false,
     }
+}
+
+fn resolve_focus_endpoint(kind: ArrowPointKind) -> Option<ArrowEndpoint> {
+    match kind {
+        ArrowPointKind::FocusStart => Some(ArrowEndpoint::Start),
+        ArrowPointKind::FocusEnd => Some(ArrowEndpoint::End),
+        ArrowPointKind::Turning
+        | ArrowPointKind::Addable
+        | ArrowPointKind::LoopStart
+        | ArrowPointKind::LoopEnd => None,
+    }
+}
+
+fn resolve_focus_handle_position(
+    context: &ArrowPointEditContext,
+    endpoint: ArrowEndpoint,
+) -> Option<DrawPoint> {
+    match endpoint {
+        ArrowEndpoint::Start => context.focus_start_handle_position,
+        ArrowEndpoint::End => context.focus_end_handle_position,
+    }
+}
+
+fn resolve_effective_drag_offset(context: &ArrowPointEditContext) -> DrawPoint {
+    resolve_focus_endpoint(context.point_kind)
+        .and_then(|endpoint| resolve_focus_handle_position(context, endpoint))
+        .map(|handle_position| handle_position - context.start_position)
+        .unwrap_or_else(|| {
+            if matches!(
+                context.point_kind,
+                ArrowPointKind::FocusStart | ArrowPointKind::FocusEnd
+            ) {
+                DrawPoint::ZERO
+            } else {
+                context.drag_offset
+            }
+        })
 }
 
 fn resolve_dragged_index(
@@ -870,6 +1037,8 @@ fn resolve_dragged_index(
     let index = match kind {
         ArrowPointKind::LoopStart => 0,
         ArrowPointKind::LoopEnd => point_count.checked_sub(1)?,
+        ArrowPointKind::FocusStart => 0,
+        ArrowPointKind::FocusEnd => point_count.checked_sub(1)?,
         ArrowPointKind::Turning | ArrowPointKind::Addable => point_index,
     };
     (index < point_count).then_some(index)
@@ -908,6 +1077,8 @@ pub fn resolve_point_position(
     let resolved = match kind {
         ArrowPointKind::LoopStart => 0,
         ArrowPointKind::LoopEnd => points.len() - 1,
+        ArrowPointKind::FocusStart => 0,
+        ArrowPointKind::FocusEnd => points.len() - 1,
         ArrowPointKind::Turning | ArrowPointKind::Addable => index.min(points.len() - 1),
     };
     points[resolved]
@@ -946,5 +1117,139 @@ fn normalize_segments(segments: Vec<ElbowFixedSegment>) -> Option<Vec<ElbowFixed
         None
     } else {
         Some(segments)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_context(
+        point_kind: ArrowPointKind,
+        point_index: usize,
+        start_position: DrawPoint,
+        initial_points: Vec<DrawPoint>,
+        initial_fixed_segments: Vec<ElbowFixedSegment>,
+        arrow_type: ArrowType,
+    ) -> ArrowPointEditContext {
+        ArrowPointEditContext::from_start_position(
+            "arrow",
+            DrawRect::from_ltwh(0.0, 0.0, 200.0, 200.0),
+            0.0,
+            start_position,
+            initial_points,
+            initial_fixed_segments,
+            arrow_type,
+            point_kind,
+            point_index,
+            false,
+            false,
+            ArrowheadStyle::None,
+            ArrowheadStyle::None,
+            None,
+            None,
+            false,
+        )
+    }
+
+    #[test]
+    fn focus_drag_uses_pointer_delta_without_endpoint_offset() {
+        let operation = ArrowPointOperation::new();
+        let context = test_context(
+            ArrowPointKind::FocusStart,
+            0,
+            DrawPoint::new(20.0, 10.0),
+            vec![DrawPoint::new(0.0, 0.0), DrawPoint::new(100.0, 0.0)],
+            vec![],
+            ArrowType::Straight,
+        );
+        let transform = operation.initial_transform(&context, DrawPoint::new(20.0, 10.0));
+        let mut binding_lookup = NoopArrowPointBindingLookup;
+
+        let next = operation.update(
+            &context,
+            &transform,
+            DrawPoint::new(30.0, 20.0),
+            ArrowPointUpdateOptions::default(),
+            &mut binding_lookup,
+        );
+
+        assert_eq!(
+            next.points,
+            vec![DrawPoint::new(30.0, 20.0), DrawPoint::new(100.0, 0.0)]
+        );
+        assert_eq!(next.active_index, Some(0));
+        assert!(next.has_changes);
+    }
+
+    #[test]
+    fn focus_drag_respects_focus_handle_override() {
+        let operation = ArrowPointOperation::new();
+        let context = test_context(
+            ArrowPointKind::FocusStart,
+            0,
+            DrawPoint::new(22.0, 12.0),
+            vec![DrawPoint::new(0.0, 0.0), DrawPoint::new(100.0, 0.0)],
+            vec![],
+            ArrowType::Straight,
+        )
+        .with_focus_handle_positions(Some(DrawPoint::new(20.0, 10.0)), None);
+        let transform = operation.initial_transform(&context, DrawPoint::new(22.0, 12.0));
+        let mut binding_lookup = NoopArrowPointBindingLookup;
+
+        let next = operation.update(
+            &context,
+            &transform,
+            DrawPoint::new(32.0, 22.0),
+            ArrowPointUpdateOptions::default(),
+            &mut binding_lookup,
+        );
+
+        assert_eq!(context.drag_offset, DrawPoint::new(-2.0, -2.0));
+        assert_eq!(
+            next.points,
+            vec![DrawPoint::new(30.0, 20.0), DrawPoint::new(100.0, 0.0)]
+        );
+        assert_eq!(next.active_index, Some(0));
+    }
+
+    #[test]
+    fn elbow_endpoint_drag_clears_fixed_segments_and_uses_endpoints_only() {
+        let operation = ArrowPointOperation::new();
+        let context = test_context(
+            ArrowPointKind::Turning,
+            0,
+            DrawPoint::new(0.0, 0.0),
+            vec![
+                DrawPoint::new(0.0, 0.0),
+                DrawPoint::new(0.0, 60.0),
+                DrawPoint::new(120.0, 60.0),
+                DrawPoint::new(120.0, 0.0),
+            ],
+            vec![ElbowFixedSegment {
+                index: 2,
+                start: DrawPoint::new(0.0, 60.0),
+                end: DrawPoint::new(120.0, 60.0),
+            }],
+            ArrowType::Elbow,
+        );
+        let transform = operation.initial_transform(&context, DrawPoint::new(0.0, 0.0));
+        let mut binding_lookup = NoopArrowPointBindingLookup;
+
+        let next = operation.update(
+            &context,
+            &transform,
+            DrawPoint::new(10.0, 20.0),
+            ArrowPointUpdateOptions::default(),
+            &mut binding_lookup,
+        );
+
+        assert_eq!(
+            next.points,
+            vec![DrawPoint::new(10.0, 20.0), DrawPoint::new(120.0, 0.0)]
+        );
+        assert_eq!(next.fixed_segments, None);
+        assert_eq!(next.active_index, Some(0));
+        assert!(next.has_changes);
     }
 }

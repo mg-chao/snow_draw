@@ -78,14 +78,14 @@ pub fn to_core_arrow_state(
         width: normalized.width,
         height: normalized.height,
         points: normalized.points,
-        start_binding: start_binding_override
-            .flatten()
-            .cloned()
-            .or_else(|| data.start_binding.as_ref().map(to_engine_binding)),
-        end_binding: end_binding_override
-            .flatten()
-            .cloned()
-            .or_else(|| data.end_binding.as_ref().map(to_engine_binding)),
+        start_binding: match start_binding_override {
+            Some(binding) => binding.cloned(),
+            None => data.start_binding.as_ref().map(to_engine_binding),
+        },
+        end_binding: match end_binding_override {
+            Some(binding) => binding.cloned(),
+            None => data.end_binding.as_ref().map(to_engine_binding),
+        },
         start_arrowhead: Some(arrowhead_name(data.start_arrowhead).to_string()),
         end_arrowhead: Some(arrowhead_name(data.end_arrowhead).to_string()),
         elbowed: data.arrow_type == ArrowType::Elbow,
@@ -130,10 +130,39 @@ pub fn apply_core_arrow_state_to_element(
         &local_points,
         element.rect,
         element.rotation,
-        data.arrow_type,
+        if next_arrow.elbowed {
+            ArrowType::Elbow
+        } else {
+            data.arrow_type
+        },
     );
     let next_data = data.copy_with(super::arrow_data::ArrowDataPatch {
         points: Some(geometry.normalized_points),
+        arrow_type: Some(if next_arrow.elbowed {
+            ArrowType::Elbow
+        } else {
+            data.arrow_type
+        }),
+        start_binding: match &next_arrow.start_binding {
+            Some(binding) => super::arrow_data::NullableField::Value(to_source_binding(binding)),
+            None => super::arrow_data::NullableField::Null,
+        },
+        end_binding: match &next_arrow.end_binding {
+            Some(binding) => super::arrow_data::NullableField::Value(to_source_binding(binding)),
+            None => super::arrow_data::NullableField::Null,
+        },
+        fixed_segments: match &next_arrow.fixed_segments {
+            Some(segments) => super::arrow_data::NullableField::Value(segments.clone()),
+            None => super::arrow_data::NullableField::Null,
+        },
+        start_is_special: match next_arrow.start_is_special {
+            Some(value) => super::arrow_data::NullableField::Value(value),
+            None => super::arrow_data::NullableField::Null,
+        },
+        end_is_special: match next_arrow.end_is_special {
+            Some(value) => super::arrow_data::NullableField::Value(value),
+            None => super::arrow_data::NullableField::Null,
+        },
         ..Default::default()
     });
     element.copy_with(
@@ -158,6 +187,18 @@ fn to_engine_binding(binding: &SourceArrowBinding) -> ArrowBinding {
     )
 }
 
+fn to_source_binding(binding: &ArrowBinding) -> SourceArrowBinding {
+    SourceArrowBinding::new(
+        binding.element_id.clone(),
+        binding.anchor,
+        match binding.mode {
+            ArrowBindingMode::Inside => SourceArrowBindingMode::Inside,
+            ArrowBindingMode::Orbit => SourceArrowBindingMode::Orbit,
+            ArrowBindingMode::Skip => SourceArrowBindingMode::Skip,
+        },
+    )
+}
+
 fn arrowhead_name(style: ArrowheadStyle) -> &'static str {
     match style {
         ArrowheadStyle::None => "none",
@@ -175,5 +216,88 @@ fn arrowhead_name(style: ArrowheadStyle) -> &'static str {
         ArrowheadStyle::CrowfootOneOrMany => "crowfootOneOrMany",
         ArrowheadStyle::InvertedTriangle => "invertedTriangle",
         ArrowheadStyle::VerticalLine => "verticalLine",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::{apply_core_arrow_state_to_element, ArrowCoreState};
+    use crate::draw::elements::types::arrow::arrow_binding::{ArrowBinding, ArrowBindingMode};
+    use crate::draw::elements::types::arrow::arrow_data::{
+        ArrowBinding as DataArrowBinding, ArrowBindingMode as DataArrowBindingMode, ArrowData,
+        ElbowFixedSegment,
+    };
+    use crate::draw::models::element_state::ElementState;
+    use crate::draw::types::draw_point::DrawPoint;
+    use crate::draw::types::draw_rect::DrawRect;
+
+    fn binding(id: &str) -> ArrowBinding {
+        ArrowBinding::new(
+            id.to_owned(),
+            DrawPoint::new(0.4, 0.6),
+            ArrowBindingMode::Orbit,
+        )
+    }
+
+    fn to_data_binding(binding: ArrowBinding) -> DataArrowBinding {
+        DataArrowBinding::new(
+            binding.element_id,
+            binding.anchor,
+            match binding.mode {
+                ArrowBindingMode::Inside => DataArrowBindingMode::Inside,
+                ArrowBindingMode::Orbit => DataArrowBindingMode::Orbit,
+                ArrowBindingMode::Skip => DataArrowBindingMode::Skip,
+            },
+        )
+    }
+
+    #[test]
+    fn apply_core_arrow_state_to_element_preserves_binding_and_elbow_metadata() {
+        let element = ElementState::new(
+            "arrow",
+            DrawRect::new(0.0, 0.0, 10.0, 10.0),
+            0.0,
+            1.0,
+            1,
+            Arc::new(ArrowData::default()),
+        );
+        let data = ArrowData::default();
+        let next_arrow = ArrowCoreState {
+            id: "arrow".to_owned(),
+            x: 4.0,
+            y: 5.0,
+            width: 20.0,
+            height: 10.0,
+            points: vec![DrawPoint::ZERO, DrawPoint::new(20.0, 10.0)],
+            start_binding: Some(binding("box-a")),
+            end_binding: Some(binding("box-b")),
+            start_arrowhead: Some("none".to_owned()),
+            end_arrowhead: Some("standard".to_owned()),
+            elbowed: true,
+            fixed_segments: Some(vec![ElbowFixedSegment {
+                index: 1,
+                start: DrawPoint::new(3.0, 4.0),
+                end: DrawPoint::new(5.0, 6.0),
+            }]),
+            start_is_special: Some(true),
+            end_is_special: Some(false),
+        };
+
+        let patched = apply_core_arrow_state_to_element(&element, &data, &next_arrow);
+        let patched_data = ArrowData::from_json(&patched.data.to_json()).expect("arrow data");
+
+        assert_eq!(
+            patched_data.start_binding,
+            next_arrow.start_binding.clone().map(to_data_binding)
+        );
+        assert_eq!(
+            patched_data.end_binding,
+            next_arrow.end_binding.clone().map(to_data_binding)
+        );
+        assert_eq!(patched_data.fixed_segments, next_arrow.fixed_segments);
+        assert_eq!(patched_data.start_is_special, next_arrow.start_is_special);
+        assert_eq!(patched_data.end_is_special, next_arrow.end_is_special);
     }
 }

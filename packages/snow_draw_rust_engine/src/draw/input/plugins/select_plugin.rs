@@ -1405,6 +1405,8 @@ fn map_detector_arrow_point_kind(kind: DetectorArrowPointKind) -> DomainArrowPoi
         DetectorArrowPointKind::Addable => DomainArrowPointKind::Addable,
         DetectorArrowPointKind::LoopStart => DomainArrowPointKind::LoopStart,
         DetectorArrowPointKind::LoopEnd => DomainArrowPointKind::LoopEnd,
+        DetectorArrowPointKind::FocusStart => DomainArrowPointKind::FocusStart,
+        DetectorArrowPointKind::FocusEnd => DomainArrowPointKind::FocusEnd,
     }
 }
 
@@ -1423,6 +1425,12 @@ fn map_detector_arrow_point_kind_to_operation(
         }
         DetectorArrowPointKind::LoopEnd => {
             crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::LoopEnd
+        }
+        DetectorArrowPointKind::FocusStart => {
+            crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::FocusStart
+        }
+        DetectorArrowPointKind::FocusEnd => {
+            crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::FocusEnd
         }
     }
 }

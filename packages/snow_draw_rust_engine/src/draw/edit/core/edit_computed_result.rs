@@ -12,6 +12,8 @@ use crate::draw::types::draw_rect::DrawRect;
 pub struct EditComputedResult {
     /// Updated elements keyed by element id.
     pub updated_elements: HashMap<String, ElementState>,
+    /// Optional explicit element order after edit-time reordering.
+    pub ordered_element_ids: Option<Vec<String>>,
     /// Overlay bounds for multi-select edit previews.
     pub multi_select_bounds: Option<DrawRect>,
     /// Overlay rotation (radians) for multi-select edit previews.
@@ -21,11 +23,13 @@ pub struct EditComputedResult {
 impl EditComputedResult {
     pub fn new(
         updated_elements: HashMap<String, ElementState>,
+        ordered_element_ids: Option<Vec<String>>,
         multi_select_bounds: Option<DrawRect>,
         multi_select_rotation: Option<f64>,
     ) -> Self {
         Self {
             updated_elements,
+            ordered_element_ids,
             multi_select_bounds,
             multi_select_rotation,
         }

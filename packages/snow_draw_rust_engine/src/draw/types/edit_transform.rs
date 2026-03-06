@@ -325,10 +325,12 @@ pub struct ArrowPointTransform {
     pub fixed_segments: Option<Vec<ElbowFixedSegment>>,
     pub start_binding: Option<ArrowBinding>,
     pub end_binding: Option<ArrowBinding>,
+    pub ordered_element_ids: Option<Vec<String>>,
     pub active_index: Option<usize>,
     pub did_insert: bool,
     pub should_delete: bool,
     pub has_changes: bool,
+    pub allow_binding_on_finalize: bool,
 }
 
 impl ArrowPointTransform {
@@ -339,10 +341,12 @@ impl ArrowPointTransform {
             fixed_segments: None,
             start_binding: None,
             end_binding: None,
+            ordered_element_ids: None,
             active_index: None,
             did_insert: false,
             should_delete: false,
             has_changes: false,
+            allow_binding_on_finalize: true,
         }
     }
 
@@ -353,10 +357,12 @@ impl ArrowPointTransform {
         fixed_segments: Option<Vec<ElbowFixedSegment>>,
         start_binding: Option<ArrowBinding>,
         end_binding: Option<ArrowBinding>,
+        ordered_element_ids: Option<Vec<String>>,
         active_index: Option<usize>,
         did_insert: bool,
         should_delete: bool,
         has_changes: bool,
+        allow_binding_on_finalize: bool,
     ) -> Self {
         Self {
             current_position,
@@ -364,10 +370,12 @@ impl ArrowPointTransform {
             fixed_segments,
             start_binding,
             end_binding,
+            ordered_element_ids,
             active_index,
             did_insert,
             should_delete,
             has_changes,
+            allow_binding_on_finalize,
         }
     }
 
@@ -379,10 +387,12 @@ impl ArrowPointTransform {
         fixed_segments: Option<Option<Vec<ElbowFixedSegment>>>,
         start_binding: Option<Option<ArrowBinding>>,
         end_binding: Option<Option<ArrowBinding>>,
+        ordered_element_ids: Option<Option<Vec<String>>>,
         active_index: Option<usize>,
         did_insert: Option<bool>,
         should_delete: Option<bool>,
         has_changes: Option<bool>,
+        allow_binding_on_finalize: Option<bool>,
     ) -> Self {
         Self {
             current_position: current_position.unwrap_or(self.current_position),
@@ -399,10 +409,16 @@ impl ArrowPointTransform {
                 Some(value) => value,
                 None => self.end_binding.clone(),
             },
+            ordered_element_ids: match ordered_element_ids {
+                Some(value) => value,
+                None => self.ordered_element_ids.clone(),
+            },
             active_index: active_index.or(self.active_index),
             did_insert: did_insert.unwrap_or(self.did_insert),
             should_delete: should_delete.unwrap_or(self.should_delete),
             has_changes: has_changes.unwrap_or(self.has_changes),
+            allow_binding_on_finalize: allow_binding_on_finalize
+                .unwrap_or(self.allow_binding_on_finalize),
         }
     }
 
@@ -429,10 +445,12 @@ impl PartialEq for ArrowPointTransform {
             )
             && self.start_binding == other.start_binding
             && self.end_binding == other.end_binding
+            && self.ordered_element_ids == other.ordered_element_ids
             && self.active_index == other.active_index
             && self.did_insert == other.did_insert
             && self.should_delete == other.should_delete
             && self.has_changes == other.has_changes
+            && self.allow_binding_on_finalize == other.allow_binding_on_finalize
     }
 }
 

@@ -88,11 +88,11 @@ impl ArrowState {
         width: Option<f64>,
         height: Option<f64>,
         points: Option<Vec<DrawPoint>>,
-        _start_binding: NullableField<ArrowBinding>,
-        _end_binding: NullableField<ArrowBinding>,
-        _fixed_segments: NullableField<Vec<ElbowFixedSegment>>,
-        _start_is_special: NullableField<bool>,
-        _end_is_special: NullableField<bool>,
+        start_binding: NullableField<ArrowBinding>,
+        end_binding: NullableField<ArrowBinding>,
+        fixed_segments: NullableField<Vec<ElbowFixedSegment>>,
+        start_is_special: NullableField<bool>,
+        end_is_special: NullableField<bool>,
     ) -> Self {
         Self {
             id: self.id.clone(),
@@ -101,14 +101,14 @@ impl ArrowState {
             width: width.unwrap_or(self.width),
             height: height.unwrap_or(self.height),
             points: points.unwrap_or_else(|| self.points.clone()),
-            start_binding: self.start_binding.clone(),
-            end_binding: self.end_binding.clone(),
+            start_binding: resolve_nullable_update(start_binding, &self.start_binding),
+            end_binding: resolve_nullable_update(end_binding, &self.end_binding),
             start_arrowhead: self.start_arrowhead.clone(),
             end_arrowhead: self.end_arrowhead.clone(),
             elbowed: self.elbowed,
-            fixed_segments: self.fixed_segments.clone(),
-            start_is_special: self.start_is_special,
-            end_is_special: self.end_is_special,
+            fixed_segments: resolve_nullable_update(fixed_segments, &self.fixed_segments),
+            start_is_special: resolve_nullable_update(start_is_special, &self.start_is_special),
+            end_is_special: resolve_nullable_update(end_is_special, &self.end_is_special),
         }
     }
 
@@ -232,4 +232,71 @@ fn clamp_coordinate(value: f64, max_coordinate: f64) -> f64 {
         return value;
     }
     value.clamp(-max_coordinate, max_coordinate)
+}
+
+fn resolve_nullable_update<T: Clone>(update: NullableField<T>, current: &Option<T>) -> Option<T> {
+    match update {
+        NullableField::Unset => current.clone(),
+        NullableField::Null => None,
+        NullableField::Value(value) => Some(value),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ArrowState, NullableField};
+    use crate::draw::elements::types::arrow::arrow_binding::{ArrowBinding, ArrowBindingMode};
+    use crate::draw::elements::types::arrow::arrow_data::ElbowFixedSegment;
+    use crate::draw::types::draw_point::DrawPoint;
+
+    fn binding(id: &str) -> ArrowBinding {
+        ArrowBinding::new(
+            id.to_owned(),
+            DrawPoint::new(0.25, 0.75),
+            ArrowBindingMode::Orbit,
+        )
+    }
+
+    #[test]
+    fn copy_with_updates_nullable_binding_and_segment_fields() {
+        let state = ArrowState {
+            id: "arrow".to_owned(),
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+            points: vec![DrawPoint::ZERO, DrawPoint::new(10.0, 10.0)],
+            start_binding: Some(binding("start")),
+            end_binding: Some(binding("end")),
+            start_arrowhead: Some("none".to_owned()),
+            end_arrowhead: Some("standard".to_owned()),
+            elbowed: true,
+            fixed_segments: Some(vec![ElbowFixedSegment {
+                index: 1,
+                start: DrawPoint::new(1.0, 2.0),
+                end: DrawPoint::new(3.0, 4.0),
+            }]),
+            start_is_special: Some(true),
+            end_is_special: Some(false),
+        };
+
+        let next = state.copy_with(
+            None,
+            None,
+            None,
+            None,
+            None,
+            NullableField::Null,
+            NullableField::Value(binding("next-end")),
+            NullableField::Null,
+            NullableField::Value(false),
+            NullableField::Null,
+        );
+
+        assert_eq!(next.start_binding, None);
+        assert_eq!(next.end_binding, Some(binding("next-end")));
+        assert_eq!(next.fixed_segments, None);
+        assert_eq!(next.start_is_special, Some(false));
+        assert_eq!(next.end_is_special, None);
+    }
 }

@@ -35,6 +35,9 @@ use crate::draw::elements::types::arrow::arrow_data::{
     ArrowDataPatch, ElbowFixedSegment as ArrowDataElbowFixedSegment,
     NullableField as ArrowDataNullableField,
 };
+use crate::draw::elements::types::arrow::arrow_focus::{
+    list_visible_arrow_focus_points, ArrowFocusEndpoint,
+};
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_layout::resolve_arrow_geometry_update;
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField as ArrowLikeNullableField;
@@ -47,6 +50,7 @@ use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::element_state::ElementState as DomainElementState;
 use crate::draw::models::multi_select_lifecycle::MultiSelectOverlayState;
+use crate::draw::reducers::core::arrow_binding_sync::reorder_elements_by_id_order;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_context::{EditContext, MoveEditContext, RotateEditContext};
@@ -77,7 +81,7 @@ impl DefaultEditOperationRegistry {
     /// Built-in operation ids used by [`Self::with_defaults`].
     pub const DEFAULT_OPERATION_IDS: [EditOperationId; 4] = [
         EditOperationIds::MOVE,
-        EditOperationIds::ARROW_POINT,
+        EditOperationIds::CONNECTOR_POINT,
         EditOperationIds::RESIZE,
         EditOperationIds::ROTATE,
     ];
@@ -692,7 +696,7 @@ impl ArrowPointBindingLookup for DocumentArrowPointBindingLookup<'_> {
 
 impl EditOperation for ArrowPointEditOperationAdapter {
     fn id(&self) -> EditOperationId {
-        EditOperationIds::ARROW_POINT
+        EditOperationIds::CONNECTOR_POINT
     }
 
     fn records_history(&self) -> bool {
@@ -784,6 +788,8 @@ impl EditOperation for ArrowPointEditOperationAdapter {
         let should_lookup_bindings = config.snap.enable_arrow_binding
             || typed_transform.start_binding.is_some()
             || typed_transform.end_binding.is_some();
+        let allow_binding_on_finalize =
+            config.snap.enable_arrow_binding && !modifiers.snap_override;
         let updated = self.operation.update(
             &typed_context,
             &into_internal_arrow_transform(typed_transform),
@@ -799,16 +805,29 @@ impl EditOperation for ArrowPointEditOperationAdapter {
                 } else {
                     0.0
                 },
-                allow_new_binding: config.snap.enable_arrow_binding
-                    && !modifiers.snap_override
-                    && snapping_mode != SnappingMode::Grid,
+                allow_new_binding: allow_binding_on_finalize,
             },
             &mut binding_lookup,
         );
+        let next_transform = ArrowPointTransform::with_state(
+            updated.current_position,
+            updated.points.clone(),
+            updated.fixed_segments.clone(),
+            updated.start_binding.clone(),
+            updated.end_binding.clone(),
+            typed_transform.ordered_element_ids.clone(),
+            updated.active_index,
+            updated.did_insert,
+            updated.should_delete,
+            updated.has_changes,
+            allow_binding_on_finalize,
+        );
 
-        EditUpdateResult::new(EditTransform::ArrowPoint(into_public_arrow_transform(
-            &updated,
-        )))
+        if next_transform == *typed_transform {
+            EditUpdateResult::new(transform.clone())
+        } else {
+            EditUpdateResult::new(EditTransform::ArrowPoint(next_transform))
+        }
     }
 
     fn finish(
@@ -919,6 +938,8 @@ fn apply_computed_result(state: &DrawState, result: &EditComputedResult) -> Draw
                 .unwrap_or_else(|| element.clone())
         })
         .collect::<Vec<_>>();
+    let next_elements =
+        reorder_elements_by_id_order(next_elements, result.ordered_element_ids.as_deref());
     let next_document = state
         .domain
         .document
@@ -1135,6 +1156,19 @@ fn build_arrow_context_from_target(
         }
     }
 
+    if let ArrowEditPayload::Arrow(arrow_data) = &target.payload {
+        let mut focus_start_handle_position = None;
+        let mut focus_end_handle_position = None;
+        for handle in list_visible_arrow_focus_points(&target.element, arrow_data) {
+            match handle.endpoint {
+                ArrowFocusEndpoint::Start => focus_start_handle_position = Some(handle.point),
+                ArrowFocusEndpoint::End => focus_end_handle_position = Some(handle.point),
+            }
+        }
+        context = context
+            .with_focus_handle_positions(focus_start_handle_position, focus_end_handle_position);
+    }
+
     context
 }
 
@@ -1153,6 +1187,12 @@ fn map_operation_arrow_point_kind(
         }
         crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::LoopEnd => {
             OperationArrowPointKind::LoopEnd
+        }
+        crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::FocusStart => {
+            OperationArrowPointKind::FocusStart
+        }
+        crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::FocusEnd => {
+            OperationArrowPointKind::FocusEnd
         }
     }
 }
@@ -1280,12 +1320,39 @@ fn compute_updated_arrow_element(
                 let element_map = state.domain.document.element_map();
                 let updates = HashMap::new();
                 let lookup = CombinedElementLookup::new(&element_map, &updates);
+                let active_index = transform.active_index;
+                let is_endpoint_turning_drag = context.point_kind
+                    == OperationArrowPointKind::Turning
+                    && active_index
+                        .is_some_and(|index| index == 0 || index + 1 == next_world_points.len());
+                let is_fixed_segment_editing =
+                    context.point_kind == OperationArrowPointKind::Addable;
+                let should_release_fixed_segment =
+                    is_fixed_segment_editing && context.release_fixed_segment;
+                let elbow_points_override = if should_release_fixed_segment {
+                    None
+                } else if is_endpoint_turning_drag {
+                    Some(vec![
+                        next_world_points
+                            .first()
+                            .copied()
+                            .unwrap_or(DrawPoint::ZERO),
+                        next_world_points.last().copied().unwrap_or(DrawPoint::ZERO),
+                    ])
+                } else {
+                    Some(next_world_points.clone())
+                };
+                let fixed_segments_override = if is_fixed_segment_editing {
+                    Some(fixed_segments)
+                } else {
+                    None
+                };
                 let updated = compute_elbow_edit(
                     &current_element,
                     &data_with_bindings,
                     &lookup,
-                    Some(next_world_points.clone()),
-                    Some(fixed_segments),
+                    elbow_points_override,
+                    fixed_segments_override,
                     ElbowBindingOverride::Unset,
                     ElbowBindingOverride::Unset,
                     finalize,
@@ -1303,8 +1370,25 @@ fn compute_updated_arrow_element(
                     geometry.rect,
                     context.rotation,
                 );
+                let mut resolved_start_binding = transform.start_binding.clone();
+                let mut resolved_end_binding = transform.end_binding.clone();
+                if is_endpoint_turning_drag {
+                    if active_index == Some(0) {
+                        resolved_end_binding = transform.end_binding.clone();
+                    } else {
+                        resolved_start_binding = transform.start_binding.clone();
+                    }
+                }
                 let updated_data = data_with_bindings.copy_with(ArrowDataPatch {
                     points: Some(geometry.normalized_points),
+                    start_binding: match resolved_start_binding {
+                        Some(binding) => ArrowDataNullableField::Value(binding),
+                        None => ArrowDataNullableField::Null,
+                    },
+                    end_binding: match resolved_end_binding {
+                        Some(binding) => ArrowDataNullableField::Value(binding),
+                        None => ArrowDataNullableField::Null,
+                    },
                     fixed_segments: match transformed_fixed_segments {
                         Some(segments) => ArrowDataNullableField::Value(segments),
                         None => ArrowDataNullableField::Null,
@@ -1394,10 +1478,12 @@ fn into_public_arrow_transform(transform: &InternalArrowPointTransform) -> Arrow
         transform.fixed_segments.clone(),
         transform.start_binding.clone(),
         transform.end_binding.clone(),
+        None,
         transform.active_index,
         transform.did_insert,
         transform.should_delete,
         transform.has_changes,
+        true,
     )
 }
 

@@ -250,7 +250,7 @@ pub fn resolve_default_intent(
 ) -> Option<EditIntentResolution> {
     match intent {
         EditIntent::StartArrowPoint(start) => Some(EditIntentResolution {
-            operation_id: EditOperationIds::ARROW_POINT,
+            operation_id: EditOperationIds::CONNECTOR_POINT,
             params: ArrowPointOperationParams::new(
                 start.element_id.clone(),
                 start.point_kind,
@@ -357,7 +357,7 @@ mod tests {
             .map_to_start_edit(&intent, DrawPoint::ZERO, &DrawConfig::default())
             .expect("start edit should be mapped");
 
-        assert_eq!(start.operation_id, EditOperationIds::ARROW_POINT);
+        assert_eq!(start.operation_id, EditOperationIds::CONNECTOR_POINT);
         assert_eq!(
             start.params,
             EditOperationParams::ArrowPoint(ArrowPointOperationParams::new(

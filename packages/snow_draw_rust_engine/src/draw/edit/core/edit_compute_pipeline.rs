@@ -38,6 +38,7 @@ use std::sync::Arc;
 #[derive(Clone, Debug, PartialEq)]
 pub struct EditComputedResult<E> {
     pub updated_elements: HashMap<String, E>,
+    pub ordered_element_ids: Option<Vec<String>>,
     pub multi_select_bounds: Option<DrawRect>,
     pub multi_select_rotation: Option<f64>,
 }
@@ -45,11 +46,13 @@ pub struct EditComputedResult<E> {
 impl<E> EditComputedResult<E> {
     pub fn new(
         updated_elements: HashMap<String, E>,
+        ordered_element_ids: Option<Vec<String>>,
         multi_select_bounds: Option<DrawRect>,
         multi_select_rotation: Option<f64>,
     ) -> Self {
         Self {
             updated_elements,
+            ordered_element_ids,
             multi_select_bounds,
             multi_select_rotation,
         }
@@ -171,6 +174,7 @@ impl EditComputePipeline {
 
         Some(EditComputedResult::new(
             merged,
+            None,
             multi_select_bounds,
             multi_select_rotation,
         ))
@@ -221,6 +225,7 @@ pub fn finalize_domain_result(
 
     Some(DomainEditComputedResult::new(
         merged,
+        None,
         multi_select_bounds,
         multi_select_rotation,
     ))

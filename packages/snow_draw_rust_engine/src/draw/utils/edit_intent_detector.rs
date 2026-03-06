@@ -194,7 +194,11 @@ pub enum ArrowPointKind {
     Addable,
     LoopStart,
     LoopEnd,
+    FocusStart,
+    FocusEnd,
 }
+
+pub type ConnectorPointKind = ArrowPointKind;
 
 /// Arrow control-point hit result.
 #[derive(Clone, Debug, PartialEq)]
@@ -367,6 +371,8 @@ pub struct StartArrowPointIntent {
     pub point_index: usize,
     pub is_double_click: bool,
 }
+
+pub type StartConnectorPointIntent = StartArrowPointIntent;
 
 /// Start box-selection interaction.
 #[derive(Clone, Copy, Debug, PartialEq)]
