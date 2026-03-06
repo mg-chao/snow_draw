@@ -165,6 +165,7 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
     fixedSegmentsOverride: fixedSegmentsForCore,
     startBindingOverride: startBinding,
     endBindingOverride: endBinding,
+    maxCoordinate: coreEngineContext.maxCoordinate,
   );
   final activeBinding = draggedIndex == 0 ? startBinding : endBinding;
   final oppositeBinding = draggedIndex == 0 ? endBinding : startBinding;
@@ -293,14 +294,23 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
   // endpoint dragging applies strategy-driven binding updates via the
   // simple-binding patch path (strategy + updateBoundPoint), while finalization
   // is still expressed through the shared `options.finalize` flag.
-  final result = computeCoreSimpleBindingPatch(
-    arrow: arrow,
-    draggedPoints: draggedPoints,
-    pointer: toCorePoint(worldPointer),
-    bindables: bindables,
-    context: dragContext,
-    options: mergedOptions,
-  );
+  final result = finalize
+      ? finalizeCoreEndpointDrag(
+          arrow: arrow,
+          draggedPoints: draggedPoints,
+          pointer: toCorePoint(worldPointer),
+          bindables: bindables,
+          context: dragContext,
+          options: mergedOptions,
+        )
+      : computeCoreEndpointDrag(
+          arrow: arrow,
+          draggedPoints: draggedPoints,
+          pointer: toCorePoint(worldPointer),
+          bindables: bindables,
+          context: dragContext,
+          options: mergedOptions,
+        );
   final suggestedBindableId = _resolveSuggestedBindableId(result: result);
 
   final applied = session.applyEngineResultWithOrderFallback(

@@ -11,7 +11,7 @@ import 'arrow_core_bindable_projector.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
 
-enum ArrowBindingMode { inside, orbit }
+enum ArrowBindingMode { inside, orbit, skip }
 
 @immutable
 final class ArrowBinding {
@@ -680,13 +680,17 @@ DrawPoint? _resolveBoundPointViaCore({
 
 core.Point _toCorePoint(DrawPoint point) => <double>[point.x, point.y];
 
-ArrowBindingMode _fromCoreBindingMode(String mode) =>
-    mode == core.bindModeInside
-    ? ArrowBindingMode.inside
-    : ArrowBindingMode.orbit;
+ArrowBindingMode _fromCoreBindingMode(String mode) => switch (mode) {
+  core.bindModeInside => ArrowBindingMode.inside,
+  core.bindModeSkip => ArrowBindingMode.skip,
+  _ => ArrowBindingMode.orbit,
+};
 
-String _toCoreBindingMode(ArrowBindingMode mode) =>
-    mode == ArrowBindingMode.inside ? core.bindModeInside : core.bindModeOrbit;
+String _toCoreBindingMode(ArrowBindingMode mode) => switch (mode) {
+  ArrowBindingMode.inside => core.bindModeInside,
+  ArrowBindingMode.skip => core.bindModeSkip,
+  ArrowBindingMode.orbit => core.bindModeOrbit,
+};
 
 DrawPoint _arrowWorldEndpoint(
   core.ArrowState arrow, {

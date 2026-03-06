@@ -63,11 +63,25 @@ final class ArrowBindingResolver {
       return ArrowBindingResolutionResult.empty;
     }
 
+    final orderIndexById = <String, int>{
+      for (var index = 0; index < orderedElementIds.length; index += 1)
+        orderedElementIds[index]: index,
+    };
+    final sortedChangedBindableIds = changedBindableIds.toList(growable: false)
+      ..sort((left, right) {
+        final leftIndex = orderIndexById[left] ?? 1 << 30;
+        final rightIndex = orderIndexById[right] ?? 1 << 30;
+        if (leftIndex != rightIndex) {
+          return leftIndex.compareTo(rightIndex);
+        }
+        return left.compareTo(right);
+      });
+
     final recomputed = recomputeCoreBindingsForChangedBindables(
       arrows: session.arrows,
       bindables: session.bindables,
       relations: session.bindableRelations,
-      changedBindableIds: changedBindableIds.toList(growable: false),
+      changedBindableIds: sortedChangedBindableIds,
       context: session.context,
     );
     final patchedUpdates = session.applyArrowPatches(recomputed.arrowPatches);

@@ -211,7 +211,9 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     context: session.context,
   );
   final patchedById = session.applyArrowPatches(syncResult.arrowPatches);
-  final List<String>? reorderedElementIds = null;
+  final reorderedElementIds = session.reduceEventsToOrderedElementIds(
+    syncResult.events,
+  );
   if (patchedById.isEmpty && reorderedElementIds == null) {
     return elements;
   }

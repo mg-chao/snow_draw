@@ -485,6 +485,7 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
   final currentArrow = toCoreArrowState(
     element: previewElement,
     data: result.data,
+    maxCoordinate: coreContext.maxCoordinate,
   );
   final patchedElement = finalized.arrow == currentArrow
       ? previewElement

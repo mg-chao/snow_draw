@@ -77,10 +77,14 @@ List<ArrowFocusPoint> listVisibleArrowFocusPoints({
   core.EngineContext? engineContext,
   bool ignoreOverlap = false,
 }) {
-  final arrow = toCoreArrowState(element: element, data: data);
   final session = ArrowCoreSession.fromElements(
     elements,
     context: engineContext,
+  );
+  final arrow = toCoreArrowState(
+    element: element,
+    data: data,
+    maxCoordinate: session.context.maxCoordinate,
   );
   final bindables = session.bindables;
   if (bindables.isEmpty) {
@@ -124,10 +128,14 @@ ArrowFocusEndpoint? pickArrowFocusPoint({
   core.EngineContext? engineContext,
   bool ignoreOverlap = false,
 }) {
-  final arrow = toCoreArrowState(element: element, data: data);
   final session = ArrowCoreSession.fromElements(
     elements,
     context: engineContext,
+  );
+  final arrow = toCoreArrowState(
+    element: element,
+    data: data,
+    maxCoordinate: session.context.maxCoordinate,
   );
   final bindables = session.bindables;
   if (bindables.isEmpty) {
@@ -157,10 +165,14 @@ ArrowFocusHit pickArrowFocusPointWithOffset({
   core.EngineContext? engineContext,
   bool ignoreOverlap = false,
 }) {
-  final arrow = toCoreArrowState(element: element, data: data);
   final session = ArrowCoreSession.fromElements(
     elements,
     context: engineContext,
+  );
+  final arrow = toCoreArrowState(
+    element: element,
+    data: data,
+    maxCoordinate: session.context.maxCoordinate,
   );
   final bindables = session.bindables;
   if (bindables.isEmpty) {
@@ -192,11 +204,15 @@ ArrowFocusDragResult dragArrowFocusPoint({
   double? gridSize,
   List<String>? orderedElementIds,
 }) {
-  final arrow = toCoreArrowState(element: element, data: data);
   final session = ArrowCoreSession.fromElements(
     elementsById.values,
     orderedElementIds: orderedElementIds,
     context: engineContext,
+  );
+  final arrow = toCoreArrowState(
+    element: element,
+    data: data,
+    maxCoordinate: session.context.maxCoordinate,
   );
   final bindables = session.bindables;
   final result = computeCoreFocusPointDrag(
@@ -212,6 +228,8 @@ ArrowFocusDragResult dragArrowFocusPoint({
   final applied = session.applyEngineResultWithOrderFallback(
     arrow: arrow,
     result: result,
+    hoveredBindableId: result.suggestedBinding?.bindableId,
+    point: toCorePoint(pointer),
     orderedElementIds: orderedElementIds,
   );
   final patchedElement = applied.arrow == arrow

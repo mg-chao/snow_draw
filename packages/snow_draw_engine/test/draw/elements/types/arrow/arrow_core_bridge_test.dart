@@ -314,6 +314,22 @@ void main() {
       expect(binding.anchor.y, closeTo(1.25, 1e-9));
     });
 
+    test('fromCoreBinding preserves skip bind mode', () {
+      final binding = fromCoreBinding(
+        core.FixedPointBinding(
+          elementId: 'rect-1',
+          fixedPoint: const <double>[0.5, 0.5],
+          mode: core.bindModeSkip,
+        ),
+      );
+
+      expect(binding, isNotNull);
+      expect(binding!.mode, ArrowBindingMode.skip);
+      final roundTripped = toCoreBinding(binding);
+      expect(roundTripped, isNotNull);
+      expect(roundTripped!.mode, core.bindModeSkip);
+    });
+
     test(
       'applyCoreArrowPatchToElement applies binding-only patches without geometry drift',
       () {
@@ -441,6 +457,42 @@ void main() {
       expect(patched.rect, element.rect);
       expect(patchedData.points, data.points);
       expect(patchedData.fixedSegments, expectedFixedSegments);
+    });
+
+    test('applyCoreArrowPatchToElement accepts map-shaped fixed-segment '
+        'patch values', () {
+      final base = _arrowElement(
+        id: 'arrow-fixed-segment-map-patch',
+        points: const <DrawPoint>[
+          DrawPoint(x: 40, y: 20),
+          DrawPoint(x: 160, y: 80),
+        ],
+        zIndex: 5,
+      );
+      final data = (base.data as ArrowData).copyWith(
+        arrowType: ArrowType.elbow,
+      );
+      final element = base.copyWith(data: data);
+      final patch = <String, dynamic>{
+        'fixedSegments': <Map<String, dynamic>>[
+          <String, dynamic>{
+            'index': 1,
+            'start': <double>[90, 16],
+            'end': <double>[90, 72],
+          },
+        ],
+      };
+
+      final patched = applyCoreArrowPatchToElement(
+        element: element,
+        data: data,
+        patch: patch,
+      );
+      final patchedData = patched.data as ArrowData;
+
+      expect(patchedData.fixedSegments, isNotNull);
+      expect(patchedData.fixedSegments, hasLength(1));
+      expect(patchedData.fixedSegments!.first.index, 1);
     });
   });
 }

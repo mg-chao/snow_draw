@@ -60,13 +60,17 @@ List<core.Point> toCorePoints(Iterable<DrawPoint> points) =>
 List<DrawPoint> toDrawPoints(Iterable<core.Point> points) =>
     decodeArrowCorePoints(points);
 
-String _toCoreBindingMode(ArrowBindingMode mode) =>
-    mode == ArrowBindingMode.inside ? core.bindModeInside : core.bindModeOrbit;
+String _toCoreBindingMode(ArrowBindingMode mode) => switch (mode) {
+  ArrowBindingMode.inside => core.bindModeInside,
+  ArrowBindingMode.skip => core.bindModeSkip,
+  ArrowBindingMode.orbit => core.bindModeOrbit,
+};
 
-ArrowBindingMode _fromCoreBindingMode(String mode) =>
-    mode == core.bindModeInside
-    ? ArrowBindingMode.inside
-    : ArrowBindingMode.orbit;
+ArrowBindingMode _fromCoreBindingMode(String mode) => switch (mode) {
+  core.bindModeInside => ArrowBindingMode.inside,
+  core.bindModeSkip => ArrowBindingMode.skip,
+  _ => ArrowBindingMode.orbit,
+};
 
 core.FixedPointBinding? toCoreBinding(ArrowBinding? binding) {
   if (binding == null) {
@@ -101,7 +105,13 @@ bool isArrowBindableElement(ElementState element) {
       data is HighlightData;
 }
 
-core.BindableState? toCoreBindableState(ElementState element, {int? zIndex}) {
+core.BindableState? toCoreBindableState(
+  ElementState element, {
+  int? zIndex,
+  bool bindingEnabled = true,
+  bool interiorHitEnabled = true,
+  List<double>? visibilityBounds,
+}) {
   final data = element.data;
   if (data is RectangleData) {
     return _buildCoreBindableState(
@@ -111,6 +121,9 @@ core.BindableState? toCoreBindableState(ElementState element, {int? zIndex}) {
       roundness: _adaptiveRoundness(data.cornerRadius),
       backgroundOpaque: data.fillColor.a > 0,
       zIndex: zIndex,
+      bindingEnabled: bindingEnabled,
+      interiorHitEnabled: interiorHitEnabled,
+      visibilityBounds: visibilityBounds,
     );
   }
   if (data is TextData) {
@@ -121,6 +134,9 @@ core.BindableState? toCoreBindableState(ElementState element, {int? zIndex}) {
       roundness: _adaptiveRoundness(data.cornerRadius),
       backgroundOpaque: data.fillColor.a > 0,
       zIndex: zIndex,
+      bindingEnabled: bindingEnabled,
+      interiorHitEnabled: interiorHitEnabled,
+      visibilityBounds: visibilityBounds,
     );
   }
   if (data is SerialNumberData) {
@@ -130,6 +146,9 @@ core.BindableState? toCoreBindableState(ElementState element, {int? zIndex}) {
       strokeWidth: resolveSerialNumberStrokeWidth(data: data),
       backgroundOpaque: data.fillColor.a > 0,
       zIndex: zIndex,
+      bindingEnabled: bindingEnabled,
+      interiorHitEnabled: interiorHitEnabled,
+      visibilityBounds: visibilityBounds,
     );
   }
   if (data is HighlightData) {
@@ -139,6 +158,9 @@ core.BindableState? toCoreBindableState(ElementState element, {int? zIndex}) {
       strokeWidth: data.strokeWidth,
       backgroundOpaque: data.color.a > 0,
       zIndex: zIndex,
+      bindingEnabled: bindingEnabled,
+      interiorHitEnabled: interiorHitEnabled,
+      visibilityBounds: visibilityBounds,
     );
   }
   return null;
@@ -154,6 +176,9 @@ core.BindableState _buildCoreBindableState({
   required bool backgroundOpaque,
   core.BindableRoundness? roundness,
   int? zIndex,
+  bool bindingEnabled = true,
+  bool interiorHitEnabled = true,
+  List<double>? visibilityBounds,
 }) => core.BindableState(
   id: element.id,
   shape: shape,
@@ -166,8 +191,9 @@ core.BindableState _buildCoreBindableState({
   roundness: roundness,
   zIndex: (zIndex ?? element.zIndex).toDouble(),
   backgroundOpaque: backgroundOpaque,
-  bindingEnabled: true,
-  interiorHitEnabled: true,
+  bindingEnabled: bindingEnabled,
+  interiorHitEnabled: interiorHitEnabled,
+  visibilityBounds: visibilityBounds,
 );
 
 List<core.BindableState> collectCoreBindables(Iterable<ElementState> elements) {
@@ -477,6 +503,7 @@ core.ArrowState toCoreArrowState({
   List<ElbowFixedSegment>? fixedSegmentsOverride,
   ArrowBinding? startBindingOverride,
   ArrowBinding? endBindingOverride,
+  double maxCoordinate = _defaultMaxCoordinate,
 }) {
   final localPoints = resolveArrowLocalPoints(
     element,
@@ -486,7 +513,7 @@ core.ArrowState toCoreArrowState({
   final worldPoints = localToWorldPoints(element, localPoints);
   final normalized = core.normalizeArrowFromGlobalPoints(
     toCorePoints(worldPoints),
-    _defaultMaxCoordinate,
+    maxCoordinate,
   );
 
   return core.ArrowState(
@@ -701,11 +728,69 @@ List<ElbowFixedSegment>? _decodeCoreFixedSegmentsPatchValue({
   required ArrowLikeData data,
   required core.ArrowPatch patch,
 }) {
+  final rawFixedSegments = patch['fixedSegments'];
+  if (rawFixedSegments is List<Object?>) {
+    final parsedSegments = _decodeCoreFixedSegmentsPatchSegments(
+      rawFixedSegments,
+    );
+    if (parsedSegments != null) {
+      final patchedArrow = core.applyArrowPatch(
+        toCoreArrowState(element: element, data: data),
+        <String, dynamic>{'fixedSegments': parsedSegments},
+      );
+      return toLocalFixedSegmentsFromCoreArrow(patchedArrow, element);
+    }
+  }
+
   final patchedArrow = core.applyArrowPatch(
     toCoreArrowState(element: element, data: data),
     patch,
   );
   return toLocalFixedSegmentsFromCoreArrow(patchedArrow, element);
+}
+
+List<core.FixedSegment>? _decodeCoreFixedSegmentsPatchSegments(
+  List<Object?> rawSegments,
+) {
+  if (rawSegments.isEmpty) {
+    return const <core.FixedSegment>[];
+  }
+
+  final decoded = <core.FixedSegment>[];
+  for (final rawSegment in rawSegments) {
+    if (rawSegment is core.FixedSegment) {
+      decoded.add(rawSegment);
+      continue;
+    }
+    if (rawSegment is! Map<Object?, Object?>) {
+      return null;
+    }
+
+    final index = rawSegment['index'];
+    final start = _decodeCorePointArray(rawSegment['start']);
+    final end = _decodeCorePointArray(rawSegment['end']);
+    if (index is! num || start == null || end == null) {
+      return null;
+    }
+
+    decoded.add(
+      core.FixedSegment(index: index.toInt(), start: start, end: end),
+    );
+  }
+
+  return List<core.FixedSegment>.unmodifiable(decoded);
+}
+
+List<double>? _decodeCorePointArray(Object? raw) {
+  if (raw is! List<Object?> || raw.length != 2) {
+    return null;
+  }
+  final x = raw[0];
+  final y = raw[1];
+  if (x is! num || y is! num) {
+    return null;
+  }
+  return <double>[x.toDouble(), y.toDouble()];
 }
 
 ArrowBinding? _decodeCoreBindingPatchValue(Object? raw) {
