@@ -1,6 +1,6 @@
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+import 'arrow_core.dart' as core;
 
-/// Singleton runtime boundary for `snow_draw_arrow_core`.
+/// Singleton runtime boundary for the integrated arrow core module.
 ///
 /// This keeps engine-facing code decoupled from direct static calls and aligns
 /// host integrations around a single arrow-core runtime instance.
@@ -216,7 +216,7 @@ Map<String, dynamic> _composeEndpointBindingOptionsPayload(
   };
 }
 
-/// Typed wrapper around `snow_draw_arrow_core` endpoint-drag computation.
+/// Typed wrapper around integrated arrow core endpoint-drag computation.
 core.EngineResult computeCoreEndpointDrag({
   required core.ArrowState arrow,
   required Map<int, core.Point> draggedPoints,
@@ -250,7 +250,7 @@ core.EngineResult finalizeCoreEndpointDrag({
   options: options,
 );
 
-/// Typed wrapper around `snow_draw_arrow_core` binding preview computation.
+/// Typed wrapper around integrated arrow core binding preview computation.
 core.EngineResult computeCoreSimpleBindingPatch({
   required core.ArrowState arrow,
   required Map<int, core.Point> draggedPoints,

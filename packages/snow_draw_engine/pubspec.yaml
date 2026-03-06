@@ -14,8 +14,6 @@ dependencies:
   logger: ^2.6.2
   meta: ^1.15.0
   rbush: ^1.1.1
-  snow_draw_arrow_core:
-    path: ../snow_draw_arrow_core
 
 dev_dependencies:
   mocktail: ^1.0.4

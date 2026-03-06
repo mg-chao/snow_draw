@@ -115,66 +115,6 @@ bool _pointInBounds(Point point, _Bounds bounds) =>
     point[1] > bounds[1] &&
     point[1] < bounds[3];
 
-bool _segmentIntersectsBounds(Point a, Point b, _Bounds bounds) {
-  const epsilon = 1e-9;
-  final inner = <double>[
-    bounds[0] + epsilon,
-    bounds[1] + epsilon,
-    bounds[2] - epsilon,
-    bounds[3] - epsilon,
-  ];
-
-  if (inner[0] >= inner[2] || inner[1] >= inner[3]) {
-    return false;
-  }
-
-  final vertical = (a[0] - b[0]).abs() <= _dedupThreshold;
-  if (vertical) {
-    final x = (a[0] + b[0]) / 2;
-    if (x < inner[0] || x > inner[2]) {
-      return false;
-    }
-    return _overlapLength(
-          math.min(a[1], b[1]),
-          math.max(a[1], b[1]),
-          inner[1],
-          inner[3],
-        ) >
-        epsilon;
-  }
-
-  final horizontal = (a[1] - b[1]).abs() <= _dedupThreshold;
-  if (!horizontal) {
-    return false;
-  }
-
-  final y = (a[1] + b[1]) / 2;
-  if (y < inner[1] || y > inner[3]) {
-    return false;
-  }
-  return _overlapLength(
-        math.min(a[0], b[0]),
-        math.max(a[0], b[0]),
-        inner[0],
-        inner[2],
-      ) >
-      epsilon;
-}
-
-double _overlapLength(double minA, double maxA, double minB, double maxB) =>
-    math.min(maxA, maxB) - math.max(minA, minB);
-
-_Bounds _commonBounds(List<Point> points, double padding) {
-  final xs = points.map((point) => point[0]);
-  final ys = points.map((point) => point[1]);
-  return <double>[
-    xs.reduce(math.min) - padding,
-    ys.reduce(math.min) - padding,
-    xs.reduce(math.max) + padding,
-    ys.reduce(math.max) + padding,
-  ];
-}
-
 _Bounds _commonAabb(List<_Bounds> aabbs) => <double>[
   aabbs.map((aabb) => aabb[0]).reduce(math.min),
   aabbs.map((aabb) => aabb[1]).reduce(math.min),
@@ -617,19 +557,6 @@ int _estimateSegmentCount(
     }
   }
   return 0;
-}
-
-Heading _headingBetween(_GridNode from, _GridNode to) {
-  if (to.x > from.x) {
-    return 'right';
-  }
-  if (to.x < from.x) {
-    return 'left';
-  }
-  if (to.y > from.y) {
-    return 'down';
-  }
-  return 'up';
 }
 
 List<Point> _reconstructPath(String endKey, Map<String, _QueueNode> visited) {
@@ -1790,21 +1717,6 @@ ArrowPatch _handleEndpointDrag({
     startIsSpecial: startIsSpecial,
     endIsSpecial: endIsSpecial,
   );
-}
-
-int? _deletedFixedSegmentIndex(
-  List<FixedSegment>? previous,
-  List<FixedSegment> next,
-) {
-  final previousIndices =
-      previous?.map((segment) => segment.index).toSet() ?? <int>{};
-  final nextIndices = next.map((segment) => segment.index).toSet();
-  for (final index in previousIndices) {
-    if (!nextIndices.contains(index)) {
-      return index;
-    }
-  }
-  return null;
 }
 
 int? _activelyModifiedFixedSegmentPosition(

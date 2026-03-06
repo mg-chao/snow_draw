@@ -1,5 +1,6 @@
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core.dart'
+    as core;
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';

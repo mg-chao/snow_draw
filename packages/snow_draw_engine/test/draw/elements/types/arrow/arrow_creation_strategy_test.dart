@@ -588,6 +588,83 @@ void main() {
       expect(finishedData.endBinding!.elementId, 'rect-end');
     });
 
+    test('elbow creation binds end endpoint to opposite side of same '
+        'rectangle', () {
+      const startPosition = DrawPoint(x: 218, y: 60);
+      final state = _stateWithElements(<ElementState>[
+        _rectangleElement(
+          id: 'rect-target',
+          rect: const DrawRect(minX: 220, maxX: 320, maxY: 120),
+          zIndex: 1,
+        ),
+      ]);
+      final creatingState = _startCreating(
+        strategy: strategy,
+        startPosition: startPosition,
+        data: const ArrowData(arrowType: ArrowType.elbow),
+      );
+
+      final startBoundUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: creatingState,
+        currentPosition: const DrawPoint(x: 260, y: 60),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      final nextCreating = creatingState.copyWith(
+        element: creatingState.element.copyWith(
+          rect: startBoundUpdate.rect,
+          data: startBoundUpdate.data,
+        ),
+        currentRect: startBoundUpdate.rect,
+        creationMode: startBoundUpdate.creationMode,
+      );
+
+      final oppositeSideUpdate = strategy.update(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: nextCreating,
+        currentPosition: const DrawPoint(x: 322, y: 60),
+        maintainAspectRatio: false,
+        createFromCenter: false,
+        snappingMode: SnappingMode.none,
+      );
+      final oppositeSideData = oppositeSideUpdate.data as ArrowData;
+      expect(oppositeSideData.startBinding, isNotNull);
+      expect(oppositeSideData.endBinding, isNotNull);
+      expect(oppositeSideData.startBinding!.elementId, 'rect-target');
+      expect(oppositeSideData.endBinding!.elementId, 'rect-target');
+      expect(
+        oppositeSideData.endBinding!.anchor.x,
+        greaterThan(oppositeSideData.startBinding!.anchor.x + 0.5),
+      );
+
+      final finish = strategy.finish(
+        state: state,
+        config: DrawConfig.defaultConfig,
+        creatingState: nextCreating.copyWith(
+          element: nextCreating.element.copyWith(
+            rect: oppositeSideUpdate.rect,
+            data: oppositeSideUpdate.data,
+          ),
+          currentRect: oppositeSideUpdate.rect,
+          creationMode: oppositeSideUpdate.creationMode,
+        ),
+      );
+      final finishedData = finish.data as ArrowData;
+      expect(finish.shouldCommit, isTrue);
+      expect(finishedData.startBinding, isNotNull);
+      expect(finishedData.endBinding, isNotNull);
+      expect(finishedData.startBinding!.elementId, 'rect-target');
+      expect(finishedData.endBinding!.elementId, 'rect-target');
+      expect(
+        finishedData.endBinding!.anchor.x,
+        greaterThan(finishedData.startBinding!.anchor.x + 0.5),
+      );
+    });
+
     test('update honors zoom-aware core binding distance', () {
       const startPosition = DrawPoint(x: 20, y: 60);
       const currentPosition = DrawPoint(x: 82, y: 60);

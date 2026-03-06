@@ -538,33 +538,6 @@ bool _isBoundsTuple(Object? value) =>
 bool _isStringArray(Object? value) =>
     value is List && value.every((entry) => entry is String);
 
-bool _isListWhere(Object? value, bool Function(Object? entry) predicate) =>
-    value is List && value.every(predicate);
-
-bool _isBindableStateArray(Object? value) =>
-    _isListWhere(value, (entry) => _asBindableState(entry) != null);
-
-bool _isBindableRelationStateArray(Object? value) =>
-    _isListWhere(value, (entry) => _asBindableRelationState(entry) != null);
-
-bool _isArrowStateArray(Object? value) =>
-    _isListWhere(value, (entry) => _asArrowState(entry) != null);
-
-bool _isArrowBindingStateArray(Object? value) =>
-    _isListWhere(value, (entry) => _asArrowBindingState(entry) != null);
-
-bool _isBindablePatchArray(Object? value) =>
-    _isListWhere(value, (entry) => _asBindablePatch(entry) != null);
-
-bool _isBindableRelationPatchArray(Object? value) =>
-    _isListWhere(value, (entry) => _asBindableRelationPatch(entry) != null);
-
-bool _isArrowEngineEventArray(Object? value) =>
-    _isListWhere(value, (entry) => _asArrowEngineEvent(entry) != null);
-
-bool _isCurvePathOpArray(Object? value) =>
-    _isListWhere(value, (entry) => _asCurvePathOp(entry) != null);
-
 bool _isDirectionalLinkBoundsShape(Object? value) =>
     value is Map &&
     _isFiniteNumber(value['x']) &&
@@ -1379,7 +1352,7 @@ List<String> _validateUpdateElbowPatchShape(
 }
 
 List<String> _validateOptionalBooleanFields(
-  Map value, {
+  Map<Object?, Object?> value, {
   required String path,
   required List<String> fields,
 }) {
@@ -2343,13 +2316,6 @@ String _asString(Object? value, {String fallback = ''}) =>
 double _asDouble(Object? value, {double fallback = 0}) {
   if (value is num && value.isFinite) {
     return value.toDouble();
-  }
-  return fallback;
-}
-
-int _asInt(Object? value, {int fallback = 0}) {
-  if (value is num && value.isFinite) {
-    return value.toInt();
   }
   return fallback;
 }

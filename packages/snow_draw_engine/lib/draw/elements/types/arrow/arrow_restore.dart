@@ -1,9 +1,8 @@
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
-
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
+import 'arrow_core.dart' as core;
 import 'arrow_core_bridge.dart';
 import 'arrow_core_geometry_adapter.dart';
 import 'arrow_core_ops.dart';
@@ -12,7 +11,7 @@ import 'arrow_like_data.dart';
 /// Repairs arrow payloads restored from persisted snapshots.
 ///
 /// This normalizes dangling endpoint bindings against [elements], then applies
-/// elbow-specific restore fixes from `snow_draw_arrow_core`.
+/// elbow-specific restore fixes from the integrated arrow core module.
 ///
 /// Returns [elements] unchanged when no repair is needed.
 List<ElementState> repairArrowElementsOnRestore({
@@ -57,7 +56,7 @@ List<ElementState> repairArrowElementsOnRestore({
 /// Builds world points for a directional two-point arrow path.
 ///
 /// This delegates direction-aware endpoint placement to
-/// `snow_draw_arrow_core`.
+/// the integrated arrow core module.
 List<DrawPoint> createDirectionalArrowWorldPoints({
   required DrawRect startBounds,
   required DrawRect endBounds,

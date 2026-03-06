@@ -188,11 +188,6 @@ Map<String, BindableState> _normalizeBindableLookup(Object? bindables) {
   return out;
 }
 
-Point _clonePoint(Point point) => <double>[point[0], point[1]];
-
-List<Point> _clonePoints(List<Point> points) =>
-    points.map(_clonePoint).toList(growable: true);
-
 Bounds _aabbForBindable(BindableState bindable, [List<double>? offset]) {
   final bindableCenter = center(
     bindable.x,
@@ -1478,40 +1473,6 @@ _BindingMutation _addOrRemoveBindingPatch({
   return (changed: true, binding: binding);
 }
 
-double _pointsWidth(List<Point> points) {
-  if (points.isEmpty) {
-    return 0;
-  }
-  var minValue = points[0][0];
-  var maxValue = points[0][0];
-  for (final point in points) {
-    if (point[0] < minValue) {
-      minValue = point[0];
-    }
-    if (point[0] > maxValue) {
-      maxValue = point[0];
-    }
-  }
-  return maxValue - minValue;
-}
-
-double _pointsHeight(List<Point> points) {
-  if (points.isEmpty) {
-    return 0;
-  }
-  var minValue = points[0][1];
-  var maxValue = points[0][1];
-  for (final point in points) {
-    if (point[1] < minValue) {
-      minValue = point[1];
-    }
-    if (point[1] > maxValue) {
-      maxValue = point[1];
-    }
-  }
-  return maxValue - minValue;
-}
-
 EngineResult _emptyEngineResult() => const EngineResult(
   arrowPatch: <String, dynamic>{},
   bindablePatches: <BindablePatch>[],
@@ -2488,7 +2449,6 @@ EndpointBindingStrategies getEndpointBindingStrategy(
     final bindTarget =
         hit != null &&
             isOverlappingOther &&
-            otherBindable != null &&
             isBindableBackgroundOpaque(otherBindable)
         ? otherBindable
         : hit;
@@ -2703,10 +2663,10 @@ EngineResult computeSimpleBindingPatch(ComputeEndpointDragInput input) {
 
   final startBindable = effectiveStartBinding == null
       ? null
-      : bindablesById[effectiveStartBinding!.elementId];
+      : bindablesById[effectiveStartBinding.elementId];
   final endBindable = effectiveEndBinding == null
       ? null
-      : bindablesById[effectiveEndBinding!.elementId];
+      : bindablesById[effectiveEndBinding.elementId];
 
   SuggestedBinding? suggestedBinding;
   if (strategies.start?.element != null &&
@@ -2898,12 +2858,13 @@ EngineResult recomputeBindingsAfterBindableChange(
           changedBindableIds.isEmpty ||
           changedBindableIds.contains(endBinding.elementId));
 
-  if (shouldUpdateStart && startBinding != null) {
-    final bindable = bindablesById[startBinding.elementId]!;
+  final startBindingToUpdate = shouldUpdateStart ? startBinding : null;
+  if (startBindingToUpdate != null) {
+    final bindable = bindablesById[startBindingToUpdate.elementId]!;
     final updated = updateBoundPoint(
       arrow: simulatedArrow,
       edge: 'startBinding',
-      binding: startBinding,
+      binding: startBindingToUpdate,
       bindable: bindable,
       bindablesById: bindablesById,
     );
@@ -2914,12 +2875,13 @@ EngineResult recomputeBindingsAfterBindableChange(
 
   final simulatedWithStart = simulatedArrow.copyWith(points: nextPoints);
 
-  if (shouldUpdateEnd && endBinding != null) {
-    final bindable = bindablesById[endBinding.elementId]!;
+  final endBindingToUpdate = shouldUpdateEnd ? endBinding : null;
+  if (endBindingToUpdate != null) {
+    final bindable = bindablesById[endBindingToUpdate.elementId]!;
     final updated = updateBoundPoint(
       arrow: simulatedWithStart,
       edge: 'endBinding',
-      binding: endBinding,
+      binding: endBindingToUpdate,
       bindable: bindable,
       bindablesById: bindablesById,
     );

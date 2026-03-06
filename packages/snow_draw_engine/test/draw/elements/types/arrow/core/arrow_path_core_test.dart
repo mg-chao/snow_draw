@@ -1,4 +1,4 @@
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core.dart';
 import 'package:test/test.dart';
 
 void main() {

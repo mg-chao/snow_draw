@@ -1,4 +1,5 @@
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core.dart'
+    as core;
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_ops.dart';
 import 'package:test/test.dart';
@@ -116,63 +117,58 @@ void main() {
       },
     );
 
-    test(
-      'resolveCoreEndpointBindingStrategy mirrors core default options',
-      () {
-        final arrow = _arrowState(
-          endBinding: const core.FixedPointBinding(
-            elementId: 'bindable-1',
-            fixedPoint: <double>[0.5, 0.5],
-            mode: core.bindModeOrbit,
-          ),
-        );
-        final bindable = _bindableState();
-        final payload = <String, dynamic>{
-          'arrow': arrow,
-          'draggedPoints': const <int, core.Point>{
-            0: <double>[60, 0],
-          },
-          'pointer': const <double>[60, 0],
-          'bindables': <core.BindableState>[bindable],
-          'context': buildCoreEngineContext(),
-        };
+    test('resolveCoreEndpointBindingStrategy mirrors core default options', () {
+      final arrow = _arrowState(
+        endBinding: const core.FixedPointBinding(
+          elementId: 'bindable-1',
+          fixedPoint: <double>[0.5, 0.5],
+          mode: core.bindModeOrbit,
+        ),
+      );
+      final bindable = _bindableState();
+      final payload = <String, dynamic>{
+        'arrow': arrow,
+        'draggedPoints': const <int, core.Point>{
+          0: <double>[60, 0],
+        },
+        'pointer': const <double>[60, 0],
+        'bindables': <core.BindableState>[bindable],
+        'context': buildCoreEngineContext(),
+      };
 
-        final expectedDefault = core.getEndpointBindingStrategy(payload);
-        final expectedComplex = core.getEndpointBindingStrategy(
-          <String, dynamic>{
-            ...payload,
-            'options': const <String, dynamic>{'complexBindings': true},
-          },
-        );
-        final actual = resolveCoreEndpointBindingStrategy(
-          arrow: arrow,
-          draggedPoints: const <int, core.Point>{
-            0: <double>[60, 0],
-          },
-          pointer: const <double>[60, 0],
-          bindables: <core.BindableState>[bindable],
-          context: buildCoreEngineContext(),
-        );
+      final expectedDefault = core.getEndpointBindingStrategy(payload);
+      final expectedComplex = core.getEndpointBindingStrategy(<String, dynamic>{
+        ...payload,
+        'options': const <String, dynamic>{'complexBindings': true},
+      });
+      final actual = resolveCoreEndpointBindingStrategy(
+        arrow: arrow,
+        draggedPoints: const <int, core.Point>{
+          0: <double>[60, 0],
+        },
+        pointer: const <double>[60, 0],
+        bindables: <core.BindableState>[bindable],
+        context: buildCoreEngineContext(),
+      );
 
-        final defaultStart = expectedDefault.start;
-        final actualStart = actual.start;
-        expect(actualStart?.bindableId, defaultStart?.bindableId);
-        expect(actualStart?.mode, defaultStart?.mode);
-        expect(actualStart?.focusPoint, defaultStart?.focusPoint);
+      final defaultStart = expectedDefault.start;
+      final actualStart = actual.start;
+      expect(actualStart?.bindableId, defaultStart?.bindableId);
+      expect(actualStart?.mode, defaultStart?.mode);
+      expect(actualStart?.focusPoint, defaultStart?.focusPoint);
 
-        final defaultEnd = expectedDefault.end;
-        final actualEnd = actual.end;
-        expect(actualEnd?.bindableId, defaultEnd?.bindableId);
-        expect(actualEnd?.mode, defaultEnd?.mode);
-        expect(actualEnd?.focusPoint, defaultEnd?.focusPoint);
+      final defaultEnd = expectedDefault.end;
+      final actualEnd = actual.end;
+      expect(actualEnd?.bindableId, defaultEnd?.bindableId);
+      expect(actualEnd?.mode, defaultEnd?.mode);
+      expect(actualEnd?.focusPoint, defaultEnd?.focusPoint);
 
-        expect(
-          expectedComplex.start?.mode == expectedDefault.start?.mode &&
-              expectedComplex.end?.mode == expectedDefault.end?.mode,
-          isFalse,
-        );
-      },
-    );
+      expect(
+        expectedComplex.start?.mode == expectedDefault.start?.mode &&
+            expectedComplex.end?.mode == expectedDefault.end?.mode,
+        isFalse,
+      );
+    });
 
     test(
       'computeCoreSimpleBindingPatch mirrors core complex-binding options',

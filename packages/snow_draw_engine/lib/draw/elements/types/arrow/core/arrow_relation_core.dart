@@ -56,12 +56,11 @@ List<TEntry>? mergeBoundRelationEntries<TEntry extends BoundRelationEntry>({
   return next.isNotEmpty ? next : null;
 }
 
-List<TEntry>?
-mergeArrowBoundRelationEntries<TEntry extends BoundRelationEntry>({
-  required List<TEntry>? entries,
-  required List<String> boundArrowIds,
-}) => mergeBoundRelationEntries<TEntry>(
-  entries: entries,
-  targetType: 'arrow',
-  targetIds: boundArrowIds,
-);
+List<TEntry>? mergeArrowBoundRelationEntries<
+  TEntry extends BoundRelationEntry
+>({required List<TEntry>? entries, required List<String> boundArrowIds}) =>
+    mergeBoundRelationEntries<TEntry>(
+      entries: entries,
+      targetType: 'arrow',
+      targetIds: boundArrowIds,
+    );

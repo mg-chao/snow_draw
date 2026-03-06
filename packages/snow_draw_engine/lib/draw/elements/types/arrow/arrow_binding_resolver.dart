@@ -1,16 +1,16 @@
 import 'package:meta/meta.dart';
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../models/element_state.dart';
 import '../../../utils/combined_element_lookup.dart';
+import 'arrow_core.dart' as core;
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
 import 'arrow_core_session.dart';
 
 /// Resolves arrow bindings when bindable elements change position.
 ///
-/// The resolver delegates recomputation to `snow_draw_arrow_core` and maps the
-/// resulting patch back into engine element state.
+/// The resolver delegates recomputation to the integrated arrow core module
+/// and maps the resulting patch back into engine element state.
 @immutable
 final class ArrowBindingResolutionResult {
   const ArrowBindingResolutionResult({
@@ -171,8 +171,9 @@ core.EngineResult _recomputeElbowBindingsAfterBindableChange({
   core.Point? nextStartPoint;
   core.Point? nextEndPoint;
 
-  if (shouldUpdateStart && startBinding != null) {
-    final startBindable = bindablesById[startBinding.elementId];
+  final startBindingToUpdate = shouldUpdateStart ? startBinding : null;
+  if (startBindingToUpdate != null) {
+    final startBindable = bindablesById[startBindingToUpdate.elementId];
     if (startBindable == null) {
       return recomputeCoreBindingsAfterBindableChange(
         arrow: arrow,
@@ -184,7 +185,7 @@ core.EngineResult _recomputeElbowBindingsAfterBindableChange({
     final updatedStart = updateCoreBoundPoint(
       arrow: arrow,
       edge: 'startBinding',
-      binding: startBinding,
+      binding: startBindingToUpdate,
       bindable: startBindable,
       bindablesById: bindablesById,
     );
@@ -193,8 +194,9 @@ core.EngineResult _recomputeElbowBindingsAfterBindableChange({
     }
   }
 
-  if (shouldUpdateEnd && endBinding != null) {
-    final endBindable = bindablesById[endBinding.elementId];
+  final endBindingToUpdate = shouldUpdateEnd ? endBinding : null;
+  if (endBindingToUpdate != null) {
+    final endBindable = bindablesById[endBindingToUpdate.elementId];
     if (endBindable == null) {
       return recomputeCoreBindingsAfterBindableChange(
         arrow: arrow,
@@ -206,7 +208,7 @@ core.EngineResult _recomputeElbowBindingsAfterBindableChange({
     final updatedEnd = updateCoreBoundPoint(
       arrow: arrow,
       edge: 'endBinding',
-      binding: endBinding,
+      binding: endBindingToUpdate,
       bindable: endBindable,
       bindablesById: bindablesById,
     );

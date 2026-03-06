@@ -1,11 +1,11 @@
 import 'package:meta/meta.dart';
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../../core/coordinates/element_space.dart';
 import '../../../../models/element_state.dart';
 import '../../../../types/draw_point.dart';
 import '../../../../types/element_style.dart';
 import '../arrow_binding.dart';
+import '../arrow_core.dart' as core;
 import '../arrow_core_bridge.dart';
 import '../arrow_core_geometry_adapter.dart';
 import '../arrow_core_ops.dart';
@@ -14,8 +14,8 @@ import 'elbow_fixed_segment.dart';
 
 /// Elbow arrow routing entry points.
 ///
-/// Routing is delegated to `snow_draw_arrow_core` and then projected back to
-/// engine point types.
+/// Routing is delegated to the integrated arrow core module and then
+/// projected back to engine point types.
 @immutable
 final class ElbowRouteResult {
   const ElbowRouteResult({

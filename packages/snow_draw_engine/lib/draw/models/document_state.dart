@@ -1,5 +1,5 @@
 import 'package:meta/meta.dart';
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
+import '../elements/types/arrow/arrow_core.dart' as core;
 
 import '../elements/types/arrow/arrow_core_bridge.dart';
 import '../elements/types/arrow/arrow_like_data.dart';

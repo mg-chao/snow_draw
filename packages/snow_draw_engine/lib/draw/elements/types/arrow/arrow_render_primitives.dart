@@ -1,8 +1,8 @@
 import 'package:meta/meta.dart';
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
+import 'arrow_core.dart' as core;
 
 /// Endpoint position for arrowhead primitive resolution.
 enum ArrowEndpointPosition { start, end }

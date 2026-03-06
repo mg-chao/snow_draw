@@ -1,20 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core.dart';
 import 'package:test/test.dart';
 
 void main() {
   group('protocol runtime parity', () {
     test('dart protocol responses match excalidraw fixtures', () {
-      final fixtureFile = File('test/fixtures/protocol_parity_cases.json');
+      final fixtureFile = _resolveProtocolParityFixtureFile();
       expect(
         fixtureFile.existsSync(),
         isTrue,
         reason:
             'Missing protocol parity fixture. Run '
-            '`node tool/generate_protocol_parity_fixtures.mjs` in '
-            '`packages/snow_draw_arrow_core`.',
+            '`node tool/generate_arrow_protocol_parity_fixtures.mjs` in '
+            '`packages/snow_draw_engine`.',
       );
 
       final decoded = jsonDecode(fixtureFile.readAsStringSync());
@@ -426,4 +426,18 @@ String? _diffJsonLike(
   }
 
   return '$path expected=$expected actual=$actual';
+}
+
+File _resolveProtocolParityFixtureFile() {
+  const candidates = <String>[
+    'test/draw/elements/types/arrow/core/fixtures/protocol_parity_cases.json',
+    'packages/snow_draw_engine/test/draw/elements/types/arrow/core/fixtures/protocol_parity_cases.json',
+  ];
+  for (final candidate in candidates) {
+    final file = File(candidate);
+    if (file.existsSync()) {
+      return file;
+    }
+  }
+  return File(candidates.first);
 }

@@ -1,8 +1,7 @@
-import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
-
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
+import 'arrow_core.dart' as core;
 import 'arrow_core_geometry_adapter.dart';
 import 'arrow_like_data.dart';
 
@@ -14,7 +13,8 @@ typedef LinearBoundsWithBoundText = ({DrawRect rect, DrawPoint center});
 
 /// Computes a stable container dimension for bound arrow text.
 ///
-/// This delegates to `snow_draw_arrow_core` label defaults and clamping rules.
+/// This delegates to the integrated arrow core label defaults and clamping
+/// rules.
 double computeArrowContainerDimensionForBoundText(
   double dimension, {
   core.ArrowLabelLayoutOptions? options,

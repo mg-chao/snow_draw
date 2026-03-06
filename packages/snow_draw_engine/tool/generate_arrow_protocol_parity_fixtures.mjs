@@ -398,6 +398,11 @@ const output = {
 const outputPath = path.resolve(
   process.cwd(),
   "test",
+  "draw",
+  "elements",
+  "types",
+  "arrow",
+  "core",
   "fixtures",
   "protocol_parity_cases.json",
 );
