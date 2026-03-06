@@ -255,7 +255,7 @@ void main() {
     });
 
     test(
-      'finish finalizes endpoint drag with default same-target behavior',
+      'finish finalizes endpoint drag with complex same-target behavior',
       () {
         final bindTarget = _rectangleElement(
           id: 'rect-shared',
@@ -305,10 +305,8 @@ void main() {
 
         expect(updatedData.startBinding, isNotNull);
         expect(updatedData.startBinding!.elementId, bindTarget.id);
-        expect(updatedData.startBinding!.mode, ArrowBindingMode.inside);
-        expect(updatedData.endBinding, isNotNull);
-        expect(updatedData.endBinding!.elementId, bindTarget.id);
-        expect(updatedData.endBinding!.mode, ArrowBindingMode.inside);
+        expect(updatedData.startBinding!.mode, ArrowBindingMode.orbit);
+        expect(updatedData.endBinding, isNull);
       },
     );
 
