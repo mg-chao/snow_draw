@@ -19,6 +19,7 @@ pub enum ArrowBindingMode {
     Inside,
     #[default]
     Orbit,
+    Skip,
 }
 
 impl ArrowBindingMode {
@@ -26,6 +27,7 @@ impl ArrowBindingMode {
         match self {
             Self::Inside => "inside",
             Self::Orbit => "orbit",
+            Self::Skip => "skip",
         }
     }
 
@@ -33,6 +35,7 @@ impl ArrowBindingMode {
         match name {
             "inside" => Some(Self::Inside),
             "orbit" => Some(Self::Orbit),
+            "skip" => Some(Self::Skip),
             _ => None,
         }
     }
@@ -87,7 +90,7 @@ impl ArrowBinding {
             .get("mode")
             .and_then(Value::as_str)
             .and_then(ArrowBindingMode::from_name)
-            .ok_or_else(|| "ArrowBinding.mode must be 'inside' or 'orbit'".to_string())?;
+            .ok_or_else(|| "ArrowBinding.mode must be 'inside', 'orbit', or 'skip'".to_string())?;
 
         Ok(Self::new(
             element_id,

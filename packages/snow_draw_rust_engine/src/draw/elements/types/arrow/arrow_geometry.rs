@@ -195,13 +195,20 @@ impl ArrowGeometry {
 
         let length = Self::resolve_arrowhead_length(stroke_width);
         match style {
-            ArrowheadStyle::Circle => length * 0.6,
+            ArrowheadStyle::Dot | ArrowheadStyle::Circle | ArrowheadStyle::CircleOutline => {
+                length * 0.6
+            }
             ArrowheadStyle::Square => length * 0.6,
-            ArrowheadStyle::Triangle => length,
-            ArrowheadStyle::Diamond => length,
-            ArrowheadStyle::InvertedTriangle => 0.0,
-            ArrowheadStyle::Standard => 0.0,
-            ArrowheadStyle::VerticalLine => 0.0,
+            ArrowheadStyle::Triangle
+            | ArrowheadStyle::TriangleOutline
+            | ArrowheadStyle::Diamond
+            | ArrowheadStyle::DiamondOutline => length,
+            ArrowheadStyle::InvertedTriangle
+            | ArrowheadStyle::Standard
+            | ArrowheadStyle::CrowfootOne
+            | ArrowheadStyle::CrowfootMany
+            | ArrowheadStyle::CrowfootOneOrMany
+            | ArrowheadStyle::VerticalLine => 0.0,
             ArrowheadStyle::None => 0.0,
         }
     }
@@ -213,13 +220,20 @@ impl ArrowGeometry {
 
         let length = Self::resolve_arrowhead_length(stroke_width);
         match style {
-            ArrowheadStyle::Circle => length * 0.6,
+            ArrowheadStyle::Dot | ArrowheadStyle::Circle | ArrowheadStyle::CircleOutline => {
+                length * 0.6
+            }
             ArrowheadStyle::Square => length * 0.6,
-            ArrowheadStyle::Standard => length,
-            ArrowheadStyle::Triangle => length,
-            ArrowheadStyle::Diamond => length,
-            ArrowheadStyle::InvertedTriangle => length,
             ArrowheadStyle::VerticalLine => length * 0.6,
+            ArrowheadStyle::Standard
+            | ArrowheadStyle::Triangle
+            | ArrowheadStyle::TriangleOutline
+            | ArrowheadStyle::Diamond
+            | ArrowheadStyle::DiamondOutline
+            | ArrowheadStyle::CrowfootOne
+            | ArrowheadStyle::CrowfootMany
+            | ArrowheadStyle::CrowfootOneOrMany
+            | ArrowheadStyle::InvertedTriangle => length,
             ArrowheadStyle::None => 0.0,
         }
     }

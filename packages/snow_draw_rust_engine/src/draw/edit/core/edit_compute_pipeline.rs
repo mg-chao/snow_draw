@@ -659,5 +659,6 @@ fn domain_binding_mode_to_resolver(mode: DomainArrowBindingMode) -> ArrowBinding
     match mode {
         DomainArrowBindingMode::Inside => ArrowBindingMode::Inside,
         DomainArrowBindingMode::Orbit => ArrowBindingMode::Orbit,
+        DomainArrowBindingMode::Skip => ArrowBindingMode::Skip,
     }
 }

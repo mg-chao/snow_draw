@@ -1015,6 +1015,9 @@ fn domain_arrow_binding_mode_to_local(
         DomainArrowBindingMode::Orbit => {
             crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode::Orbit
         }
+        DomainArrowBindingMode::Skip => {
+            crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode::Skip
+        }
     }
 }
 
@@ -1027,6 +1030,9 @@ fn local_binding_mode_to_domain_arrow(
         }
         crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode::Orbit => {
             DomainArrowBindingMode::Orbit
+        }
+        crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode::Skip => {
+            DomainArrowBindingMode::Skip
         }
     }
 }

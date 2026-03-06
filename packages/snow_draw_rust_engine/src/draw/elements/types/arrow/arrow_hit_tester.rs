@@ -295,21 +295,35 @@ fn arrow_data_signature<D: ArrowLikeData + ?Sized>(data: &D) -> u64 {
         ArrowheadStyle::None => 0_u8.hash(&mut hasher),
         ArrowheadStyle::Standard => 1_u8.hash(&mut hasher),
         ArrowheadStyle::Triangle => 2_u8.hash(&mut hasher),
-        ArrowheadStyle::Square => 3_u8.hash(&mut hasher),
-        ArrowheadStyle::Circle => 4_u8.hash(&mut hasher),
-        ArrowheadStyle::Diamond => 5_u8.hash(&mut hasher),
-        ArrowheadStyle::InvertedTriangle => 6_u8.hash(&mut hasher),
-        ArrowheadStyle::VerticalLine => 7_u8.hash(&mut hasher),
+        ArrowheadStyle::TriangleOutline => 3_u8.hash(&mut hasher),
+        ArrowheadStyle::Square => 4_u8.hash(&mut hasher),
+        ArrowheadStyle::Dot => 5_u8.hash(&mut hasher),
+        ArrowheadStyle::Circle => 6_u8.hash(&mut hasher),
+        ArrowheadStyle::CircleOutline => 7_u8.hash(&mut hasher),
+        ArrowheadStyle::Diamond => 8_u8.hash(&mut hasher),
+        ArrowheadStyle::DiamondOutline => 9_u8.hash(&mut hasher),
+        ArrowheadStyle::CrowfootOne => 10_u8.hash(&mut hasher),
+        ArrowheadStyle::CrowfootMany => 11_u8.hash(&mut hasher),
+        ArrowheadStyle::CrowfootOneOrMany => 12_u8.hash(&mut hasher),
+        ArrowheadStyle::InvertedTriangle => 13_u8.hash(&mut hasher),
+        ArrowheadStyle::VerticalLine => 14_u8.hash(&mut hasher),
     }
     match data.end_arrowhead() {
         ArrowheadStyle::None => 0_u8.hash(&mut hasher),
         ArrowheadStyle::Standard => 1_u8.hash(&mut hasher),
         ArrowheadStyle::Triangle => 2_u8.hash(&mut hasher),
-        ArrowheadStyle::Square => 3_u8.hash(&mut hasher),
-        ArrowheadStyle::Circle => 4_u8.hash(&mut hasher),
-        ArrowheadStyle::Diamond => 5_u8.hash(&mut hasher),
-        ArrowheadStyle::InvertedTriangle => 6_u8.hash(&mut hasher),
-        ArrowheadStyle::VerticalLine => 7_u8.hash(&mut hasher),
+        ArrowheadStyle::TriangleOutline => 3_u8.hash(&mut hasher),
+        ArrowheadStyle::Square => 4_u8.hash(&mut hasher),
+        ArrowheadStyle::Dot => 5_u8.hash(&mut hasher),
+        ArrowheadStyle::Circle => 6_u8.hash(&mut hasher),
+        ArrowheadStyle::CircleOutline => 7_u8.hash(&mut hasher),
+        ArrowheadStyle::Diamond => 8_u8.hash(&mut hasher),
+        ArrowheadStyle::DiamondOutline => 9_u8.hash(&mut hasher),
+        ArrowheadStyle::CrowfootOne => 10_u8.hash(&mut hasher),
+        ArrowheadStyle::CrowfootMany => 11_u8.hash(&mut hasher),
+        ArrowheadStyle::CrowfootOneOrMany => 12_u8.hash(&mut hasher),
+        ArrowheadStyle::InvertedTriangle => 13_u8.hash(&mut hasher),
+        ArrowheadStyle::VerticalLine => 14_u8.hash(&mut hasher),
     }
     data.points().len().hash(&mut hasher);
     for point in data.points() {
@@ -454,7 +468,9 @@ fn arrowhead_target_for_style(
                 },
             ]))
         }
-        ArrowheadStyle::Triangle | ArrowheadStyle::InvertedTriangle => {
+        ArrowheadStyle::Triangle
+        | ArrowheadStyle::TriangleOutline
+        | ArrowheadStyle::InvertedTriangle => {
             let base = subtract_scaled_draw_point(tip, dir, length);
             let left = add_scaled_draw_point(base, perp, width / 2.0);
             let right = add_scaled_draw_point(base, perp, -width / 2.0);
@@ -486,12 +502,12 @@ fn arrowhead_target_for_style(
                 corner1, corner2, corner3, corner4,
             ])))
         }
-        ArrowheadStyle::Circle => {
+        ArrowheadStyle::Dot | ArrowheadStyle::Circle | ArrowheadStyle::CircleOutline => {
             let radius = length * 0.3;
             let center = subtract_scaled_draw_point(tip, dir, radius);
             Some(ArrowheadHitTarget::Circle { center, radius })
         }
-        ArrowheadStyle::Diamond => {
+        ArrowheadStyle::Diamond | ArrowheadStyle::DiamondOutline => {
             let base = subtract_scaled_draw_point(tip, dir, length);
             let mid = subtract_scaled_draw_point(tip, dir, length / 2.0);
             let left = add_scaled_draw_point(mid, perp, width / 2.0);
@@ -499,6 +515,37 @@ fn arrowhead_target_for_style(
             Some(ArrowheadHitTarget::Segments(closed_segments(&[
                 tip, left, base, right,
             ])))
+        }
+        ArrowheadStyle::CrowfootOne => {
+            let base = subtract_scaled_draw_point(tip, dir, length);
+            let left = add_scaled_draw_point(base, perp, width / 2.0);
+            let right = add_scaled_draw_point(base, perp, -width / 2.0);
+            Some(ArrowheadHitTarget::Segments(vec![ArrowheadSegment {
+                start: left,
+                end: right,
+            }]))
+        }
+        ArrowheadStyle::CrowfootMany | ArrowheadStyle::CrowfootOneOrMany => {
+            let base = subtract_scaled_draw_point(tip, dir, length);
+            let left = add_scaled_draw_point(base, perp, width / 2.0);
+            let right = add_scaled_draw_point(base, perp, -width / 2.0);
+            let mut segments = vec![
+                ArrowheadSegment {
+                    start: tip,
+                    end: left,
+                },
+                ArrowheadSegment {
+                    start: tip,
+                    end: right,
+                },
+            ];
+            if style == ArrowheadStyle::CrowfootOneOrMany {
+                segments.push(ArrowheadSegment {
+                    start: left,
+                    end: right,
+                });
+            }
+            Some(ArrowheadHitTarget::Segments(segments))
         }
         ArrowheadStyle::VerticalLine => {
             let half = width / 2.0;
@@ -805,10 +852,19 @@ fn calculate_arrowhead_inset(style: ArrowheadStyle, stroke_width: f64) -> f64 {
 
     let length = arrowhead_length(stroke_width);
     match style {
-        ArrowheadStyle::Circle | ArrowheadStyle::Square => length * 0.6,
-        ArrowheadStyle::Triangle | ArrowheadStyle::Diamond => length,
+        ArrowheadStyle::Dot | ArrowheadStyle::Circle | ArrowheadStyle::CircleOutline => {
+            length * 0.6
+        }
+        ArrowheadStyle::Square => length * 0.6,
+        ArrowheadStyle::Triangle
+        | ArrowheadStyle::TriangleOutline
+        | ArrowheadStyle::Diamond
+        | ArrowheadStyle::DiamondOutline => length,
         ArrowheadStyle::InvertedTriangle
         | ArrowheadStyle::Standard
+        | ArrowheadStyle::CrowfootOne
+        | ArrowheadStyle::CrowfootMany
+        | ArrowheadStyle::CrowfootOneOrMany
         | ArrowheadStyle::VerticalLine
         | ArrowheadStyle::None => 0.0,
     }
@@ -821,12 +877,19 @@ fn calculate_arrowhead_direction_offset(style: ArrowheadStyle, stroke_width: f64
 
     let length = arrowhead_length(stroke_width);
     match style {
-        ArrowheadStyle::Circle | ArrowheadStyle::Square | ArrowheadStyle::VerticalLine => {
-            length * 0.6
-        }
+        ArrowheadStyle::Dot
+        | ArrowheadStyle::Circle
+        | ArrowheadStyle::CircleOutline
+        | ArrowheadStyle::Square
+        | ArrowheadStyle::VerticalLine => length * 0.6,
         ArrowheadStyle::Standard
         | ArrowheadStyle::Triangle
+        | ArrowheadStyle::TriangleOutline
         | ArrowheadStyle::Diamond
+        | ArrowheadStyle::DiamondOutline
+        | ArrowheadStyle::CrowfootOne
+        | ArrowheadStyle::CrowfootMany
+        | ArrowheadStyle::CrowfootOneOrMany
         | ArrowheadStyle::InvertedTriangle => length,
         ArrowheadStyle::None => 0.0,
     }

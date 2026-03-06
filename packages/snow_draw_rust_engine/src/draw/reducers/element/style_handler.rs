@@ -4,9 +4,9 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::Arc;
 
 use crate::draw::core::draw_context::DrawContext;
-use crate::draw::edit::apply::edit_apply::EditApply;
 use crate::draw::elements::core::element_data::ElementData;
 use crate::draw::elements::core::element_style_updatable_data::ElementStyleUpdatableData;
+use crate::draw::elements::types::arrow::arrow_binding::ArrowBindingUtils;
 use crate::draw::elements::types::arrow::arrow_data::{ArrowData, ArrowDataPatch, NullableField};
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_layout::resolve_arrow_geometry_update;
@@ -21,6 +21,9 @@ use crate::draw::elements::types::serial_number::serial_number_layout::resolve_s
 use crate::draw::elements::types::text::text_data::TextData;
 use crate::draw::models::element_state::ElementState;
 use crate::draw::models::interaction_state::TextEditingState;
+use crate::draw::reducers::core::arrow_binding_sync::{
+    apply_element_replacements_and_order, resolve_arrow_bindings_for_changed_bindables,
+};
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::{ArrowType, ElementStyleUpdate};
@@ -165,6 +168,7 @@ where
     let elements_by_id = document.element_map();
 
     let mut replacements_by_id = HashMap::<String, ElementState>::new();
+    let mut changed_bindable_ids = std::collections::HashSet::<String>::new();
     let mut selection_geometry_changed = false;
 
     for id in &target_ids {
@@ -185,6 +189,9 @@ where
         };
 
         replacements_by_id.insert(id.clone(), update.element);
+        if ArrowBindingUtils::is_bindable_target(&replacements_by_id[id]) {
+            changed_bindable_ids.insert(id.clone());
+        }
         if update.geometry_changed {
             selection_geometry_changed = true;
         }
@@ -205,8 +212,37 @@ where
     }
 
     let next_domain = if domain_changed {
-        let next_elements =
-            EditApply::replace_elements_by_id(document.elements().to_vec(), &replacements_by_id);
+        let mut merged_replacements_by_id = replacements_by_id;
+        let mut ordered_element_ids = None;
+
+        if !changed_bindable_ids.is_empty() {
+            let binding_resolution = resolve_arrow_bindings_for_changed_bindables(
+                document.elements(),
+                &changed_bindable_ids,
+                &merged_replacements_by_id,
+            );
+            if !binding_resolution.updated_elements.is_empty() {
+                if track_selection_overlay
+                    && has_selection_geometry_changes(
+                        &selected_ids,
+                        &elements_by_id,
+                        &binding_resolution.updated_elements,
+                    )
+                {
+                    selection_geometry_changed = true;
+                }
+                for (id, element) in binding_resolution.updated_elements {
+                    merged_replacements_by_id.insert(id, element);
+                }
+            }
+            ordered_element_ids = binding_resolution.ordered_element_ids;
+        }
+
+        let next_elements = apply_element_replacements_and_order(
+            document.elements().to_vec(),
+            &merged_replacements_by_id,
+            ordered_element_ids.as_deref(),
+        );
         domain.with_document(document.with_elements(next_elements))
     } else {
         domain.clone()
@@ -311,7 +347,8 @@ fn resolve_data_style_update(
             }
         }
         StyleUpdatedDataKind::Arrow { previous, updated }
-            if previous.arrow_type != updated.arrow_type =>
+            if previous.arrow_type != updated.arrow_type
+                || should_recompute_elbow_after_style_change(&previous, &updated) =>
         {
             let result = resolve_arrow_rect_and_data(&updated_element, &updated, elements_by_id);
             if result.rect != updated_element.rect && track_geometry_change {
@@ -602,6 +639,34 @@ fn resolve_arrow_rect_and_data(
     }
 }
 
+fn has_selection_geometry_changes(
+    selected_ids: &BTreeSet<String>,
+    original_elements_by_id: &HashMap<String, ElementState>,
+    updates_by_id: &HashMap<String, ElementState>,
+) -> bool {
+    for id in selected_ids {
+        let Some(original) = original_elements_by_id.get(id) else {
+            continue;
+        };
+        let Some(updated) = updates_by_id.get(id) else {
+            continue;
+        };
+        if original.rect != updated.rect || original.rotation != updated.rotation {
+            return true;
+        }
+    }
+    false
+}
+
+fn should_recompute_elbow_after_style_change(previous: &ArrowData, next: &ArrowData) -> bool {
+    if previous.arrow_type != ArrowType::Elbow || next.arrow_type != ArrowType::Elbow {
+        return false;
+    }
+
+    previous.start_arrowhead != next.start_arrowhead
+        || previous.end_arrowhead != next.end_arrowhead
+        || previous.stroke_width != next.stroke_width
+}
 fn sanitize_positive_extent(value: f64, fallback: f64) -> f64 {
     if value.is_finite() && value > 0.0 {
         value

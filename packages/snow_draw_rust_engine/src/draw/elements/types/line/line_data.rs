@@ -77,9 +77,9 @@ impl LineData {
             end_arrowhead: ArrowheadStyle::None,
             start_binding: decode_optional_binding(json, "startBinding")?,
             end_binding: decode_optional_binding(json, "endBinding")?,
-            fixed_segments: decode_optional_fixed_segments(json, "fixedSegments")?,
-            start_is_special: decode_optional_bool(json, "startIsSpecial")?,
-            end_is_special: decode_optional_bool(json, "endIsSpecial")?,
+            fixed_segments: None,
+            start_is_special: None,
+            end_is_special: None,
         })
     }
 
@@ -130,15 +130,9 @@ impl LineData {
             end_arrowhead: ArrowheadStyle::None,
             start_binding: resolve_nullable_update(patch.start_binding, &self.start_binding),
             end_binding: resolve_nullable_update(patch.end_binding, &self.end_binding),
-            fixed_segments: normalize_fixed_segments(resolve_nullable_update(
-                patch.fixed_segments,
-                &self.fixed_segments,
-            )),
-            start_is_special: resolve_nullable_update(
-                patch.start_is_special,
-                &self.start_is_special,
-            ),
-            end_is_special: resolve_nullable_update(patch.end_is_special, &self.end_is_special),
+            fixed_segments: None,
+            start_is_special: None,
+            end_is_special: None,
         }
     }
 
@@ -189,18 +183,6 @@ impl LineData {
         json.insert(
             "endBinding".to_string(),
             option_binding_to_json(self.end_binding.as_ref()),
-        );
-        json.insert(
-            "fixedSegments".to_string(),
-            option_fixed_segments_to_json(self.fixed_segments.as_deref()),
-        );
-        json.insert(
-            "startIsSpecial".to_string(),
-            option_bool_to_json(self.start_is_special),
-        );
-        json.insert(
-            "endIsSpecial".to_string(),
-            option_bool_to_json(self.end_is_special),
         );
         json
     }
@@ -274,15 +256,15 @@ impl ArrowLikeData for LineData {
     }
 
     fn fixed_segments(&self) -> Option<&[Self::ElbowFixedSegment]> {
-        self.fixed_segments.as_deref()
+        None
     }
 
     fn start_is_special(&self) -> Option<bool> {
-        self.start_is_special
+        None
     }
 
     fn end_is_special(&self) -> Option<bool> {
-        self.end_is_special
+        None
     }
 
     fn copy_with(
@@ -593,9 +575,16 @@ fn arrowhead_style_to_name(style: ArrowheadStyle) -> &'static str {
         ArrowheadStyle::None => "none",
         ArrowheadStyle::Standard => "standard",
         ArrowheadStyle::Triangle => "triangle",
+        ArrowheadStyle::TriangleOutline => "triangleOutline",
         ArrowheadStyle::Square => "square",
+        ArrowheadStyle::Dot => "dot",
         ArrowheadStyle::Circle => "circle",
+        ArrowheadStyle::CircleOutline => "circleOutline",
         ArrowheadStyle::Diamond => "diamond",
+        ArrowheadStyle::DiamondOutline => "diamondOutline",
+        ArrowheadStyle::CrowfootOne => "crowfootOne",
+        ArrowheadStyle::CrowfootMany => "crowfootMany",
+        ArrowheadStyle::CrowfootOneOrMany => "crowfootOneOrMany",
         ArrowheadStyle::InvertedTriangle => "invertedTriangle",
         ArrowheadStyle::VerticalLine => "verticalLine",
     }

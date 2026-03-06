@@ -10,5 +10,6 @@ impl EditOperationIds {
     pub const MOVE: EditOperationId = "move";
     pub const RESIZE: EditOperationId = "resize";
     pub const ROTATE: EditOperationId = "rotate";
-    pub const ARROW_POINT: EditOperationId = "arrow_point";
+    pub const CONNECTOR_POINT: EditOperationId = "connector_point";
+    pub const ARROW_POINT: EditOperationId = Self::CONNECTOR_POINT;
 }

@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use crate::draw::core::draw_context::DrawContext;
+use crate::draw::elements::types::arrow::arrow_binding::ArrowBindingUtils;
 use crate::draw::elements::types::text::text_data::TextData as DomainTextData;
 use crate::draw::elements::types::text::text_editing_geometry::{
     resolve_auto_resize_text_editing_rect, TextData as GeometryTextData,
@@ -14,6 +15,9 @@ use crate::draw::models::application_state::{
 };
 use crate::draw::models::draw_state::{
     DomainDocumentState, DomainElementState, DomainState as DrawDomainState, DrawState,
+};
+use crate::draw::reducers::core::arrow_binding_sync::{
+    apply_element_replacements_and_order, resolve_arrow_bindings_for_changed_bindables,
 };
 use crate::draw::reducers::core::reducer_utils::apply_selection_change;
 use crate::draw::reducers::element::element_reducer::RefreshAutoResizeTextLayoutsAfterFontLoad;
@@ -201,11 +205,156 @@ where
 pub fn handle_refresh_auto_resize_text_layouts_after_font_load(
     state: DrawState,
     _action: &RefreshAutoResizeTextLayoutsAfterFontLoad,
-    _context: &DrawContext,
+    context: &DrawContext,
 ) -> Option<DrawState> {
-    Some(refresh_auto_resize_text_layouts_after_font_load(
-        &state, None,
-    ))
+    let document = state.domain.document.clone();
+    let selected_ids = state.domain.selection.selected_ids.clone();
+    let should_refresh_selection_overlay = selected_ids.len() > 1;
+    let original_elements_by_id = document.element_map();
+    let text_metrics_service = context
+        .text_metrics_service
+        .as_text_editing_metrics_service();
+
+    let mut replacements_by_id = HashMap::<String, DomainElementState>::new();
+    let mut changed_bindable_ids = HashSet::<String>::new();
+    let mut refresh_selection_overlay = false;
+
+    for element in &document.elements {
+        let Some(data) = decode_domain_text_data(element) else {
+            continue;
+        };
+        if !data.auto_resize {
+            continue;
+        }
+
+        let next_rect = resolve_auto_resize_text_editing_rect(
+            DrawPoint::new(element.rect.min_x, element.rect.min_y),
+            &GeometryTextData {
+                text: data.text,
+                font_size: data.font_size,
+                auto_resize: data.auto_resize,
+            },
+            text_metrics_service,
+            None,
+        );
+        if next_rect == element.rect {
+            continue;
+        }
+
+        let updated_element = element.copy_with(None, Some(next_rect), None, None, None, None);
+        if ArrowBindingUtils::is_bindable_target(&updated_element) {
+            changed_bindable_ids.insert(updated_element.id.clone());
+        }
+        replacements_by_id.insert(updated_element.id.clone(), updated_element);
+
+        if should_refresh_selection_overlay && selected_ids.contains(element.id.as_str()) {
+            refresh_selection_overlay = true;
+        }
+    }
+
+    let mut next_text_interaction = None;
+    if let AppInteractionState::TextEditing(interaction) = &state.application.interaction {
+        if interaction.draft_data.auto_resize {
+            let next_rect = resolve_auto_resize_text_editing_rect(
+                DrawPoint::new(interaction.rect.min_x, interaction.rect.min_y),
+                &GeometryTextData {
+                    text: interaction.draft_data.text.clone(),
+                    font_size: interaction.draft_data.font_size,
+                    auto_resize: interaction.draft_data.auto_resize,
+                },
+                text_metrics_service,
+                None,
+            );
+
+            if next_rect != interaction.rect {
+                next_text_interaction =
+                    Some(interaction.copy_with(None, Some(next_rect), None, None, None, None));
+
+                if should_refresh_selection_overlay
+                    && selected_ids.contains(interaction.element_id.as_str())
+                {
+                    refresh_selection_overlay = true;
+                }
+            }
+        }
+    }
+
+    let has_domain_changes = !replacements_by_id.is_empty();
+    if !has_domain_changes && next_text_interaction.is_none() {
+        return Some(state);
+    }
+
+    let mut merged_replacements_by_id = replacements_by_id;
+    let mut ordered_element_ids = None;
+    if has_domain_changes && !changed_bindable_ids.is_empty() {
+        let binding_resolution = resolve_arrow_bindings_for_changed_bindables(
+            &document.elements,
+            &changed_bindable_ids,
+            &merged_replacements_by_id,
+        );
+        if !binding_resolution.updated_elements.is_empty() {
+            if should_refresh_selection_overlay
+                && has_selection_geometry_changes(
+                    &selected_ids,
+                    &original_elements_by_id,
+                    &binding_resolution.updated_elements,
+                )
+            {
+                refresh_selection_overlay = true;
+            }
+
+            for (id, element) in binding_resolution.updated_elements {
+                merged_replacements_by_id.insert(id, element);
+            }
+        }
+        ordered_element_ids = binding_resolution.ordered_element_ids;
+    }
+
+    let mut next_state = state;
+    if has_domain_changes {
+        let next_elements = apply_element_replacements_and_order(
+            document.elements.clone(),
+            &merged_replacements_by_id,
+            ordered_element_ids.as_deref(),
+        );
+        let next_document = document.copy_with(Some(next_elements), None, None);
+        let next_domain = next_state.domain.copy_with(Some(next_document), None);
+        next_state = next_state.copy_with(Some(next_domain), None);
+    }
+
+    if let Some(next_text_interaction) = next_text_interaction {
+        let next_application = next_state.application.copy_with(
+            None,
+            Some(AppInteractionState::TextEditing(next_text_interaction)),
+            None,
+        );
+        next_state = next_state.copy_with(None, Some(next_application));
+    }
+
+    if !refresh_selection_overlay {
+        return Some(next_state);
+    }
+
+    Some(apply_selection_change(&next_state, selected_ids, true))
+}
+
+fn has_selection_geometry_changes(
+    selected_ids: &BTreeSet<String>,
+    original_elements_by_id: &HashMap<String, DomainElementState>,
+    updates_by_id: &HashMap<String, DomainElementState>,
+) -> bool {
+    for id in selected_ids {
+        let Some(original) = original_elements_by_id.get(id) else {
+            continue;
+        };
+        let Some(updated) = updates_by_id.get(id) else {
+            continue;
+        };
+        if original.rect != updated.rect || original.rotation != updated.rotation {
+            return true;
+        }
+    }
+    false
 }
 
 impl TextLayoutRefreshElement for DomainElementState {

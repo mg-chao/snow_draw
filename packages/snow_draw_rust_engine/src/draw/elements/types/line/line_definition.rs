@@ -2,7 +2,7 @@ use std::sync::LazyLock;
 
 use crate::draw::elements::core::element_data::ElementTypeId;
 use crate::draw::elements::core::element_definition::ElementDefinition;
-use crate::draw::elements::types::arrow::arrow_creation_strategy::ArrowCreationStrategy;
+use crate::draw::elements::types::connector::connector_creation_strategy::LineCreationStrategy;
 
 use super::line_data::LineData;
 use super::line_hit_tester::LineHitTester;
@@ -10,7 +10,7 @@ use super::line_task_encoder::LineTaskEncoder;
 
 /// Typed Rust alias for the Dart `ElementDefinition<LineData>`.
 pub type LineDefinition =
-    ElementDefinition<LineData, LineHitTester, LineTaskEncoder, ArrowCreationStrategy>;
+    ElementDefinition<LineData, LineHitTester, LineTaskEncoder, LineCreationStrategy>;
 
 /// Shared line element definition, equivalent to Dart `const lineDefinition`.
 pub static LINE_DEFINITION: LazyLock<LineDefinition> = LazyLock::new(build_line_definition);
@@ -28,7 +28,7 @@ fn build_line_definition() -> LineDefinition {
         LineData::default,
         |json| LineData::from_json(json).unwrap_or_default(),
         LineTaskEncoder,
-        Some(ArrowCreationStrategy::new()),
+        Some(LineCreationStrategy::new()),
     )
 }
 

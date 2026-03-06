@@ -1422,6 +1422,7 @@ fn compat_binding_to_internal(binding: &CompatArrowBinding) -> ArrowDataBinding 
         match binding.mode {
             CompatArrowBindingMode::Inside => ArrowDataBindingMode::Inside,
             CompatArrowBindingMode::Orbit => ArrowDataBindingMode::Orbit,
+            CompatArrowBindingMode::Skip => ArrowDataBindingMode::Skip,
         },
     )
 }
@@ -1433,6 +1434,7 @@ fn internal_binding_to_compat(binding: &ArrowDataBinding) -> CompatArrowBinding 
         match binding.mode {
             ArrowDataBindingMode::Inside => CompatArrowBindingMode::Inside,
             ArrowDataBindingMode::Orbit => CompatArrowBindingMode::Orbit,
+            ArrowDataBindingMode::Skip => CompatArrowBindingMode::Skip,
         },
     )
 }

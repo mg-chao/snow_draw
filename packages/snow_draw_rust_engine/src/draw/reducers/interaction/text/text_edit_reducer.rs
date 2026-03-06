@@ -5,9 +5,9 @@ use std::sync::Arc;
 
 use crate::draw::config::draw_config::ElementStyleConfig;
 use crate::draw::core::draw_context::DrawContext;
-use crate::draw::edit::apply::edit_apply::EditApply;
 use crate::draw::elements::core::element_data::ElementData;
 use crate::draw::elements::core::element_style_configurable_data::ElementStyleConfigurableData;
+use crate::draw::elements::types::arrow::arrow_binding::ArrowBindingUtils;
 use crate::draw::elements::types::serial_number::serial_number_dependencies::{
     clear_element_dependencies_for_ids, DependencyFilter,
 };
@@ -18,6 +18,10 @@ use crate::draw::elements::types::text::text_editing_geometry::{
 };
 use crate::draw::models::element_state::ElementState;
 use crate::draw::models::interaction_state::TextEditingState;
+use crate::draw::reducers::core::arrow_binding_sync::{
+    apply_element_replacements_and_order, resolve_arrow_bindings_for_changed_bindables,
+    sync_arrow_bindings_after_deletion,
+};
 use crate::draw::reducers::core::reducer_utils::resolve_next_z_index;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
@@ -419,9 +423,25 @@ impl TextEditReducer {
             current_element.copy_with(None, Some(rect), None, None, None, Some(Arc::new(data))),
         );
 
-        let next_elements = EditApply::replace_elements_by_id(
-            state.document_elements().to_vec(),
+        let changed_bindable_ids = if ArrowBindingUtils::is_bindable_target(current_element) {
+            HashSet::from([interaction.element_id.clone()])
+        } else {
+            HashSet::new()
+        };
+        let binding_resolution = resolve_arrow_bindings_for_changed_bindables(
+            state.document_elements(),
+            &changed_bindable_ids,
             &replacements_by_id,
+        );
+        let mut merged_replacements = replacements_by_id;
+        for (id, element) in binding_resolution.updated_elements {
+            merged_replacements.insert(id, element);
+        }
+
+        let next_elements = apply_element_replacements_and_order(
+            state.document_elements().to_vec(),
+            &merged_replacements,
+            binding_resolution.ordered_element_ids.as_deref(),
         );
         let next_state = state.with_document_elements(next_elements);
 
@@ -432,11 +452,26 @@ impl TextEditReducer {
     where
         S: TextEditReducerState,
     {
+        let deleted_was_bindable = state
+            .document_elements()
+            .iter()
+            .find(|element| element.id == interaction.element_id)
+            .is_some_and(ArrowBindingUtils::is_bindable_target);
         let next_state = match self.remove_text_element_and_unbind_references(
             state.document_elements(),
             &interaction.element_id,
         ) {
-            Some(next_elements) => state.with_document_elements(next_elements),
+            Some(next_elements) => {
+                let synced = if deleted_was_bindable {
+                    sync_arrow_bindings_after_deletion(
+                        next_elements,
+                        &HashSet::from([interaction.element_id.clone()]),
+                    )
+                } else {
+                    next_elements
+                };
+                state.with_document_elements(synced)
+            }
             None => state.clone(),
         };
 
@@ -458,8 +493,14 @@ impl TextEditReducer {
                 continue;
             }
 
-            let updated =
-                clear_element_dependencies_for_ids(element, &deleted_ids, DependencyFilter::all());
+            let updated = clear_element_dependencies_for_ids(
+                element,
+                &deleted_ids,
+                DependencyFilter {
+                    include_serial_bindings: true,
+                    include_arrow_bindings: false,
+                },
+            );
             if updated != *element {
                 changed = true;
             }

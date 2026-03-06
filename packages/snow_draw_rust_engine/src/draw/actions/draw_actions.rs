@@ -239,12 +239,12 @@ impl UpdateCreatingElement {
 impl_draw_action_editing_conflict!(UpdateCreatingElement);
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-pub struct AddArrowPoint {
+pub struct AddConnectorPoint {
     pub position: DrawPoint,
     pub snap_override: bool,
 }
 
-impl AddArrowPoint {
+impl AddConnectorPoint {
     pub const fn new(position: DrawPoint, snap_override: bool) -> Self {
         Self {
             position,
@@ -253,7 +253,9 @@ impl AddArrowPoint {
     }
 }
 
-impl_draw_action_editing_conflict!(AddArrowPoint);
+impl_draw_action_editing_conflict!(AddConnectorPoint);
+
+pub type AddArrowPoint = AddConnectorPoint;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct FinishCreateElement;

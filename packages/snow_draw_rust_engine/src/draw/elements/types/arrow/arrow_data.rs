@@ -17,6 +17,7 @@ use thiserror::Error;
 pub enum ArrowBindingMode {
     Inside,
     Orbit,
+    Skip,
 }
 
 /// Arrow endpoint binding metadata.
@@ -617,9 +618,16 @@ fn arrowhead_style_to_name(style: ArrowheadStyle) -> &'static str {
         ArrowheadStyle::None => "none",
         ArrowheadStyle::Standard => "standard",
         ArrowheadStyle::Triangle => "triangle",
+        ArrowheadStyle::TriangleOutline => "triangleOutline",
         ArrowheadStyle::Square => "square",
+        ArrowheadStyle::Dot => "dot",
         ArrowheadStyle::Circle => "circle",
+        ArrowheadStyle::CircleOutline => "circleOutline",
         ArrowheadStyle::Diamond => "diamond",
+        ArrowheadStyle::DiamondOutline => "diamondOutline",
+        ArrowheadStyle::CrowfootOne => "crowfootOne",
+        ArrowheadStyle::CrowfootMany => "crowfootMany",
+        ArrowheadStyle::CrowfootOneOrMany => "crowfootOneOrMany",
         ArrowheadStyle::InvertedTriangle => "invertedTriangle",
         ArrowheadStyle::VerticalLine => "verticalLine",
     }
@@ -630,9 +638,16 @@ fn arrowhead_style_from_name(raw: &str) -> Option<ArrowheadStyle> {
         "none" => Some(ArrowheadStyle::None),
         "standard" => Some(ArrowheadStyle::Standard),
         "triangle" => Some(ArrowheadStyle::Triangle),
+        "triangleOutline" => Some(ArrowheadStyle::TriangleOutline),
         "square" => Some(ArrowheadStyle::Square),
+        "dot" => Some(ArrowheadStyle::Dot),
         "circle" => Some(ArrowheadStyle::Circle),
+        "circleOutline" => Some(ArrowheadStyle::CircleOutline),
         "diamond" => Some(ArrowheadStyle::Diamond),
+        "diamondOutline" => Some(ArrowheadStyle::DiamondOutline),
+        "crowfootOne" => Some(ArrowheadStyle::CrowfootOne),
+        "crowfootMany" => Some(ArrowheadStyle::CrowfootMany),
+        "crowfootOneOrMany" => Some(ArrowheadStyle::CrowfootOneOrMany),
         "invertedTriangle" => Some(ArrowheadStyle::InvertedTriangle),
         "verticalLine" => Some(ArrowheadStyle::VerticalLine),
         _ => None,
@@ -643,6 +658,7 @@ fn binding_mode_to_name(mode: ArrowBindingMode) -> &'static str {
     match mode {
         ArrowBindingMode::Inside => "inside",
         ArrowBindingMode::Orbit => "orbit",
+        ArrowBindingMode::Skip => "skip",
     }
 }
 
@@ -650,6 +666,7 @@ fn binding_mode_from_name(raw: &str) -> Option<ArrowBindingMode> {
     match raw {
         "inside" => Some(ArrowBindingMode::Inside),
         "orbit" => Some(ArrowBindingMode::Orbit),
+        "skip" => Some(ArrowBindingMode::Skip),
         _ => None,
     }
 }

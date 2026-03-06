@@ -1,5 +1,6 @@
 ﻿#![allow(dead_code)]
 pub mod arrow;
+pub mod connector;
 pub mod filter;
 pub mod free_draw;
 pub mod highlight;

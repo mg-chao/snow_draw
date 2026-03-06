@@ -23,3 +23,13 @@ pub fn resolve_arrow_point_handle_size(control_point_size: f64) -> f64 {
     }
     control_point_size * ARROW_POINT_SIZE_MULTIPLIER
 }
+
+/// Resolves the loop-closing threshold for connector-point interactions.
+pub fn resolve_connector_point_loop_threshold(hit_radius: f64) -> f64 {
+    resolve_arrow_point_loop_threshold(hit_radius)
+}
+
+/// Resolves rendered connector-point handle size from control-point size.
+pub fn resolve_connector_point_handle_size(control_point_size: f64) -> f64 {
+    resolve_arrow_point_handle_size(control_point_size)
+}

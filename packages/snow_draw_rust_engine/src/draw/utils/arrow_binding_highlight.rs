@@ -3,6 +3,7 @@
 use serde_json::Value;
 
 use crate::draw::edit::arrow::arrow_point_operation::{ArrowPointEditContext, ArrowPointKind};
+use crate::draw::edit::connector::connector_point_operation::ConnectorPointEditContext;
 use crate::draw::elements::core::element_data::ElementData;
 use crate::draw::elements::types::arrow::arrow_data::{ArrowBinding, ArrowBindingMode, ArrowData};
 use crate::draw::elements::types::line::line_data::LineData;
@@ -45,6 +46,15 @@ pub fn resolve_arrow_point_edit_highlight_binding(
     }
 }
 
+/// Resolves the binding to highlight during connector-point editing.
+pub fn resolve_connector_point_edit_highlight_binding(
+    context: &ConnectorPointEditContext,
+    bindings: &ArrowBindingPair,
+    transform: Option<&EditTransform>,
+) -> Option<ArrowBinding> {
+    resolve_arrow_point_edit_highlight_binding(context, bindings, transform)
+}
+
 /// Fallback endpoint-binding resolver when only active index is available.
 ///
 /// This is used by view layers where operation-specific typed context is not
@@ -76,6 +86,21 @@ pub fn resolve_arrow_point_highlight_binding_from_active_index(
         ArrowEndpoint::Start => bindings.start_binding.clone(),
         ArrowEndpoint::End => bindings.end_binding.clone(),
     }
+}
+
+/// Fallback endpoint-binding resolver for connector-point overlays.
+pub fn resolve_connector_point_highlight_binding_from_active_index(
+    points_len: usize,
+    active_index: Option<usize>,
+    bindings: &ArrowBindingPair,
+    transform: Option<&EditTransform>,
+) -> Option<ArrowBinding> {
+    resolve_arrow_point_highlight_binding_from_active_index(
+        points_len,
+        active_index,
+        bindings,
+        transform,
+    )
 }
 
 /// Extracts endpoint bindings from a runtime element payload.
@@ -156,6 +181,7 @@ fn parse_binding_mode(raw: &str) -> Option<ArrowBindingMode> {
     match raw {
         "inside" => Some(ArrowBindingMode::Inside),
         "orbit" => Some(ArrowBindingMode::Orbit),
+        "skip" => Some(ArrowBindingMode::Skip),
         _ => None,
     }
 }
