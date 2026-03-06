@@ -362,7 +362,16 @@ where
             .fixed_segments_override
             .as_deref()
             .or(self.data.fixed_segments.as_deref());
-        let fixed_segments = sanitize_fixed_segments(requested_fixed, incoming_points.len());
+        let fixed_segment_point_count = if self.fixed_segments_override.is_none()
+            && incoming_points.len() == 2
+            && base_points.len() > incoming_points.len()
+            && requested_fixed.is_some()
+        {
+            base_points.len()
+        } else {
+            incoming_points.len()
+        };
+        let fixed_segments = sanitize_fixed_segments(requested_fixed, fixed_segment_point_count);
 
         let start_binding = resolve_binding_override(
             &self.start_binding_override,

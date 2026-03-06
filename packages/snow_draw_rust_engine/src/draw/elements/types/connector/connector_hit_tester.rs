@@ -83,10 +83,6 @@ mod tests {
             data: &ArrowData::default(),
         };
 
-        assert!(!tester.hit_test_connector(
-            &element,
-            DrawPoint::new(200.0, 200.0),
-            1.0,
-        ));
+        assert!(!tester.hit_test_connector(&element, DrawPoint::new(200.0, 200.0), 1.0,));
     }
 }

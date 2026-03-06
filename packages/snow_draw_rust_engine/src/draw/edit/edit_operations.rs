@@ -1348,6 +1348,20 @@ fn finalize_endpoint_drag_on_finish(
         .ordered_element_ids
         .clone()
         .unwrap_or_else(|| current_ordered_element_ids(state));
+
+    if source_data.arrow_type == ArrowType::Elbow {
+        return finalize_elbow_endpoint_drag_on_finish(
+            state,
+            context,
+            transform,
+            &current_element,
+            &source_data,
+            local_points,
+            release_local_pointer,
+            ordered_element_ids.as_slice(),
+        );
+    }
+
     let start_binding = transform
         .start_binding
         .as_ref()
@@ -1383,29 +1397,6 @@ fn finalize_endpoint_drag_on_finish(
         .as_ref()
         .map(compat_binding_to_internal);
 
-    if source_data.arrow_type == ArrowType::Elbow {
-        let mut next_start_binding = next_start_binding;
-        let mut next_end_binding = next_end_binding;
-        if active_index == 0 {
-            next_end_binding = transform.end_binding.clone();
-        } else {
-            next_start_binding = transform.start_binding.clone();
-        }
-        let bindings_changed = next_start_binding != transform.start_binding
-            || next_end_binding != transform.end_binding;
-        let order_changed = drag_result.ordered_element_ids.is_some();
-        if !bindings_changed && !order_changed {
-            return None;
-        }
-        return Some(FinalizeEndpointComputation {
-            points: local_points.to_vec(),
-            start_binding: next_start_binding,
-            end_binding: next_end_binding,
-            fixed_segments: transform.fixed_segments.clone(),
-            ordered_element_ids: drag_result.ordered_element_ids,
-        });
-    }
-
     let points_changed = !point_list_equals(local_points, &drag_result.local_points);
     let bindings_changed =
         next_start_binding != transform.start_binding || next_end_binding != transform.end_binding;
@@ -1425,6 +1416,179 @@ fn finalize_endpoint_drag_on_finish(
         end_binding: next_end_binding,
         fixed_segments: drag_result.fixed_segments,
         ordered_element_ids: drag_result.ordered_element_ids,
+    })
+}
+
+fn finalize_elbow_endpoint_drag_on_finish(
+    state: &DrawState,
+    context: &ArrowPointEditContext,
+    transform: &ArrowPointTransform,
+    current_element: &DomainElementState,
+    source_data: &ArrowData,
+    local_points: &[DrawPoint],
+    release_local_pointer: DrawPoint,
+    ordered_element_ids: &[String],
+) -> Option<FinalizeEndpointComputation> {
+    let base_points = context.initial_points.as_slice();
+    if base_points.len() < 2 {
+        return None;
+    }
+
+    let active_index = transform.active_index?;
+    let dragged_start = active_index == 0;
+    let dragged_end = active_index + 1 == local_points.len();
+    if !dragged_start && !dragged_end {
+        return None;
+    }
+
+    let mut next_start_binding = transform.start_binding.clone();
+    let mut next_end_binding = transform.end_binding.clone();
+    let mut reordered_element_ids = None;
+
+    if !transform.allow_binding_on_finalize {
+        if dragged_start {
+            next_start_binding = None;
+        } else {
+            next_end_binding = None;
+        }
+    } else {
+        let world_target = context.to_world(release_local_pointer);
+        let endpoint_index = if dragged_start {
+            0
+        } else {
+            base_points.len() - 1
+        };
+        let mut preview_points = base_points.to_vec();
+        preview_points[endpoint_index] = release_local_pointer;
+
+        let start_binding = transform
+            .start_binding
+            .as_ref()
+            .map(internal_binding_to_compat);
+        let end_binding = transform
+            .end_binding
+            .as_ref()
+            .map(internal_binding_to_compat);
+        let drag_result = finalize_arrow_core_endpoint_drag_result(
+            state,
+            current_element,
+            source_data,
+            &preview_points,
+            endpoint_index,
+            world_target,
+            start_binding.as_ref(),
+            end_binding.as_ref(),
+            context.element_id.as_str(),
+            true,
+            transform.allow_binding_on_finalize,
+            0.0,
+            core_context_for_state(state, transform.allow_binding_on_finalize),
+            if context.initial_fixed_segments.is_empty() {
+                None
+            } else {
+                Some(context.initial_fixed_segments.as_slice())
+            },
+            Some(ordered_element_ids),
+            Default::default(),
+        )?;
+        next_start_binding = drag_result
+            .start_binding
+            .as_ref()
+            .map(compat_binding_to_internal);
+        next_end_binding = drag_result
+            .end_binding
+            .as_ref()
+            .map(compat_binding_to_internal);
+        reordered_element_ids = drag_result.ordered_element_ids;
+    }
+
+    if dragged_start {
+        next_end_binding = transform.end_binding.clone();
+    } else {
+        next_start_binding = transform.start_binding.clone();
+    }
+
+    let start_point = if dragged_start {
+        release_local_pointer
+    } else {
+        base_points.first().copied().unwrap_or(DrawPoint::ZERO)
+    };
+    let end_point = if dragged_end {
+        release_local_pointer
+    } else {
+        base_points.last().copied().unwrap_or(DrawPoint::ZERO)
+    };
+
+    let updated_data = source_data.copy_with(ArrowDataPatch {
+        start_binding: match next_start_binding.clone() {
+            Some(binding) => ArrowDataNullableField::Value(binding),
+            None => ArrowDataNullableField::Null,
+        },
+        end_binding: match next_end_binding.clone() {
+            Some(binding) => ArrowDataNullableField::Value(binding),
+            None => ArrowDataNullableField::Null,
+        },
+        ..ArrowDataPatch::default()
+    });
+    let element_map = state.domain.document.element_map();
+    let updates: HashMap<String, DomainElementState> = HashMap::new();
+    let lookup = CombinedElementLookup::new(&element_map, &updates);
+    let updated = compute_elbow_edit(
+        current_element,
+        &updated_data,
+        &lookup,
+        Some(vec![start_point, end_point]),
+        Some(context.initial_fixed_segments.clone()),
+        ElbowBindingOverride::Unset,
+        ElbowBindingOverride::Unset,
+        true,
+    );
+
+    let base_fixed_segments = if context.initial_fixed_segments.is_empty() {
+        None
+    } else {
+        Some(context.initial_fixed_segments.as_slice())
+    };
+    let bindings_changed =
+        next_start_binding != transform.start_binding || next_end_binding != transform.end_binding;
+    if !bindings_changed
+        && reordered_element_ids.is_none()
+        && base_fixed_segments.is_some()
+        && base_points.len() > 2
+    {
+        let mut updated_points = base_points.to_vec();
+        updated_points[0] = local_points.first().copied().unwrap_or(DrawPoint::ZERO);
+        let last_index = updated_points.len() - 1;
+        updated_points[last_index] = local_points.last().copied().unwrap_or(DrawPoint::ZERO);
+        if point_list_equals(base_points, &updated_points) {
+            return None;
+        }
+        return Some(FinalizeEndpointComputation {
+            points: updated_points,
+            start_binding: next_start_binding,
+            end_binding: next_end_binding,
+            fixed_segments: Some(context.initial_fixed_segments.clone()),
+            ordered_element_ids: reordered_element_ids,
+        });
+    }
+
+    let points_changed = !point_list_equals(base_points, &updated.local_points);
+    let segments_changed = !fixed_segment_structure_equals_with_tolerance(
+        base_fixed_segments,
+        updated.fixed_segments.as_deref(),
+        1.0,
+    );
+    let order_changed = reordered_element_ids.is_some();
+    if !points_changed && !bindings_changed && !segments_changed && !order_changed {
+        return None;
+    }
+
+    Some(FinalizeEndpointComputation {
+        points: updated.local_points,
+        start_binding: next_start_binding,
+        end_binding: next_end_binding,
+        fixed_segments: updated.fixed_segments,
+        ordered_element_ids: reordered_element_ids,
     })
 }
 
@@ -1522,6 +1686,43 @@ fn compute_updated_arrow_element(
                 });
                 Some((Arc::new(updated_data), layout.rect))
             } else if data.arrow_type == ArrowType::Elbow {
+                let has_finalized_endpoint_path = finalize
+                    && context.point_kind == OperationArrowPointKind::Turning
+                    && transform
+                        .active_index
+                        .is_some_and(|index| index >= next_world_points.len())
+                    && transform.fixed_segments.is_some();
+                if has_finalized_endpoint_path {
+                    let geometry = resolve_arrow_geometry_update(
+                        &next_world_points,
+                        context.element_rect,
+                        context.rotation,
+                        data.arrow_type,
+                    );
+                    let transformed_fixed_segments = transform_fixed_segments(
+                        transform.fixed_segments.as_deref(),
+                        context.element_rect,
+                        geometry.rect,
+                        context.rotation,
+                    );
+                    let updated_data = data_with_bindings.copy_with(ArrowDataPatch {
+                        points: Some(geometry.normalized_points),
+                        fixed_segments: match transformed_fixed_segments {
+                            Some(segments) => ArrowDataNullableField::Value(segments),
+                            None => ArrowDataNullableField::Null,
+                        },
+                        ..ArrowDataPatch::default()
+                    });
+                    return Some(DomainElementState::new(
+                        current_element.id.clone(),
+                        geometry.rect,
+                        current_element.rotation,
+                        current_element.opacity,
+                        current_element.z_index,
+                        Arc::new(updated_data),
+                    ));
+                }
+
                 let element_map = state.domain.document.element_map();
                 let updates = HashMap::new();
                 let lookup = CombinedElementLookup::new(&element_map, &updates);
@@ -1855,10 +2056,152 @@ mod tests {
             Some("box")
         );
         assert_eq!(finalized.start_binding, None);
-        assert_eq!(finalized.points, local_points);
+        assert_eq!(
+            finalized.points.first().copied(),
+            Some(DrawPoint::new(0.0, 0.0))
+        );
+        assert_eq!(
+            finalized.points.last().copied(),
+            Some(DrawPoint::new(90.0, 110.0))
+        );
         assert_eq!(
             finalized.ordered_element_ids,
             Some(vec!["box".to_owned(), "arrow".to_owned()])
         );
+    }
+
+    #[test]
+    fn finalize_elbow_endpoint_drag_reroutes_from_endpoints_only() {
+        let fixed_segments = vec![
+            ArrowDataElbowFixedSegment::new(
+                2,
+                DrawPoint::new(20.0, 0.0),
+                DrawPoint::new(20.0, 20.0),
+            ),
+            ArrowDataElbowFixedSegment::new(
+                4,
+                DrawPoint::new(40.0, 20.0),
+                DrawPoint::new(40.0, 40.0),
+            ),
+        ];
+        let initial_points = vec![
+            DrawPoint::new(0.0, 0.0),
+            DrawPoint::new(20.0, 0.0),
+            DrawPoint::new(20.0, 20.0),
+            DrawPoint::new(40.0, 20.0),
+            DrawPoint::new(40.0, 40.0),
+            DrawPoint::new(60.0, 40.0),
+            DrawPoint::new(60.0, 60.0),
+            DrawPoint::new(80.0, 60.0),
+        ];
+        let preview_points = vec![
+            DrawPoint::new(0.0, 10.0),
+            DrawPoint::new(20.0, 0.0),
+            DrawPoint::new(20.0, 20.0),
+            DrawPoint::new(40.0, 20.0),
+            DrawPoint::new(40.0, 40.0),
+            DrawPoint::new(60.0, 40.0),
+            DrawPoint::new(60.0, 60.0),
+            DrawPoint::new(80.0, 60.0),
+            DrawPoint::new(80.0, 90.0),
+        ];
+        let arrow_data = ArrowData::default().copy_with(ArrowDataPatch {
+            arrow_type: Some(ArrowType::Elbow),
+            points: Some(initial_points.clone()),
+            fixed_segments: ArrowDataNullableField::Value(fixed_segments.clone()),
+            end_arrowhead: Some(ArrowheadStyle::Standard),
+            ..ArrowDataPatch::default()
+        });
+        let arrow = arrow_element("arrow", DrawRect::new(0.0, 0.0, 80.0, 60.0), arrow_data, 0);
+        let state = draw_state(vec![arrow.clone()]);
+        let context = ArrowPointEditContext::from_start_position(
+            arrow.id.clone(),
+            arrow.rect,
+            arrow.rotation,
+            DrawPoint::new(80.0, 60.0),
+            initial_points,
+            fixed_segments,
+            ArrowType::Elbow,
+            OperationArrowPointKind::Turning,
+            7,
+            false,
+            false,
+            ArrowheadStyle::None,
+            ArrowheadStyle::Standard,
+            None,
+            None,
+            false,
+        );
+        let transform = ArrowPointTransform::with_state(
+            DrawPoint::new(80.0, 90.0),
+            preview_points.clone(),
+            Some(vec![
+                ArrowDataElbowFixedSegment::new(
+                    2,
+                    DrawPoint::new(20.0, 0.0),
+                    DrawPoint::new(20.0, 20.0),
+                ),
+                ArrowDataElbowFixedSegment::new(
+                    4,
+                    DrawPoint::new(40.0, 20.0),
+                    DrawPoint::new(40.0, 40.0),
+                ),
+            ]),
+            None,
+            None,
+            None,
+            Some(preview_points.len() - 1),
+            false,
+            false,
+            true,
+            true,
+        );
+
+        let finalized =
+            finalize_endpoint_drag_on_finish(&state, &context, &transform, &preview_points)
+                .expect("finalized elbow endpoint reroute");
+        assert_eq!(finalized.points.len(), 8);
+        assert_eq!(finalized.fixed_segments.as_ref().map(Vec::len), Some(2));
+        let effective_transform = transform.copy_with(
+            None,
+            Some(finalized.points),
+            Some(finalized.fixed_segments),
+            Some(finalized.start_binding),
+            Some(finalized.end_binding),
+            Some(finalized.ordered_element_ids),
+            None,
+            None,
+            None,
+            Some(true),
+            None,
+        );
+        let updated_element = compute_updated_arrow_element(
+            &ArrowPointOperation::new(),
+            &state,
+            &context,
+            &into_internal_arrow_transform(&effective_transform),
+            true,
+            true,
+        )
+        .expect("updated elbow element");
+        let updated_target =
+            resolve_arrow_target_for_element(updated_element.clone()).expect("arrow target");
+        let updated_data = match updated_target.payload {
+            ArrowEditPayload::Arrow(data) => data,
+            ArrowEditPayload::Line(_) => panic!("expected arrow payload"),
+        };
+        let updated_points =
+            ArrowGeometry::resolve_world_points(updated_target.element.rect, &updated_data.points);
+
+        assert_eq!(updated_points.len(), 8);
+        assert_eq!(
+            updated_points.first().copied(),
+            Some(DrawPoint::new(0.0, 10.0))
+        );
+        assert_eq!(
+            updated_points.last().copied(),
+            Some(DrawPoint::new(80.0, 90.0))
+        );
+        assert_eq!(updated_data.fixed_segments.as_ref().map(Vec::len), Some(2));
     }
 }

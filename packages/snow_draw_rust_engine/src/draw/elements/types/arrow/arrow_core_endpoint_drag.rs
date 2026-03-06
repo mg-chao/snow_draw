@@ -15,12 +15,12 @@ use crate::draw::elements::types::arrow::arrow_core_ops::{
     calculate_core_fixed_point_for_binding, resolve_core_max_binding_distance,
     ArrowCoreEndpointBindingOptions,
 };
+use crate::draw::elements::types::arrow::arrow_scene::project_arrow_bindable_candidates;
 use crate::draw::elements::types::arrow::core::arrow_order_core::{
     reorder_arrow_above_hovered_bindable, reordered_element_ids_from_hovered_reorder,
 };
 use crate::draw::elements::types::arrow::core::arrow_types::ReorderArrowAboveHoveredBindableInput;
 use crate::draw::elements::types::arrow::elbow::elbow_fixed_segment::ElbowFixedSegment;
-use crate::draw::elements::types::arrow::arrow_scene::project_arrow_bindable_candidates;
 use crate::draw::models::draw_state::{DomainElementState, DrawState};
 use crate::draw::models::element_state::ElementState;
 use crate::draw::types::draw_point::DrawPoint;
@@ -636,7 +636,11 @@ mod tests {
     fn compute_endpoint_drag_disables_existing_binding_when_new_bindings_are_disallowed() {
         let existing_end = binding("box");
         let data = arrow_data_with(None, Some(existing_end.clone()));
-        let arrow = arrow_element("arrow", DrawRect::new(60.0, 60.0, 220.0, 60.0), data.clone());
+        let arrow = arrow_element(
+            "arrow",
+            DrawRect::new(60.0, 60.0, 220.0, 60.0),
+            data.clone(),
+        );
         let target = rectangle_element("box", DrawRect::new(220.0, 20.0, 320.0, 120.0));
         let state = draw_state(vec![arrow.clone(), target]);
 
@@ -676,7 +680,11 @@ mod tests {
             ArrowBindingMode::Orbit,
         );
         let data = arrow_data_with(Some(existing_start.clone()), Some(existing_end.clone()));
-        let arrow = arrow_element("arrow", DrawRect::new(70.0, 70.0, 270.0, 70.0), data.clone());
+        let arrow = arrow_element(
+            "arrow",
+            DrawRect::new(70.0, 70.0, 270.0, 70.0),
+            data.clone(),
+        );
         let start_target = rectangle_element("rect-start", DrawRect::new(20.0, 20.0, 120.0, 120.0));
         let end_target = rectangle_element("rect-end", DrawRect::new(220.0, 20.0, 320.0, 120.0));
         let state = draw_state(vec![arrow.clone(), start_target, end_target]);
@@ -749,7 +757,11 @@ mod tests {
             ArrowBindingMode::Inside,
         );
         let data = arrow_data_with(Some(existing_start.clone()), None);
-        let arrow = arrow_element("arrow", DrawRect::new(40.0, 40.0, 220.0, 40.0), data.clone());
+        let arrow = arrow_element(
+            "arrow",
+            DrawRect::new(40.0, 40.0, 220.0, 40.0),
+            data.clone(),
+        );
         let start_target = rectangle_element("rect-start", DrawRect::new(0.0, 0.0, 120.0, 120.0));
         let state = draw_state(vec![arrow.clone(), start_target]);
 
@@ -787,11 +799,16 @@ mod tests {
             DrawPoint::new(0.5001, 0.5001),
             ArrowBindingMode::Orbit,
         );
-        let elbow_data = arrow_data_with(Some(existing_start.clone()), None).copy_with(ArrowDataPatch {
-            arrow_type: Some(ArrowType::Elbow),
-            ..Default::default()
-        });
-        let arrow = arrow_element("arrow", DrawRect::new(70.0, 70.0, 220.0, 70.0), elbow_data.clone());
+        let elbow_data =
+            arrow_data_with(Some(existing_start.clone()), None).copy_with(ArrowDataPatch {
+                arrow_type: Some(ArrowType::Elbow),
+                ..Default::default()
+            });
+        let arrow = arrow_element(
+            "arrow",
+            DrawRect::new(70.0, 70.0, 220.0, 70.0),
+            elbow_data.clone(),
+        );
         let start_target = rectangle_element("rect-start", DrawRect::new(20.0, 20.0, 120.0, 120.0));
         let end_target = rectangle_element("rect-end", DrawRect::new(260.0, 20.0, 360.0, 120.0));
         let state = draw_state(vec![arrow.clone(), start_target, end_target.clone()]);
@@ -842,11 +859,16 @@ mod tests {
             DrawPoint::new(0.5001, 0.5001),
             ArrowBindingMode::Orbit,
         );
-        let elbow_data = arrow_data_with(Some(existing_start.clone()), Some(existing_end)).copy_with(ArrowDataPatch {
-            arrow_type: Some(ArrowType::Elbow),
-            ..Default::default()
-        });
-        let arrow = arrow_element("arrow", DrawRect::new(70.0, 70.0, 280.0, 70.0), elbow_data.clone());
+        let elbow_data = arrow_data_with(Some(existing_start.clone()), Some(existing_end))
+            .copy_with(ArrowDataPatch {
+                arrow_type: Some(ArrowType::Elbow),
+                ..Default::default()
+            });
+        let arrow = arrow_element(
+            "arrow",
+            DrawRect::new(70.0, 70.0, 280.0, 70.0),
+            elbow_data.clone(),
+        );
         let start_target = rectangle_element("rect-start", DrawRect::new(20.0, 20.0, 120.0, 120.0));
         let end_target = rectangle_element("rect-end", DrawRect::new(260.0, 20.0, 360.0, 120.0));
         let state = draw_state(vec![arrow.clone(), start_target, end_target]);
@@ -859,13 +881,17 @@ mod tests {
             1,
             DrawPoint::new(520.0, 340.0),
             Some(&existing_start),
-            elbow_data.end_binding.as_ref().map(|binding| {
-                ArrowBinding::new(
-                    binding.element_id.clone(),
-                    binding.anchor,
-                    ArrowBindingMode::Orbit,
-                )
-            }).as_ref(),
+            elbow_data
+                .end_binding
+                .as_ref()
+                .map(|binding| {
+                    ArrowBinding::new(
+                        binding.element_id.clone(),
+                        binding.anchor,
+                        ArrowBindingMode::Orbit,
+                    )
+                })
+                .as_ref(),
             "arrow",
             true,
             true,

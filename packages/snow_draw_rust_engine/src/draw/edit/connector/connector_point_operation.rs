@@ -48,8 +48,13 @@ impl ConnectorPointOperation {
         options: ConnectorPointUpdateOptions,
         binding_lookup: &mut dyn ConnectorPointBindingLookup,
     ) -> ConnectorPointTransform {
-        self.delegate
-            .update(context, transform, current_position, options, binding_lookup)
+        self.delegate.update(
+            context,
+            transform,
+            current_position,
+            options,
+            binding_lookup,
+        )
     }
 
     pub fn compute_points_for_result(
@@ -86,6 +91,9 @@ mod tests {
         let operation = ConnectorPointOperation::new();
         let debug_name = format!("{:?}", operation);
 
-        assert_eq!(debug_name, "ConnectorPointOperation { delegate: ArrowPointOperation }");
+        assert_eq!(
+            debug_name,
+            "ConnectorPointOperation { delegate: ArrowPointOperation }"
+        );
     }
 }

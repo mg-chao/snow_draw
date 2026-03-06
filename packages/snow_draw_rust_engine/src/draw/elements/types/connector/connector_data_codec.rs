@@ -14,13 +14,18 @@ pub type ConnectorDataCodecError = ElementDataCodecError;
 
 /// Decodes connector points from JSON.
 pub fn decode_points(raw_points: &Value) -> Result<Vec<DrawPoint>, ConnectorDataCodecError> {
-    let entries = raw_points.as_array().ok_or_else(|| {
-        ElementDataCodecError::new("Connector points must be a JSON array")
-    })?;
+    let entries = raw_points
+        .as_array()
+        .ok_or_else(|| ElementDataCodecError::new("Connector points must be a JSON array"))?;
 
     let mut points = Vec::with_capacity(entries.len());
     for entry in entries {
-        points.push(ElementDataCodec::decode_point(entry, "points entry", true, Some("pressure"))?);
+        points.push(ElementDataCodec::decode_point(
+            entry,
+            "points entry",
+            true,
+            Some("pressure"),
+        )?);
     }
 
     if points.len() < 2 {
@@ -33,7 +38,9 @@ pub fn decode_points(raw_points: &Value) -> Result<Vec<DrawPoint>, ConnectorData
 }
 
 /// Decodes an optional connector binding from JSON.
-pub fn decode_binding(raw: Option<&Value>) -> Result<Option<ArrowBinding>, ConnectorDataCodecError> {
+pub fn decode_binding(
+    raw: Option<&Value>,
+) -> Result<Option<ArrowBinding>, ConnectorDataCodecError> {
     let Some(raw) = raw else {
         return Ok(None);
     };
@@ -57,9 +64,9 @@ pub fn decode_fixed_segments(
         return Ok(None);
     }
 
-    let entries = raw.as_array().ok_or_else(|| {
-        ElementDataCodecError::new("fixedSegments must be a JSON array")
-    })?;
+    let entries = raw
+        .as_array()
+        .ok_or_else(|| ElementDataCodecError::new("fixedSegments must be a JSON array"))?;
 
     let mut segments = Vec::with_capacity(entries.len());
     for entry in entries {
@@ -104,7 +111,13 @@ pub fn encode_fixed_segments(
     segments: Option<&[ElbowFixedSegment]>,
 ) -> Option<Vec<Map<String, Value>>> {
     let segments = segments.filter(|value| !value.is_empty())?;
-    Some(segments.iter().cloned().map(ElbowFixedSegment::to_json).collect())
+    Some(
+        segments
+            .iter()
+            .cloned()
+            .map(ElbowFixedSegment::to_json)
+            .collect(),
+    )
 }
 
 /// Resolves a nullable binding update using connector semantics.

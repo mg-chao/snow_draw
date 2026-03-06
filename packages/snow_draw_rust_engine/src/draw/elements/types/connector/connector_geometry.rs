@@ -1,8 +1,6 @@
 #![allow(dead_code)]
 
-use crate::draw::elements::types::arrow::arrow_geometry::{
-    ArrowGeometry, DirectionResolveOptions,
-};
+use crate::draw::elements::types::arrow::arrow_geometry::{ArrowGeometry, DirectionResolveOptions};
 use crate::draw::elements::types::arrow::arrow_layout::{
     resolve_arrow_geometry_update, ArrowGeometryUpdate,
 };
@@ -406,7 +404,13 @@ fn build_straight_path_commands(points: &[DrawPoint]) -> Vec<ConnectorPathComman
     };
 
     let mut commands = vec![ConnectorPathCommand::Move(first)];
-    commands.extend(points.iter().skip(1).copied().map(ConnectorPathCommand::Line));
+    commands.extend(
+        points
+            .iter()
+            .skip(1)
+            .copied()
+            .map(ConnectorPathCommand::Line),
+    );
     commands
 }
 
@@ -522,7 +526,10 @@ mod tests {
 
     #[test]
     fn geometry_descriptor_caches_arrowhead_metrics() {
-        let mut descriptor = ConnectorGeometryDescriptor::new(ArrowData::default(), DrawRect::new(0.0, 0.0, 100.0, 100.0));
+        let mut descriptor = ConnectorGeometryDescriptor::new(
+            ArrowData::default(),
+            DrawRect::new(0.0, 0.0, 100.0, 100.0),
+        );
 
         assert!(descriptor.start_inset() >= 0.0);
         assert!(descriptor.end_inset() >= 0.0);

@@ -183,7 +183,11 @@ pub fn apply_endpoint_drag_with_fixed_segments(
     }
 
     // Step 1: apply endpoint overrides to a stable reference path.
-    let reference_points = if ElbowGeometry::point_lists_equal_except_endpoints(
+    let reference_points = if context.incoming_points.len() == 2
+        && context.base_points.len() > context.incoming_points.len()
+    {
+        context.base_points.clone()
+    } else if ElbowGeometry::point_lists_equal_except_endpoints(
         &context.base_points,
         &context.incoming_points,
     ) {
