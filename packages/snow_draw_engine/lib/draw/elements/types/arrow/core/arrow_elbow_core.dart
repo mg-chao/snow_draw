@@ -916,6 +916,18 @@ List<Point> _toGlobalPoints(ArrowState arrow, List<Point> points) => points
 List<Point> _clonePoints(List<Point> points) =>
     points.map((point) => <double>[point[0], point[1]]).toList(growable: false);
 
+bool _pointsEqualExceptEndpoints(List<Point> a, List<Point> b) {
+  if (a.length != b.length || a.length < 2) {
+    return false;
+  }
+  for (var index = 1; index < a.length - 1; index += 1) {
+    if (!pointsEqual(a[index], b[index])) {
+      return false;
+    }
+  }
+  return true;
+}
+
 List<FixedSegment>? _cloneFixedSegments(List<FixedSegment>? segments) {
   if (segments == null) {
     return null;
@@ -1519,19 +1531,26 @@ ArrowPatch _handleEndpointDrag({
   var startIsSpecial = arrow.startIsSpecial;
   var endIsSpecial = arrow.endIsSpecial;
 
-  final globalUpdatedPoints = updatedPoints
+  final referencePoints =
+      _pointsEqualExceptEndpoints(arrow.points, updatedPoints)
+      ? arrow.points
+      : updatedPoints;
+
+  final globalUpdatedPoints = referencePoints
       .asMap()
       .entries
       .map((entry) {
         final index = entry.key;
         final point = entry.value;
-        if (index == 0 || index == updatedPoints.length - 1) {
-          return <double>[arrow.x + point[0], arrow.y + point[1]];
+        if (index == 0) {
+          final startPoint = updatedPoints.first;
+          return <double>[arrow.x + startPoint[0], arrow.y + startPoint[1]];
         }
-        return <double>[
-          arrow.x + arrow.points[index][0],
-          arrow.y + arrow.points[index][1],
-        ];
+        if (index == referencePoints.length - 1) {
+          final endPoint = updatedPoints.last;
+          return <double>[arrow.x + endPoint[0], arrow.y + endPoint[1]];
+        }
+        return <double>[arrow.x + point[0], arrow.y + point[1]];
       })
       .toList(growable: false);
 

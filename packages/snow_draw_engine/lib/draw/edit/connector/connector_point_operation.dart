@@ -487,11 +487,20 @@ ElementState _buildUpdatedElement({
     return element.copyWith(rect: layout.rect, data: updatedData);
   }
   if (data.arrowType == ArrowType.elbow && arrowData != null) {
+    final activeIndex = transform.activeIndex;
+    final isEndpointTurningDrag =
+        context.pointKind == ConnectorPointKind.turning &&
+        activeIndex != null &&
+        (activeIndex == 0 || activeIndex == localPoints.length - 1);
     final isFixedSegmentEditing =
         context.pointKind == ConnectorPointKind.addable;
     final shouldReleaseFixedSegment =
         isFixedSegmentEditing && context.releaseFixedSegment;
-    final elbowPointsOverride = shouldReleaseFixedSegment ? null : localPoints;
+    final elbowPointsOverride = shouldReleaseFixedSegment
+        ? null
+        : isEndpointTurningDrag
+        ? <DrawPoint>[localPoints.first, localPoints.last]
+        : localPoints;
     final fixedSegmentsOverride = isFixedSegmentEditing
         ? (shouldReleaseFixedSegment
               // Excalidraw parity: releasing a fixed segment explicitly clears
@@ -516,11 +525,6 @@ ElementState _buildUpdatedElement({
     );
     var resolvedStartBinding = updated.startBinding;
     var resolvedEndBinding = updated.endBinding;
-    final activeIndex = transform.activeIndex;
-    final isEndpointTurningDrag =
-        context.pointKind == ConnectorPointKind.turning &&
-        activeIndex != null &&
-        (activeIndex == 0 || activeIndex == localPoints.length - 1);
     if (isEndpointTurningDrag) {
       if (activeIndex == 0) {
         resolvedEndBinding = transform.endBinding;
@@ -1315,6 +1319,37 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   final releaseLocalPointer = transform.currentPosition.translate(
     context.dragOffset,
   );
+  if (data.arrowType == ArrowType.elbow && data is ArrowData) {
+    final elbowComputation = _computeElbowEndpointDragComputation(
+      state: state,
+      context: context,
+      data: data,
+      basePoints: context.initialPoints,
+      baseFixedSegments: context.initialFixedSegments,
+      draggedIndex: activeIndex,
+      target: releaseLocalPointer,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      shouldLookupBindings: true,
+      allowNewBinding: transform.allowBindingOnFinalize,
+      bindingDistance: 0,
+      coreEngineContext: coreEngineContext,
+      angleLocked: false,
+      altKey: false,
+      orderedElementIds: transform.orderedElementIds,
+    );
+    if (!elbowComputation.hasChanges) {
+      return null;
+    }
+    return _FinalizeEndpointComputation(
+      points: List<DrawPoint>.unmodifiable(elbowComputation.points),
+      startBinding: elbowComputation.startBinding,
+      endBinding: elbowComputation.endBinding,
+      fixedSegments: elbowComputation.fixedSegments,
+      orderedElementIds: elbowComputation.orderedElementIds,
+    );
+  }
+
   final worldTarget = context.toWorld(releaseLocalPointer);
   final dragResult = finalizeArrowCoreEndpointDragResult(
     state: state,

@@ -5,6 +5,7 @@ import 'package:snow_draw_engine/draw/edit/core/edit_operation_params.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/connector/connector_creation_strategy.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/elbow/elbow_editing.dart';
 import 'package:snow_draw_engine/draw/elements/types/connector/connector_geometry.dart';
 import 'package:snow_draw_engine/draw/elements/types/connector/connector_points.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
@@ -21,6 +22,7 @@ import 'package:snow_draw_engine/draw/types/draw_rect.dart';
 import 'package:snow_draw_engine/draw/types/edit_context.dart';
 import 'package:snow_draw_engine/draw/types/edit_transform.dart';
 import 'package:snow_draw_engine/draw/types/element_style.dart';
+import 'package:snow_draw_engine/draw/utils/combined_element_lookup.dart';
 import 'package:snow_draw_engine/draw/utils/snapping_mode.dart';
 import 'package:test/test.dart';
 
@@ -862,6 +864,214 @@ void main() {
         expect(updatedData.fixedSegments![1].end.y, closeTo(260, 1e-6));
       },
     );
+
+    test('elbow endpoint preview writes back from endpoints only', () {
+      final arrow = _elbowArrowElement(
+        id: 'elbow-endpoint-preview-endpoints-only',
+        points: const <DrawPoint>[
+          DrawPoint(x: 0, y: 0),
+          DrawPoint(x: 20, y: 0),
+          DrawPoint(x: 20, y: 20),
+          DrawPoint(x: 40, y: 20),
+          DrawPoint(x: 40, y: 40),
+          DrawPoint(x: 60, y: 40),
+          DrawPoint(x: 60, y: 60),
+          DrawPoint(x: 80, y: 60),
+        ],
+        zIndex: 1,
+        fixedSegments: const <ElbowFixedSegment>[
+          ElbowFixedSegment(
+            index: 2,
+            start: DrawPoint(x: 20, y: 0),
+            end: DrawPoint(x: 20, y: 20),
+          ),
+          ElbowFixedSegment(
+            index: 4,
+            start: DrawPoint(x: 40, y: 20),
+            end: DrawPoint(x: 40, y: 40),
+          ),
+        ],
+      );
+      final state = _stateWithElements(
+        <ElementState>[arrow],
+        selectedIds: <String>{arrow.id},
+      );
+      final data = arrow.data as ArrowData;
+      const previewPoints = <DrawPoint>[
+        DrawPoint(x: 0, y: 10),
+        DrawPoint(x: 20, y: 0),
+        DrawPoint(x: 20, y: 20),
+        DrawPoint(x: 40, y: 20),
+        DrawPoint(x: 40, y: 40),
+        DrawPoint(x: 60, y: 40),
+        DrawPoint(x: 60, y: 60),
+        DrawPoint(x: 80, y: 60),
+        DrawPoint(x: 80, y: 90),
+      ];
+      final context = ConnectorPointEditContext(
+        startPosition: const DrawPoint(x: 80, y: 60),
+        startBounds: arrow.rect,
+        selectedIdsAtStart: <String>{arrow.id},
+        selectionVersion: state.domain.selection.selectionVersion,
+        elementsVersion: state.domain.document.elementsVersion,
+        elementId: arrow.id,
+        elementRect: arrow.rect,
+        rotation: arrow.rotation,
+        initialPoints: ConnectorGeometry.resolveWorldPoints(
+          rect: arrow.rect,
+          normalizedPoints: data.points,
+        ),
+        initialFixedSegments: data.fixedSegments ?? const <ElbowFixedSegment>[],
+        arrowType: ArrowType.elbow,
+        pointKind: ConnectorPointKind.turning,
+        pointIndex: 7,
+        dragOffset: const DrawPoint(x: 0, y: 0),
+        baseElement: arrow,
+        elementSpace: null,
+        releaseFixedSegment: false,
+        deletePointOnStart: false,
+        startArrowhead: data.startArrowhead,
+        endArrowhead: data.endArrowhead,
+        initialStartBinding: data.startBinding,
+        initialEndBinding: data.endBinding,
+        hasBindableTargets: false,
+      );
+      final transform = ConnectorPointTransform(
+        currentPosition: previewPoints.last,
+        points: previewPoints,
+        fixedSegments: data.fixedSegments,
+        startBinding: data.startBinding,
+        endBinding: data.endBinding,
+        activeIndex: previewPoints.length - 1,
+        hasChanges: true,
+      );
+
+      final result = const ConnectorPointOperation().computeResult(
+        state: state,
+        context: context,
+        transform: transform,
+      );
+
+      expect(result, isNotNull);
+      final updatedArrow = result!.updatedElements[arrow.id]!;
+      final updatedData = updatedArrow.data as ArrowData;
+      final updatedPoints = ConnectorGeometry.resolveWorldPoints(
+        rect: updatedArrow.rect,
+        normalizedPoints: updatedData.points,
+      );
+      final expected = computeElbowEdit(
+        element: arrow,
+        data: data,
+        lookup: CombinedElementLookup(base: state.domain.document.elementMap),
+        localPointsOverride: <DrawPoint>[
+          previewPoints.first,
+          previewPoints.last,
+        ],
+      );
+
+      expect(updatedPoints, expected.localPoints);
+      expect(updatedPoints, hasLength(8));
+      expect(updatedData.fixedSegments, expected.fixedSegments);
+    });
+
+    test('finishing elbow endpoint drag tolerates expanded preview points', () {
+      final arrow = _elbowArrowElement(
+        id: 'elbow-endpoint-finish-expanded-preview',
+        points: const <DrawPoint>[
+          DrawPoint(x: 0, y: 0),
+          DrawPoint(x: 20, y: 0),
+          DrawPoint(x: 20, y: 20),
+          DrawPoint(x: 40, y: 20),
+          DrawPoint(x: 40, y: 40),
+          DrawPoint(x: 60, y: 40),
+          DrawPoint(x: 60, y: 60),
+          DrawPoint(x: 80, y: 60),
+        ],
+        zIndex: 1,
+        fixedSegments: const <ElbowFixedSegment>[
+          ElbowFixedSegment(
+            index: 2,
+            start: DrawPoint(x: 20, y: 0),
+            end: DrawPoint(x: 20, y: 20),
+          ),
+          ElbowFixedSegment(
+            index: 4,
+            start: DrawPoint(x: 40, y: 20),
+            end: DrawPoint(x: 40, y: 40),
+          ),
+        ],
+      );
+      final state = _stateWithElements(
+        <ElementState>[arrow],
+        selectedIds: <String>{arrow.id},
+      );
+      final data = arrow.data as ArrowData;
+      const previewPoints = <DrawPoint>[
+        DrawPoint(x: 0, y: 10),
+        DrawPoint(x: 20, y: 0),
+        DrawPoint(x: 20, y: 20),
+        DrawPoint(x: 40, y: 20),
+        DrawPoint(x: 40, y: 40),
+        DrawPoint(x: 60, y: 40),
+        DrawPoint(x: 60, y: 60),
+        DrawPoint(x: 80, y: 60),
+        DrawPoint(x: 80, y: 90),
+      ];
+      final context = ConnectorPointEditContext(
+        startPosition: const DrawPoint(x: 80, y: 60),
+        startBounds: arrow.rect,
+        selectedIdsAtStart: <String>{arrow.id},
+        selectionVersion: state.domain.selection.selectionVersion,
+        elementsVersion: state.domain.document.elementsVersion,
+        elementId: arrow.id,
+        elementRect: arrow.rect,
+        rotation: arrow.rotation,
+        initialPoints: ConnectorGeometry.resolveWorldPoints(
+          rect: arrow.rect,
+          normalizedPoints: data.points,
+        ),
+        initialFixedSegments: data.fixedSegments ?? const <ElbowFixedSegment>[],
+        arrowType: ArrowType.elbow,
+        pointKind: ConnectorPointKind.turning,
+        pointIndex: 7,
+        dragOffset: const DrawPoint(x: 0, y: 0),
+        baseElement: arrow,
+        elementSpace: null,
+        releaseFixedSegment: false,
+        deletePointOnStart: false,
+        startArrowhead: data.startArrowhead,
+        endArrowhead: data.endArrowhead,
+        initialStartBinding: data.startBinding,
+        initialEndBinding: data.endBinding,
+        hasBindableTargets: false,
+      );
+      final transform = ConnectorPointTransform(
+        currentPosition: previewPoints.last,
+        points: previewPoints,
+        fixedSegments: data.fixedSegments,
+        startBinding: data.startBinding,
+        endBinding: data.endBinding,
+        activeIndex: previewPoints.length - 1,
+        hasChanges: true,
+      );
+
+      final next = const ConnectorPointOperation().finish(
+        state: state,
+        context: context,
+        transform: transform,
+      );
+      final updatedArrow = next.domain.document.getElementById(arrow.id)!;
+      final updatedData = updatedArrow.data as ArrowData;
+      final updatedPoints = ConnectorGeometry.resolveWorldPoints(
+        rect: updatedArrow.rect,
+        normalizedPoints: updatedData.points,
+      );
+
+      expect(updatedPoints, hasLength(8));
+      expect(updatedPoints.first, const DrawPoint(x: 0, y: 10));
+      expect(updatedPoints.last, const DrawPoint(x: 80, y: 90));
+      expect(updatedData.fixedSegments, hasLength(2));
+    });
 
     test(
       'dragging elbow end endpoint keeps existing start binding element',

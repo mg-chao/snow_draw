@@ -279,6 +279,48 @@ void main() {
       expect(point![0], closeTo(60.004, 1e-6));
       expect(point[1], closeTo(0.004, 1e-6));
     });
+
+    test(
+      'updateCoreElbowArrowPatch handles endpoint drags when incoming points grow',
+      () {
+        final arrow = _elbowArrowState();
+        const updatedPoints = <core.Point>[
+          <double>[0, 10],
+          <double>[20, 0],
+          <double>[20, 20],
+          <double>[40, 20],
+          <double>[40, 40],
+          <double>[60, 40],
+          <double>[60, 60],
+          <double>[80, 60],
+          <double>[80, 90],
+        ];
+
+        final patch = updateCoreElbowArrowPatch(
+          arrow: arrow,
+          updates: const <String, dynamic>{'points': updatedPoints},
+          bindables: const <core.BindableState>[],
+          context: buildCoreEngineContext(),
+          options: const <String, dynamic>{'isDragging': true},
+        );
+        final patched = core.applyArrowPatch(arrow, patch);
+        final globalStart = <double>[
+          patched.x + patched.points.first[0],
+          patched.y + patched.points.first[1],
+        ];
+        final globalEnd = <double>[
+          patched.x + patched.points.last[0],
+          patched.y + patched.points.last[1],
+        ];
+
+        expect(patched.points, hasLength(updatedPoints.length));
+        expect(core.validateElbowInvariant(patched), isEmpty);
+        expect(globalStart[0], closeTo(updatedPoints.first[0], 1e-9));
+        expect(globalStart[1], closeTo(updatedPoints.first[1], 1e-9));
+        expect(globalEnd[0], closeTo(updatedPoints.last[0], 1e-9));
+        expect(globalEnd[1], closeTo(updatedPoints.last[1], 1e-9));
+      },
+    );
   });
 }
 
@@ -324,4 +366,33 @@ core.FixedPointBinding _insideBinding() => const core.FixedPointBinding(
   elementId: 'bindable-1',
   fixedPoint: <double>[0.5, 0.5],
   mode: core.bindModeInside,
+);
+
+core.ArrowState _elbowArrowState() => core.ArrowState(
+  id: 'elbow-arrow-1',
+  x: 0,
+  y: 0,
+  width: 80,
+  height: 60,
+  points: const <core.Point>[
+    <double>[0, 0],
+    <double>[20, 0],
+    <double>[20, 20],
+    <double>[40, 20],
+    <double>[40, 40],
+    <double>[60, 40],
+    <double>[60, 60],
+    <double>[80, 60],
+  ],
+  startBinding: null,
+  endBinding: null,
+  startArrowhead: null,
+  endArrowhead: 'arrow',
+  elbowed: true,
+  fixedSegments: const <core.FixedSegment>[
+    core.FixedSegment(index: 2, start: <double>[20, 0], end: <double>[20, 20]),
+    core.FixedSegment(index: 4, start: <double>[40, 20], end: <double>[40, 40]),
+  ],
+  startIsSpecial: null,
+  endIsSpecial: null,
 );
