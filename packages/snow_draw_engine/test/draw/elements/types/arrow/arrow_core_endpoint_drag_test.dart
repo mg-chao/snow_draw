@@ -149,6 +149,64 @@ void main() {
       },
     );
 
+    test(
+      'computeArrowCoreEndpointDragResult keeps opposite endpoint binding when new bindings are disallowed',
+      () {
+        final startTarget = _rectangleElement(
+          id: 'rect-start',
+          rect: const DrawRect(minX: 20, minY: 20, maxX: 120, maxY: 120),
+          zIndex: 1,
+        );
+        final endTarget = _rectangleElement(
+          id: 'rect-end',
+          rect: const DrawRect(minX: 220, minY: 20, maxX: 320, maxY: 120),
+          zIndex: 2,
+        );
+        final arrow = _arrowElement(
+          id: 'arrow-1',
+          points: const <DrawPoint>[
+            DrawPoint(x: 70, y: 70),
+            DrawPoint(x: 270, y: 70),
+          ],
+          zIndex: 0,
+          startBinding: const ArrowBinding(
+            elementId: 'rect-start',
+            anchor: DrawPoint(x: 0.5001, y: 0.5001),
+          ),
+          endBinding: const ArrowBinding(
+            elementId: 'rect-end',
+            anchor: DrawPoint(x: 0.5001, y: 0.5001),
+          ),
+        );
+        final state = _stateWithElements(<ElementState>[
+          arrow,
+          startTarget,
+          endTarget,
+        ]);
+        final data = arrow.data as ArrowData;
+
+        final result = computeArrowCoreEndpointDragResult(
+          state: state,
+          element: arrow,
+          data: data,
+          localPoints: _resolveLocalPoints(arrow, data),
+          draggedIndex: 1,
+          worldPointer: const DrawPoint(x: 420, y: 300),
+          startBinding: data.startBinding,
+          endBinding: data.endBinding,
+          excludedElementId: arrow.id,
+          shouldLookupBindings: true,
+          allowNewBinding: false,
+          bindingDistance: 80,
+          coreEngineContext: buildCoreEngineContext(),
+        );
+
+        expect(result, isNotNull);
+        expect(result!.startBinding?.elementId, 'rect-start');
+        expect(result.endBinding, isNull);
+      },
+    );
+
     test('new-arrow drag keeps dragged endpoint anchor at pointer focus', () {
       final bindable = _rectangleElement(
         id: 'rect-target',

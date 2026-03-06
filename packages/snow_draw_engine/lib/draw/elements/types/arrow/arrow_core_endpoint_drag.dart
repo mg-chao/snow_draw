@@ -324,9 +324,19 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
   if (!allowNewBinding) {
     final endpointIndex = nextArrow.points.length - 1;
     if (draggedIndex == 0) {
-      nextArrow = nextArrow.copyWith(startBinding: null, setStartBinding: true);
+      nextArrow = nextArrow.copyWith(
+        startBinding: null,
+        setStartBinding: true,
+        endBinding: arrow.endBinding,
+        setEndBinding: true,
+      );
     } else if (draggedIndex == endpointIndex) {
-      nextArrow = nextArrow.copyWith(endBinding: null, setEndBinding: true);
+      nextArrow = nextArrow.copyWith(
+        startBinding: arrow.startBinding,
+        setStartBinding: true,
+        endBinding: null,
+        setEndBinding: true,
+      );
     }
   }
   final draggedStrategy = draggedIndex == 0 ? startStrategy : endStrategy;
