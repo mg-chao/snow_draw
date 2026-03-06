@@ -316,6 +316,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       bindingDistance: bindingDistance,
       allowNewBinding: allowNewBinding,
       coreEngineContext: coreEngineContext,
+      orderedElementIds: typedTransform.orderedElementIds,
     );
 
     if (_isNoOpArrowTransformUpdate(previous: typedTransform, next: result)) {
@@ -679,6 +680,7 @@ _ArrowPointComputation _compute({
   required double bindingDistance,
   required bool allowNewBinding,
   required core.EngineContext coreEngineContext,
+  required List<String>? orderedElementIds,
 }) {
   final basePoints = context.initialPoints;
   final baseFixedSegments = context.initialFixedSegments;
@@ -712,6 +714,7 @@ _ArrowPointComputation _compute({
       endpoint: focusEndpoint,
       switchToInsideBinding: modifiers.fromCenter,
       coreEngineContext: coreEngineContext,
+      orderedElementIds: orderedElementIds,
     );
   }
 
@@ -795,6 +798,7 @@ _ArrowPointComputation _compute({
         coreEngineContext: coreEngineContext,
         angleLocked: modifiers.maintainAspectRatio,
         altKey: modifiers.fromCenter,
+        orderedElementIds: orderedElementIds,
       );
       return endpointComputation;
     }
@@ -853,6 +857,7 @@ _ArrowPointComputation _computeFocusComputation({
   required ArrowFocusEndpoint endpoint,
   required bool switchToInsideBinding,
   required core.EngineContext coreEngineContext,
+  required List<String>? orderedElementIds,
 }) {
   final data = context.baseElement.data as ArrowLikeData;
   if (data.arrowType == ArrowType.elbow) {
@@ -878,9 +883,11 @@ _ArrowPointComputation _computeFocusComputation({
     pointer: context.toWorld(target),
     engineContext: coreEngineContext,
     switchToInsideBinding: switchToInsideBinding,
-    orderedElementIds: state.domain.document.elements
-        .map((element) => element.id)
-        .toList(growable: false),
+    orderedElementIds:
+        orderedElementIds ??
+        state.domain.document.elements
+            .map((element) => element.id)
+            .toList(growable: false),
   );
   final nextData = dragResult.element.data;
   if (nextData is! ArrowLikeData) {
@@ -954,6 +961,7 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
   required core.EngineContext coreEngineContext,
   required bool angleLocked,
   required bool altKey,
+  required List<String>? orderedElementIds,
 }) {
   final data = context.baseElement.data as ArrowLikeData;
   if (data.arrowType == ArrowType.elbow && data is ArrowData) {
@@ -973,6 +981,7 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
       coreEngineContext: coreEngineContext,
       angleLocked: angleLocked,
       altKey: altKey,
+      orderedElementIds: orderedElementIds,
     );
   }
   final worldTarget = context.toWorld(target);
@@ -991,6 +1000,7 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
     allowNewBinding: allowNewBinding,
     bindingDistance: bindingDistance,
     coreEngineContext: coreEngineContext,
+    orderedElementIds: orderedElementIds,
     options: <String, dynamic>{
       if (angleLocked) 'angleLocked': true,
       if (altKey) 'altKey': true,
@@ -1025,8 +1035,8 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
       : draggedIndex >= localPoints.length
       ? localPoints.length - 1
       : draggedIndex;
-  final orderedElementIds = dragResult.orderedElementIds;
-  final orderChanged = orderedElementIds != null;
+  final reorderedElementIds = dragResult.orderedElementIds;
+  final orderChanged = reorderedElementIds != null;
 
   return _ArrowPointComputation(
     points: List<DrawPoint>.unmodifiable(localPoints),
@@ -1038,7 +1048,7 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
     startBinding: nextStartBinding,
     endBinding: nextEndBinding,
     fixedSegments: nextFixedSegments,
-    orderedElementIds: orderedElementIds,
+    orderedElementIds: reorderedElementIds,
   );
 }
 
@@ -1058,6 +1068,7 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
   required core.EngineContext coreEngineContext,
   required bool angleLocked,
   required bool altKey,
+  required List<String>? orderedElementIds,
 }) {
   if (basePoints.length < 2) {
     return _noOpComputation(
@@ -1102,6 +1113,7 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
       oppositeBinding: oppositeBinding,
       excludedElementId: context.elementId,
       allowNewBinding: allowNewBinding,
+      orderedElementIds: orderedElementIds,
     );
     final nextEndpointPoints = List<DrawPoint>.of(basePoints, growable: false);
     if (draggedStart) {
@@ -1156,19 +1168,6 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
     );
     nextStartBinding = fromCoreBinding(strategyArrow.startBinding);
     nextEndBinding = fromCoreBinding(strategyArrow.endBinding);
-
-    if (!allowNewBinding && activeBinding != null) {
-      final activeBindingId = activeBinding.elementId;
-      final resolvedBinding = draggedStart ? nextStartBinding : nextEndBinding;
-      if (resolvedBinding == null ||
-          resolvedBinding.elementId != activeBindingId) {
-        if (draggedStart) {
-          nextStartBinding = null;
-        } else {
-          nextEndBinding = null;
-        }
-      }
-    }
   }
 
   if (draggedStart) {
@@ -1204,20 +1203,22 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
   );
   final activeIndex = draggedStart ? 0 : localPoints.length - 1;
 
-  List<String>? orderedElementIds;
+  List<String>? reorderedElementIds;
   if (hoveredBindableId != null) {
+    final currentOrderedElementIds =
+        orderedElementIds ?? state.domain.document.orderedElementIds;
     final reorderResult = reorderCoreArrowAboveHoveredBindable(
-      orderedElementIds: state.domain.document.orderedElementIds,
+      orderedElementIds: currentOrderedElementIds,
       arrowId: context.elementId,
       hoveredBindableId: hoveredBindableId,
       anchorElementIdsByBindableId:
           state.domain.document.arrowCoreAnchorElementIdsByBindableId,
     );
-    orderedElementIds = reorderedElementIdsFromCoreHoveredReorder(
+    reorderedElementIds = reorderedElementIdsFromCoreHoveredReorder(
       reorderResult,
     );
   }
-  final orderChanged = orderedElementIds != null;
+  final orderChanged = reorderedElementIds != null;
 
   return _ArrowPointComputation(
     points: List<DrawPoint>.unmodifiable(localPoints),
@@ -1229,7 +1230,7 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
     startBinding: nextStartBinding,
     endBinding: nextEndBinding,
     fixedSegments: nextFixedSegments,
-    orderedElementIds: orderedElementIds,
+    orderedElementIds: reorderedElementIds,
   );
 }
 

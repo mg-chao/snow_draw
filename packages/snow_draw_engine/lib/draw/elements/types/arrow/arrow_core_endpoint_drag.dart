@@ -312,18 +312,18 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
     isNewArrow: isNewArrow,
   );
 
-  final suggestedBindableId = _strategyBindableId(draggedStrategy);
-  List<String>? nextOrderedElementIds;
-  if (dragContext.isBindingEnabled &&
-      suggestedBindableId != null &&
-      suggestedBindableId.isNotEmpty) {
-    nextOrderedElementIds = session.reorderArrowAboveHoveredBindable(
-      arrowId: arrow.id,
-      hoveredBindableId: suggestedBindableId,
-      point: toCorePoint(worldPointer),
-      orderedElementIds: orderedElementIds,
-    );
-  }
+  final suggestedBindableId = _resolveSuggestedBindableId(
+    result: result,
+    strategy: draggedStrategy,
+  );
+  final applied = session.applyEngineResultWithOrderFallback(
+    arrow: arrow,
+    result: result,
+    hoveredBindableId: suggestedBindableId,
+    point: toCorePoint(worldPointer),
+    orderedElementIds: orderedElementIds,
+  );
+  final nextOrderedElementIds = applied.orderedElementIds;
 
   return (
     arrow: nextArrow,
@@ -451,6 +451,22 @@ String? _strategyBindableId(core.EndpointBindingStrategy? strategy) {
     return bindableId;
   }
   return strategy.element?.id;
+}
+
+String? _resolveSuggestedBindableId({
+  required core.EngineResult result,
+  required core.EndpointBindingStrategy? strategy,
+}) {
+  final suggestedBinding = result.suggestedBinding;
+  final suggestedBindableId = suggestedBinding?.bindableId;
+  if (suggestedBindableId != null && suggestedBindableId.isNotEmpty) {
+    return suggestedBindableId;
+  }
+  final suggestedElementId = suggestedBinding?.element.id;
+  if (suggestedElementId != null && suggestedElementId.isNotEmpty) {
+    return suggestedElementId;
+  }
+  return _strategyBindableId(strategy);
 }
 
 List<core.BindableState> _resolveCoreEndpointBindables({
