@@ -143,8 +143,8 @@ void main() {
         );
 
         expect(targets.map((element) => element.id).toList(), <String>[
-          'bottom',
           'top',
+          'bottom',
         ]);
       },
     );

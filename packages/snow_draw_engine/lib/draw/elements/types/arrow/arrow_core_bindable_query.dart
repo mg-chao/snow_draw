@@ -30,10 +30,18 @@ ArrowCoreBindableCandidates resolveCoreBindableCandidates({
   }
 
   if (includeNearby && distance > 0 && document.hasArrowBindableElements) {
-    document.visitArrowBindableElementsAtPoint(worldPoint, distance, (element) {
-      candidateIds.add(element.id);
-      return true;
-    }, excludedElementId: excludedElementId);
+    final hoveredBindables = core.listHoveredBindables(
+      <double>[worldPoint.x, worldPoint.y],
+      document.arrowCoreBindables,
+      distance,
+      stopAtOpaque: true,
+    );
+    for (final bindable in hoveredBindables) {
+      if (excludedElementId != null && bindable.id == excludedElementId) {
+        continue;
+      }
+      candidateIds.add(bindable.id);
+    }
   }
 
   if (candidateIds.isEmpty) {
