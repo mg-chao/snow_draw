@@ -176,6 +176,43 @@ class DocumentState {
     }
   }
 
+  /// Queries bindable arrow targets from top-most to bottom-most z-order.
+  ///
+  /// When [stopAtOpaque] is true, iteration stops after the first bindable
+  /// whose projected arrow-binding surface is opaque.
+  List<ElementState> queryArrowBindableElementsAtPointTopDown(
+    DrawPoint point,
+    double tolerance, {
+    String? excludedElementId,
+    bool stopAtOpaque = false,
+  }) {
+    if (!hasArrowBindableElements) {
+      return const <ElementState>[];
+    }
+
+    final result = <ElementState>[];
+    final entries = _arrowBindableSpatialIndex.searchPointEntries(
+      point,
+      tolerance,
+    );
+    for (final entry in entries) {
+      final elementId = entry.id;
+      if (excludedElementId != null && elementId == excludedElementId) {
+        continue;
+      }
+      final element = _elementForEntry(entry);
+      result.add(element);
+      if (!stopAtOpaque) {
+        continue;
+      }
+      final bindable = _arrowBindableStateById[elementId];
+      if (bindable?.backgroundOpaque ?? false) {
+        break;
+      }
+    }
+    return List<ElementState>.unmodifiable(result);
+  }
+
   /// Touch lazy caches eagerly to avoid stalls during interactive work.
   int warmCaches() =>
       _elementMap.length +

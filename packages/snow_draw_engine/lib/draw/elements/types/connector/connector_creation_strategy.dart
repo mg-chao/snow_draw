@@ -34,7 +34,10 @@ import '../line/line_data.dart';
 import 'connector_data.dart';
 import 'connector_geometry.dart';
 
-/// Creation strategy for connector elements (single- and multi-point).
+/// Shared creation strategy for connector elements.
+///
+/// Built-in registrations should prefer [ArrowCreationStrategy] or
+/// [LineCreationStrategy] so arrow and line ownership stays explicit.
 @immutable
 class ConnectorCreationStrategy extends PointCreationStrategy {
   const ConnectorCreationStrategy();
@@ -45,24 +48,24 @@ class ConnectorCreationStrategy extends PointCreationStrategy {
     required DrawPoint startPosition,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final arrowData = requireCreationDataType<ConnectorData>(
+    final connectorData = requireCreationDataType<ConnectorData>(
       data: data,
       strategyName: 'ConnectorCreationStrategy.start',
     );
 
-    final arrowRect = _calculateArrowRect(
+    final connectorRect = _calculateArrowRect(
       points: [startPosition, startPosition],
-      arrowType: arrowData.arrowType,
+      arrowType: connectorData.arrowType,
     );
     final normalizedPoints = normalizeArrowPoints(
       worldPoints: [startPosition, startPosition],
-      rect: arrowRect,
+      rect: connectorRect,
     );
-    final updatedData = arrowData.copyWith(points: normalizedPoints);
-    final sessionData = _ArrowCreationSessionData();
+    final updatedData = connectorData.copyWith(points: normalizedPoints);
+    final sessionData = _ConnectorCreationSessionData();
     return CreationUpdateResult(
       data: updatedData,
-      rect: arrowRect,
+      rect: connectorRect,
       creationMode: PointCreationMode(
         fixedPoints: List<DrawPoint>.unmodifiable([startPosition]),
         currentPoint: startPosition,
@@ -88,7 +91,7 @@ class ConnectorCreationStrategy extends PointCreationStrategy {
       strategyName: 'ConnectorCreationStrategy.update',
     );
     if (elementData is LineData) {
-      return _updateLine(
+      return _updateLineCreation(
         state: state,
         config: config,
         creatingState: creatingState,
@@ -100,132 +103,22 @@ class ConnectorCreationStrategy extends PointCreationStrategy {
         data: elementData,
       );
     }
-    final sessionData = _resolveSessionData(creatingState.creationMode);
-
-    final endpoints = _resolveCreationEndpoints(
-      state: state,
-      config: config,
-      creatingState: creatingState,
-      data: elementData,
-      currentPosition: currentPosition,
-      snappingMode: snappingMode,
-      snapOverrideActive: snapOverrideActive,
-      sessionData: sessionData,
-      maintainAspectRatio: maintainAspectRatio,
-      createFromCenter: createFromCenter,
-    );
-    var adjustedCurrent = endpoints.currentPosition;
-
-    final bindingResult = _snapBindingPoint(
-      state: state,
-      config: config,
-      data: elementData,
-      position: adjustedCurrent,
-      snappingMode: snappingMode,
-      dragStart: false,
-      preferredBinding: elementData.endBinding,
-      oppositeBinding: endpoints.startBinding,
-      oppositePoint: endpoints.segmentStart,
-      initialBinding: false,
-      preserveOppositeInsideBinding: sessionData.preserveStartInsideBinding,
-      oppositeOrbitFocusPoint: sessionData.startOrbitFocusPoint,
-      angleLocked: maintainAspectRatio,
-      altKey: createFromCenter,
-      snapOverrideActive: snapOverrideActive,
-    );
-    sessionData.allowBindingOnFinalize = bindingResult.allowBindingOnFinalize;
-    adjustedCurrent = bindingResult.position;
-    var endBinding = bindingResult.binding;
-    final startBinding = bindingResult.startBinding ?? endpoints.startBinding;
-    final closeTolerance =
-        config.selection.interaction.handleTolerance *
-        _loopCloseToleranceMultiplier;
-    if (elementData.arrowType != ArrowType.elbow &&
-        endpoints.fixedPoints.length >= 2) {
-      final startPoint = endpoints.fixedPoints.first;
-      if (adjustedCurrent.distanceSquared(startPoint) <=
-          closeTolerance * closeTolerance) {
-        adjustedCurrent = startPoint;
-        endBinding = startBinding;
-      }
-    }
-
-    final allPoints = _appendCurrentPoint(
-      fixedPoints: endpoints.fixedPoints,
-      currentPoint: adjustedCurrent,
-    );
-    late final DrawRect arrowRect;
-    late final List<DrawPoint> normalizedPoints;
-    var resolvedStartBinding = startBinding;
-    var resolvedEndBinding = endBinding;
-    List<ElbowFixedSegment>? resolvedFixedSegments;
-    bool? resolvedStartIsSpecial;
-    bool? resolvedEndIsSpecial;
-    if (elementData.arrowType == ArrowType.elbow) {
-      final routed = routeElbowArrow(
-        start: endpoints.startPosition,
-        end: adjustedCurrent,
-        startBinding: resolvedStartBinding,
-        endBinding: bindingResult.binding,
-        elementsById: state.domain.document.elementMap,
-        startArrowhead: elementData.startArrowhead,
-        endArrowhead: elementData.endArrowhead,
-        engineContext: buildCoreEngineContext(
-          zoom: state.application.view.camera.zoom,
-          isBindingEnabled: config.snap.enableArrowBinding,
-        ),
-      );
-      final routedPoints = routed.points;
-      arrowRect = _calculateArrowRect(
-        points: routedPoints,
-        arrowType: elementData.arrowType,
-      );
-      normalizedPoints = normalizeArrowPoints(
-        worldPoints: routedPoints,
-        rect: arrowRect,
-      );
-      resolvedStartBinding = routed.startBinding;
-      resolvedEndBinding = routed.endBinding;
-      resolvedFixedSegments = routed.fixedSegments;
-      resolvedStartIsSpecial = routed.startIsSpecial;
-      resolvedEndIsSpecial = routed.endIsSpecial;
-    } else if (endpoints.fixedPoints.length == 1) {
-      final layout = computeArrowTwoPointLayout(
-        first: endpoints.fixedPoints.first,
-        second: adjustedCurrent,
-      );
-      arrowRect = layout.rect;
-      normalizedPoints = layout.normalizedPoints;
-    } else {
-      arrowRect = _calculateArrowRect(
-        points: allPoints,
-        arrowType: elementData.arrowType,
-      );
-      normalizedPoints = normalizeArrowPoints(
-        worldPoints: allPoints,
-        rect: arrowRect,
+    if (elementData is ArrowData) {
+      return _updateArrowCreation(
+        state: state,
+        config: config,
+        creatingState: creatingState,
+        currentPosition: currentPosition,
+        snappingMode: snappingMode,
+        snapOverrideActive: snapOverrideActive,
+        maintainAspectRatio: maintainAspectRatio,
+        createFromCenter: createFromCenter,
+        data: elementData,
       );
     }
-    final updatedData = elementData.copyWith(
-      points: normalizedPoints,
-      startBinding: resolvedStartBinding,
-      endBinding: resolvedEndBinding,
-      fixedSegments: resolvedFixedSegments,
-      startIsSpecial: resolvedStartIsSpecial,
-      endIsSpecial: resolvedEndIsSpecial,
-    );
-
-    return CreationUpdateResult(
-      data: updatedData,
-      rect: arrowRect,
-      snapGuides: endpoints.snapGuides,
-      creationMode: PointCreationMode(
-        fixedPoints: elementData.arrowType == ArrowType.elbow
-            ? List<DrawPoint>.unmodifiable([endpoints.startPosition])
-            : endpoints.fixedPoints,
-        currentPoint: adjustedCurrent,
-        sessionData: sessionData,
-      ),
+    throw StateError(
+      'ConnectorCreationStrategy only supports ArrowData and LineData '
+      '(got ${elementData.runtimeType})',
     );
   }
 
@@ -415,6 +308,76 @@ class ConnectorCreationStrategy extends PointCreationStrategy {
   }
 }
 
+/// Dedicated creation strategy for arrow elements.
+@immutable
+final class ArrowCreationStrategy extends ConnectorCreationStrategy {
+  const ArrowCreationStrategy();
+
+  @override
+  CreationUpdateResult update({
+    required DrawState state,
+    required DrawConfig config,
+    required CreatingState creatingState,
+    required DrawPoint currentPosition,
+    required bool maintainAspectRatio,
+    required bool createFromCenter,
+    required SnappingMode snappingMode,
+    bool snapOverrideActive = false,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
+  }) {
+    final elementData = requireCreatingElementDataType<ArrowData>(
+      creatingState: creatingState,
+      strategyName: 'ArrowCreationStrategy.update',
+    );
+    return _updateArrowCreation(
+      state: state,
+      config: config,
+      creatingState: creatingState,
+      currentPosition: currentPosition,
+      snappingMode: snappingMode,
+      snapOverrideActive: snapOverrideActive,
+      maintainAspectRatio: maintainAspectRatio,
+      createFromCenter: createFromCenter,
+      data: elementData,
+    );
+  }
+}
+
+/// Dedicated creation strategy for line elements.
+@immutable
+final class LineCreationStrategy extends ConnectorCreationStrategy {
+  const LineCreationStrategy();
+
+  @override
+  CreationUpdateResult update({
+    required DrawState state,
+    required DrawConfig config,
+    required CreatingState creatingState,
+    required DrawPoint currentPosition,
+    required bool maintainAspectRatio,
+    required bool createFromCenter,
+    required SnappingMode snappingMode,
+    bool snapOverrideActive = false,
+    TextMetricsService textMetricsService = defaultTextMetricsService,
+  }) {
+    final elementData = requireCreatingElementDataType<LineData>(
+      creatingState: creatingState,
+      strategyName: 'LineCreationStrategy.update',
+    );
+    return _updateLineCreation(
+      state: state,
+      config: config,
+      creatingState: creatingState,
+      currentPosition: currentPosition,
+      snappingMode: snappingMode,
+      snapOverrideActive: snapOverrideActive,
+      maintainAspectRatio: maintainAspectRatio,
+      createFromCenter: createFromCenter,
+      data: elementData,
+    );
+  }
+}
+
 typedef _ArrowCreationFinishResult = ({
   DrawRect rect,
   ConnectorData data,
@@ -426,7 +389,7 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
   required DrawConfig config,
   required String elementId,
   required _ArrowCreationFinishResult result,
-  required _ArrowCreationSessionData sessionData,
+  required _ConnectorCreationSessionData sessionData,
 }) {
   final worldPoints = resolveArrowWorldPoints(
     rect: result.rect,
@@ -516,7 +479,147 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
   );
 }
 
-CreationUpdateResult _updateLine({
+CreationUpdateResult _updateArrowCreation({
+  required DrawState state,
+  required DrawConfig config,
+  required CreatingState creatingState,
+  required DrawPoint currentPosition,
+  required SnappingMode snappingMode,
+  required bool snapOverrideActive,
+  required bool maintainAspectRatio,
+  required bool createFromCenter,
+  required ArrowData data,
+}) {
+  final sessionData = _resolveSessionData(creatingState.creationMode);
+
+  final endpoints = _resolveCreationEndpoints(
+    state: state,
+    config: config,
+    creatingState: creatingState,
+    data: data,
+    currentPosition: currentPosition,
+    snappingMode: snappingMode,
+    snapOverrideActive: snapOverrideActive,
+    sessionData: sessionData,
+    maintainAspectRatio: maintainAspectRatio,
+    createFromCenter: createFromCenter,
+  );
+  var adjustedCurrent = endpoints.currentPosition;
+
+  final bindingResult = _snapBindingPoint(
+    state: state,
+    config: config,
+    data: data,
+    position: adjustedCurrent,
+    snappingMode: snappingMode,
+    dragStart: false,
+    preferredBinding: data.endBinding,
+    oppositeBinding: endpoints.startBinding,
+    oppositePoint: endpoints.segmentStart,
+    initialBinding: false,
+    preserveOppositeInsideBinding: sessionData.preserveStartInsideBinding,
+    oppositeOrbitFocusPoint: sessionData.startOrbitFocusPoint,
+    angleLocked: maintainAspectRatio,
+    altKey: createFromCenter,
+    snapOverrideActive: snapOverrideActive,
+  );
+  sessionData.allowBindingOnFinalize = bindingResult.allowBindingOnFinalize;
+  adjustedCurrent = bindingResult.position;
+  var endBinding = bindingResult.binding;
+  final startBinding = bindingResult.startBinding ?? endpoints.startBinding;
+  final closeTolerance =
+      config.selection.interaction.handleTolerance *
+      _loopCloseToleranceMultiplier;
+  if (data.arrowType != ArrowType.elbow && endpoints.fixedPoints.length >= 2) {
+    final startPoint = endpoints.fixedPoints.first;
+    if (adjustedCurrent.distanceSquared(startPoint) <=
+        closeTolerance * closeTolerance) {
+      adjustedCurrent = startPoint;
+      endBinding = startBinding;
+    }
+  }
+
+  final allPoints = _appendCurrentPoint(
+    fixedPoints: endpoints.fixedPoints,
+    currentPoint: adjustedCurrent,
+  );
+  late final DrawRect arrowRect;
+  late final List<DrawPoint> normalizedPoints;
+  var resolvedStartBinding = startBinding;
+  var resolvedEndBinding = endBinding;
+  List<ElbowFixedSegment>? resolvedFixedSegments;
+  bool? resolvedStartIsSpecial;
+  bool? resolvedEndIsSpecial;
+  if (data.arrowType == ArrowType.elbow) {
+    final routed = routeElbowArrow(
+      start: endpoints.startPosition,
+      end: adjustedCurrent,
+      startBinding: resolvedStartBinding,
+      endBinding: bindingResult.binding,
+      elementsById: state.domain.document.elementMap,
+      startArrowhead: data.startArrowhead,
+      endArrowhead: data.endArrowhead,
+      engineContext: buildCoreEngineContext(
+        zoom: state.application.view.camera.zoom,
+        isBindingEnabled: config.snap.enableArrowBinding,
+      ),
+    );
+    final routedPoints = routed.points;
+    arrowRect = _calculateArrowRect(
+      points: routedPoints,
+      arrowType: data.arrowType,
+    );
+    normalizedPoints = normalizeArrowPoints(
+      worldPoints: routedPoints,
+      rect: arrowRect,
+    );
+    resolvedStartBinding = routed.startBinding;
+    resolvedEndBinding = routed.endBinding;
+    resolvedFixedSegments = routed.fixedSegments;
+    resolvedStartIsSpecial = routed.startIsSpecial;
+    resolvedEndIsSpecial = routed.endIsSpecial;
+  } else if (endpoints.fixedPoints.length == 1) {
+    final layout = computeArrowTwoPointLayout(
+      first: endpoints.fixedPoints.first,
+      second: adjustedCurrent,
+    );
+    arrowRect = layout.rect;
+    normalizedPoints = layout.normalizedPoints;
+  } else {
+    arrowRect = _calculateArrowRect(
+      points: allPoints,
+      arrowType: data.arrowType,
+    );
+    normalizedPoints = normalizeArrowPoints(
+      worldPoints: allPoints,
+      rect: arrowRect,
+    );
+  }
+
+  final updatedData = data.copyWith(
+    points: normalizedPoints,
+    startBinding: resolvedStartBinding,
+    endBinding: resolvedEndBinding,
+    fixedSegments: resolvedFixedSegments,
+    startIsSpecial: resolvedStartIsSpecial,
+    endIsSpecial: resolvedEndIsSpecial,
+  );
+
+  return CreationUpdateResult(
+    data: updatedData,
+    rect: arrowRect,
+    snapGuides: endpoints.snapGuides,
+    creationMode: PointCreationMode(
+      fixedPoints: data.arrowType == ArrowType.elbow
+          ? List<DrawPoint>.unmodifiable([endpoints.startPosition])
+          : endpoints.fixedPoints,
+      currentPoint: adjustedCurrent,
+      sessionData: sessionData,
+    ),
+  );
+}
+
+CreationUpdateResult _updateLineCreation({
   required DrawState state,
   required DrawConfig config,
   required CreatingState creatingState,
@@ -628,13 +731,12 @@ _CreationEndpointResolution _resolveCreationEndpoints({
   required DrawPoint currentPosition,
   required SnappingMode snappingMode,
   required bool snapOverrideActive,
-  required _ArrowCreationSessionData sessionData,
+  required _ConnectorCreationSessionData sessionData,
   required bool maintainAspectRatio,
   required bool createFromCenter,
 }) {
   sessionData.allowBindingOnFinalize = _shouldAttemptBinding(
     snapConfig: config.snap,
-    snappingMode: snappingMode,
     snapOverrideActive: snapOverrideActive,
   );
   var startPosition = _snapPointToGridIfNeeded(
@@ -775,7 +877,7 @@ _PointSnapResult _snapCreatePoint({
   required DrawConfig config,
   required DrawPoint position,
   required SnappingMode snappingMode,
-  required _ArrowCreationSessionData sessionData,
+  required _ConnectorCreationSessionData sessionData,
 }) {
   if (snappingMode != SnappingMode.object) {
     return _PointSnapResult(position: position);
@@ -844,7 +946,6 @@ _BindingSnapResult _snapBindingPoint({
   final snapConfig = config.snap;
   final shouldLookupBindings = _shouldAttemptBinding(
     snapConfig: snapConfig,
-    snappingMode: snappingMode,
     snapOverrideActive: snapOverrideActive,
   );
   final bindingDistance = shouldLookupBindings
@@ -1167,7 +1268,7 @@ _BindingSnapResult _resolveStartBindingPoint({
   required ArrowBinding? preferredBinding,
   required ArrowBinding? oppositeBinding,
   required DrawPoint oppositePoint,
-  required _ArrowCreationSessionData sessionData,
+  required _ConnectorCreationSessionData sessionData,
   required bool angleLocked,
   required bool altKey,
   required bool snapOverrideActive,
@@ -1175,7 +1276,6 @@ _BindingSnapResult _resolveStartBindingPoint({
   final snapConfig = config.snap;
   final bindingEnabled = _shouldAttemptBinding(
     snapConfig: snapConfig,
-    snappingMode: snappingMode,
     snapOverrideActive: snapOverrideActive,
   );
   final bindingDistance = bindingEnabled
@@ -1276,24 +1376,22 @@ _BindingSnapResult _resolveStartBindingPoint({
 
 bool _shouldAttemptBinding({
   required SnapConfig snapConfig,
-  required SnappingMode snappingMode,
   required bool snapOverrideActive,
 }) => shouldAttemptArrowBinding(
   snapConfig: snapConfig,
-  snappingMode: snappingMode,
   snapOverrideActive: snapOverrideActive,
 );
 
-_ArrowCreationSessionData _resolveSessionData(CreationMode mode) {
+_ConnectorCreationSessionData _resolveSessionData(CreationMode mode) {
   if (mode case PointCreationMode(:final sessionData)) {
-    if (sessionData is _ArrowCreationSessionData) {
+    if (sessionData is _ConnectorCreationSessionData) {
       return sessionData;
     }
   }
-  return _ArrowCreationSessionData();
+  return _ConnectorCreationSessionData();
 }
 
-class _ArrowCreationSessionData {
+class _ConnectorCreationSessionData {
   DrawPoint? _cachedStartPosition;
   ArrowBinding? _cachedStartPreferredBinding;
   ArrowBinding? _cachedStartBinding;

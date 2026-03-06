@@ -8,5 +8,5 @@ final class EditOperationIds {
   static const move = 'move';
   static const resize = 'resize';
   static const rotate = 'rotate';
-  static const arrowPoint = 'arrow_point';
+  static const connectorPoint = 'connector_point';
 }

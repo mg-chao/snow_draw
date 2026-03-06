@@ -21,8 +21,9 @@ import 'package:snow_draw_engine/draw/utils/snapping_mode.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('ConnectorCreationStrategy core binding integration', () {
-    const strategy = ConnectorCreationStrategy();
+  group('ArrowCreationStrategy core binding integration', () {
+    const strategy = ArrowCreationStrategy();
+    const lineStrategy = LineCreationStrategy();
 
     test('update binds end endpoint to nearby bindable via core', () {
       const startPosition = DrawPoint(x: 20, y: 60);
@@ -706,12 +707,12 @@ void main() {
         ),
       ]);
       final creatingState = _startCreating(
-        strategy: strategy,
+        strategy: lineStrategy,
         startPosition: startPosition,
         data: const LineData(),
       );
 
-      final update = strategy.update(
+      final update = lineStrategy.update(
         state: state,
         config: DrawConfig.defaultConfig,
         creatingState: creatingState,

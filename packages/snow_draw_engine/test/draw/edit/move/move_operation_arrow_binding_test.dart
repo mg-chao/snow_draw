@@ -333,7 +333,7 @@ ElementState _createElbowArrowFromCreation({
   required DrawPoint midPosition,
   required DrawPoint endPosition,
 }) {
-  const strategy = ConnectorCreationStrategy();
+  const strategy = ArrowCreationStrategy();
   final start = strategy.start(
     data: const ArrowData(arrowType: ArrowType.elbow),
     startPosition: startPosition,

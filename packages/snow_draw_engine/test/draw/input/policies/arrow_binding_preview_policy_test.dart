@@ -9,7 +9,6 @@ import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_color.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
-import 'package:snow_draw_engine/draw/utils/snapping_mode.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -19,44 +18,19 @@ void main() {
       expect(
         shouldPreviewArrowBinding(
           snapConfig: enabled,
-          snappingMode: SnappingMode.none,
           snapOverrideActive: true,
         ),
         isFalse,
       );
 
-      expect(
-        shouldPreviewArrowBinding(
-          snapConfig: enabled,
-          snappingMode: SnappingMode.none,
-        ),
-        isTrue,
-      );
-      expect(
-        shouldPreviewArrowBinding(
-          snapConfig: enabled,
-          snappingMode: SnappingMode.grid,
-        ),
-        isTrue,
-      );
+      expect(shouldPreviewArrowBinding(snapConfig: enabled), isTrue);
+      expect(shouldPreviewArrowBinding(snapConfig: enabled), isTrue);
 
       final objectSnapEnabled = enabled.copyWith(enabled: true);
-      expect(
-        shouldPreviewArrowBinding(
-          snapConfig: objectSnapEnabled,
-          snappingMode: SnappingMode.none,
-        ),
-        isTrue,
-      );
+      expect(shouldPreviewArrowBinding(snapConfig: objectSnapEnabled), isTrue);
 
       final bindingDisabled = enabled.copyWith(enableArrowBinding: false);
-      expect(
-        shouldPreviewArrowBinding(
-          snapConfig: bindingDisabled,
-          snappingMode: SnappingMode.object,
-        ),
-        isFalse,
-      );
+      expect(shouldPreviewArrowBinding(snapConfig: bindingDisabled), isFalse);
     });
 
     test('resolveArrowBindingTargets returns nearby bindables only', () {

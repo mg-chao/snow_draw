@@ -58,7 +58,7 @@ EditIntentResolution? _resolveDefaultIntent(
     :final isDoubleClick,
   ) =>
     (
-      operationId: EditOperationIds.arrowPoint,
+      operationId: EditOperationIds.connectorPoint,
       params: ConnectorPointOperationParams(
         elementId: elementId,
         pointKind: pointKind,

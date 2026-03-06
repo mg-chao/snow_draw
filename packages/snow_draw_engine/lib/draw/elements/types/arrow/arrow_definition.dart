@@ -10,6 +10,6 @@ const arrowDefinition = ElementDefinition<ArrowData>(
   hitTester: ConnectorHitTester(),
   createDefaultData: ArrowData.new,
   fromJson: ArrowData.fromJson,
-  creationStrategy: ConnectorCreationStrategy(),
+  creationStrategy: ArrowCreationStrategy(),
   taskEncoder: ArrowTaskEncoder(),
 );

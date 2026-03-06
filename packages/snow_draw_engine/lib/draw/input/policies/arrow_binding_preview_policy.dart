@@ -1,19 +1,15 @@
 import '../../config/draw_config.dart';
 import '../../elements/types/arrow/arrow_binding_policy.dart';
-import '../../elements/types/arrow/arrow_core.dart' as core;
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';
 import '../../types/draw_point.dart';
-import '../../utils/snapping_mode.dart';
 
 /// Returns whether arrow binding preview should be evaluated.
 bool shouldPreviewArrowBinding({
   required SnapConfig snapConfig,
-  required SnappingMode snappingMode,
   bool snapOverrideActive = false,
 }) => shouldAttemptArrowBinding(
   snapConfig: snapConfig,
-  snappingMode: snappingMode,
   snapOverrideActive: snapOverrideActive,
 );
 
@@ -32,9 +28,8 @@ List<ElementState> resolveArrowBindingTargets({
     return const <ElementState>[];
   }
 
-  final hovered = core.listHoveredBindables(
-    <double>[position.x, position.y],
-    document.arrowBindableStates,
+  final hovered = document.queryArrowBindableElementsAtPointTopDown(
+    position,
     distance,
     stopAtOpaque: true,
   );
@@ -43,9 +38,8 @@ List<ElementState> resolveArrowBindingTargets({
   }
 
   final orderedTargets = <ElementState>[];
-  for (final bindable in hovered) {
-    final element = document.elementMap[bindable.id];
-    if (element != null && element.opacity > 0) {
+  for (final element in hovered) {
+    if (element.opacity > 0) {
       orderedTargets.add(element);
     }
   }

@@ -10,6 +10,6 @@ const lineDefinition = ElementDefinition<LineData>(
   hitTester: LineHitTester(),
   createDefaultData: LineData.new,
   fromJson: LineData.fromJson,
-  creationStrategy: ConnectorCreationStrategy(),
+  creationStrategy: LineCreationStrategy(),
   taskEncoder: LineTaskEncoder(),
 );

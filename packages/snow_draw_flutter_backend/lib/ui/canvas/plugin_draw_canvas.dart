@@ -1601,13 +1601,8 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     final config = widget.store.config;
-    final snappingMode = resolveEffectiveSnappingModeForConfig(
-      config: config,
-      ctrlPressed: _currentModifiers.control,
-    );
     if (!shouldPreviewArrowBinding(
       snapConfig: config.snap,
-      snappingMode: snappingMode,
       snapOverrideActive: _currentModifiers.control,
     )) {
       return null;

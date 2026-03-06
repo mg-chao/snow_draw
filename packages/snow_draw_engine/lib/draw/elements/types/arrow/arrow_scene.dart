@@ -116,17 +116,14 @@ ArrowBindableCandidates resolveArrowBindableCandidates({
   }
 
   if (includeNearby && distance > 0 && document.hasArrowBindableElements) {
-    final hoveredBindables = core.listHoveredBindables(
-      <double>[worldPoint.x, worldPoint.y],
-      document.arrowBindableStates,
+    final nearbyBindables = document.queryArrowBindableElementsAtPointTopDown(
+      worldPoint,
       distance,
+      excludedElementId: excludedElementId,
       stopAtOpaque: true,
     );
-    for (final bindable in hoveredBindables) {
-      if (excludedElementId != null && bindable.id == excludedElementId) {
-        continue;
-      }
-      candidateIds.add(bindable.id);
+    for (final element in nearbyBindables) {
+      candidateIds.add(element.id);
     }
   }
 

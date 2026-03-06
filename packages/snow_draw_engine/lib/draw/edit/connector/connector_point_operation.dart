@@ -48,7 +48,7 @@ class ConnectorPointOperation extends EditOperation with StandardFinishMixin {
   const ConnectorPointOperation();
 
   @override
-  EditOperationId get id => EditOperationIds.arrowPoint;
+  EditOperationId get id => EditOperationIds.connectorPoint;
 
   @override
   HistoryMetadata createHistoryMetadata({
@@ -288,7 +288,6 @@ class ConnectorPointOperation extends EditOperation with StandardFinishMixin {
             endBinding != null);
     final allowNewBinding = shouldAttemptArrowBinding(
       snapConfig: snapConfig,
-      snappingMode: snappingMode,
       snapOverrideActive: modifiers.snapOverride,
     );
     final bindingDistance = shouldLookupBindings
