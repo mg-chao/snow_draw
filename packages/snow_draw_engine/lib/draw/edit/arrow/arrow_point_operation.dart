@@ -298,7 +298,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
         : 0.0;
     final coreEngineContext = _coreContextForState(
       state: state,
-      isBindingEnabled: snapConfig.enableArrowBinding,
+      isBindingEnabled: allowNewBinding,
     );
 
     final result = _compute(
@@ -406,7 +406,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
             localPoints: localPoints,
             coreEngineContext: _coreContextForState(
               state: state,
-              isBindingEnabled: true,
+              isBindingEnabled: typedTransform.allowBindingOnFinalize,
             ),
           )
         : null;
@@ -432,7 +432,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       localPoints: effectiveLocalPoints,
       coreEngineContext: _coreContextForState(
         state: state,
-        isBindingEnabled: true,
+        isBindingEnabled: effectiveTransform.allowBindingOnFinalize,
       ),
       finalize: applyDeletion,
     );

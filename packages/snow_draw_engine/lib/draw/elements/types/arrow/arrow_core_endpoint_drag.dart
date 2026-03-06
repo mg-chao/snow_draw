@@ -177,7 +177,14 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
     oppositeBinding: oppositeBinding,
     orderedElementIds: orderedElementIds,
   );
-  final dragContext = coreEngineContext;
+  final dragContext = shouldLookupBindings && allowNewBinding
+      ? coreEngineContext
+      : buildCoreEngineContext(
+          zoom: coreEngineContext.zoom,
+          isBindingEnabled: false,
+          bindMode: coreEngineContext.bindMode,
+          maxCoordinate: coreEngineContext.maxCoordinate,
+        );
   final session = ArrowCoreSession.fromDocument(
     state.domain.document,
     orderedElementIds: orderedElementIds,

@@ -211,6 +211,49 @@ void main() {
       expect(updatedData.endBinding, isNull);
     });
 
+    test('snap override prevents reorder fallback while dragging endpoint', () {
+      final bindTarget = _rectangleElement(
+        id: 'rect-snap-reorder',
+        rect: const DrawRect(minX: 220, maxX: 320, maxY: 120),
+        zIndex: 1,
+      );
+      final arrow = _arrowElement(
+        id: 'arrow-snap-reorder',
+        points: const <DrawPoint>[
+          DrawPoint(x: 60, y: 60),
+          DrawPoint(x: 160, y: 60),
+        ],
+        zIndex: 0,
+      );
+      final state = _stateWithElements(
+        <ElementState>[arrow, bindTarget],
+        selectedIds: <String>{arrow.id},
+      );
+
+      final session = _dragArrowHandleSession(
+        state: state,
+        elementId: arrow.id,
+        pointKind: ArrowPointKind.turning,
+        pointIndex: 1,
+        startPosition: const DrawPoint(x: 160, y: 60),
+        currentPosition: const DrawPoint(x: 240, y: 60),
+        modifiers: const EditModifiers(snapOverride: true),
+      );
+
+      expect(session.transform.endBinding, isNull);
+      expect(session.transform.orderedElementIds, isNull);
+
+      final next = const ArrowPointOperation().finish(
+        state: state,
+        context: session.context,
+        transform: session.transform,
+      );
+      final orderedIds = next.domain.document.elements
+          .map((element) => element.id)
+          .toList(growable: false);
+      expect(orderedIds, <String>[arrow.id, bindTarget.id]);
+    });
+
     test(
       'finish finalizes endpoint drag with complex same-target behavior',
       () {
