@@ -30,6 +30,10 @@ use crate::draw::elements::types::arrow::arrow_binding_snapper::{
     ArrowBindingCachePolicy, ArrowBindingResolver as SnapperBindingResolver, ArrowBindingSnapper,
     ArrowBindingTargetCache as SnapperTargetCache,
 };
+use crate::draw::elements::types::arrow::arrow_core::DEFAULT_MAX_COORDINATE;
+use crate::draw::elements::types::arrow::arrow_core_bridge::build_core_engine_context;
+use crate::draw::elements::types::arrow::arrow_core_endpoint_drag::finalize_arrow_core_endpoint_drag_result;
+use crate::draw::elements::types::arrow::arrow_core_ops::resolve_endpoint_drag_binding_enabled;
 use crate::draw::elements::types::arrow::arrow_data::{
     ArrowBinding as ArrowDataBinding, ArrowBindingMode as ArrowDataBindingMode, ArrowData,
     ArrowDataPatch, ElbowFixedSegment as ArrowDataElbowFixedSegment,
@@ -58,6 +62,9 @@ use crate::draw::types::edit_operation_id::{EditOperationId, EditOperationIds};
 use crate::draw::types::edit_transform::{ArrowPointTransform, EditTransform};
 use crate::draw::types::element_style::{ArrowType, ArrowheadStyle};
 use crate::draw::utils::combined_element_lookup::CombinedElementLookup;
+use crate::draw::utils::list_equality::{
+    fixed_segment_structure_equals_with_tolerance, point_list_equals,
+};
 use crate::draw::utils::snapping_mode::{resolve_effective_snapping_mode_for_config, SnappingMode};
 
 use super::core::edit_modifiers::EditModifiers;
@@ -845,7 +852,28 @@ impl EditOperation for ArrowPointEditOperationAdapter {
             self.replace_session(None);
             return to_idle_state(state);
         };
-        let internal_transform = into_internal_arrow_transform(typed_transform);
+        let local_points = self
+            .operation
+            .compute_points_for_result(&into_internal_arrow_transform(typed_transform), true);
+        let finalized_endpoint =
+            finalize_endpoint_drag_on_finish(state, &typed_context, typed_transform, &local_points);
+        let effective_transform = match finalized_endpoint {
+            Some(finalized) => typed_transform.copy_with(
+                None,
+                Some(finalized.points),
+                Some(finalized.fixed_segments),
+                Some(finalized.start_binding),
+                Some(finalized.end_binding),
+                Some(finalized.ordered_element_ids),
+                None,
+                None,
+                None,
+                Some(true),
+                None,
+            ),
+            None => typed_transform.clone(),
+        };
+        let internal_transform = into_internal_arrow_transform(&effective_transform);
         let Some(updated_element) = compute_updated_arrow_element(
             &self.operation,
             state,
@@ -871,6 +899,10 @@ impl EditOperation for ArrowPointEditOperationAdapter {
                 }
             })
             .collect::<Vec<_>>();
+        let next_elements = reorder_elements_by_id_order(
+            next_elements,
+            effective_transform.ordered_element_ids.as_deref(),
+        );
         let next_document = state
             .domain
             .document
@@ -1268,6 +1300,180 @@ fn is_bindable_target(element: &DomainElementState) -> bool {
     ArrowBindingUtils::is_bindable_target(element)
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct FinalizeEndpointComputation {
+    points: Vec<DrawPoint>,
+    start_binding: Option<ArrowDataBinding>,
+    end_binding: Option<ArrowDataBinding>,
+    fixed_segments: Option<Vec<ArrowDataElbowFixedSegment>>,
+    ordered_element_ids: Option<Vec<String>>,
+}
+
+fn finalize_endpoint_drag_on_finish(
+    state: &DrawState,
+    context: &ArrowPointEditContext,
+    transform: &ArrowPointTransform,
+    local_points: &[DrawPoint],
+) -> Option<FinalizeEndpointComputation> {
+    if transform.should_delete || local_points.len() < 2 {
+        return None;
+    }
+    if matches!(
+        context.point_kind,
+        OperationArrowPointKind::Addable
+            | OperationArrowPointKind::FocusStart
+            | OperationArrowPointKind::FocusEnd
+    ) {
+        return None;
+    }
+
+    let active_index = transform.active_index?;
+    if active_index >= local_points.len() {
+        return None;
+    }
+    if active_index != 0 && active_index + 1 != local_points.len() {
+        return None;
+    }
+
+    let current_element = state
+        .domain
+        .document
+        .get_element_by_id(context.element_id.as_str())?
+        .clone();
+    let target = resolve_arrow_target_for_element(current_element.clone())?;
+    let source_data = connector_source_data_from_payload(&target.payload);
+    let release_local_pointer = transform.current_position + context.drag_offset;
+    let world_target = context.to_world(release_local_pointer);
+    let ordered_element_ids = transform
+        .ordered_element_ids
+        .clone()
+        .unwrap_or_else(|| current_ordered_element_ids(state));
+    let start_binding = transform
+        .start_binding
+        .as_ref()
+        .map(internal_binding_to_compat);
+    let end_binding = transform
+        .end_binding
+        .as_ref()
+        .map(internal_binding_to_compat);
+    let drag_result = finalize_arrow_core_endpoint_drag_result(
+        state,
+        &current_element,
+        &source_data,
+        local_points,
+        active_index,
+        world_target,
+        start_binding.as_ref(),
+        end_binding.as_ref(),
+        context.element_id.as_str(),
+        true,
+        transform.allow_binding_on_finalize,
+        0.0,
+        core_context_for_state(state, transform.allow_binding_on_finalize),
+        transform.fixed_segments.as_deref(),
+        Some(ordered_element_ids.as_slice()),
+        Default::default(),
+    )?;
+    let next_start_binding = drag_result
+        .start_binding
+        .as_ref()
+        .map(compat_binding_to_internal);
+    let next_end_binding = drag_result
+        .end_binding
+        .as_ref()
+        .map(compat_binding_to_internal);
+
+    if source_data.arrow_type == ArrowType::Elbow {
+        let mut next_start_binding = next_start_binding;
+        let mut next_end_binding = next_end_binding;
+        if active_index == 0 {
+            next_end_binding = transform.end_binding.clone();
+        } else {
+            next_start_binding = transform.start_binding.clone();
+        }
+        let bindings_changed = next_start_binding != transform.start_binding
+            || next_end_binding != transform.end_binding;
+        let order_changed = drag_result.ordered_element_ids.is_some();
+        if !bindings_changed && !order_changed {
+            return None;
+        }
+        return Some(FinalizeEndpointComputation {
+            points: local_points.to_vec(),
+            start_binding: next_start_binding,
+            end_binding: next_end_binding,
+            fixed_segments: transform.fixed_segments.clone(),
+            ordered_element_ids: drag_result.ordered_element_ids,
+        });
+    }
+
+    let points_changed = !point_list_equals(local_points, &drag_result.local_points);
+    let bindings_changed =
+        next_start_binding != transform.start_binding || next_end_binding != transform.end_binding;
+    let segments_changed = !fixed_segment_structure_equals_with_tolerance(
+        transform.fixed_segments.as_deref(),
+        drag_result.fixed_segments.as_deref(),
+        1.0,
+    );
+    let order_changed = drag_result.ordered_element_ids.is_some();
+    if !points_changed && !bindings_changed && !segments_changed && !order_changed {
+        return None;
+    }
+
+    Some(FinalizeEndpointComputation {
+        points: drag_result.local_points,
+        start_binding: next_start_binding,
+        end_binding: next_end_binding,
+        fixed_segments: drag_result.fixed_segments,
+        ordered_element_ids: drag_result.ordered_element_ids,
+    })
+}
+
+fn connector_source_data_from_payload(payload: &ArrowEditPayload) -> ArrowData {
+    match payload {
+        ArrowEditPayload::Arrow(data) => data.clone(),
+        ArrowEditPayload::Line(data) => ArrowData::default().copy_with(ArrowDataPatch {
+            points: Some(data.points.clone()),
+            stroke_width: Some(data.stroke_width),
+            stroke_style: Some(data.stroke_style),
+            arrow_type: Some(data.arrow_type),
+            start_arrowhead: Some(data.start_arrowhead),
+            end_arrowhead: Some(data.end_arrowhead),
+            start_binding: match data.start_binding.as_ref() {
+                Some(binding) => ArrowDataNullableField::Value(compat_binding_to_internal(binding)),
+                None => ArrowDataNullableField::Null,
+            },
+            end_binding: match data.end_binding.as_ref() {
+                Some(binding) => ArrowDataNullableField::Value(compat_binding_to_internal(binding)),
+                None => ArrowDataNullableField::Null,
+            },
+            fixed_segments: ArrowDataNullableField::Null,
+            ..ArrowDataPatch::default()
+        }),
+    }
+}
+
+fn current_ordered_element_ids(state: &DrawState) -> Vec<String> {
+    state
+        .domain
+        .document
+        .elements
+        .iter()
+        .map(|element| element.id.clone())
+        .collect()
+}
+
+fn core_context_for_state(
+    state: &DrawState,
+    is_binding_enabled: bool,
+) -> crate::draw::elements::types::arrow::arrow_core::EngineContext {
+    build_core_engine_context(
+        state.application.view.camera.zoom,
+        is_binding_enabled,
+        resolve_endpoint_drag_binding_enabled(is_binding_enabled),
+        DEFAULT_MAX_COORDINATE,
+    )
+}
+
 fn compute_updated_arrow_element(
     operation: &ArrowPointOperation,
     state: &DrawState,
@@ -1316,7 +1522,6 @@ fn compute_updated_arrow_element(
                 });
                 Some((Arc::new(updated_data), layout.rect))
             } else if data.arrow_type == ArrowType::Elbow {
-                let fixed_segments = transform.fixed_segments.clone().unwrap_or_default();
                 let element_map = state.domain.document.element_map();
                 let updates = HashMap::new();
                 let lookup = CombinedElementLookup::new(&element_map, &updates);
@@ -1343,7 +1548,11 @@ fn compute_updated_arrow_element(
                     Some(next_world_points.clone())
                 };
                 let fixed_segments_override = if is_fixed_segment_editing {
-                    Some(fixed_segments)
+                    if should_release_fixed_segment {
+                        Some(transform.fixed_segments.clone().unwrap_or_default())
+                    } else {
+                        transform.fixed_segments.clone()
+                    }
                 } else {
                     None
                 };
@@ -1542,5 +1751,114 @@ fn internal_fixed_segment_to_compat(
         index: segment.index,
         start: segment.start,
         end: segment.end,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
+    use crate::draw::models::application_state::ApplicationState;
+    use crate::draw::models::draw_state::{DomainDocumentState, DomainState, DrawState};
+
+    fn arrow_element(
+        id: &str,
+        rect: DrawRect,
+        data: ArrowData,
+        z_index: i64,
+    ) -> DomainElementState {
+        DomainElementState::new(id.to_owned(), rect, 0.0, 1.0, z_index, Arc::new(data))
+    }
+
+    fn rectangle_element(id: &str, rect: DrawRect, z_index: i64) -> DomainElementState {
+        DomainElementState::new(
+            id.to_owned(),
+            rect,
+            0.0,
+            1.0,
+            z_index,
+            Arc::new(RectangleData::default()),
+        )
+    }
+
+    fn draw_state(elements: Vec<DomainElementState>) -> DrawState {
+        let domain = DomainState::new(
+            DomainDocumentState::new(elements, 1, Default::default()),
+            Default::default(),
+        );
+        DrawState::new(Some(domain), Some(ApplicationState::initial(None)))
+    }
+
+    #[test]
+    fn finalize_elbow_endpoint_drag_updates_binding_and_order() {
+        let arrow_data = ArrowData::default().copy_with(ArrowDataPatch {
+            arrow_type: Some(ArrowType::Elbow),
+            end_arrowhead: Some(ArrowheadStyle::Standard),
+            ..ArrowDataPatch::default()
+        });
+        let arrow = arrow_element(
+            "arrow",
+            DrawRect::new(0.0, 0.0, 80.0, 60.0),
+            arrow_data.clone(),
+            0,
+        );
+        let target = rectangle_element("box", DrawRect::new(90.0, 90.0, 130.0, 130.0), 1);
+        let state = draw_state(vec![arrow.clone(), target]);
+        let local_points = vec![
+            DrawPoint::new(0.0, 0.0),
+            DrawPoint::new(20.0, 0.0),
+            DrawPoint::new(20.0, 20.0),
+            DrawPoint::new(110.0, 110.0),
+        ];
+        let context = ArrowPointEditContext::from_start_position(
+            arrow.id.clone(),
+            arrow.rect,
+            arrow.rotation,
+            DrawPoint::new(110.0, 110.0),
+            local_points.clone(),
+            Vec::new(),
+            ArrowType::Elbow,
+            OperationArrowPointKind::Turning,
+            local_points.len() - 1,
+            false,
+            false,
+            ArrowheadStyle::None,
+            ArrowheadStyle::Standard,
+            None,
+            None,
+            true,
+        );
+        let transform = ArrowPointTransform::with_state(
+            DrawPoint::new(110.0, 110.0),
+            local_points.clone(),
+            None,
+            None,
+            None,
+            None,
+            Some(local_points.len() - 1),
+            false,
+            false,
+            true,
+            true,
+        );
+
+        let finalized =
+            finalize_endpoint_drag_on_finish(&state, &context, &transform, &local_points)
+                .expect("finalized elbow endpoint drag");
+
+        assert_eq!(
+            finalized
+                .end_binding
+                .as_ref()
+                .map(|binding| binding.element_id.as_str()),
+            Some("box")
+        );
+        assert_eq!(finalized.start_binding, None);
+        assert_eq!(finalized.points, local_points);
+        assert_eq!(
+            finalized.ordered_element_ids,
+            Some(vec!["box".to_owned(), "arrow".to_owned()])
+        );
     }
 }

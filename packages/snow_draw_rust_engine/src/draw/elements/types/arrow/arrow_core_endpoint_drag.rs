@@ -14,6 +14,10 @@ use crate::draw::elements::types::arrow::arrow_core_bridge::{
 use crate::draw::elements::types::arrow::arrow_core_ops::{
     resolve_core_max_binding_distance, ArrowCoreEndpointBindingOptions,
 };
+use crate::draw::elements::types::arrow::core::arrow_order_core::{
+    reorder_arrow_above_hovered_bindable, reordered_element_ids_from_hovered_reorder,
+};
+use crate::draw::elements::types::arrow::core::arrow_types::ReorderArrowAboveHoveredBindableInput;
 use crate::draw::elements::types::arrow::elbow::elbow_fixed_segment::ElbowFixedSegment;
 use crate::draw::models::draw_state::{DomainElementState, DrawState};
 use crate::draw::models::element_state::ElementState;
@@ -253,6 +257,21 @@ fn run_arrow_core_endpoint_drag_result(
     );
     let next_world_points = core_arrow_world_points(&next_arrow);
 
+    let reordered_element_ids = ordered_element_ids.and_then(|ids| {
+        let hovered_bindable_id = suggested_bindable_id.clone()?;
+        let reorder =
+            reorder_arrow_above_hovered_bindable(&ReorderArrowAboveHoveredBindableInput {
+                ordered_element_ids: ids.to_vec(),
+                arrow_id: excluded_element_id.to_owned(),
+                hovered_bindable_id: Some(hovered_bindable_id),
+                point: None,
+                bindables: None,
+                tolerance: None,
+                anchor_element_ids_by_bindable_id: None,
+            });
+        reordered_element_ids_from_hovered_reorder(&reorder)
+    });
+
     Some(ArrowCoreEndpointDragResult {
         arrow: next_arrow.clone(),
         world_points: next_world_points.clone(),
@@ -264,7 +283,7 @@ fn run_arrow_core_endpoint_drag_result(
         } else {
             fixed_segments.map(|segments| segments.to_vec())
         },
-        ordered_element_ids: ordered_element_ids.map(|ids| ids.to_vec()),
+        ordered_element_ids: reordered_element_ids,
         suggested_bindable_id,
     })
 }
@@ -515,6 +534,40 @@ mod tests {
             Some("box")
         );
         assert_eq!(result.start_binding, None);
+    }
+
+    #[test]
+    fn compute_endpoint_drag_reorders_arrow_above_suggested_bindable() {
+        let data = ArrowData::default();
+        let arrow = arrow_element("arrow", DrawRect::new(0.0, 0.0, 20.0, 20.0), data.clone());
+        let target = rectangle_element("box", DrawRect::new(90.0, 90.0, 130.0, 130.0));
+        let state = draw_state(vec![arrow.clone(), target.clone()]);
+
+        let result = compute_arrow_core_endpoint_drag_result(
+            &state,
+            &arrow,
+            &data,
+            &[DrawPoint::new(0.0, 10.0), DrawPoint::new(20.0, 10.0)],
+            1,
+            DrawPoint::new(110.0, 110.0),
+            None,
+            None,
+            "arrow",
+            true,
+            true,
+            40.0,
+            EngineContext::new(1.0, true, "orbit", 1e6),
+            None,
+            Some(&["arrow".to_owned(), "box".to_owned()]),
+            ArrowCoreEndpointBindingOptions::default(),
+        )
+        .expect("endpoint drag result");
+
+        assert_eq!(
+            result.ordered_element_ids,
+            Some(vec!["box".to_owned(), "arrow".to_owned()])
+        );
+        assert_eq!(result.suggested_bindable_id.as_deref(), Some("box"));
     }
 
     #[test]
