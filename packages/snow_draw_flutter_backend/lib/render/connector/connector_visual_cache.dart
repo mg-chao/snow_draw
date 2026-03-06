@@ -2,10 +2,10 @@ import 'dart:ui';
 
 import 'package:snow_draw_engine/snow_draw_engine.dart';
 
-import '../geometry/arrow_geometry.dart';
+import '../geometry/connector_geometry.dart';
 
-class ArrowVisualCacheEntry {
-  ArrowVisualCacheEntry({
+class ConnectorVisualCacheEntry {
+  ConnectorVisualCacheEntry({
     required this.data,
     required this.width,
     required this.height,
@@ -14,30 +14,30 @@ class ArrowVisualCacheEntry {
     required this.arrowheadPaths,
   });
 
-  final ArrowLikeData data;
+  final ConnectorData data;
   final double width;
   final double height;
-  final FlutterArrowGeometryDescriptor geometry;
+  final FlutterConnectorGeometryDescriptor geometry;
   final Path shaftPath;
-  final FlutterArrowheadPaths arrowheadPaths;
+  final FlutterConnectorArrowheadPaths arrowheadPaths;
 
-  bool matches(ArrowLikeData data, double width, double height) =>
+  bool matches(ConnectorData data, double width, double height) =>
       identical(this.data, data) &&
       this.width == width &&
       this.height == height;
 }
 
-class ArrowVisualCache {
-  ArrowVisualCache({int maxEntries = 1024})
-    : _entries = LruCache<String, ArrowVisualCacheEntry>(
+class ConnectorVisualCache {
+  ConnectorVisualCache({int maxEntries = 1024})
+    : _entries = LruCache<String, ConnectorVisualCacheEntry>(
         maxEntries: maxEntries,
       );
 
-  final LruCache<String, ArrowVisualCacheEntry> _entries;
+  final LruCache<String, ConnectorVisualCacheEntry> _entries;
 
-  ArrowVisualCacheEntry resolve({
+  ConnectorVisualCacheEntry resolve({
     required ElementState element,
-    required ArrowLikeData data,
+    required ConnectorData data,
   }) {
     final id = element.id;
     final width = element.rect.width;
@@ -54,20 +54,20 @@ class ArrowVisualCache {
 
   void clear() => _entries.clear();
 
-  ArrowVisualCacheEntry _buildEntry({
+  ConnectorVisualCacheEntry _buildEntry({
     required ElementState element,
-    required ArrowLikeData data,
+    required ConnectorData data,
   }) {
     final rect = element.rect;
-    final geometry = FlutterArrowGeometryDescriptor(data: data, rect: rect);
-    final shaftPath = FlutterArrowGeometry.buildShaftPathFromResolvedPoints(
+    final geometry = FlutterConnectorGeometryDescriptor(data: data, rect: rect);
+    final shaftPath = FlutterConnectorGeometry.buildShaftPathFromResolvedPoints(
       points: geometry.insetPoints,
       arrowType: data.arrowType,
     );
 
     final arrowheadPaths = _buildArrowheadPaths(geometry);
 
-    return ArrowVisualCacheEntry(
+    return ConnectorVisualCacheEntry(
       data: data,
       width: rect.width,
       height: rect.height,
@@ -77,20 +77,20 @@ class ArrowVisualCache {
     );
   }
 
-  FlutterArrowheadPaths _buildArrowheadPaths(
-    FlutterArrowGeometryDescriptor geometry,
+  FlutterConnectorArrowheadPaths _buildArrowheadPaths(
+    FlutterConnectorGeometryDescriptor geometry,
   ) {
     final points = geometry.localPoints;
     final data = geometry.data;
     if (data.strokeWidth <= 0) {
-      return FlutterArrowheadPaths.empty();
+      return FlutterConnectorArrowheadPaths.empty();
     }
 
     final strokePath = Path();
     final fillPath = Path();
     final startDirection = geometry.startDirection;
     if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
-      final startPaths = FlutterArrowGeometry.buildArrowheadPaths(
+      final startPaths = FlutterConnectorGeometry.buildArrowheadPaths(
         points: points,
         arrowType: data.arrowType,
         style: data.startArrowhead,
@@ -105,7 +105,7 @@ class ArrowVisualCache {
 
     final endDirection = geometry.endDirection;
     if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
-      final endPaths = FlutterArrowGeometry.buildArrowheadPaths(
+      final endPaths = FlutterConnectorGeometry.buildArrowheadPaths(
         points: points,
         arrowType: data.arrowType,
         style: data.endArrowhead,
@@ -118,8 +118,11 @@ class ArrowVisualCache {
       fillPath.addPath(endPaths.fillPath, Offset.zero);
     }
 
-    return FlutterArrowheadPaths(strokePath: strokePath, fillPath: fillPath);
+    return FlutterConnectorArrowheadPaths(
+      strokePath: strokePath,
+      fillPath: fillPath,
+    );
   }
 }
 
-final arrowVisualCache = ArrowVisualCache();
+final connectorVisualCache = ConnectorVisualCache();

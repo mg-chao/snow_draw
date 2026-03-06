@@ -1,5 +1,5 @@
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bindable_candidates.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_scene.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dart';
 import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
@@ -43,7 +43,7 @@ void main() {
       final result =
           ArrowBindingUtils.resolveBindingCandidateFromCoreCandidates(
             worldPoint: const DrawPoint(x: 160, y: 160),
-            candidates: ArrowCoreBindableCandidates(
+            candidates: ArrowBindableCandidates(
               elements: <ElementState>[target],
               bindables: [bindable!],
             ),
@@ -245,7 +245,7 @@ void main() {
         final result =
             ArrowBindingUtils.resolveElbowBindingCandidateFromCoreCandidates(
               worldPoint: const DrawPoint(x: 220, y: 160),
-              candidates: ArrowCoreBindableCandidates(
+              candidates: ArrowBindableCandidates(
                 elements: <ElementState>[target],
                 bindables: [bindable!],
               ),

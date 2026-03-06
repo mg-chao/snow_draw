@@ -6,11 +6,10 @@ import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import 'arrow_binding.dart';
 import 'arrow_core.dart' as core;
-import 'arrow_core_bindable_query.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
-import 'arrow_core_session.dart';
 import 'arrow_like_data.dart';
+import 'arrow_scene.dart';
 import 'elbow/elbow_fixed_segment.dart';
 
 /// Result of applying a core endpoint drag/finalize computation.
@@ -188,7 +187,7 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
           bindMode: coreEngineContext.bindMode,
           maxCoordinate: coreEngineContext.maxCoordinate,
         );
-  final session = ArrowCoreSession.fromDocument(
+  final session = ArrowScene.fromDocument(
     state.domain.document,
     orderedElementIds: orderedElementIds,
     context: dragContext,
@@ -246,7 +245,7 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
   required bool allowNewBinding,
   required DrawPoint worldPointer,
   required ArrowCoreEndpointBindingOptions options,
-  required ArrowCoreSession session,
+  required ArrowScene session,
   required List<String>? orderedElementIds,
 }) {
   if (arrow.points.isEmpty) {
@@ -490,7 +489,7 @@ List<core.BindableState> _resolveCoreEndpointBindables({
     return const <core.BindableState>[];
   }
 
-  final resolved = resolveCoreBindableCandidatesForEndpointStrategy(
+  final resolved = resolveArrowBindableCandidatesForEndpointStrategy(
     document: state.domain.document,
     activeBinding: activeBinding,
     oppositeBinding: oppositeBinding,

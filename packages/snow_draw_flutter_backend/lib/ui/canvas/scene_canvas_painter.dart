@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../../extensions/draw_color_extensions.dart';
-import '../../render/arrow/arrow_visual_cache.dart';
+import '../../render/connector/connector_visual_cache.dart';
 import '../../render/element_renderer.dart';
 import '../../render/free_draw/free_draw_visual_cache.dart';
 import '../../render/patterns/stroke_pattern_utils.dart';
@@ -1157,7 +1157,7 @@ class SceneCanvasPainter extends CustomPainter {
   }) {
     final element = task.element;
     final config = task.config;
-    if (element.data is ArrowLikeData) {
+    if (element.data is ConnectorData) {
       _drawArrowHoverOutline(
         canvas: canvas,
         element: element,
@@ -1265,7 +1265,7 @@ class SceneCanvasPainter extends CustomPainter {
       }
       effectiveElement = stateView.effectiveElement(documentElement);
     }
-    if (effectiveElement.data is! ArrowLikeData) {
+    if (effectiveElement.data is! ConnectorData) {
       return;
     }
 
@@ -1427,7 +1427,7 @@ class SceneCanvasPainter extends CustomPainter {
     required double scale,
   }) {
     final data = element.data;
-    if (data is! ArrowLikeData) {
+    if (data is! ConnectorData) {
       return;
     }
     if (_drawLineHoverOutlineFastPath(
@@ -1441,7 +1441,7 @@ class SceneCanvasPainter extends CustomPainter {
     }
 
     final rect = element.rect;
-    final cached = arrowVisualCache.resolve(element: element, data: data);
+    final cached = connectorVisualCache.resolve(element: element, data: data);
     if (cached.geometry.localPoints.length < 2) {
       return;
     }
@@ -1477,7 +1477,7 @@ class SceneCanvasPainter extends CustomPainter {
   bool _drawLineHoverOutlineFastPath({
     required Canvas canvas,
     required ElementState element,
-    required ArrowLikeData data,
+    required ConnectorData data,
     required SelectionConfig config,
     required double scale,
   }) {

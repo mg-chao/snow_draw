@@ -2,21 +2,22 @@ import 'dart:ui';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:snow_draw_engine/snow_draw_engine.dart';
-import 'package:snow_draw_flutter_backend/render/geometry/arrow_geometry.dart';
+import 'package:snow_draw_flutter_backend/render/geometry/connector_geometry.dart';
 
 void main() {
-  group('FlutterArrowGeometry elbow integration', () {
+  group('FlutterConnectorGeometry elbow integration', () {
     test(
       'buildShaftPathFromResolvedPoints rounds elbow corners via core path',
       () {
         const points = <Offset>[Offset.zero, Offset(100, 0), Offset(100, 100)];
 
-        final elbowPath = FlutterArrowGeometry.buildShaftPathFromResolvedPoints(
-          points: points,
-          arrowType: ArrowType.elbow,
-        );
+        final elbowPath =
+            FlutterConnectorGeometry.buildShaftPathFromResolvedPoints(
+              points: points,
+              arrowType: ArrowType.elbow,
+            );
         final straightPath =
-            FlutterArrowGeometry.buildShaftPathFromResolvedPoints(
+            FlutterConnectorGeometry.buildShaftPathFromResolvedPoints(
               points: points,
               arrowType: ArrowType.straight,
             );
@@ -32,7 +33,7 @@ void main() {
     test('buildShaftPathFromResolvedPoints preserves elbow endpoints', () {
       const points = <Offset>[Offset.zero, Offset(100, 0), Offset(100, 100)];
 
-      final path = FlutterArrowGeometry.buildShaftPathFromResolvedPoints(
+      final path = FlutterConnectorGeometry.buildShaftPathFromResolvedPoints(
         points: points,
         arrowType: ArrowType.elbow,
       );
@@ -56,7 +57,7 @@ void main() {
       'buildShaftPathFromResolvedPoints keeps two-point elbows straight',
       () {
         const points = <Offset>[Offset.zero, Offset(100, 0)];
-        final path = FlutterArrowGeometry.buildShaftPathFromResolvedPoints(
+        final path = FlutterConnectorGeometry.buildShaftPathFromResolvedPoints(
           points: points,
           arrowType: ArrowType.elbow,
         );
@@ -66,11 +67,11 @@ void main() {
     );
   });
 
-  group('FlutterArrowGeometry arrowhead integration', () {
+  group('FlutterConnectorGeometry arrowhead integration', () {
     const straightPoints = <Offset>[Offset.zero, Offset(100, 0)];
 
     test('triangle arrowhead returns both stroke and fill paths', () {
-      final paths = FlutterArrowGeometry.buildArrowheadPaths(
+      final paths = FlutterConnectorGeometry.buildArrowheadPaths(
         points: straightPoints,
         arrowType: ArrowType.straight,
         style: ArrowheadStyle.triangle,
@@ -84,7 +85,7 @@ void main() {
     });
 
     test('standard arrowhead returns stroke path without fill path', () {
-      final paths = FlutterArrowGeometry.buildArrowheadPaths(
+      final paths = FlutterConnectorGeometry.buildArrowheadPaths(
         points: straightPoints,
         arrowType: ArrowType.straight,
         style: ArrowheadStyle.standard,

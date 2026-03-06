@@ -7,8 +7,8 @@ import 'arrow_binding.dart';
 import 'arrow_core.dart' as core;
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
-import 'arrow_core_session.dart';
 import 'arrow_like_data.dart';
+import 'arrow_scene.dart';
 
 /// Endpoint identifier for arrow focus-point interactions.
 enum ArrowFocusEndpoint { start, end }
@@ -82,10 +82,7 @@ List<ArrowFocusPoint> listVisibleArrowFocusPoints({
     return const <ArrowFocusPoint>[];
   }
 
-  final session = ArrowCoreSession.fromElements(
-    elements,
-    context: engineContext,
-  );
+  final session = ArrowScene.fromElements(elements, context: engineContext);
   final arrow = toCoreArrowState(
     element: element,
     data: data,
@@ -137,10 +134,7 @@ ArrowFocusEndpoint? pickArrowFocusPoint({
     return null;
   }
 
-  final session = ArrowCoreSession.fromElements(
-    elements,
-    context: engineContext,
-  );
+  final session = ArrowScene.fromElements(elements, context: engineContext);
   final arrow = toCoreArrowState(
     element: element,
     data: data,
@@ -178,10 +172,7 @@ ArrowFocusHit pickArrowFocusPointWithOffset({
     return const ArrowFocusHit(endpoint: null, pointerOffset: DrawPoint.zero);
   }
 
-  final session = ArrowCoreSession.fromElements(
-    elements,
-    context: engineContext,
-  );
+  final session = ArrowScene.fromElements(elements, context: engineContext);
   final arrow = toCoreArrowState(
     element: element,
     data: data,
@@ -225,7 +216,7 @@ ArrowFocusDragResult dragArrowFocusPoint({
     );
   }
 
-  final session = ArrowCoreSession.fromElements(
+  final session = ArrowScene.fromElements(
     elementsById.values,
     orderedElementIds: orderedElementIds,
     context: engineContext,

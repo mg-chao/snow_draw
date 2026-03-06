@@ -8,7 +8,7 @@ import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../../extensions/coordinate_service_offset_extensions.dart';
 import '../../extensions/draw_color_extensions.dart';
-import '../../render/geometry/arrow_geometry.dart';
+import '../../render/geometry/connector_geometry.dart';
 import '../../render/text/text_renderer.dart';
 import '../../services/text/flutter_text_layout.dart';
 import '../../services/text/flutter_text_rendering_cache_invalidation.dart';
@@ -1682,7 +1682,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     final element = state.domain.document.getElementById(selectedIds.first);
-    if (element == null || element.data is! ArrowLikeData) {
+    if (element == null || element.data is! ConnectorData) {
       return null;
     }
 
@@ -1735,7 +1735,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         ? null
         : stateView.effectiveElement(element);
     final data = effectiveElement?.data;
-    if (data is ArrowLikeData &&
+    if (data is ConnectorData &&
         data.arrowType == ArrowType.elbow &&
         kind == ArrowPointKind.addable) {
       final segmentIndex = index + 1;
@@ -1769,14 +1769,14 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     final element = state.domain.document.getElementById(handle.elementId);
-    if (element == null || element.data is! ArrowLikeData) {
+    if (element == null || element.data is! ConnectorData) {
       return null;
     }
-    final data = element.data as ArrowLikeData;
+    final data = element.data as ConnectorData;
     if (data.arrowType != ArrowType.elbow) {
       return null;
     }
-    final points = FlutterArrowGeometry.resolveWorldPoints(
+    final points = FlutterConnectorGeometry.resolveWorldPoints(
       rect: element.rect,
       normalizedPoints: data.points,
     );

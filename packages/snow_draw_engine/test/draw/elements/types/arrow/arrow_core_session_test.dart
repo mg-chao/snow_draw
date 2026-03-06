@@ -1,9 +1,9 @@
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core.dart'
     as core;
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_session.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_scene.dart';
 import 'package:snow_draw_engine/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_engine/draw/models/document_state.dart';
@@ -13,7 +13,7 @@ import 'package:snow_draw_engine/draw/types/draw_rect.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('ArrowCoreSession', () {
+  group('ArrowScene', () {
     test('fromElements builds projection and normalized context', () {
       final arrow = _arrowElement(
         id: 'arrow-1',
@@ -24,7 +24,7 @@ void main() {
         zIndex: 0,
       );
 
-      final session = ArrowCoreSession.fromElements(
+      final session = ArrowScene.fromElements(
         <ElementState>[arrow],
         zoom: 2,
         isBindingEnabled: false,
@@ -67,24 +67,24 @@ void main() {
       final document = DocumentState(
         elements: <ElementState>[serial, text, boundArrow, unboundArrow],
       );
-      final session = ArrowCoreSession.fromDocument(
+      final session = ArrowScene.fromDocument(
         document,
         onlyBoundArrows: true,
         zoom: 1.5,
       );
 
-      expect(identical(session.bindables, document.arrowCoreBindables), isTrue);
       expect(
-        identical(
-          session.bindableRelations,
-          document.arrowCoreBindableRelations,
-        ),
+        identical(session.bindables, document.arrowBindableStates),
+        isTrue,
+      );
+      expect(
+        identical(session.bindableRelations, document.arrowBindableRelations),
         isTrue,
       );
       expect(
         identical(
           session.anchorElementIdsByBindableId,
-          document.arrowCoreAnchorElementIdsByBindableId,
+          document.arrowAnchorElementIdsByBindableId,
         ),
         isTrue,
       );
@@ -110,13 +110,13 @@ void main() {
           elements: <ElementState>[serial, text, arrow],
         );
 
-        final session = ArrowCoreSession.fromDocument(
+        final session = ArrowScene.fromDocument(
           document,
           orderedElementIds: const <String>['text-1', 'serial-1', 'arrow-1'],
         );
 
         expect(
-          identical(session.bindables, document.arrowCoreBindables),
+          identical(session.bindables, document.arrowBindableStates),
           isFalse,
         );
         expect(
@@ -142,7 +142,7 @@ void main() {
         zIndex: 0,
       );
 
-      final session = ArrowCoreSession.fromElements(<ElementState>[arrow]);
+      final session = ArrowScene.fromElements(<ElementState>[arrow]);
       final updates = session.applyArrowPatches(<core.ArrowStatePatchWithId>[
         const core.ArrowStatePatchWithId(
           id: 'arrow-1',
@@ -183,7 +183,7 @@ void main() {
         ),
       );
 
-      final session = ArrowCoreSession.fromElements(
+      final session = ArrowScene.fromElements(
         <ElementState>[serial, text, arrow],
         orderedElementIds: const <String>['arrow-1', 'serial-1', 'text-1'],
       );
@@ -210,7 +210,7 @@ void main() {
           zIndex: 2,
         );
 
-        final session = ArrowCoreSession.fromElements(
+        final session = ArrowScene.fromElements(
           <ElementState>[arrow, serial, text],
           orderedElementIds: const <String>['arrow-1', 'serial-1', 'text-1'],
         );
@@ -237,7 +237,7 @@ void main() {
           zIndex: 2,
         );
 
-        final session = ArrowCoreSession.fromElements(
+        final session = ArrowScene.fromElements(
           <ElementState>[arrow, serial, text],
           orderedElementIds: const <String>['arrow-1', 'serial-1', 'text-1'],
         );
@@ -281,7 +281,7 @@ void main() {
           zIndex: 2,
         );
 
-        final session = ArrowCoreSession.fromElements(
+        final session = ArrowScene.fromElements(
           <ElementState>[arrow, serial, text],
           orderedElementIds: const <String>['arrow-1', 'serial-1', 'text-1'],
         );
@@ -322,7 +322,7 @@ void main() {
           zIndex: 2,
         );
 
-        final session = ArrowCoreSession.fromElements(
+        final session = ArrowScene.fromElements(
           <ElementState>[arrow, serial, text],
           orderedElementIds: const <String>['arrow-1', 'serial-1', 'text-1'],
           isBindingEnabled: false,

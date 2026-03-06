@@ -6,10 +6,9 @@ import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../shared/element_data_codec.dart';
 import 'arrow_core.dart' as core;
-import 'arrow_core_bindable_candidates.dart';
-import 'arrow_core_bindable_projector.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
+import 'arrow_scene.dart';
 
 enum ArrowBindingMode { inside, orbit, skip }
 
@@ -178,7 +177,7 @@ class ArrowBindingUtils {
 
   static ArrowBindingResult? resolveBindingCandidateFromCoreCandidates({
     required DrawPoint worldPoint,
-    required ArrowCoreBindableCandidates candidates,
+    required ArrowBindableCandidates candidates,
     required double snapDistance,
     ArrowBinding? preferredBinding,
     ArrowBinding? oppositeBinding,
@@ -255,7 +254,7 @@ class ArrowBindingUtils {
 
   static ArrowBindingResult? resolveElbowBindingCandidateFromCoreCandidates({
     required DrawPoint worldPoint,
-    required ArrowCoreBindableCandidates candidates,
+    required ArrowBindableCandidates candidates,
     required double snapDistance,
     required bool hasArrowhead,
     ArrowBinding? preferredBinding,
@@ -312,7 +311,7 @@ class ArrowBindingUtils {
     }
     return resolveBindingCandidateFromCoreCandidates(
       worldPoint: worldPoint,
-      candidates: ArrowCoreBindableCandidates(
+      candidates: ArrowBindableCandidates(
         elements: <ElementState>[target],
         bindables: <core.BindableState>[bindable],
       ),
@@ -348,7 +347,7 @@ class ArrowBindingUtils {
     }
     return resolveElbowBindingCandidateFromCoreCandidates(
       worldPoint: worldPoint,
-      candidates: ArrowCoreBindableCandidates(
+      candidates: ArrowBindableCandidates(
         elements: <ElementState>[target],
         bindables: <core.BindableState>[bindable],
       ),
@@ -431,7 +430,7 @@ class ArrowBindingUtils {
 
 ArrowBindingResult? _resolveBindingCandidateViaCore({
   required DrawPoint worldPoint,
-  required ArrowCoreBindableCandidates candidates,
+  required ArrowBindableCandidates candidates,
   required double snapDistance,
   required ArrowBinding? preferredBinding,
   required ArrowBinding? oppositeBinding,
@@ -736,6 +735,6 @@ const _defaultMaxCoordinate = 1e6;
 const _bindingHitToleranceFactor = 0.4;
 const _previewSpanMultiplier = 3.0;
 
-ArrowCoreBindableCandidates _collectCoreBindableCandidatesFromTargets(
+ArrowBindableCandidates _collectCoreBindableCandidatesFromTargets(
   Iterable<ElementState> targets,
-) => projectArrowCoreBindableCandidates(elements: targets);
+) => projectArrowBindableCandidates(elements: targets);

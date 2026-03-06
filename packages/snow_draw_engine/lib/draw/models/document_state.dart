@@ -78,28 +78,28 @@ class DocumentState {
   /// bindable shapes are present.
   late final bool hasArrowBindableElements = _arrowBindableElements.isNotEmpty;
 
-  /// Cached bindable snapshots projected for arrow-core operations.
+  /// Cached bindable snapshots projected for arrow operations.
   ///
   /// Reused by high-frequency arrow interactions to avoid repeatedly
   /// re-projecting static bindable geometry for the same document version.
-  late final _arrowCoreBindables = List<core.BindableState>.unmodifiable(
+  late final _arrowBindableStates = List<core.BindableState>.unmodifiable(
     collectCoreBindables(elements),
   );
 
-  /// Cached bindables keyed by id for fast arrow-core candidate resolution.
+  /// Cached bindables keyed by id for fast arrow candidate resolution.
   ///
   /// This avoids rebuilding bindable projections in high-frequency pointer
   /// interactions.
-  late final _arrowCoreBindableById =
+  late final _arrowBindableStateById =
       Map<String, core.BindableState>.unmodifiable({
-        for (final bindable in _arrowCoreBindables) bindable.id: bindable,
+        for (final bindable in _arrowBindableStates) bindable.id: bindable,
       });
 
-  /// Cached bindable relation snapshots projected for arrow-core operations.
+  /// Cached bindable relation snapshots projected for arrow operations.
   ///
   /// The relation graph is derived from current arrow endpoint bindings and
   /// reused across interactive arrow sessions within the same document state.
-  late final _arrowCoreBindableRelations =
+  late final _arrowBindableRelations =
       List<core.BindableRelationState>.unmodifiable(
         collectCoreBindableRelations(elements),
       );
@@ -108,7 +108,7 @@ class DocumentState {
   ///
   /// This includes bindable ids and any additional anchor element ids that
   /// should remain below bound arrows (for example serial-number labels).
-  late final Map<String, List<String>> _arrowCoreAnchorElementIdsByBindableId =
+  late final Map<String, List<String>> _arrowAnchorElementIdsByBindableId =
       collectCoreAnchorElementIdsByBindableId(elements);
 
   /// Cached highlight elements in document z-order.
@@ -120,20 +120,20 @@ class DocumentState {
     _buildHighlightElements(),
   );
 
-  /// Arrow-core bindable projections for this document snapshot.
-  List<core.BindableState> get arrowCoreBindables => _arrowCoreBindables;
+  /// Arrow bindable projections for this document snapshot.
+  List<core.BindableState> get arrowBindableStates => _arrowBindableStates;
 
-  /// Arrow-core bindables keyed by element id.
-  Map<String, core.BindableState> get arrowCoreBindableById =>
-      _arrowCoreBindableById;
+  /// Arrow bindables keyed by element id.
+  Map<String, core.BindableState> get arrowBindableStateById =>
+      _arrowBindableStateById;
 
-  /// Arrow-core bindable relation projections for this document snapshot.
-  List<core.BindableRelationState> get arrowCoreBindableRelations =>
-      _arrowCoreBindableRelations;
+  /// Arrow bindable relation projections for this document snapshot.
+  List<core.BindableRelationState> get arrowBindableRelations =>
+      _arrowBindableRelations;
 
-  /// Bindable id -> anchor element ids used by arrow-core reorder reductions.
-  Map<String, List<String>> get arrowCoreAnchorElementIdsByBindableId =>
-      _arrowCoreAnchorElementIdsByBindableId;
+  /// Bindable id -> anchor element ids used by arrow reorder reductions.
+  Map<String, List<String>> get arrowAnchorElementIdsByBindableId =>
+      _arrowAnchorElementIdsByBindableId;
 
   Map<String, ElementState> get elementMap => _elementMap;
 
@@ -183,10 +183,10 @@ class DocumentState {
       orderedElementIds.length +
       _spatialIndex.size +
       _arrowBindableSpatialIndex.size +
-      _arrowCoreBindables.length +
-      _arrowCoreBindableById.length +
-      _arrowCoreBindableRelations.length +
-      _arrowCoreAnchorElementIdsByBindableId.length +
+      _arrowBindableStates.length +
+      _arrowBindableStateById.length +
+      _arrowBindableRelations.length +
+      _arrowAnchorElementIdsByBindableId.length +
       boundArrowTargetIds.length +
       highlightElements.length;
 

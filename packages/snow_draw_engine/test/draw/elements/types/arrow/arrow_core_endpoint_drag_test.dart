@@ -1,12 +1,12 @@
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core.dart'
     as core;
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bindable_query.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_endpoint_drag.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_ops.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_scene.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/models/document_state.dart';
 import 'package:snow_draw_engine/draw/models/domain_state.dart';
@@ -482,7 +482,7 @@ void main() {
           startBindingOverride: data.startBinding,
           endBindingOverride: data.endBinding,
         );
-        final candidates = resolveCoreBindableCandidatesForEndpointStrategy(
+        final candidates = resolveArrowBindableCandidatesForEndpointStrategy(
           document: state.domain.document,
           allowNewBinding: true,
           activeBinding: data.endBinding,

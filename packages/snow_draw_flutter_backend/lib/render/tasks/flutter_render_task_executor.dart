@@ -3,9 +3,9 @@ import 'dart:ui';
 
 import 'package:snow_draw_engine/snow_draw_engine.dart';
 
-import '../arrow/arrow_visual_cache.dart';
+import '../connector/connector_visual_cache.dart';
 import '../free_draw/free_draw_visual_cache.dart';
-import '../geometry/arrow_geometry.dart';
+import '../geometry/connector_geometry.dart';
 import '../patterns/stroke_pattern_utils.dart';
 import '../text/text_renderer.dart';
 
@@ -131,7 +131,7 @@ class FlutterRenderTaskExecutor {
   void _renderLine({required Canvas canvas, required LineRenderTask task}) {
     final element = task.element;
     final data = task.data;
-    final points = FlutterArrowGeometry.resolveWorldPoints(
+    final points = FlutterConnectorGeometry.resolveWorldPoints(
       rect: element.rect,
       normalizedPoints: data.points,
     );
@@ -139,7 +139,7 @@ class FlutterRenderTaskExecutor {
       return;
     }
 
-    final path = FlutterArrowGeometry.buildShaftPathFromResolvedPoints(
+    final path = FlutterConnectorGeometry.buildShaftPathFromResolvedPoints(
       points: points,
       arrowType: data.arrowType,
     );
@@ -186,7 +186,7 @@ class FlutterRenderTaskExecutor {
   void _renderArrow({required Canvas canvas, required ArrowRenderTask task}) {
     final element = task.element;
     final data = task.data;
-    final cached = arrowVisualCache.resolve(element: element, data: data);
+    final cached = connectorVisualCache.resolve(element: element, data: data);
     if (cached.geometry.localPoints.length < 2 ||
         cached.geometry.insetPoints.length < 2) {
       return;

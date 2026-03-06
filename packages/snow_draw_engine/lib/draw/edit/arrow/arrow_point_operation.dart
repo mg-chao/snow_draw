@@ -5,7 +5,6 @@ import '../../core/coordinates/element_space.dart';
 import '../../elements/types/arrow/arrow_binding.dart';
 import '../../elements/types/arrow/arrow_binding_policy.dart';
 import '../../elements/types/arrow/arrow_core.dart' as core;
-import '../../elements/types/arrow/arrow_core_bindable_query.dart';
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_endpoint_drag.dart';
 import '../../elements/types/arrow/arrow_core_geometry_adapter.dart';
@@ -15,6 +14,7 @@ import '../../elements/types/arrow/arrow_focus.dart';
 import '../../elements/types/arrow/arrow_geometry.dart';
 import '../../elements/types/arrow/arrow_like_data.dart';
 import '../../elements/types/arrow/arrow_points.dart';
+import '../../elements/types/arrow/arrow_scene.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import '../../elements/types/line/line_data.dart';
@@ -1107,7 +1107,7 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
     final worldTarget = context.toWorld(target);
     final activeBinding = draggedStart ? startBinding : endBinding;
     final oppositeBinding = draggedStart ? endBinding : startBinding;
-    final candidates = resolveCoreBindableCandidatesForEndpointStrategy(
+    final candidates = resolveArrowBindableCandidatesForEndpointStrategy(
       document: state.domain.document,
       activeBinding: activeBinding,
       oppositeBinding: oppositeBinding,
@@ -1212,7 +1212,7 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
       arrowId: context.elementId,
       hoveredBindableId: hoveredBindableId,
       anchorElementIdsByBindableId:
-          state.domain.document.arrowCoreAnchorElementIdsByBindableId,
+          state.domain.document.arrowAnchorElementIdsByBindableId,
     );
     reorderedElementIds = reorderedElementIdsFromCoreHoveredReorder(
       reorderResult,

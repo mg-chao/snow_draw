@@ -22,7 +22,6 @@ import '../arrow/arrow_binding.dart';
 import '../arrow/arrow_binding_policy.dart';
 import '../line/line_data.dart';
 import 'arrow_core.dart' as core;
-import 'arrow_core_bindable_query.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_endpoint_drag.dart';
 import 'arrow_core_geometry_adapter.dart';
@@ -30,6 +29,7 @@ import 'arrow_core_ops.dart';
 import 'arrow_data.dart';
 import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
+import 'arrow_scene.dart';
 import 'elbow/elbow_editing.dart';
 import 'elbow/elbow_fixed_segment.dart';
 import 'elbow/elbow_router.dart';
@@ -969,7 +969,7 @@ _CorePreviewBindingResult? _resolveBindingWithCoreEndpointPreview({
     final previewOppositeBinding = dragStart
         ? previewData.endBinding
         : previewData.startBinding;
-    final candidates = resolveCoreBindableCandidatesForEndpointStrategy(
+    final candidates = resolveArrowBindableCandidatesForEndpointStrategy(
       document: state.domain.document,
       allowNewBinding: allowNewBinding,
       activeBinding: activeBinding,
@@ -1199,13 +1199,13 @@ _BindingSnapResult _resolveStartBindingPoint({
               binding: stableBinding,
               target: target,
               hasArrowhead: startArrowheadStyle != ArrowheadStyle.none,
-              bindables: state.domain.document.arrowCoreBindables,
+              bindables: state.domain.document.arrowBindableStates,
             )
           : ArrowBindingUtils.resolveBoundPoint(
               binding: stableBinding,
               target: target,
               referencePoint: oppositePoint,
-              bindables: state.domain.document.arrowCoreBindables,
+              bindables: state.domain.document.arrowBindableStates,
             );
       if (boundPoint != null) {
         return _BindingSnapResult(position: boundPoint, binding: stableBinding);
@@ -1358,13 +1358,13 @@ class _ArrowCreationSessionData {
             binding: cachedBinding,
             target: target,
             hasArrowhead: startArrowheadStyle != ArrowheadStyle.none,
-            bindables: state.domain.document.arrowCoreBindables,
+            bindables: state.domain.document.arrowBindableStates,
           )
         : ArrowBindingUtils.resolveBoundPoint(
             binding: cachedBinding,
             target: target,
             referencePoint: oppositePoint,
-            bindables: state.domain.document.arrowCoreBindables,
+            bindables: state.domain.document.arrowBindableStates,
           );
     if (boundPoint == null) {
       return null;

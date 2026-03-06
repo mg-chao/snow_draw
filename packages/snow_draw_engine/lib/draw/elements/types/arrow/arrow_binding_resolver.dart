@@ -5,7 +5,7 @@ import '../../../utils/combined_element_lookup.dart';
 import 'arrow_core.dart' as core;
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
-import 'arrow_core_session.dart';
+import 'arrow_scene.dart';
 
 /// Resolves arrow bindings when bindable elements change position.
 ///
@@ -53,7 +53,7 @@ final class ArrowBindingResolver {
       return ArrowBindingResolutionResult.empty;
     }
 
-    final session = ArrowCoreSession.fromElements(
+    final session = ArrowScene.fromElements(
       lookup.values,
       onlyBoundArrows: true,
       orderedElementIds: orderedElementIds,

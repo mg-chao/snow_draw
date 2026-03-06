@@ -1,5 +1,5 @@
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bindable_query.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_scene.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/models/document_state.dart';
 import 'package:snow_draw_engine/draw/models/element_state.dart';
@@ -26,7 +26,7 @@ void main() {
         elements: <ElementState>[first, second, third],
       );
 
-      final resolved = resolveCoreBindableCandidates(
+      final resolved = resolveArrowBindableCandidates(
         document: document,
         worldPoint: const DrawPoint(x: 160, y: 70),
         distance: 320,
@@ -60,11 +60,11 @@ void main() {
         elements: <ElementState>[first, second, third],
       );
       final cachedById = {
-        for (final bindable in document.arrowCoreBindables)
+        for (final bindable in document.arrowBindableStates)
           bindable.id: bindable,
       };
 
-      final resolved = resolveCoreBindableCandidates(
+      final resolved = resolveArrowBindableCandidates(
         document: document,
         worldPoint: const DrawPoint(x: 160, y: 70),
         distance: 320,
@@ -95,7 +95,7 @@ void main() {
           elements: <ElementState>[first, second, third],
         );
 
-        final resolved = resolveCoreBindableCandidates(
+        final resolved = resolveArrowBindableCandidates(
           document: document,
           worldPoint: const DrawPoint(x: -9999, y: -9999),
           distance: 0,
@@ -136,7 +136,7 @@ void main() {
           elements: <ElementState>[first, second, third],
         );
 
-        final resolved = resolveCoreBindableCandidatesForEndpointStrategy(
+        final resolved = resolveArrowBindableCandidatesForEndpointStrategy(
           document: document,
           allowNewBinding: true,
         );
@@ -167,7 +167,7 @@ void main() {
           elements: <ElementState>[first, second, third],
         );
 
-        final resolved = resolveCoreBindableCandidatesForEndpointStrategy(
+        final resolved = resolveArrowBindableCandidatesForEndpointStrategy(
           document: document,
           allowNewBinding: true,
           orderedElementIds: const <String>['third', 'second', 'first'],
@@ -203,7 +203,7 @@ void main() {
           elements: <ElementState>[first, second, third],
         );
 
-        final resolved = resolveCoreBindableCandidatesForEndpointStrategy(
+        final resolved = resolveArrowBindableCandidatesForEndpointStrategy(
           document: document,
           activeBinding: const ArrowBinding(
             elementId: 'third',

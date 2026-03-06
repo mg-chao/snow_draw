@@ -34,7 +34,7 @@ List<ElementState> resolveArrowBindingTargets({
 
   final hovered = core.listHoveredBindables(
     <double>[position.x, position.y],
-    document.arrowCoreBindables,
+    document.arrowBindableStates,
     distance,
     stopAtOpaque: true,
   );

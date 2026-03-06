@@ -2,8 +2,8 @@ import 'dart:ui';
 
 import 'package:snow_draw_engine/snow_draw_engine.dart';
 
-class FlutterArrowGeometry {
-  const FlutterArrowGeometry._();
+class FlutterConnectorGeometry {
+  const FlutterConnectorGeometry._();
 
   static List<Offset> resolveWorldPoints({
     required DrawRect rect,
@@ -14,11 +14,6 @@ class FlutterArrowGeometry {
       normalizedPoints: normalizedPoints,
     ),
   );
-
-  static List<DrawPoint> normalizePoints({
-    required List<DrawPoint> worldPoints,
-    required DrawRect rect,
-  }) => ArrowGeometry.normalizePoints(worldPoints: worldPoints, rect: rect);
 
   static Path buildShaftPathFromResolvedPoints({
     required List<Offset> points,
@@ -34,7 +29,7 @@ class FlutterArrowGeometry {
     };
   }
 
-  static FlutterArrowheadPaths buildArrowheadPaths({
+  static FlutterConnectorArrowheadPaths buildArrowheadPaths({
     required List<Offset> points,
     required ArrowType arrowType,
     required ArrowheadStyle style,
@@ -59,7 +54,7 @@ class FlutterArrowGeometry {
       directionOverride: overrideDirection,
     );
     if (primitives.isEmpty) {
-      return FlutterArrowheadPaths.empty();
+      return FlutterConnectorArrowheadPaths.empty();
     }
 
     final strokePath = Path();
@@ -99,7 +94,10 @@ class FlutterArrowGeometry {
       }
     }
 
-    return FlutterArrowheadPaths(strokePath: strokePath, fillPath: fillPath);
+    return FlutterConnectorArrowheadPaths(
+      strokePath: strokePath,
+      fillPath: fillPath,
+    );
   }
 
   static Path _buildStraightPath(List<Offset> points) {
@@ -182,11 +180,13 @@ class FlutterArrowGeometry {
   }
 }
 
-class FlutterArrowGeometryDescriptor {
-  FlutterArrowGeometryDescriptor({required this.data, required DrawRect rect})
-    : _engineDescriptor = ArrowGeometryDescriptor(data: data, rect: rect);
+class FlutterConnectorGeometryDescriptor {
+  FlutterConnectorGeometryDescriptor({
+    required this.data,
+    required DrawRect rect,
+  }) : _engineDescriptor = ArrowGeometryDescriptor(data: data, rect: rect);
 
-  final ArrowLikeData data;
+  final ConnectorData data;
   final ArrowGeometryDescriptor _engineDescriptor;
 
   late final List<Offset> localPoints = _toOffsets(
@@ -223,14 +223,14 @@ class _CubicSegment {
   final Offset end;
 }
 
-class FlutterArrowheadPaths {
-  const FlutterArrowheadPaths({
+class FlutterConnectorArrowheadPaths {
+  const FlutterConnectorArrowheadPaths({
     required this.strokePath,
     required this.fillPath,
   });
 
-  factory FlutterArrowheadPaths.empty() =>
-      FlutterArrowheadPaths(strokePath: Path(), fillPath: Path());
+  factory FlutterConnectorArrowheadPaths.empty() =>
+      FlutterConnectorArrowheadPaths(strokePath: Path(), fillPath: Path());
 
   final Path strokePath;
   final Path fillPath;
