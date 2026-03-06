@@ -63,6 +63,64 @@ void main() {
         );
       }
     });
+
+    test('skips recomputing arrows that are simultaneously updated', () {
+      const bindable = ElementState(
+        id: 'bindable-1',
+        rect: DrawRect(minX: 100, minY: 100, maxX: 220, maxY: 220),
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        data: RectangleData(),
+      );
+      final arrow = _buildArrowBoundToSingleTarget(
+        id: 'arrow-1',
+        targetId: bindable.id,
+        zIndex: 1,
+        worldPoints: const <DrawPoint>[
+          DrawPoint(x: 100, y: 160),
+          DrawPoint(x: 160, y: 120),
+          DrawPoint(x: 220, y: 160),
+        ],
+      );
+      final baseArrowPoints = _resolveWorldPoints(arrow);
+      final movedBindable = bindable.copyWith(
+        rect: bindable.rect.translate(const DrawPoint(x: 40, y: 20)),
+      );
+      final movedArrow = _copyArrowWithWorldPoints(
+        arrow,
+        _translatePoints(baseArrowPoints, const DrawPoint(x: 5, y: 5)),
+      );
+
+      final withoutSkip = ArrowBindingResolver.instance.resolve(
+        baseElements: <String, ElementState>{
+          bindable.id: bindable,
+          arrow.id: arrow,
+        },
+        updatedElements: <String, ElementState>{
+          bindable.id: movedBindable,
+          arrow.id: movedArrow,
+        },
+        changedElementIds: <String>{bindable.id, arrow.id},
+        orderedElementIds: <String>[bindable.id, arrow.id],
+      );
+      final withSkip = ArrowBindingResolver.instance.resolve(
+        baseElements: <String, ElementState>{
+          bindable.id: bindable,
+          arrow.id: arrow,
+        },
+        updatedElements: <String, ElementState>{
+          bindable.id: movedBindable,
+          arrow.id: movedArrow,
+        },
+        changedElementIds: <String>{bindable.id, arrow.id},
+        orderedElementIds: <String>[bindable.id, arrow.id],
+        skipArrowIds: <String>{arrow.id},
+      );
+
+      expect(withoutSkip.updatedElements.containsKey(arrow.id), isTrue);
+      expect(withSkip.updatedElements.containsKey(arrow.id), isFalse);
+    });
   });
 }
 
@@ -102,5 +160,26 @@ List<DrawPoint> _resolveWorldPoints(ElementState arrowElement) {
   return ArrowGeometry.resolveWorldPoints(
     rect: arrowElement.rect,
     normalizedPoints: data.points,
+  );
+}
+
+List<DrawPoint> _translatePoints(List<DrawPoint> points, DrawPoint delta) => [
+  for (final point in points)
+    DrawPoint(x: point.x + delta.x, y: point.y + delta.y),
+];
+
+ElementState _copyArrowWithWorldPoints(
+  ElementState arrowElement,
+  List<DrawPoint> worldPoints,
+) {
+  final data = arrowElement.data as ArrowData;
+  final rect = DrawRect.fromPointCloud(worldPoints);
+  final normalized = ArrowGeometry.normalizePoints(
+    worldPoints: worldPoints,
+    rect: rect,
+  );
+  return arrowElement.copyWith(
+    rect: rect,
+    data: data.copyWith(points: normalized),
   );
 }

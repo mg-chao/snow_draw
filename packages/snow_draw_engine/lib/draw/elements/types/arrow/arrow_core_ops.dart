@@ -214,7 +214,14 @@ Map<String, dynamic> _composeEndpointBindingOptionsPayload(
 
 Map<String, dynamic> _normalizeEndpointBindingOptions(
   Map<String, dynamic>? options,
-) => <String, dynamic>{...?options};
+) {
+  final normalized = <String, dynamic>{...?options};
+  final complexBindings = normalized['complexBindings'];
+  if (complexBindings is! bool) {
+    normalized['complexBindings'] = false;
+  }
+  return normalized;
+}
 
 /// Typed wrapper around `snow_draw_arrow_core` endpoint-drag computation.
 core.EngineResult computeCoreEndpointDrag({

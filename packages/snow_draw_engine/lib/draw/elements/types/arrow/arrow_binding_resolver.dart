@@ -35,6 +35,7 @@ final class ArrowBindingResolver {
     required Set<String> changedElementIds,
     required List<String> orderedElementIds,
     core.EngineContext? engineContext,
+    Set<String> skipArrowIds = const <String>{},
   }) {
     if (changedElementIds.isEmpty) {
       return ArrowBindingResolutionResult.empty;
@@ -82,6 +83,9 @@ final class ArrowBindingResolver {
     final events = <core.ArrowEngineEvent>[];
 
     for (final arrow in session.arrows) {
+      if (skipArrowIds.contains(arrow.id)) {
+        continue;
+      }
       if (!_isArrowAffectedByChangedBindables(arrow, changedBindableIdSet)) {
         continue;
       }
