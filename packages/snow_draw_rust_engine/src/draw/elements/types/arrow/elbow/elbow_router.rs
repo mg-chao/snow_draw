@@ -3,13 +3,19 @@
 use std::collections::HashMap;
 
 use crate::draw::core::coordinates::element_space::ElementSpace;
+use crate::draw::elements::types::arrow::arrow_binding::{
+    ArrowBinding as PipelineArrowBinding, ArrowBindingMode as PipelineArrowBindingMode,
+};
 use crate::draw::elements::types::arrow::arrow_data::{ArrowBinding, ArrowData};
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
+use crate::draw::models::element_state::ElementState as ModelElementState;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::ArrowheadStyle;
 
 pub use crate::draw::elements::types::arrow::elbow::elbow_heading::ElbowHeading;
+
+use super::elbow_router_pipeline::route_elbow_arrow_internal as route_elbow_arrow_internal_pipeline;
 
 const AXIS_EPSILON: f64 = 1e-6;
 const BASE_BINDING_GAP: f64 = 5.0;
@@ -34,6 +40,10 @@ pub struct ElbowRoutedPoints {
 pub trait ElbowRouteElement {
     fn rect(&self) -> DrawRect;
     fn rotation(&self) -> f64;
+
+    fn model_element(&self) -> Option<&ModelElementState> {
+        None
+    }
 }
 
 impl ElbowRouteElement for crate::draw::models::element_state::ElementState {
@@ -43,6 +53,10 @@ impl ElbowRouteElement for crate::draw::models::element_state::ElementState {
 
     fn rotation(&self) -> f64 {
         self.rotation
+    }
+
+    fn model_element(&self) -> Option<&ModelElementState> {
+        Some(self)
     }
 }
 
@@ -62,12 +76,33 @@ pub fn route_elbow_arrow<E>(
 where
     E: ElbowRouteElement,
 {
-    route_elbow_arrow_internal(
+    let fallback_start_binding = start_binding;
+    let fallback_end_binding = end_binding;
+    let pipeline_elements_by_id = elements_by_id
+        .iter()
+        .filter_map(|(id, element)| element.model_element().cloned().map(|value| (id.clone(), value)))
+        .collect::<HashMap<_, _>>();
+    let start_binding = start_binding.map(to_pipeline_binding);
+    let end_binding = end_binding.map(to_pipeline_binding);
+
+    if !pipeline_elements_by_id.is_empty() || start_binding.is_none() || end_binding.is_none() {
+        return route_elbow_arrow_internal_pipeline(
+            start,
+            end,
+            &pipeline_elements_by_id,
+            start_arrowhead,
+            end_arrowhead,
+            start_binding.as_ref(),
+            end_binding.as_ref(),
+        );
+    }
+
+    route_elbow_arrow_fallback(
         start,
         end,
         elements_by_id,
-        start_binding,
-        end_binding,
+        fallback_start_binding,
+        fallback_end_binding,
         start_arrowhead,
         end_arrowhead,
     )
@@ -147,7 +182,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-fn route_elbow_arrow_internal<E>(
+fn route_elbow_arrow_fallback<E>(
     start: DrawPoint,
     end: DrawPoint,
     elements_by_id: &HashMap<String, E>,
@@ -179,6 +214,24 @@ where
     );
 
     build_route_result(endpoints.start.point, endpoints.end.point, raw_points)
+}
+
+fn to_pipeline_binding(binding: &ArrowBinding) -> PipelineArrowBinding {
+    PipelineArrowBinding::new(
+        binding.element_id.clone(),
+        binding.anchor,
+        match binding.mode {
+            crate::draw::elements::types::arrow::arrow_data::ArrowBindingMode::Inside => {
+                PipelineArrowBindingMode::Inside
+            }
+            crate::draw::elements::types::arrow::arrow_data::ArrowBindingMode::Orbit => {
+                PipelineArrowBindingMode::Orbit
+            }
+            crate::draw::elements::types::arrow::arrow_data::ArrowBindingMode::Skip => {
+                PipelineArrowBindingMode::Skip
+            }
+        },
+    )
 }
 
 fn build_route_result(

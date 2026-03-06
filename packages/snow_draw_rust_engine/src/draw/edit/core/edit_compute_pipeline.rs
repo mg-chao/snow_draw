@@ -512,6 +512,14 @@ impl crate::draw::elements::types::arrow::elbow::elbow_edit_pipeline::ElbowPipel
         self.element.rect
     }
 
+    fn rotation(&self) -> f64 {
+        self.element.rotation
+    }
+
+    fn model_element(&self) -> Option<&crate::draw::models::element_state::ElementState> {
+        Some(&self.element)
+    }
+
     fn previous_arrow_data(&self) -> Option<&ArrowData> {
         match &self.arrow_data {
             Some(ResolverDomainArrowData::Arrow { data, .. }) => Some(data),

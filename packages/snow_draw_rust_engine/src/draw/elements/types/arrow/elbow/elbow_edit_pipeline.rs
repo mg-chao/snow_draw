@@ -4,10 +4,14 @@ use std::collections::{HashMap, HashSet};
 
 use crate::draw::elements::types::arrow::arrow_data::{ArrowBinding, ArrowData, ElbowFixedSegment};
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
+use crate::draw::models::element_state::ElementState as ModelElementState;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::ArrowheadStyle;
 use crate::draw::utils::combined_element_lookup::CombinedElementLookup;
+
+use super::elbow_edit_endpoint_drag as endpoint_drag;
+use super::elbow_router;
 
 const AXIS_EPSILON: f64 = 1e-6;
 
@@ -95,6 +99,14 @@ impl ElbowHeading {
 pub trait ElbowPipelineElement: Clone {
     fn rect(&self) -> DrawRect;
 
+    fn rotation(&self) -> f64 {
+        0.0
+    }
+
+    fn model_element(&self) -> Option<&ModelElementState> {
+        None
+    }
+
     fn previous_arrow_data(&self) -> Option<&ArrowData> {
         None
     }
@@ -103,6 +115,14 @@ pub trait ElbowPipelineElement: Clone {
 impl ElbowPipelineElement for crate::draw::models::element_state::ElementState {
     fn rect(&self) -> DrawRect {
         self.rect
+    }
+
+    fn rotation(&self) -> f64 {
+        self.rotation
+    }
+
+    fn model_element(&self) -> Option<&ModelElementState> {
+        Some(self)
     }
 }
 
@@ -576,36 +596,21 @@ fn route_elbow_arrow_for_element<E>(
 where
     E: ElbowPipelineElement + Clone,
 {
-    let start = data
-        .start_binding
-        .as_ref()
-        .and_then(|binding| resolve_bound_world_point(binding, elements_by_id))
-        .unwrap_or(start_override);
-    let end = data
-        .end_binding
-        .as_ref()
-        .and_then(|binding| resolve_bound_world_point(binding, elements_by_id))
-        .unwrap_or(end_override);
+    let routed = elbow_router::route_elbow_arrow(
+        start_override,
+        end_override,
+        &elements_by_id
+            .iter()
+            .filter_map(|(id, element)| element.model_element().cloned().map(|value| (id.clone(), value)))
+            .collect::<HashMap<_, _>>(),
+        data.start_binding.as_ref(),
+        data.end_binding.as_ref(),
+        data.start_arrowhead,
+        data.end_arrowhead,
+    );
 
-    let mut points = Vec::new();
-    points.push(start);
-
-    if !axis_aligned(start, end) {
-        let dx = (end.x - start.x).abs();
-        let dy = (end.y - start.y).abs();
-        let bend = if dx >= dy {
-            DrawPoint::new(end.x, start.y)
-        } else {
-            DrawPoint::new(start.x, end.y)
-        };
-        if bend != start && bend != end {
-            points.push(bend);
-        }
-    }
-
-    points.push(end);
     RoutedElbowArrow {
-        local_points: dedupe_consecutive_points(points),
+        local_points: dedupe_consecutive_points(routed.points),
     }
 }
 
@@ -615,6 +620,10 @@ fn apply_endpoint_drag_with_fixed_segments<E>(
 where
     E: ElbowPipelineElement + Clone,
 {
+    if let Some(updated) = try_apply_endpoint_drag_with_translated_flow(context) {
+        return updated;
+    }
+
     let mut points = context.incoming_points.clone();
     if points.len() < 2 {
         return FixedSegmentPathResult::new(points, Vec::new());
@@ -642,6 +651,43 @@ where
     }
 
     normalize_fixed_segment_path(points, fixed, &HashSet::new(), true)
+}
+
+fn try_apply_endpoint_drag_with_translated_flow<E>(
+    context: &ElbowEditContext<E>,
+) -> Option<FixedSegmentPathResult>
+where
+    E: ElbowPipelineElement + Clone,
+{
+    let element = context.element.model_element()?.clone();
+    let elements_by_id = context
+        .elements_by_id
+        .iter()
+        .filter_map(|(id, element)| element.model_element().cloned().map(|value| (id.clone(), value)))
+        .collect::<HashMap<_, _>>();
+    let translated = endpoint_drag::apply_endpoint_drag_with_fixed_segments(
+        &endpoint_drag::ElbowEditContext {
+            element,
+            elements_by_id,
+            base_points: context.base_points.clone(),
+            incoming_points: context.incoming_points.clone(),
+            fixed_segments: context.fixed_segments.clone(),
+            start_binding: context.start_binding.clone(),
+            end_binding: context.end_binding.clone(),
+            start_arrowhead: context.start_arrowhead(),
+            end_arrowhead: context.end_arrowhead(),
+            start_active: context.start_active(),
+            end_active: context.end_active(),
+            start_was_bound: context.start_was_bound(),
+            end_was_bound: context.end_was_bound(),
+            start_binding_removed: context.start_binding_removed(),
+            end_binding_removed: context.end_binding_removed(),
+        },
+    );
+    Some(FixedSegmentPathResult::new(
+        translated.points,
+        translated.fixed_segments,
+    ))
 }
 
 fn apply_perpendicular_adjustment(

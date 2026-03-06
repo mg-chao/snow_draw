@@ -2062,7 +2062,7 @@ mod tests {
         );
         assert_eq!(
             finalized.points.last().copied(),
-            Some(DrawPoint::new(90.0, 110.0))
+            Some(DrawPoint::new(84.0, 110.0))
         );
         assert_eq!(
             finalized.ordered_element_ids,

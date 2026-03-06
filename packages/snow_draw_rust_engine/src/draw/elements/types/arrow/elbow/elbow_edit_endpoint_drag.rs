@@ -5,12 +5,19 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::draw::core::coordinates::element_space::ElementSpace;
+use crate::draw::elements::types::arrow::arrow_binding::{
+    ArrowBinding as PerpendicularArrowBinding,
+    ArrowBindingMode as PerpendicularArrowBindingMode,
+};
 use crate::draw::elements::types::arrow::arrow_data::{ArrowBinding, ElbowFixedSegment};
 use crate::draw::elements::types::arrow::elbow::elbow_constants::ElbowConstants;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::ArrowheadStyle;
 use crate::draw::utils::selection_calculator::{ElementState, SelectionCalculator};
+
+use super::elbow_edit_perpendicular as translated_perpendicular;
+use super::elbow_router;
 
 /// Cardinal direction used by elbow endpoint editing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -1266,10 +1273,17 @@ fn route_local_path(
         }
     }
 
-    // Full obstacle-aware elbow routing lives in elbow_router; use a stable direct fallback.
-    let default_prefer_horizontal =
-        (start_local.x - end_local.x).abs() >= (start_local.y - end_local.y).abs();
-    ElbowGeometry::direct_elbow_path(start_local, end_local, default_prefer_horizontal)
+    elbow_router::route_elbow_arrow_for_element_points(
+        element,
+        start_local,
+        end_local,
+        elements_by_id,
+        start_binding,
+        end_binding,
+        start_arrowhead,
+        end_arrowhead,
+    )
+    .local_points
 }
 
 fn stitch_sub_path(
@@ -1643,11 +1657,36 @@ fn ensure_perpendicular_bindings(
     points: Vec<DrawPoint>,
     fixed_segments: Vec<ElbowFixedSegment>,
 ) -> FixedSegmentPathResult {
-    // Full perpendicular-adjustment flow is translated in elbow_edit_perpendicular.
-    // Keep endpoint drag output stable and re-synced meanwhile.
-    FixedSegmentPathResult::new(
-        points.clone(),
-        sync_fixed_segments_to_points(&points, &fixed_segments),
+    let translated = translated_perpendicular::ensure_perpendicular_bindings(
+        &translated_perpendicular::ElbowEditContext {
+            element: context.element.clone(),
+            elements_by_id: context.elements_by_id.clone(),
+            start_binding: context.start_binding.as_ref().map(to_translated_binding),
+            end_binding: context.end_binding.as_ref().map(to_translated_binding),
+            start_arrowhead: context.start_arrowhead,
+            end_arrowhead: context.end_arrowhead,
+        },
+        points,
+        fixed_segments,
+    );
+    FixedSegmentPathResult::new(translated.points, translated.fixed_segments)
+}
+
+fn to_translated_binding(binding: &ArrowBinding) -> PerpendicularArrowBinding {
+    PerpendicularArrowBinding::new(
+        binding.element_id.clone(),
+        binding.anchor,
+        match binding.mode {
+            crate::draw::elements::types::arrow::arrow_data::ArrowBindingMode::Inside => {
+                PerpendicularArrowBindingMode::Inside
+            }
+            crate::draw::elements::types::arrow::arrow_data::ArrowBindingMode::Orbit => {
+                PerpendicularArrowBindingMode::Orbit
+            }
+            crate::draw::elements::types::arrow::arrow_data::ArrowBindingMode::Skip => {
+                PerpendicularArrowBindingMode::Skip
+            }
+        },
     )
 }
 
