@@ -374,6 +374,56 @@ void main() {
   });
 
   test(
+    'recompute-elbow renormalizes fixed segments without fixed-length mutation',
+    () {
+      final arrow = ArrowState(
+        id: 'arrow-elbow-fixed-segment-renorm',
+        x: 10,
+        y: 20,
+        width: 80,
+        height: 0,
+        points: const <Point>[
+          <double>[0, 0],
+          <double>[40, 0],
+          <double>[80, 0],
+        ],
+        startBinding: null,
+        endBinding: null,
+        startArrowhead: null,
+        endArrowhead: null,
+        elbowed: true,
+        fixedSegments: const <FixedSegment>[
+          FixedSegment(index: 1, start: <double>[0, 0], end: <double>[40, 0]),
+        ],
+        startIsSpecial: null,
+        endIsSpecial: null,
+      );
+
+      final response = executeArrowOperationSafe(<String, dynamic>{
+        'type': 'recompute-elbow',
+        'input': <String, dynamic>{
+          'arrow': arrow,
+          'bindables': const <BindableState>[],
+          'context': const <String, dynamic>{
+            'zoom': 1,
+            'isBindingEnabled': true,
+            'bindMode': 'inside',
+            'maxCoordinate': 10000,
+          },
+        },
+      });
+
+      expect(response['type'], 'arrow-patch');
+      final patch = response['patch'] as Map<String, dynamic>;
+      expect(
+        (patch['points'] as List<Object?>).length,
+        greaterThanOrEqualTo(2),
+      );
+      expect(patch.containsKey('fixedSegments'), isTrue);
+    },
+  );
+
+  test(
     'update-elbow-arrow invariant check rejects invalid point array length',
     () {
       final arrow = ArrowState(

@@ -1001,7 +1001,7 @@ List<FixedSegment>? _cloneFixedSegments(List<FixedSegment>? segments) {
           end: <double>[segment.end[0], segment.end[1]],
         ),
       )
-      .toList(growable: false);
+      .toList(growable: true);
 }
 
 List<FixedSegment>? _normalizeFixedSegmentsFromPoints(
