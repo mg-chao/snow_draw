@@ -154,6 +154,28 @@ impl ArrowBindingResolver {
         E: ElementStateLike,
         D: ArrowBindingResolverDelegate<E>,
     {
+        self.resolve_with_skip(
+            base_elements,
+            updated_elements,
+            changed_element_ids,
+            delegate,
+            &HashSet::new(),
+        )
+    }
+
+    /// Resolves bound arrows while skipping arrows that are already updated.
+    pub fn resolve_with_skip<E, D>(
+        &self,
+        base_elements: &HashMap<String, E>,
+        updated_elements: &HashMap<String, E>,
+        changed_element_ids: &HashSet<String>,
+        delegate: &D,
+        skip_arrow_ids: &HashSet<String>,
+    ) -> HashMap<String, E>
+    where
+        E: ElementStateLike,
+        D: ArrowBindingResolverDelegate<E>,
+    {
         if changed_element_ids.is_empty() {
             return HashMap::new();
         }
@@ -162,6 +184,9 @@ impl ArrowBindingResolver {
         let mut updates = HashMap::new();
 
         for element in lookup.values() {
+            if skip_arrow_ids.contains(element.id()) {
+                continue;
+            }
             let Some(data) = element.arrow_like_data() else {
                 continue;
             };
@@ -180,8 +205,15 @@ impl ArrowBindingResolver {
                 continue;
             }
 
-            let updated =
-                apply_bindings(element, data, &lookup, update_start, update_end, delegate);
+            let updated = apply_bindings(
+                element,
+                data,
+                &lookup,
+                update_start,
+                update_end,
+                changed_element_ids,
+                delegate,
+            );
             if let Some(updated_element) = updated {
                 updates.insert(updated_element.id().to_string(), updated_element);
             }
@@ -197,6 +229,7 @@ fn apply_bindings<E, D>(
     lookup: &CombinedElementLookup<'_, E>,
     update_start: bool,
     update_end: bool,
+    changed_element_ids: &HashSet<String>,
     delegate: &D,
 ) -> Option<E>
 where
@@ -212,6 +245,7 @@ where
     if local_points.len() < 2 {
         return None;
     }
+    let original_points = local_points.clone();
 
     let sync_both_ends = data.start_binding().is_some() && data.end_binding().is_some();
     let should_update_start = update_start || sync_both_ends;
@@ -263,6 +297,13 @@ where
         }
         changed_at_least_once = true;
     }
+
+    maybe_translate_midpoints_with_shared_bindable(
+        data,
+        changed_element_ids,
+        &original_points,
+        &mut local_points,
+    );
 
     if !changed_at_least_once {
         return None;
@@ -417,4 +458,311 @@ where
     D: ArrowBindingResolverDelegate<E>,
 {
     delegate.resolve_world_points(element.rect(), data.points())
+}
+
+fn maybe_translate_midpoints_with_shared_bindable<D>(
+    data: &D,
+    changed_element_ids: &HashSet<String>,
+    original_points: &[DrawPoint],
+    updated_points: &mut [DrawPoint],
+) where
+    D: ArrowLikeData,
+{
+    if updated_points.len() <= 2 || original_points.len() != updated_points.len() {
+        return;
+    }
+
+    let Some(start_binding) = data.start_binding() else {
+        return;
+    };
+    let Some(end_binding) = data.end_binding() else {
+        return;
+    };
+    if start_binding.element_id != end_binding.element_id
+        || !changed_element_ids.contains(&start_binding.element_id)
+    {
+        return;
+    }
+
+    let start_delta = updated_points[0] - original_points[0];
+    let end_delta =
+        updated_points[updated_points.len() - 1] - original_points[original_points.len() - 1];
+    if !points_almost_equal(start_delta, end_delta) {
+        return;
+    }
+
+    for index in 1..updated_points.len() - 1 {
+        updated_points[index] = original_points[index] + start_delta;
+    }
+}
+
+fn points_almost_equal(a: DrawPoint, b: DrawPoint) -> bool {
+    (a.x - b.x).abs() <= 1e-9 && (a.y - b.y).abs() <= 1e-9
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct TestArrowData {
+        points: Vec<DrawPoint>,
+        arrow_type: ArrowType,
+        start_arrowhead: ArrowheadStyle,
+        end_arrowhead: ArrowheadStyle,
+        start_binding: Option<ArrowBinding>,
+        end_binding: Option<ArrowBinding>,
+    }
+
+    impl ArrowLikeData for TestArrowData {
+        type FixedSegment = ();
+
+        fn points(&self) -> &[DrawPoint] {
+            &self.points
+        }
+
+        fn arrow_type(&self) -> ArrowType {
+            self.arrow_type
+        }
+
+        fn start_arrowhead(&self) -> ArrowheadStyle {
+            self.start_arrowhead
+        }
+
+        fn end_arrowhead(&self) -> ArrowheadStyle {
+            self.end_arrowhead
+        }
+
+        fn start_binding(&self) -> Option<&ArrowBinding> {
+            self.start_binding.as_ref()
+        }
+
+        fn end_binding(&self) -> Option<&ArrowBinding> {
+            self.end_binding.as_ref()
+        }
+
+        fn with_points(&self, points: Vec<DrawPoint>) -> Self {
+            let mut next = self.clone();
+            next.points = points;
+            next
+        }
+    }
+
+    #[derive(Clone, Debug, PartialEq)]
+    struct TestElement {
+        id: String,
+        rect: DrawRect,
+        rotation: f64,
+        arrow_data: Option<TestArrowData>,
+    }
+
+    impl ElementStateLike for TestElement {
+        type ArrowData = TestArrowData;
+
+        fn id(&self) -> &str {
+            &self.id
+        }
+
+        fn rect(&self) -> DrawRect {
+            self.rect
+        }
+
+        fn rotation(&self) -> f64 {
+            self.rotation
+        }
+
+        fn arrow_like_data(&self) -> Option<&Self::ArrowData> {
+            self.arrow_data.as_ref()
+        }
+
+        fn copy_with_rect_and_data(&self, rect: DrawRect, data: Self::ArrowData) -> Self {
+            Self {
+                id: self.id.clone(),
+                rect,
+                rotation: self.rotation,
+                arrow_data: Some(data),
+            }
+        }
+    }
+
+    #[derive(Clone, Copy, Debug, Default)]
+    struct TestDelegate;
+
+    impl ArrowBindingResolverDelegate<TestElement> for TestDelegate {
+        fn resolve_world_points(
+            &self,
+            _rect: DrawRect,
+            normalized_points: &[DrawPoint],
+        ) -> Vec<DrawPoint> {
+            normalized_points.to_vec()
+        }
+
+        fn resolve_arrow_geometry_update(
+            &self,
+            local_points: &[DrawPoint],
+            _old_rect: DrawRect,
+            _rotation: f64,
+            _arrow_type: ArrowType,
+        ) -> ArrowGeometryUpdate {
+            ArrowGeometryUpdate {
+                rect: DrawRect::from_point_cloud(local_points.iter().copied()),
+                normalized_points: local_points.to_vec(),
+            }
+        }
+
+        fn resolve_bound_point(
+            &self,
+            binding: &ArrowBinding,
+            target: &TestElement,
+            _reference_point: Option<DrawPoint>,
+        ) -> Option<DrawPoint> {
+            Some(DrawPoint::new(
+                target.rect.min_x + target.rect.width() * binding.anchor.x,
+                target.rect.min_y + target.rect.height() * binding.anchor.y,
+            ))
+        }
+
+        fn resolve_elbow_bound_point(
+            &self,
+            binding: &ArrowBinding,
+            target: &TestElement,
+            _has_arrowhead: bool,
+        ) -> Option<DrawPoint> {
+            self.resolve_bound_point(binding, target, None)
+        }
+    }
+
+    #[test]
+    fn recompute_keeps_middle_points_moving_with_dual_bound_target() {
+        let bindable = bindable_element("bindable-1", DrawRect::new(100.0, 100.0, 220.0, 220.0));
+        let arrow = arrow_element(
+            "arrow-1",
+            vec![
+                DrawPoint::new(100.0, 160.0),
+                DrawPoint::new(160.0, 120.0),
+                DrawPoint::new(220.0, 160.0),
+            ],
+            Some(binding("bindable-1", 0.0, 0.5)),
+            Some(binding("bindable-1", 1.0, 0.5)),
+        );
+
+        let delta = DrawPoint::new(40.0, 20.0);
+        let moved_bindable = TestElement {
+            rect: bindable.rect.translate(delta),
+            ..bindable.clone()
+        };
+
+        let base = HashMap::from([
+            (bindable.id.clone(), bindable.clone()),
+            (arrow.id.clone(), arrow.clone()),
+        ]);
+        let updated = HashMap::from([(bindable.id.clone(), moved_bindable)]);
+        let changed = HashSet::from([bindable.id.clone()]);
+
+        let resolution =
+            ArrowBindingResolver::INSTANCE.resolve(&base, &updated, &changed, &TestDelegate);
+
+        let updated_arrow = resolution.get("arrow-1").expect("updated arrow");
+        let updated_points = updated_arrow
+            .arrow_data
+            .as_ref()
+            .expect("arrow data")
+            .points
+            .clone();
+
+        assert_eq!(updated_points.len(), 3);
+        for (updated_point, original_point) in updated_points
+            .iter()
+            .zip(arrow.arrow_data.as_ref().expect("arrow data").points.iter())
+        {
+            assert!((updated_point.x - original_point.x - delta.x).abs() <= 1e-9);
+            assert!((updated_point.y - original_point.y - delta.y).abs() <= 1e-9);
+        }
+    }
+
+    #[test]
+    fn skips_recomputing_arrows_that_are_simultaneously_updated() {
+        let bindable = bindable_element("bindable-1", DrawRect::new(100.0, 100.0, 220.0, 220.0));
+        let arrow = arrow_element(
+            "arrow-1",
+            vec![
+                DrawPoint::new(100.0, 160.0),
+                DrawPoint::new(160.0, 120.0),
+                DrawPoint::new(220.0, 160.0),
+            ],
+            Some(binding("bindable-1", 0.0, 0.5)),
+            Some(binding("bindable-1", 1.0, 0.5)),
+        );
+        let moved_bindable = TestElement {
+            rect: bindable.rect.translate(DrawPoint::new(40.0, 20.0)),
+            ..bindable.clone()
+        };
+        let moved_arrow = arrow_element(
+            "arrow-1",
+            vec![
+                DrawPoint::new(105.0, 165.0),
+                DrawPoint::new(165.0, 125.0),
+                DrawPoint::new(225.0, 165.0),
+            ],
+            Some(binding("bindable-1", 0.0, 0.5)),
+            Some(binding("bindable-1", 1.0, 0.5)),
+        );
+
+        let base = HashMap::from([
+            (bindable.id.clone(), bindable.clone()),
+            (arrow.id.clone(), arrow.clone()),
+        ]);
+        let updated = HashMap::from([
+            (bindable.id.clone(), moved_bindable),
+            (arrow.id.clone(), moved_arrow),
+        ]);
+        let changed = HashSet::from([bindable.id.clone(), arrow.id.clone()]);
+
+        let without_skip =
+            ArrowBindingResolver::INSTANCE.resolve(&base, &updated, &changed, &TestDelegate);
+        let with_skip = ArrowBindingResolver::INSTANCE.resolve_with_skip(
+            &base,
+            &updated,
+            &changed,
+            &TestDelegate,
+            &HashSet::from([arrow.id.clone()]),
+        );
+
+        assert!(without_skip.contains_key(arrow.id.as_str()));
+        assert!(!with_skip.contains_key(arrow.id.as_str()));
+    }
+
+    fn bindable_element(id: &str, rect: DrawRect) -> TestElement {
+        TestElement {
+            id: id.to_owned(),
+            rect,
+            rotation: 0.0,
+            arrow_data: None,
+        }
+    }
+
+    fn arrow_element(
+        id: &str,
+        points: Vec<DrawPoint>,
+        start_binding: Option<ArrowBinding>,
+        end_binding: Option<ArrowBinding>,
+    ) -> TestElement {
+        TestElement {
+            id: id.to_owned(),
+            rect: DrawRect::from_point_cloud(points.iter().copied()),
+            rotation: 0.0,
+            arrow_data: Some(TestArrowData {
+                points,
+                arrow_type: ArrowType::Curved,
+                start_arrowhead: ArrowheadStyle::None,
+                end_arrowhead: ArrowheadStyle::None,
+                start_binding,
+                end_binding,
+            }),
+        }
+    }
+
+    fn binding(id: &str, x: f64, y: f64) -> ArrowBinding {
+        ArrowBinding::new(id.to_owned(), DrawPoint::new(x, y), ArrowBindingMode::Orbit)
+    }
 }

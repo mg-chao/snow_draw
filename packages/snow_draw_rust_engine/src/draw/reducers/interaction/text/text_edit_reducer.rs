@@ -457,6 +457,13 @@ impl TextEditReducer {
             .iter()
             .find(|element| element.id == interaction.element_id)
             .is_some_and(ArrowBindingUtils::is_bindable_target);
+        let deleted_elements_by_id = state
+            .document_elements()
+            .iter()
+            .find(|element| element.id == interaction.element_id)
+            .cloned()
+            .map(|element| HashMap::from([(element.id.clone(), element)]))
+            .unwrap_or_default();
         let next_state = match self.remove_text_element_and_unbind_references(
             state.document_elements(),
             &interaction.element_id,
@@ -466,6 +473,7 @@ impl TextEditReducer {
                     sync_arrow_bindings_after_deletion(
                         next_elements,
                         &HashSet::from([interaction.element_id.clone()]),
+                        &deleted_elements_by_id,
                     )
                 } else {
                     next_elements

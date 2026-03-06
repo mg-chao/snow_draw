@@ -245,9 +245,17 @@ impl RotateOperation {
             return None;
         }
 
+        let rotatable_selected_ids = resolve_rotatable_selection_ids(
+            current_elements_by_id,
+            &context.base.selected_ids_at_start,
+        );
+        if rotatable_selected_ids.is_empty() {
+            return None;
+        }
+
         let updated_by_id = EditApply::apply_rotate_to_elements(
             &context.element_snapshots,
-            &context.base.selected_ids_at_start,
+            &rotatable_selected_ids,
             context.base.start_bounds.center(),
             transform.applied_angle,
             current_elements_by_id,
@@ -256,13 +264,14 @@ impl RotateOperation {
             return None;
         }
 
-        let selected_ids = context.base.selected_ids_at_start.clone();
         finalize_domain_result(
             current_elements_by_id,
             updated_by_id,
             None,
             Some(context.base_rotation + transform.applied_angle),
-            Some(&|id, element| selected_ids.contains(id) && is_elbow_arrow_element(element)),
+            Some(&|id, element| {
+                rotatable_selected_ids.contains(id) && is_elbow_arrow_element(element)
+            }),
         )
     }
 
@@ -367,4 +376,57 @@ fn is_elbow_arrow_element(element: &ElementState) -> bool {
     ArrowData::from_json_value(&payload)
         .map(|data| data.arrow_type == ArrowType::Elbow)
         .unwrap_or(false)
+}
+
+fn resolve_rotatable_selection_ids(
+    current_elements_by_id: &HashMap<String, ElementState>,
+    selected_ids: &HashSet<String>,
+) -> HashSet<String> {
+    selected_ids
+        .iter()
+        .filter_map(|id| {
+            current_elements_by_id
+                .get(id)
+                .filter(|element| !is_elbow_arrow_element(element))
+                .map(|_| id.clone())
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Arc;
+
+    fn element_with_arrow(id: &str, arrow_type: ArrowType) -> ElementState {
+        let mut data = ArrowData::default();
+        data.arrow_type = arrow_type;
+        ElementState::new(
+            id,
+            DrawRect::new(0.0, 0.0, 100.0, 100.0),
+            0.0,
+            1.0,
+            0,
+            Arc::new(data),
+        )
+    }
+
+    #[test]
+    fn resolve_rotatable_selection_ids_skips_elbow_arrows() {
+        let elements = HashMap::from([
+            (
+                "elbow".to_owned(),
+                element_with_arrow("elbow", ArrowType::Elbow),
+            ),
+            (
+                "straight".to_owned(),
+                element_with_arrow("straight", ArrowType::Straight),
+            ),
+        ]);
+        let selected_ids = HashSet::from(["elbow".to_owned(), "straight".to_owned()]);
+
+        let resolved = resolve_rotatable_selection_ids(&elements, &selected_ids);
+
+        assert_eq!(resolved, HashSet::from(["straight".to_owned()]));
+    }
 }

@@ -73,7 +73,7 @@ pub fn apply_element_replacements_and_order(
     ordered_element_ids: Option<&[String]>,
 ) -> Vec<ElementState> {
     let replaced = EditApply::replace_elements_by_id(elements, replacements_by_id);
-    reorder_elements_by_id_order(replaced, ordered_element_ids)
+    EditApply::reorder_elements_by_id_order(replaced, ordered_element_ids)
 }
 
 /// Reorders elements to match an explicit id order when one is available.
@@ -81,42 +81,14 @@ pub fn reorder_elements_by_id_order(
     elements: Vec<ElementState>,
     ordered_element_ids: Option<&[String]>,
 ) -> Vec<ElementState> {
-    let Some(ordered_ids) = ordered_element_ids else {
-        return elements;
-    };
-    if ordered_ids.is_empty() || elements.is_empty() {
-        return elements;
-    }
-
-    let elements_by_id = elements
-        .iter()
-        .cloned()
-        .map(|element| (element.id.clone(), element))
-        .collect::<HashMap<_, _>>();
-    let ordered_id_set = ordered_ids
-        .iter()
-        .map(String::as_str)
-        .collect::<HashSet<_>>();
-
-    let mut reordered = Vec::with_capacity(elements.len());
-    for id in ordered_ids {
-        if let Some(element) = elements_by_id.get(id) {
-            reordered.push(element.clone());
-        }
-    }
-    for element in elements {
-        if !ordered_id_set.contains(element.id.as_str()) {
-            reordered.push(element);
-        }
-    }
-
-    reordered
+    EditApply::reorder_elements_by_id_order(elements, ordered_element_ids)
 }
 
 /// Clears deleted arrow bindings from remaining elements.
 pub fn sync_arrow_bindings_after_deletion(
     elements: Vec<ElementState>,
     deleted_ids: &HashSet<String>,
+    _deleted_elements_by_id: &HashMap<String, ElementState>,
 ) -> Vec<ElementState> {
     if elements.is_empty() || deleted_ids.is_empty() {
         return elements;

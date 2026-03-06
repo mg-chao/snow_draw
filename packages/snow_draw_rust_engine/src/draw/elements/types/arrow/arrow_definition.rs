@@ -2,15 +2,15 @@ use std::sync::LazyLock;
 
 use crate::draw::elements::core::element_data::ElementTypeId;
 use crate::draw::elements::core::element_definition::ElementDefinition;
+use crate::draw::elements::types::connector::connector_hit_tester::ConnectorHitTester;
 
 use super::arrow_creation_strategy::ArrowCreationStrategy;
 use super::arrow_data::ArrowData;
-use super::arrow_hit_tester::ArrowHitTester;
 use super::arrow_task_encoder::ArrowTaskEncoder;
 
 /// Typed Rust alias for the Dart `ElementDefinition<ArrowData>`.
 pub type ArrowDefinition =
-    ElementDefinition<ArrowData, ArrowHitTester, ArrowTaskEncoder, ArrowCreationStrategy>;
+    ElementDefinition<ArrowData, ConnectorHitTester, ArrowTaskEncoder, ArrowCreationStrategy>;
 
 /// Shared arrow element definition, equivalent to Dart `const arrowDefinition`.
 pub static ARROW_DEFINITION: LazyLock<ArrowDefinition> = LazyLock::new(build_arrow_definition);
@@ -24,7 +24,7 @@ fn build_arrow_definition() -> ArrowDefinition {
     ElementDefinition::new(
         ElementTypeId::new(ArrowData::TYPE_ID_TOKEN),
         "Arrow",
-        ArrowHitTester,
+        ConnectorHitTester::new(),
         ArrowData::default,
         |json| ArrowData::from_json(json).unwrap_or_default(),
         ArrowTaskEncoder,

@@ -7,8 +7,9 @@ use std::{
 };
 
 use crate::draw::elements::core::element_hit_tester::{ElementHitTester, ElementState};
-use crate::draw::elements::types::arrow::arrow_hit_tester::{
-    ArrowHitTestElement, ArrowHitTester, ArrowLikeData,
+use crate::draw::elements::types::arrow::arrow_hit_tester::ArrowLikeData;
+use crate::draw::elements::types::connector::connector_hit_tester::{
+    ConnectorHitTestElement, ConnectorHitTester,
 };
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
@@ -92,13 +93,13 @@ impl LineHitTester {
         let as_arrow_data = LineAsArrowData {
             inner: element.data,
         };
-        let arrow_element = ArrowHitTestElement {
+        let connector_element = ConnectorHitTestElement {
             id: element.id,
             rect: element.rect,
             rotation: element.rotation,
             data: &as_arrow_data,
         };
-        ArrowHitTester.hit_test_arrow(&arrow_element, position, tolerance)
+        ConnectorHitTester::new().hit_test_connector(&connector_element, position, tolerance)
     }
 
     fn resolve_fill_outline<D: LineLikeData + ?Sized>(

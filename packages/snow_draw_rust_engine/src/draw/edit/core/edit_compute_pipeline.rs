@@ -155,11 +155,16 @@ impl EditComputePipeline {
         merged.extend(cleanup_updates);
 
         let changed_element_ids = merged.keys().cloned().collect::<HashSet<_>>();
-        let binding_updates = ArrowBindingResolver::INSTANCE.resolve(
+        let skip_arrow_ids = merged
+            .iter()
+            .filter_map(|(id, element)| element.arrow_like_data().is_some().then(|| id.clone()))
+            .collect::<HashSet<_>>();
+        let binding_updates = ArrowBindingResolver::INSTANCE.resolve_with_skip(
             base_elements,
             &merged,
             &changed_element_ids,
             binding_delegate,
+            &skip_arrow_ids,
         );
 
         for (id, element) in binding_updates {
@@ -204,12 +209,17 @@ pub fn finalize_domain_result(
     let base_for_resolver = to_resolver_map(base_elements);
     let merged_for_resolver = to_resolver_map(&merged);
     let changed_element_ids = merged_for_resolver.keys().cloned().collect::<HashSet<_>>();
+    let skip_arrow_ids = merged_for_resolver
+        .iter()
+        .filter_map(|(id, element)| element.arrow_like_data().is_some().then(|| id.clone()))
+        .collect::<HashSet<_>>();
     let delegate = DomainArrowBindingResolverDelegate;
-    let binding_updates = ArrowBindingResolver::INSTANCE.resolve(
+    let binding_updates = ArrowBindingResolver::INSTANCE.resolve_with_skip(
         &base_for_resolver,
         &merged_for_resolver,
         &changed_element_ids,
         &delegate,
+        &skip_arrow_ids,
     );
 
     for (id, element) in binding_updates {

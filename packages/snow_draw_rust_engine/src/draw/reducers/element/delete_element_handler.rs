@@ -81,6 +81,24 @@ pub trait ElementReducerElement: SerialNumberDependencyElement + Clone {
         z_index: i64,
         id_map: &HashMap<String, String>,
     ) -> Self;
+
+    fn sync_after_deletion(
+        elements: Vec<Self>,
+        _deleted_ids: &HashSet<String>,
+        _deleted_elements_by_id: &HashMap<String, Self>,
+    ) -> Vec<Self>
+    where
+        Self: Sized,
+    {
+        elements
+    }
+
+    fn sync_after_duplication(elements: Vec<Self>, _id_map: &HashMap<String, String>) -> Vec<Self>
+    where
+        Self: Sized,
+    {
+        elements
+    }
 }
 
 /// Context adapter required by duplicate reducer.
@@ -213,22 +231,33 @@ fn build_elements_after_deletion<E>(elements: &[E], delete_ids: &HashSet<String>
 where
     E: ElementReducerElement,
 {
-    elements
+    let deleted_elements_by_id = elements
+        .iter()
+        .filter(|element| delete_ids.contains(element.id()))
+        .map(|element| (element.id().to_owned(), element.clone()))
+        .collect::<HashMap<_, _>>();
+    let retained = elements
         .iter()
         .filter(|element| !delete_ids.contains(element.id()))
         .map(|element| apply_delete_element_updates(element, delete_ids))
-        .collect()
+        .collect::<Vec<_>>();
+
+    E::sync_after_deletion(retained, delete_ids, &deleted_elements_by_id)
 }
 
 fn apply_delete_element_updates<E>(element: &E, delete_ids: &HashSet<String>) -> E
 where
     E: ElementReducerElement,
 {
-    if !is_element_dependent_on_ids(element, delete_ids, DependencyFilter::default()) {
+    let filter = DependencyFilter {
+        include_serial_bindings: true,
+        include_arrow_bindings: false,
+    };
+    if !is_element_dependent_on_ids(element, delete_ids, filter) {
         return element.clone();
     }
 
-    clear_element_dependencies_for_ids(element, delete_ids, DependencyFilter::default())
+    clear_element_dependencies_for_ids(element, delete_ids, filter)
 }
 
 fn next_selection_after_deletion(
@@ -299,6 +328,8 @@ where
             duplicated_selected_ids.insert(new_id.clone());
         }
     }
+
+    let duplicated_elements = E::sync_after_duplication(duplicated_elements, id_map);
 
     DuplicatedElements {
         elements: duplicated_elements,
@@ -426,6 +457,49 @@ impl ElementReducerElement for DocumentElementState {
         duplicated.z_index = z_index;
         duplicated.data = duplicate_data_with_remapped_references(&self.data, id_map);
         duplicated
+    }
+
+    fn sync_after_deletion(
+        elements: Vec<Self>,
+        deleted_ids: &HashSet<String>,
+        _deleted_elements_by_id: &HashMap<String, Self>,
+    ) -> Vec<Self> {
+        let filter = DependencyFilter {
+            include_serial_bindings: false,
+            include_arrow_bindings: true,
+        };
+        elements
+            .into_iter()
+            .map(|element| clear_element_dependencies_for_ids(&element, deleted_ids, filter))
+            .collect()
+    }
+
+    fn sync_after_duplication(elements: Vec<Self>, id_map: &HashMap<String, String>) -> Vec<Self> {
+        if elements.is_empty() || id_map.is_empty() {
+            return elements;
+        }
+
+        let duplicated_ids = id_map.values().cloned().collect::<HashSet<_>>();
+        let mut expanded_id_map = id_map.clone();
+        for duplicated_id in &duplicated_ids {
+            expanded_id_map.insert(duplicated_id.clone(), duplicated_id.clone());
+        }
+
+        elements
+            .into_iter()
+            .map(|element| {
+                if !duplicated_ids.contains(element.id.as_str()) {
+                    return element;
+                }
+
+                let mut next = element.clone();
+                if let ElementData::ArrowLike(data) = &next.data {
+                    next.data =
+                        ElementData::ArrowLike(remap_arrow_bindings(data, &expanded_id_map));
+                }
+                next
+            })
+            .collect()
     }
 }
 

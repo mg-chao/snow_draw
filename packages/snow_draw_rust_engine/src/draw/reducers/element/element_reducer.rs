@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::sync::Arc;
 
 use serde_json::Map;
@@ -32,6 +32,9 @@ use crate::draw::models::application_state::{
 use crate::draw::models::draw_state::{DomainDocumentState, DomainState, DrawState};
 use crate::draw::models::element_state::ElementState;
 use crate::draw::models::selection_state::SelectionState;
+use crate::draw::reducers::core::arrow_binding_sync::{
+    sync_arrow_bindings_after_deletion, sync_arrow_bindings_after_duplication,
+};
 use crate::draw::reducers::core::reducer_utils::apply_selection_change;
 use crate::draw::types::draw_point::DrawPoint;
 
@@ -263,6 +266,18 @@ impl delete_element_handler::ElementReducerElement for ElementState {
                 id_map,
             )),
         )
+    }
+
+    fn sync_after_deletion(
+        elements: Vec<Self>,
+        deleted_ids: &HashSet<String>,
+        deleted_elements_by_id: &HashMap<String, Self>,
+    ) -> Vec<Self> {
+        sync_arrow_bindings_after_deletion(elements, deleted_ids, deleted_elements_by_id)
+    }
+
+    fn sync_after_duplication(elements: Vec<Self>, id_map: &HashMap<String, String>) -> Vec<Self> {
+        sync_arrow_bindings_after_duplication(elements, id_map)
     }
 }
 

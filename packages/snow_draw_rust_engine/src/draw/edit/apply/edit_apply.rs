@@ -6,10 +6,13 @@ use std::sync::Arc;
 use crate::draw::core::coordinates::overlay_space::OverlaySpace;
 use crate::draw::core::geometry::rotate_geometry::RotateGeometry;
 use crate::draw::elements::core::element_data::ElementData;
+
 use crate::draw::elements::types::arrow::arrow_data::{
-    ArrowData, ArrowDataPatch, ElbowFixedSegment as ArrowDataElbowFixedSegment,
+    ArrowBinding, ArrowData, ArrowDataPatch, ElbowFixedSegment as ArrowDataElbowFixedSegment,
     NullableField as ArrowNullableField,
 };
+use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
+use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
 use crate::draw::elements::types::serial_number::serial_number_data::{
     SerialNumberData, SerialNumberDataPatch,
 };
@@ -88,10 +91,6 @@ impl EditApply {
             snapshots,
             current_elements_by_id,
             |id, snapshot, current| {
-                if is_elbow_arrow_like(current.data.as_ref()) {
-                    return;
-                }
-
                 let new_rotation = snapshot.rotation + delta_angle;
                 let new_center = RotateGeometry::rotate_point(snapshot.center, pivot, delta_angle);
                 result.insert(
@@ -176,7 +175,10 @@ impl EditApply {
                         resized = apply_serial_number_resize(resized, start_element.rect);
                     }
                     ArrowData::TYPE_ID_TOKEN => {
-                        resized = apply_arrow_resize(resized, start_element.rect);
+                        resized = apply_arrow_resize(resized, scale_x < 0.0, scale_y < 0.0);
+                    }
+                    LineData::TYPE_ID_TOKEN => {
+                        resized = apply_line_resize(resized, scale_x < 0.0, scale_y < 0.0);
                     }
                     _ => {}
                 }
@@ -215,6 +217,46 @@ impl EditApply {
         }
 
         updated_elements.unwrap_or(elements)
+    }
+
+    /// Reorders elements to match an explicit id order and normalizes z-index.
+    pub fn reorder_elements_by_id_order(
+        elements: Vec<ElementState>,
+        ordered_element_ids: Option<&[String]>,
+    ) -> Vec<ElementState> {
+        let Some(ordered_ids) = ordered_element_ids else {
+            return elements;
+        };
+        if ordered_ids.is_empty() || elements.is_empty() || ordered_ids.len() != elements.len() {
+            return elements;
+        }
+
+        let by_id = elements
+            .iter()
+            .cloned()
+            .map(|element| (element.id.clone(), element))
+            .collect::<HashMap<_, _>>();
+        if by_id.len() != elements.len() {
+            return elements;
+        }
+
+        let mut seen_ids = HashSet::with_capacity(ordered_ids.len());
+        let mut reordered = Vec::with_capacity(elements.len());
+        for id in ordered_ids {
+            if !seen_ids.insert(id.as_str()) {
+                return elements;
+            }
+            let Some(element) = by_id.get(id) else {
+                return elements;
+            };
+            reordered.push(element.clone());
+        }
+
+        if same_element_order(&elements, &reordered) {
+            return reindex_elements_if_needed(elements);
+        }
+
+        reindex_elements_if_needed(reordered)
     }
 }
 
@@ -460,43 +502,81 @@ fn apply_serial_number_resize(element: ElementState, start_rect: DrawRect) -> El
     element.copy_with(None, None, None, None, None, Some(Arc::new(data)))
 }
 
-fn apply_arrow_resize(element: ElementState, start_rect: DrawRect) -> ElementState {
+fn apply_arrow_resize(element: ElementState, flip_x: bool, flip_y: bool) -> ElementState {
     let Some(data) = decode_arrow_data(element.data.as_ref()) else {
         return element;
     };
-    let Some(fixed_segments) = data.fixed_segments.as_deref() else {
-        return element;
-    };
-    if data.arrow_type != ArrowType::Elbow || fixed_segments.is_empty() {
-        return element;
+    let next_points = flip_normalized_points(&data.points, flip_x, flip_y);
+
+    if data.arrow_type != ArrowType::Elbow {
+        let updated_data = data.copy_with(ArrowDataPatch {
+            points: Some(next_points),
+            ..ArrowDataPatch::default()
+        });
+        if updated_data == data {
+            return element;
+        }
+
+        return element.copy_with(None, None, None, None, None, Some(Arc::new(updated_data)));
     }
 
-    let scaled = scale_fixed_segments(fixed_segments, start_rect, element.rect);
-    if fixed_segments == scaled.as_slice() {
-        return element;
-    }
-
+    let next_world_points = ArrowGeometry::resolve_world_points(element.rect, &next_points);
     let updated_data = data.copy_with(ArrowDataPatch {
-        fixed_segments: ArrowNullableField::Value(scaled),
+        points: Some(next_points),
+        start_binding: if flip_x || flip_y {
+            data.start_binding
+                .as_ref()
+                .map(|binding| {
+                    ArrowNullableField::Value(mirror_binding_anchor(binding, flip_x, flip_y))
+                })
+                .unwrap_or(ArrowNullableField::Unset)
+        } else {
+            ArrowNullableField::Unset
+        },
+        end_binding: if flip_x || flip_y {
+            data.end_binding
+                .as_ref()
+                .map(|binding| {
+                    ArrowNullableField::Value(mirror_binding_anchor(binding, flip_x, flip_y))
+                })
+                .unwrap_or(ArrowNullableField::Unset)
+        } else {
+            ArrowNullableField::Unset
+        },
+        fixed_segments: data
+            .fixed_segments
+            .as_ref()
+            .map(|segments| {
+                ArrowNullableField::Value(update_fixed_segments_from_points(
+                    segments,
+                    &next_world_points,
+                ))
+            })
+            .unwrap_or(ArrowNullableField::Unset),
         ..ArrowDataPatch::default()
     });
+
+    if updated_data == data {
+        return element;
+    }
 
     element.copy_with(None, None, None, None, None, Some(Arc::new(updated_data)))
 }
 
-fn scale_fixed_segments(
-    fixed_segments: &[ArrowDataElbowFixedSegment],
-    old_rect: DrawRect,
-    new_rect: DrawRect,
-) -> Vec<ArrowDataElbowFixedSegment> {
-    fixed_segments
-        .iter()
-        .map(|segment| ArrowDataElbowFixedSegment {
-            index: segment.index,
-            start: scale_point(segment.start, old_rect, new_rect),
-            end: scale_point(segment.end, old_rect, new_rect),
-        })
-        .collect()
+fn apply_line_resize(element: ElementState, flip_x: bool, flip_y: bool) -> ElementState {
+    let Some(data) = decode_line_data(element.data.as_ref()) else {
+        return element;
+    };
+
+    let updated_data = data.copy_with(LineDataPatch {
+        points: Some(flip_normalized_points(&data.points, flip_x, flip_y)),
+        ..LineDataPatch::default()
+    });
+    if updated_data == data {
+        return element;
+    }
+
+    element.copy_with(None, None, None, None, None, Some(Arc::new(updated_data)))
 }
 
 fn rect_from_center(center: DrawPoint, width: f64, height: f64) -> DrawRect {
@@ -510,34 +590,95 @@ fn rect_from_center(center: DrawPoint, width: f64, height: f64) -> DrawRect {
     )
 }
 
-fn scale_point(point: DrawPoint, old_rect: DrawRect, new_rect: DrawRect) -> DrawPoint {
-    let old_width = old_rect.width();
-    let old_height = old_rect.height();
-    let new_width = new_rect.width();
-    let new_height = new_rect.height();
-    let nx = if old_width == 0.0 {
-        0.0
-    } else {
-        (point.x - old_rect.min_x) / old_width
-    };
-    let ny = if old_height == 0.0 {
-        0.0
-    } else {
-        (point.y - old_rect.min_y) / old_height
-    };
-
-    DrawPoint::new(
-        new_rect.min_x + nx * new_width,
-        new_rect.min_y + ny * new_height,
-    )
-}
-
 fn points_match(a: DrawPoint, b: DrawPoint) -> bool {
     a.x == b.x && a.y == b.y
 }
 
-fn is_elbow_arrow_like(data: &dyn ElementData) -> bool {
-    decode_arrow_data(data).is_some_and(|arrow_data| arrow_data.arrow_type == ArrowType::Elbow)
+fn same_element_order(current: &[ElementState], candidate: &[ElementState]) -> bool {
+    if current.len() != candidate.len() {
+        return false;
+    }
+
+    current
+        .iter()
+        .zip(candidate.iter())
+        .all(|(left, right)| left.id == right.id)
+}
+
+fn reindex_elements_if_needed(elements: Vec<ElementState>) -> Vec<ElementState> {
+    let mut reindexed = None;
+    for (index, element) in elements.iter().enumerate() {
+        if element.z_index == index as i64 {
+            continue;
+        }
+
+        let updated = element.copy_with(None, None, None, None, Some(index as i64), None);
+        if reindexed.is_none() {
+            reindexed = Some(elements.clone());
+        }
+        if let Some(next_elements) = reindexed.as_mut() {
+            next_elements[index] = updated;
+        }
+    }
+
+    reindexed.unwrap_or(elements)
+}
+
+fn flip_normalized_points(points: &[DrawPoint], flip_x: bool, flip_y: bool) -> Vec<DrawPoint> {
+    points
+        .iter()
+        .map(|point| {
+            point.copy_with(
+                Some(if flip_x { 1.0 - point.x } else { point.x }),
+                Some(if flip_y { 1.0 - point.y } else { point.y }),
+                None,
+                None,
+            )
+        })
+        .collect()
+}
+
+fn mirror_binding_anchor(binding: &ArrowBinding, flip_x: bool, flip_y: bool) -> ArrowBinding {
+    ArrowBinding::new(
+        binding.element_id.clone(),
+        DrawPoint::new(
+            if flip_x {
+                -binding.anchor.x + 1.0
+            } else {
+                binding.anchor.x
+            },
+            if flip_y {
+                -binding.anchor.y + 1.0
+            } else {
+                binding.anchor.y
+            },
+        ),
+        binding.mode,
+    )
+}
+
+fn update_fixed_segments_from_points(
+    fixed_segments: &[ArrowDataElbowFixedSegment],
+    points: &[DrawPoint],
+) -> Vec<ArrowDataElbowFixedSegment> {
+    fixed_segments
+        .iter()
+        .map(|segment| {
+            let start_index = segment.index.saturating_sub(1);
+            let end_index = segment.index;
+            match (
+                points.get(start_index).copied(),
+                points.get(end_index).copied(),
+            ) {
+                (Some(start), Some(end)) => ArrowDataElbowFixedSegment {
+                    index: segment.index,
+                    start,
+                    end,
+                },
+                _ => segment.clone(),
+            }
+        })
+        .collect()
 }
 
 fn decode_text_data(data: &dyn ElementData) -> Option<TextData> {
@@ -559,4 +700,144 @@ fn decode_arrow_data(data: &dyn ElementData) -> Option<ArrowData> {
         return None;
     }
     ArrowData::from_json(&data.to_json()).ok()
+}
+
+fn decode_line_data(data: &dyn ElementData) -> Option<LineData> {
+    if data.type_id().as_str() != LineData::TYPE_ID_TOKEN {
+        return None;
+    }
+    LineData::from_json(&data.to_json()).ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::draw::elements::types::arrow::arrow_data::{
+        ArrowBinding as ArrowDataBinding, ArrowBindingMode,
+    };
+    use crate::draw::types::element_style::{FillStyle, StrokeStyle};
+
+    fn element_with_arrow(id: &str, data: ArrowData, z_index: i64) -> ElementState {
+        ElementState::new(
+            id,
+            DrawRect::new(0.0, 0.0, 100.0, 100.0),
+            0.0,
+            1.0,
+            z_index,
+            Arc::new(data),
+        )
+    }
+
+    fn element_with_line(id: &str, data: LineData, z_index: i64) -> ElementState {
+        ElementState::new(
+            id,
+            DrawRect::new(0.0, 0.0, 100.0, 100.0),
+            0.0,
+            1.0,
+            z_index,
+            Arc::new(data),
+        )
+    }
+
+    fn assert_point_close(actual: DrawPoint, expected: DrawPoint) {
+        let epsilon = 1e-9;
+        assert!(
+            (actual.x - expected.x).abs() <= epsilon,
+            "x mismatch: {actual:?} vs {expected:?}"
+        );
+        assert!(
+            (actual.y - expected.y).abs() <= epsilon,
+            "y mismatch: {actual:?} vs {expected:?}"
+        );
+    }
+
+    #[test]
+    fn reorder_elements_by_id_order_reindexes_valid_order() {
+        let elements = vec![
+            element_with_arrow("a", ArrowData::default(), 8),
+            element_with_arrow("b", ArrowData::default(), 9),
+            element_with_arrow("c", ArrowData::default(), 10),
+        ];
+        let ordered = vec!["c".to_owned(), "a".to_owned(), "b".to_owned()];
+
+        let reordered = EditApply::reorder_elements_by_id_order(elements, Some(&ordered));
+
+        assert_eq!(
+            reordered
+                .iter()
+                .map(|element| element.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["c", "a", "b"]
+        );
+        assert_eq!(
+            reordered
+                .iter()
+                .map(|element| element.z_index)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
+    }
+
+    #[test]
+    fn reorder_elements_by_id_order_rejects_invalid_order() {
+        let original = vec![
+            element_with_arrow("a", ArrowData::default(), 0),
+            element_with_arrow("b", ArrowData::default(), 1),
+        ];
+        let ordered = vec!["a".to_owned(), "a".to_owned()];
+
+        let reordered = EditApply::reorder_elements_by_id_order(original.clone(), Some(&ordered));
+
+        assert_eq!(reordered, original);
+    }
+
+    #[test]
+    fn apply_arrow_resize_flips_non_elbow_points_without_touching_bindings() {
+        let mut data = ArrowData::default();
+        data.points = vec![DrawPoint::new(0.2, 0.3), DrawPoint::new(0.8, 0.7)];
+        data.start_binding = Some(ArrowDataBinding::new(
+            "target-a",
+            DrawPoint::new(0.25, 0.75),
+            ArrowBindingMode::Orbit,
+        ));
+
+        let resized = apply_arrow_resize(element_with_arrow("arrow", data.clone(), 0), true, false);
+        let resized_data = decode_arrow_data(resized.data.as_ref()).expect("arrow data");
+
+        assert_point_close(resized_data.points[0], DrawPoint::new(0.8, 0.3));
+        assert_point_close(resized_data.points[1], DrawPoint::new(0.2, 0.7));
+        assert_eq!(resized_data.start_binding, data.start_binding);
+    }
+
+    #[test]
+    fn apply_arrow_resize_flips_elbow_binding_anchor() {
+        let mut data = ArrowData::default();
+        data.arrow_type = ArrowType::Elbow;
+        data.points = vec![DrawPoint::new(0.1, 0.2), DrawPoint::new(0.9, 0.8)];
+        data.start_binding = Some(ArrowDataBinding::new(
+            "target-a",
+            DrawPoint::new(0.25, 0.75),
+            ArrowBindingMode::Orbit,
+        ));
+
+        let resized = apply_arrow_resize(element_with_arrow("arrow", data, 0), true, true);
+        let resized_data = decode_arrow_data(resized.data.as_ref()).expect("arrow data");
+        let start_binding = resized_data.start_binding.expect("start binding");
+
+        assert_eq!(start_binding.anchor, DrawPoint::new(0.75, 0.25));
+    }
+
+    #[test]
+    fn apply_line_resize_flips_points() {
+        let mut data = LineData::default();
+        data.points = vec![DrawPoint::new(0.1, 0.2), DrawPoint::new(0.9, 0.8)];
+        data.fill_style = FillStyle::Solid;
+        data.stroke_style = StrokeStyle::Solid;
+
+        let resized = apply_line_resize(element_with_line("line", data, 0), true, false);
+        let resized_data = decode_line_data(resized.data.as_ref()).expect("line data");
+
+        assert_point_close(resized_data.points[0], DrawPoint::new(0.9, 0.2));
+        assert_point_close(resized_data.points[1], DrawPoint::new(0.1, 0.8));
+    }
 }

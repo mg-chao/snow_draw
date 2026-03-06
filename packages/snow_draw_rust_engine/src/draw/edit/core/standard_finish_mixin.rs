@@ -2,6 +2,7 @@
 
 use std::collections::HashMap;
 
+use crate::draw::edit::apply::edit_apply::EditApply;
 use crate::draw::edit::preview::edit_preview::{build_selection_preview, EditPreview};
 use crate::draw::models::application_state::SelectionOverlayState;
 use crate::draw::models::draw_state::{DomainState, DrawState};
@@ -60,9 +61,13 @@ pub trait StandardFinishMixin: EditOperation {
             return state.domain.clone();
         }
 
-        let next_elements = replace_elements_by_id(
+        let next_elements = EditApply::replace_elements_by_id(
             state.domain.document.elements.clone(),
             &result.updated_elements,
+        );
+        let next_elements = EditApply::reorder_elements_by_id_order(
+            next_elements,
+            result.ordered_element_ids.as_deref(),
         );
         let next_document = state
             .domain
@@ -149,32 +154,4 @@ pub fn build_edit_preview(
     );
 
     EditPreview::new(preview_elements_by_id.clone(), selection_preview)
-}
-
-fn replace_elements_by_id(
-    elements: Vec<ElementState>,
-    replacements_by_id: &HashMap<String, ElementState>,
-) -> Vec<ElementState> {
-    if replacements_by_id.is_empty() || elements.is_empty() {
-        return elements;
-    }
-
-    let mut updated_elements: Option<Vec<ElementState>> = None;
-    for (index, current) in elements.iter().enumerate() {
-        let Some(replacement) = replacements_by_id.get(&current.id) else {
-            continue;
-        };
-        if replacement == current {
-            continue;
-        }
-
-        if updated_elements.is_none() {
-            updated_elements = Some(elements.clone());
-        }
-        if let Some(updated) = updated_elements.as_mut() {
-            updated[index] = replacement.clone();
-        }
-    }
-
-    updated_elements.unwrap_or(elements)
 }
