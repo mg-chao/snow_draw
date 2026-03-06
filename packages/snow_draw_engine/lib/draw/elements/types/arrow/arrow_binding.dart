@@ -552,15 +552,14 @@ ArrowBindingResult? _resolveBindingCandidateViaCore({
     pointer: _toCorePoint(worldPoint),
     bindables: bindables,
     context: coreEngineContext ?? core.defaultEngineContext,
-    options: <String, dynamic>{
-      if (newArrow) 'newArrow': true,
-      if (initialBinding) 'initialBinding': true,
-      if (preserveOppositeInsideBinding) 'preserveOppositeInsideBinding': true,
-      if (oppositeOrbitFocusPoint != null)
-        'oppositeOrbitFocusPoint': _toCorePoint(oppositeOrbitFocusPoint),
-      if (angleLocked) 'angleLocked': true,
-      if (altKey) 'altKey': true,
-    },
+    options: ArrowCoreEndpointBindingOptions(
+      newArrow: newArrow,
+      initialBinding: initialBinding,
+      preserveOppositeInsideBinding: preserveOppositeInsideBinding,
+      oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
+      angleLocked: angleLocked,
+      altKey: altKey,
+    ),
   );
   final strategy = dragStart ? strategies.start : strategies.end;
   final edge = dragStart ? core.arrowEndpointStart : core.arrowEndpointEnd;

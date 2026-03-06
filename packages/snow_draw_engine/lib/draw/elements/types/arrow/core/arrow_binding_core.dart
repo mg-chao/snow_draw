@@ -8,34 +8,6 @@ const double baseBindingGap = 5;
 const double baseBindingGapElbow = 5;
 const double baseArrowMinLength = 10;
 
-typedef DirectionalLinkDirection = String;
-
-class DirectionalLinkBounds {
-  const DirectionalLinkBounds({
-    required this.x,
-    required this.y,
-    required this.width,
-    required this.height,
-  });
-
-  final double x;
-  final double y;
-  final double width;
-  final double height;
-}
-
-class DirectionalLinkArrow {
-  const DirectionalLinkArrow({
-    required this.x,
-    required this.y,
-    required this.points,
-  });
-
-  final double x;
-  final double y;
-  final List<Point> points;
-}
-
 typedef EndpointBindingStrategies = ({
   EndpointBindingStrategy? start,
   EndpointBindingStrategy? end,
@@ -1479,97 +1451,6 @@ EngineResult _emptyEngineResult() => const EngineResult(
   suggestedBinding: null,
   events: <ArrowEngineEvent>[],
 );
-
-DirectionalLinkArrow createDirectionalLinkArrow(
-  DirectionalLinkBounds start,
-  DirectionalLinkBounds end,
-  DirectionalLinkDirection direction, {
-  double padding = 6,
-}) {
-  var startX = 0.0;
-  var startY = 0.0;
-
-  if (direction == 'up') {
-    startX = start.x + start.width / 2;
-    startY = start.y - padding;
-  } else if (direction == 'down') {
-    startX = start.x + start.width / 2;
-    startY = start.y + start.height + padding;
-  } else if (direction == 'right') {
-    startX = start.x + start.width + padding;
-    startY = start.y + start.height / 2;
-  } else if (direction == 'left') {
-    startX = start.x - padding;
-    startY = start.y + start.height / 2;
-  }
-
-  var endX = 0.0;
-  var endY = 0.0;
-
-  if (direction == 'up') {
-    endX = end.x + end.width / 2 - startX;
-    endY = end.y + end.height - startY + padding;
-  } else if (direction == 'down') {
-    endX = end.x + end.width / 2 - startX;
-    endY = end.y - startY - padding;
-  } else if (direction == 'right') {
-    endX = end.x - startX - padding;
-    endY = end.y - startY + end.height / 2;
-  } else if (direction == 'left') {
-    endX = end.x + end.width - startX + padding;
-    endY = end.y - startY + end.height / 2;
-  }
-
-  return DirectionalLinkArrow(
-    x: startX,
-    y: startY,
-    points: <Point>[
-      <double>[0, 0],
-      <double>[endX, endY],
-    ],
-  );
-}
-
-List<Point> offsetArrowEndpointsForBindingOverlap(
-  List<Point> points, {
-  double delta = 0.5,
-}) {
-  if (points.length < 2 || !delta.isFinite || delta <= 0) {
-    return points;
-  }
-
-  final endPointIndex = points.length - 1;
-  final prevPoint = points[endPointIndex - 1];
-  final endPoint = points[endPointIndex];
-  final startPoint = points[0];
-  final nextPoints = points
-      .map((point) => <double>[point[0], point[1]])
-      .toList(growable: true);
-  var changed = false;
-
-  if (endPoint[0] > prevPoint[0]) {
-    nextPoints[0][0] = startPoint[0] + delta;
-    nextPoints[endPointIndex][0] = endPoint[0] - delta;
-    changed = true;
-  }
-  if (endPoint[0] < prevPoint[0]) {
-    nextPoints[0][0] = startPoint[0] - delta;
-    nextPoints[endPointIndex][0] = endPoint[0] + delta;
-    changed = true;
-  }
-  if (endPoint[1] > prevPoint[1]) {
-    nextPoints[0][1] = startPoint[1] + delta;
-    nextPoints[endPointIndex][1] = endPoint[1] - delta;
-    changed = true;
-  }
-  if (endPoint[1] < prevPoint[1]) {
-    nextPoints[0][1] = startPoint[1] - delta;
-    nextPoints[endPointIndex][1] = endPoint[1] + delta;
-    changed = true;
-  }
-
-  return changed ? nextPoints : points;
-}
 
 double getBindingGap(BindableState bindTarget, bool elbowed) =>
     (elbowed ? baseBindingGapElbow : baseBindingGap) +

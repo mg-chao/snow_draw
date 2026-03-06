@@ -52,7 +52,7 @@ void main() {
           pointer: const <double>[60, 0],
           bindables: <core.BindableState>[bindable],
           context: buildCoreEngineContext(),
-          options: const <String, dynamic>{'complexBindings': true},
+          options: const ArrowCoreEndpointBindingOptions(complexBindings: true),
         );
 
         final expectedStart = expected.start;
@@ -100,7 +100,9 @@ void main() {
           pointer: const <double>[60, 0],
           bindables: <core.BindableState>[bindable],
           context: buildCoreEngineContext(),
-          options: const <String, dynamic>{'complexBindings': false},
+          options: const ArrowCoreEndpointBindingOptions(
+            complexBindings: false,
+          ),
         );
 
         final expectedStart = expected.start;
@@ -200,7 +202,7 @@ void main() {
           pointer: const <double>[60, 0],
           bindables: <core.BindableState>[bindable],
           context: buildCoreEngineContext(),
-          options: const <String, dynamic>{'complexBindings': true},
+          options: const ArrowCoreEndpointBindingOptions(complexBindings: true),
         );
 
         final expectedStart =

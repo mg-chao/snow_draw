@@ -483,16 +483,12 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
     coreEngineContext: coreContext,
     fixedSegments: result.data.fixedSegments,
     orderedElementIds: orderedElementIds,
-    options: <String, dynamic>{
-      'newArrow': true,
-      if (preserveDraggedInsideBinding) 'altKey': true,
-      if (preserveOppositeInsideBinding) 'preserveOppositeInsideBinding': true,
-      if (oppositeOrbitFocusPoint != null)
-        'oppositeOrbitFocusPoint': <double>[
-          oppositeOrbitFocusPoint.x,
-          oppositeOrbitFocusPoint.y,
-        ],
-    },
+    options: ArrowCoreEndpointBindingOptions(
+      newArrow: true,
+      altKey: preserveDraggedInsideBinding,
+      preserveOppositeInsideBinding: preserveOppositeInsideBinding,
+      oppositeOrbitFocusPoint: oppositeOrbitFocusPoint,
+    ),
   );
   if (finalized == null) {
     return result;
@@ -882,19 +878,14 @@ _BindingSnapResult _snapBindingPoint({
     allowNewBinding: shouldLookupBindings,
     bindingDistance: bindingDistance,
     coreEngineContext: coreEngineContext,
-    options: <String, dynamic>{
-      if (newArrow) 'newArrow': true,
-      if (initialBinding) 'initialBinding': true,
-      if (shouldPreserveOppositeInsideBinding)
-        'preserveOppositeInsideBinding': true,
-      if (resolvedOppositeOrbitFocusPoint != null)
-        'oppositeOrbitFocusPoint': <double>[
-          resolvedOppositeOrbitFocusPoint.x,
-          resolvedOppositeOrbitFocusPoint.y,
-        ],
-      if (angleLocked) 'angleLocked': true,
-      if (altKey) 'altKey': true,
-    },
+    options: ArrowCoreEndpointBindingOptions(
+      newArrow: newArrow,
+      initialBinding: initialBinding,
+      preserveOppositeInsideBinding: shouldPreserveOppositeInsideBinding,
+      oppositeOrbitFocusPoint: resolvedOppositeOrbitFocusPoint,
+      angleLocked: angleLocked,
+      altKey: altKey,
+    ),
   );
   if (bindingResult == null || bindingResult.binding == null) {
     return _BindingSnapResult(position: position);
@@ -920,7 +911,8 @@ _CorePreviewBindingResult? _resolveBindingWithCoreEndpointPreview({
   required bool allowNewBinding,
   required double bindingDistance,
   required core.EngineContext coreEngineContext,
-  Map<String, dynamic>? options,
+  ArrowCoreEndpointBindingOptions options =
+      const ArrowCoreEndpointBindingOptions(),
 }) {
   final startPoint = dragStart ? worldPointer : oppositePoint;
   final endPoint = dragStart ? oppositePoint : worldPointer;

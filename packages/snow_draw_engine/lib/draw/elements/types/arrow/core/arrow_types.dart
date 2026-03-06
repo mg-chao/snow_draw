@@ -544,10 +544,6 @@ class MoveFixedSegmentToPointResult {
   final Point? activeSegmentMidPoint;
 }
 
-typedef RepairBindingOnRestoreInput = Map<String, dynamic>;
-typedef RepairInvalidUnboundElbowArrowOnRestoreInput = Map<String, dynamic>;
-typedef RepairSelfBoundExtremeElbowArrowOnRestoreInput = Map<String, dynamic>;
-
 class FocusPointDescriptor {
   const FocusPointDescriptor({
     required this.edge,

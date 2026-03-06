@@ -70,7 +70,8 @@ ArrowCoreEndpointDragResult? computeArrowCoreEndpointDragResult({
   required core.EngineContext coreEngineContext,
   List<ElbowFixedSegment>? fixedSegments,
   List<String>? orderedElementIds,
-  Map<String, dynamic>? options,
+  ArrowCoreEndpointBindingOptions options =
+      const ArrowCoreEndpointBindingOptions(),
 }) => _runArrowCoreEndpointDragResult(
   state: state,
   element: element,
@@ -108,7 +109,8 @@ ArrowCoreEndpointDragResult? finalizeArrowCoreEndpointDragResult({
   required core.EngineContext coreEngineContext,
   List<ElbowFixedSegment>? fixedSegments,
   List<String>? orderedElementIds,
-  Map<String, dynamic>? options,
+  ArrowCoreEndpointBindingOptions options =
+      const ArrowCoreEndpointBindingOptions(),
 }) => _runArrowCoreEndpointDragResult(
   state: state,
   element: element,
@@ -144,9 +146,9 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
   required double bindingDistance,
   required core.EngineContext coreEngineContext,
   required bool finalize,
+  required ArrowCoreEndpointBindingOptions options,
   List<ElbowFixedSegment>? fixedSegments,
   List<String>? orderedElementIds,
-  Map<String, dynamic>? options,
 }) {
   assert(bindingDistance >= 0, 'bindingDistance must be non-negative');
   if (localPoints.length < 2 ||
@@ -191,7 +193,9 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
     orderedElementIds: orderedElementIds,
     context: dragContext,
   );
-  final mergedOptions = <String, dynamic>{...?options};
+  final effectiveOptions = finalize
+      ? options.copyWith(finalize: true)
+      : options;
   final computed = _runEndpointDragViaStrategy(
     arrow: arrow,
     bindables: bindables,
@@ -200,8 +204,7 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
     allowNewBinding: allowNewBinding,
     worldPointer: worldPointer,
     orderedElementIds: orderedElementIds,
-    mergedOptions: mergedOptions,
-    finalize: finalize,
+    options: effectiveOptions,
     session: session,
   );
   if (computed == null) {
@@ -242,10 +245,9 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
   required int draggedIndex,
   required bool allowNewBinding,
   required DrawPoint worldPointer,
-  required List<String>? orderedElementIds,
-  required Map<String, dynamic> mergedOptions,
-  required bool finalize,
+  required ArrowCoreEndpointBindingOptions options,
   required ArrowCoreSession session,
+  required List<String>? orderedElementIds,
 }) {
   if (arrow.points.isEmpty) {
     return null;
@@ -258,22 +260,18 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
   final draggedPoints = <int, core.Point>{
     draggedIndex: <double>[worldPointer.x - arrow.x, worldPointer.y - arrow.y],
   };
-  if (finalize) {
-    mergedOptions['finalize'] = true;
-  }
-
   final strategies = resolveCoreEndpointBindingStrategy(
     arrow: arrow,
     draggedPoints: draggedPoints,
     pointer: toCorePoint(worldPointer),
     bindables: bindables,
     context: dragContext,
-    options: mergedOptions,
+    options: options,
   );
   var startStrategy = strategies.start;
   var endStrategy = strategies.end;
 
-  final isNewArrow = mergedOptions['newArrow'] == true;
+  final isNewArrow = options.newArrow;
   if (isNewArrow &&
       draggedPoints.length == 1 &&
       !arrow.elbowed &&
@@ -294,14 +292,14 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
   // endpoint dragging applies strategy-driven binding updates via the
   // simple-binding patch path (strategy + updateBoundPoint), while finalization
   // is still expressed through the shared `options.finalize` flag.
-  final result = finalize
+  final result = options.finalize
       ? finalizeCoreEndpointDrag(
           arrow: arrow,
           draggedPoints: draggedPoints,
           pointer: toCorePoint(worldPointer),
           bindables: bindables,
           context: dragContext,
-          options: mergedOptions,
+          options: options,
         )
       : computeCoreEndpointDrag(
           arrow: arrow,
@@ -309,7 +307,7 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
           pointer: toCorePoint(worldPointer),
           bindables: bindables,
           context: dragContext,
-          options: mergedOptions,
+          options: options,
         );
   final suggestedBindableId = _resolveSuggestedBindableId(result: result);
 
@@ -325,7 +323,6 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
     final endpointIndex = nextArrow.points.length - 1;
     if (draggedIndex == 0) {
       nextArrow = nextArrow.copyWith(
-        startBinding: null,
         setStartBinding: true,
         endBinding: arrow.endBinding,
         setEndBinding: true,
@@ -334,7 +331,6 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
       nextArrow = nextArrow.copyWith(
         startBinding: arrow.startBinding,
         setStartBinding: true,
-        endBinding: null,
         setEndBinding: true,
       );
     }

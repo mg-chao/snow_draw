@@ -2,7 +2,6 @@ import 'arrow_binding_core.dart';
 import 'arrow_elbow_core.dart';
 import 'arrow_focus_core.dart';
 import 'arrow_geom.dart';
-import 'arrow_hit_test.dart';
 import 'arrow_state_core.dart';
 import 'arrow_types.dart';
 
@@ -270,16 +269,6 @@ EngineContext _readContext(Object? value) {
   return normalizeEngineContext(_asStringDynamicMap(value));
 }
 
-ArrowEndpointEdge? _readArrowEndpointEdge(Object? value) {
-  if (value == arrowEndpointStart || value == 'start') {
-    return arrowEndpointStart;
-  }
-  if (value == arrowEndpointEnd || value == 'end') {
-    return arrowEndpointEnd;
-  }
-  return null;
-}
-
 ArrowState _applyPatchToArrow(ArrowState arrow, ArrowPatch patch) {
   final hasStartBinding = patch.containsKey('startBinding');
   final hasEndBinding = patch.containsKey('endBinding');
@@ -323,41 +312,6 @@ bool _isArrowAffectedByChangedBindables(
           changedBindableIds.contains(arrow.startBinding!.elementId)) ||
       (arrow.endBinding != null &&
           changedBindableIds.contains(arrow.endBinding!.elementId));
-}
-
-List<BindableState> _mergeBindables(
-  List<BindableState> primary, [
-  List<BindableState>? fallback,
-]) {
-  if (fallback == null || fallback.isEmpty) {
-    return primary;
-  }
-
-  final byId = <String, BindableState>{
-    for (final bindable in primary) bindable.id: bindable,
-  };
-  final merged = <BindableState>[...primary];
-  for (final bindable in fallback) {
-    if (byId.containsKey(bindable.id)) {
-      continue;
-    }
-    byId[bindable.id] = bindable;
-    merged.add(bindable);
-  }
-  return merged;
-}
-
-FixedPointBinding? _withModeNormalized(
-  FixedPointBinding? binding,
-  BindMode mode,
-) {
-  if (binding == null) {
-    return null;
-  }
-  return binding.copyWith(
-    mode: mode,
-    fixedPoint: normalizeFixedPoint(binding.fixedPoint),
-  );
 }
 
 Set<String> _collectBoundBindableIds(ArrowBindingState arrow) {
@@ -593,163 +547,6 @@ ArrowEndpointEdge? resolveFocusPointHit(PickFocusPointInput input) =>
 FocusPointHit resolveFocusPointHitWithOffset(
   PickFocusPointWithOffsetInput input,
 ) => pickFocusPointWithOffset(input);
-
-FixedPointBinding? repairBindingOnRestore(RepairBindingOnRestoreInput input) {
-  final binding = _readFixedPointBinding(input['binding']);
-  if (binding == null) {
-    return null;
-  }
-
-  final bindables = _readBindables(input['bindables']);
-  final existingBindables = _readBindables(input['existingBindables']);
-  final allBindables = _mergeBindables(bindables, existingBindables);
-
-  BindableState? bindable;
-  for (final candidate in allBindables) {
-    if (candidate.id == binding.elementId) {
-      bindable = candidate;
-      break;
-    }
-  }
-  if (bindable == null || binding.elementId.isEmpty) {
-    return null;
-  }
-
-  final arrow = _readArrow(input['arrow']);
-  if (arrow?.elbowed ?? false) {
-    return FixedPointBinding(
-      elementId: bindable.id,
-      mode: binding.mode.isNotEmpty ? binding.mode : bindModeOrbit,
-      fixedPoint: normalizeFixedPoint(binding.fixedPoint),
-    );
-  }
-
-  if (binding.mode.isNotEmpty) {
-    return FixedPointBinding(
-      elementId: bindable.id,
-      mode: binding.mode,
-      fixedPoint: normalizeFixedPoint(binding.fixedPoint),
-    );
-  }
-
-  final edge = _readArrowEndpointEdge(input['edge']);
-  if (arrow == null || edge == null) {
-    return FixedPointBinding(
-      elementId: bindable.id,
-      mode: bindModeOrbit,
-      fixedPoint: normalizeFixedPoint(binding.fixedPoint),
-    );
-  }
-
-  final edgeIndex = edge == arrowEndpointStart ? 0 : arrow.points.length - 1;
-  final edgePoint = getPointAtIndexGlobal(arrow, edgeIndex);
-  final mode = isPointInBindable(edgePoint, bindable)
-      ? bindModeInside
-      : bindModeOrbit;
-
-  final safeArrow = arrow.copyWith(
-    startBinding: _withModeNormalized(arrow.startBinding, mode),
-    setStartBinding: true,
-    endBinding: _withModeNormalized(arrow.endBinding, mode),
-    setEndBinding: true,
-  );
-  final focusPoint = mode == bindModeInside
-      ? edgePoint
-      : (projectFixedPointOntoDiagonal(
-              safeArrow,
-              edgePoint,
-              bindable,
-              edge,
-              allBindables,
-              1,
-            ) ??
-            edgePoint);
-
-  return FixedPointBinding(
-    elementId: bindable.id,
-    mode: mode,
-    fixedPoint: calculateFixedPointForBinding(
-      bindable: bindable,
-      point: focusPoint,
-    ),
-  );
-}
-
-ArrowPatch? repairInvalidUnboundElbowArrowOnRestore(
-  RepairInvalidUnboundElbowArrowOnRestoreInput input,
-) {
-  final arrow = _readArrow(input['arrow']);
-  if (arrow == null) {
-    return null;
-  }
-  if (arrow.startBinding != null ||
-      arrow.endBinding != null ||
-      !arrow.elbowed) {
-    return null;
-  }
-  if (validateElbowPoints(arrow.points)) {
-    return null;
-  }
-  if (arrow.points.isEmpty) {
-    return null;
-  }
-
-  final lastPoint = arrow.points.last;
-  return updateElbowArrowPatch(<String, dynamic>{
-    'arrow': arrow,
-    'updates': <String, dynamic>{
-      'points': <Point>[
-        <double>[0, 0],
-        <double>[lastPoint[0], lastPoint[1]],
-      ],
-    },
-    'bindables': _readBindables(input['bindables']),
-    'context': _readContext(input['context']),
-  });
-}
-
-ArrowPatch? repairSelfBoundExtremeElbowArrowOnRestore(
-  RepairSelfBoundExtremeElbowArrowOnRestoreInput input,
-) {
-  final maxCoordinateValue = input['maxCoordinate'];
-  final maxCoordinate = maxCoordinateValue is num
-      ? maxCoordinateValue.toDouble()
-      : 1e6;
-  final arrow = _readArrow(input['arrow']);
-  final bindable = _readBindable(input['bindable']);
-  if (arrow == null || bindable == null) {
-    return null;
-  }
-
-  if (!arrow.elbowed ||
-      arrow.startBinding == null ||
-      arrow.endBinding == null ||
-      arrow.startBinding!.elementId != arrow.endBinding!.elementId ||
-      arrow.startBinding!.elementId != bindable.id ||
-      arrow.points.length <= 1) {
-    return null;
-  }
-
-  final hasExtremePoint = arrow.points.any(
-    (point) => point[0].abs() > maxCoordinate || point[1].abs() > maxCoordinate,
-  );
-  if (!hasExtremePoint) {
-    return null;
-  }
-
-  return <String, dynamic>{
-    'x': bindable.x + bindable.width / 2,
-    'y': bindable.y - 5,
-    'width': bindable.width,
-    'height': bindable.height,
-    'points': <Point>[
-      <double>[0, 0],
-      <double>[0, -10],
-      <double>[bindable.width / 2 + 5, -10],
-      <double>[bindable.width / 2 + 5, bindable.height / 2 + 5],
-    ],
-  };
-}
 
 ValidationReport validateArrowInvariant(ArrowState arrow) {
   final violations = <String>[];

@@ -1,13 +1,11 @@
 export 'adapters.dart';
 export 'arrow_binding_core.dart';
 export 'arrow_binding_lifecycle.dart';
-export 'arrow_directional_core.dart';
 export 'arrow_elbow_core.dart';
 export 'arrow_engine.dart';
 export 'arrow_focus_core.dart';
 export 'arrow_geom.dart';
 export 'arrow_hit_test.dart';
-export 'arrow_label_core.dart';
 export 'arrow_order_core.dart';
 export 'arrow_path_core.dart';
 export 'arrow_relation_core.dart';

@@ -1001,10 +1001,10 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
     bindingDistance: bindingDistance,
     coreEngineContext: coreEngineContext,
     orderedElementIds: orderedElementIds,
-    options: <String, dynamic>{
-      if (angleLocked) 'angleLocked': true,
-      if (altKey) 'altKey': true,
-    },
+    options: ArrowCoreEndpointBindingOptions(
+      angleLocked: angleLocked,
+      altKey: altKey,
+    ),
   );
   if (dragResult == null) {
     return _noOpComputation(
@@ -1148,10 +1148,10 @@ _ArrowPointComputation _computeElbowEndpointDragComputation({
       pointer: toCorePoint(worldTarget),
       bindables: candidates.bindables,
       context: dragContext,
-      options: <String, dynamic>{
-        if (angleLocked) 'angleLocked': true,
-        if (altKey) 'altKey': true,
-      },
+      options: ArrowCoreEndpointBindingOptions(
+        angleLocked: angleLocked,
+        altKey: altKey,
+      ),
     );
     final draggedStrategy = draggedStart ? strategies.start : strategies.end;
     final bindableIdFromStrategy = draggedStrategy?.bindableId;
@@ -1334,7 +1334,6 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
     allowNewBinding: transform.allowBindingOnFinalize,
     bindingDistance: 0,
     coreEngineContext: coreEngineContext,
-    options: const <String, dynamic>{},
   );
   if (dragResult == null) {
     return null;

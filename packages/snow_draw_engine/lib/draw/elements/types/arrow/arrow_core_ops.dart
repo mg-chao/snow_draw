@@ -1,14 +1,95 @@
+import 'package:meta/meta.dart';
+
+import '../../../types/draw_point.dart';
 import 'arrow_core.dart' as core;
 
+const _unsetEndpointBindingOption = Object();
+
+/// Typed options forwarded into the migrated arrow-core endpoint helpers.
+///
+/// This keeps current engine call sites Dart-first while the core adapter still
+/// translates to the string-keyed payloads expected by the migrated logic.
+@immutable
+final class ArrowCoreEndpointBindingOptions {
+  const ArrowCoreEndpointBindingOptions({
+    this.complexBindings,
+    this.newArrow = false,
+    this.initialBinding = false,
+    this.finalize = false,
+    this.preserveOppositeInsideBinding = false,
+    this.oppositeOrbitFocusPoint,
+    this.angleLocked = false,
+    this.altKey = false,
+  });
+
+  final bool? complexBindings;
+  final bool newArrow;
+  final bool initialBinding;
+  final bool finalize;
+  final bool preserveOppositeInsideBinding;
+  final DrawPoint? oppositeOrbitFocusPoint;
+  final bool angleLocked;
+  final bool altKey;
+
+  bool get isEmpty =>
+      complexBindings == null &&
+      !newArrow &&
+      !initialBinding &&
+      !finalize &&
+      !preserveOppositeInsideBinding &&
+      oppositeOrbitFocusPoint == null &&
+      !angleLocked &&
+      !altKey;
+
+  ArrowCoreEndpointBindingOptions copyWith({
+    Object? complexBindings = _unsetEndpointBindingOption,
+    bool? newArrow,
+    bool? initialBinding,
+    bool? finalize,
+    bool? preserveOppositeInsideBinding,
+    Object? oppositeOrbitFocusPoint = _unsetEndpointBindingOption,
+    bool? angleLocked,
+    bool? altKey,
+  }) => ArrowCoreEndpointBindingOptions(
+    complexBindings: identical(complexBindings, _unsetEndpointBindingOption)
+        ? this.complexBindings
+        : complexBindings as bool?,
+    newArrow: newArrow ?? this.newArrow,
+    initialBinding: initialBinding ?? this.initialBinding,
+    finalize: finalize ?? this.finalize,
+    preserveOppositeInsideBinding:
+        preserveOppositeInsideBinding ?? this.preserveOppositeInsideBinding,
+    oppositeOrbitFocusPoint:
+        identical(oppositeOrbitFocusPoint, _unsetEndpointBindingOption)
+        ? this.oppositeOrbitFocusPoint
+        : oppositeOrbitFocusPoint as DrawPoint?,
+    angleLocked: angleLocked ?? this.angleLocked,
+    altKey: altKey ?? this.altKey,
+  );
+
+  Map<String, dynamic> toPayload() => <String, dynamic>{
+    if (complexBindings != null) 'complexBindings': complexBindings,
+    if (newArrow) 'newArrow': true,
+    if (initialBinding) 'initialBinding': true,
+    if (finalize) 'finalize': true,
+    if (preserveOppositeInsideBinding) 'preserveOppositeInsideBinding': true,
+    if (oppositeOrbitFocusPoint != null)
+      'oppositeOrbitFocusPoint': <double>[
+        oppositeOrbitFocusPoint!.x,
+        oppositeOrbitFocusPoint!.y,
+      ],
+    if (angleLocked) 'angleLocked': true,
+    if (altKey) 'altKey': true,
+  };
+}
+
 Map<String, dynamic> _composeEndpointBindingOptionsPayload(
-  Map<String, dynamic>? options,
+  ArrowCoreEndpointBindingOptions options,
 ) {
-  if (options == null || options.isEmpty) {
+  if (options.isEmpty) {
     return const <String, dynamic>{};
   }
-  return <String, dynamic>{
-    'options': <String, dynamic>{...options},
-  };
+  return <String, dynamic>{'options': options.toPayload()};
 }
 
 /// Typed wrapper around integrated arrow core endpoint-drag computation.
@@ -18,7 +99,8 @@ core.EngineResult computeCoreEndpointDrag({
   required core.Point pointer,
   required List<core.BindableState> bindables,
   required core.EngineContext context,
-  Map<String, dynamic>? options,
+  ArrowCoreEndpointBindingOptions options =
+      const ArrowCoreEndpointBindingOptions(),
 }) => core.computeEndpointDrag(<String, dynamic>{
   'arrow': arrow,
   'draggedPoints': draggedPoints,
@@ -35,7 +117,8 @@ core.EngineResult finalizeCoreEndpointDrag({
   required core.Point pointer,
   required List<core.BindableState> bindables,
   required core.EngineContext context,
-  Map<String, dynamic>? options,
+  ArrowCoreEndpointBindingOptions options =
+      const ArrowCoreEndpointBindingOptions(),
 }) => core.finalizeEndpointDrag(<String, dynamic>{
   'arrow': arrow,
   'draggedPoints': draggedPoints,
@@ -52,7 +135,8 @@ core.EngineResult computeCoreSimpleBindingPatch({
   required core.Point pointer,
   required List<core.BindableState> bindables,
   required core.EngineContext context,
-  Map<String, dynamic>? options,
+  ArrowCoreEndpointBindingOptions options =
+      const ArrowCoreEndpointBindingOptions(),
 }) => core.computeSimpleBindingPatch(<String, dynamic>{
   'arrow': arrow,
   'draggedPoints': draggedPoints,
@@ -69,7 +153,8 @@ core.EndpointBindingStrategies resolveCoreEndpointBindingStrategy({
   required core.Point pointer,
   required List<core.BindableState> bindables,
   required core.EngineContext context,
-  Map<String, dynamic>? options,
+  ArrowCoreEndpointBindingOptions options =
+      const ArrowCoreEndpointBindingOptions(),
 }) => core.getEndpointBindingStrategy(<String, dynamic>{
   'arrow': arrow,
   'draggedPoints': draggedPoints,
@@ -89,76 +174,11 @@ double resolveCoreBindingGap({
 double resolveCoreMaxBindingDistance({required double zoom}) =>
     core.maxBindingDistance(zoom);
 
-/// Typed wrapper around snap-outline midpoint projection.
-core.Point? resolveCoreSnapOutlineMidPoint({
-  required core.Point point,
-  required core.BindableState bindable,
-  double zoom = 1,
-}) => core.getSnapOutlineMidPoint(point, bindable, zoom);
-
-/// Typed wrapper around diagonal fixed-point projection.
-core.Point? projectCoreFixedPointOntoDiagonal({
-  required core.ArrowState arrow,
-  required core.Point point,
-  required core.BindableState bindable,
-  required core.ArrowEndpointEdge edge,
-  required List<core.BindableState> bindables,
-  required double zoom,
-}) => core.projectFixedPointOntoDiagonal(
-  arrow,
-  point,
-  bindable,
-  edge,
-  bindables,
-  zoom,
-);
-
 /// Typed wrapper around fixed-point normalization for non-elbow bindings.
 core.Point calculateCoreFixedPointForBinding({
   required core.BindableState bindable,
   required core.Point point,
 }) => core.calculateFixedPointForBinding(bindable: bindable, point: point);
-
-/// Typed wrapper around fixed-point normalization for elbow bindings.
-core.Point calculateCoreFixedPointForElbowBinding({
-  required core.ArrowState arrow,
-  required core.BindableState bindable,
-  required core.ArrowEndpointEdge edge,
-}) => core.calculateFixedPointForElbowArrowBinding(
-  arrow: arrow,
-  bindable: bindable,
-  edge: edge,
-);
-
-/// Typed wrapper around outline snapping for elbow endpoints.
-core.Point bindCorePointToSnapOutline({
-  required core.ArrowState arrow,
-  required core.BindableState bindable,
-  required core.ArrowEndpointEdge edge,
-  List<core.Point>? customIntersector,
-}) => core.bindPointToSnapToElementOutline(
-  arrow: arrow,
-  bindable: bindable,
-  edge: edge,
-  customIntersector: customIntersector,
-);
-
-/// Typed wrapper around elbow heading resolution.
-String resolveCoreHeadingForElbowSnap({
-  required core.Point point,
-  required core.Point otherPoint,
-  core.BindableState? bindable,
-  core.Bounds? aabb,
-  core.Point? originPoint,
-  double? zoom,
-}) => core.getHeadingForElbowArrowSnap(
-  point: point,
-  otherPoint: otherPoint,
-  bindable: bindable,
-  aabb: aabb,
-  originPoint: originPoint,
-  zoom: zoom,
-);
 
 /// Typed wrapper around bound-point projection updates.
 core.Point? updateCoreBoundPoint({
@@ -182,18 +202,6 @@ core.Point resolveCoreGlobalFixedPoint({
   required core.FixedPointBinding binding,
   required core.BindableState bindable,
 }) => core.getGlobalFixedPoint(binding, bindable);
-
-/// Typed wrapper around resolving global fixed points for an arrow.
-List<core.Point?> resolveCoreGlobalFixedPoints({
-  required core.ArrowState arrow,
-  required List<core.BindableState> bindables,
-}) => core.getGlobalFixedPoints(arrow, bindables);
-
-/// Typed wrapper around resolving local fixed points for an arrow.
-List<core.Point?> resolveCoreArrowLocalFixedPoints({
-  required core.ArrowState arrow,
-  required List<core.BindableState> bindables,
-}) => core.getArrowLocalFixedPoints(arrow, bindables);
 
 /// Typed wrapper around bindable-change recomputation.
 core.EngineResult recomputeCoreBindingsAfterBindableChange({
@@ -400,23 +408,6 @@ deriveCoreBindableRelationPatchesForBindingChange({
   required core.DeriveBindableRelationPatchesForBindingChangeInput input,
 }) => core.deriveBindableRelationPatchesForBindingChange(input);
 
-/// Typed wrapper around relation patch reconciliation for an arrow snapshot.
-List<core.BindablePatch> reconcileCoreBindablePatchesForArrow({
-  required core.ArrowBindingState arrow,
-  required List<core.BindableRelationState> bindables,
-}) => core.reconcileBindablePatchesForArrow(arrow: arrow, bindables: bindables);
-
-/// Typed wrapper around relation patch resolution for endpoint mutations.
-core.ResolvedBindableRelationPatches resolveCoreEndpointBindingMutation({
-  required core.ArrowBindingState arrow,
-  required List<core.BindableRelationState> bindables,
-  required core.EndpointBindingMutationResult mutation,
-}) => core.resolveEndpointBindingMutation(
-  arrow: arrow,
-  bindables: bindables,
-  mutation: mutation,
-);
-
 /// Typed wrapper around focus-point visibility resolution.
 List<core.FocusPointDescriptor> listCoreVisibleFocusPoints({
   required core.ArrowState arrow,
@@ -496,45 +487,6 @@ core.EngineResult finalizeCoreFocusPointDrag({
   'bindables': bindables,
 });
 
-/// Typed wrapper around endpoint binding refresh.
-core.EngineResult refreshCoreEndpointBinding({
-  required core.ArrowState arrow,
-  required core.ArrowEndpointEdge edge,
-  required List<core.BindableState> bindables,
-  required core.EngineContext context,
-}) => core.refreshEndpointBinding(<String, dynamic>{
-  'arrow': arrow,
-  'edge': edge,
-  'bindables': bindables,
-  'context': context,
-});
-
-/// Typed wrapper around endpoint-binding pruning.
-core.EngineResult pruneCoreArrowBindings({
-  required core.ArrowState arrow,
-  required List<String> retainedBindableIds,
-  Map<String, dynamic>? options,
-}) => core.pruneArrowBindings(<String, dynamic>{
-  'arrow': arrow,
-  'retainedBindableIds': retainedBindableIds,
-  ...?(options == null ? null : <String, dynamic>{'options': options}),
-});
-
-/// Typed wrapper around relation patch resolution from binding transitions.
-core.ResolvedBindableRelationPatches resolveCoreBindableRelationPatches({
-  required core.ArrowBindingState arrow,
-  required List<core.BindableRelationState> bindables,
-  core.ArrowPatch? arrowPatch,
-  List<core.BindablePatch>? bindablePatches,
-}) => core.resolveBindableRelationPatches(
-  core.ResolveBindableRelationPatchesInput(
-    arrow: arrow,
-    bindables: bindables,
-    arrowPatch: arrowPatch,
-    bindablePatches: bindablePatches,
-  ),
-);
-
 /// Typed wrapper around engine-result application/reduction.
 core.ApplyEngineResultValue applyCoreEngineResult({
   required core.ArrowState arrow,
@@ -587,68 +539,3 @@ bool didCoreEngineResultReorder(core.ApplyEngineResultValue value) =>
 List<String>? reorderedElementIdsFromCoreResult(
   core.ApplyEngineResultValue value,
 ) => didCoreEngineResultReorder(value) ? value.orderedElementIds : null;
-
-/// Typed wrapper around restore-time binding repair.
-core.FixedPointBinding? repairCoreBindingOnRestore({
-  required core.FixedPointBinding? binding,
-  required List<core.BindableState> bindables,
-  core.ArrowState? arrow,
-  core.ArrowEndpointEdge? edge,
-  List<core.BindableState>? existingBindables,
-}) => core.repairBindingOnRestore(<String, dynamic>{
-  'binding': binding,
-  'bindables': bindables,
-  ...?(arrow == null ? null : <String, dynamic>{'arrow': arrow}),
-  ...?(edge == null ? null : <String, dynamic>{'edge': edge}),
-  ...?(existingBindables == null
-      ? null
-      : <String, dynamic>{'existingBindables': existingBindables}),
-});
-
-/// Typed wrapper around invalid unbound elbow restore repair.
-core.ArrowPatch? repairCoreInvalidUnboundElbowArrowOnRestore({
-  required core.ArrowState arrow,
-  required List<core.BindableState> bindables,
-  required core.EngineContext context,
-}) => core.repairInvalidUnboundElbowArrowOnRestore(<String, dynamic>{
-  'arrow': arrow,
-  'bindables': bindables,
-  'context': context,
-});
-
-/// Typed wrapper around extreme self-bound elbow restore repair.
-core.ArrowPatch? repairCoreSelfBoundExtremeElbowArrowOnRestore({
-  required core.ArrowState arrow,
-  required core.BindableState bindable,
-  double? maxCoordinate,
-}) => core.repairSelfBoundExtremeElbowArrowOnRestore(<String, dynamic>{
-  'arrow': arrow,
-  'bindable': bindable,
-  ...?(maxCoordinate == null
-      ? null
-      : <String, dynamic>{'maxCoordinate': maxCoordinate}),
-});
-
-/// Typed wrapper around arrow invariant validation.
-core.ValidationReport validateCoreArrowInvariant(core.ArrowState arrow) =>
-    core.validateArrowInvariant(arrow);
-
-/// Typed wrapper around directional link-arrow creation.
-core.DirectionalLinkArrow createCoreDirectionalLinkArrow({
-  required core.DirectionalLinkBounds start,
-  required core.DirectionalLinkBounds end,
-  required core.DirectionalLinkDirection direction,
-  double padding = 6,
-}) => core.createDirectionalLinkArrow(start, end, direction, padding: padding);
-
-/// Typed wrapper around endpoint overlap offsetting for short arrows.
-List<core.Point> offsetCoreArrowEndpointsForBindingOverlap({
-  required List<core.Point> points,
-  double delta = 0.5,
-}) => core.offsetArrowEndpointsForBindingOverlap(points, delta: delta);
-
-/// Typed wrapper around resize-handle directional resolution.
-core.ResizeArrowDirection getCoreResizeArrowDirection({
-  required core.ResizeHandleDirection transformHandleType,
-  required List<core.Point> points,
-}) => core.getResizeArrowDirection(transformHandleType, points);

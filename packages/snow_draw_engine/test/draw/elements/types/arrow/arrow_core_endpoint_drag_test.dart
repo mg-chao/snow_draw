@@ -239,7 +239,7 @@ void main() {
         allowNewBinding: true,
         bindingDistance: 80,
         coreEngineContext: buildCoreEngineContext(),
-        options: const <String, dynamic>{'newArrow': true},
+        options: const ArrowCoreEndpointBindingOptions(newArrow: true),
       );
 
       expect(result, isNotNull);
@@ -289,10 +289,10 @@ void main() {
           bindingDistance: 80,
           coreEngineContext: buildCoreEngineContext(),
           orderedElementIds: const <String>['arrow-1', 'rect-start'],
-          options: const <String, dynamic>{
-            'newArrow': true,
-            'preserveOppositeInsideBinding': true,
-          },
+          options: const ArrowCoreEndpointBindingOptions(
+            newArrow: true,
+            preserveOppositeInsideBinding: true,
+          ),
         );
 
         expect(result, isNotNull);
@@ -470,7 +470,7 @@ void main() {
           allowNewBinding: true,
           bindingDistance: 80,
           coreEngineContext: buildCoreEngineContext(),
-          options: const <String, dynamic>{'complexBindings': true},
+          options: const ArrowCoreEndpointBindingOptions(complexBindings: true),
         );
 
         expect(result, isNotNull);
@@ -500,7 +500,7 @@ void main() {
           pointer: <double>[worldPointer.x, worldPointer.y],
           bindables: candidates.bindables,
           context: buildCoreEngineContext(),
-          options: const <String, dynamic>{'complexBindings': true},
+          options: const ArrowCoreEndpointBindingOptions(complexBindings: true),
         );
         final expectedArrow = core.applyArrowPatch(
           coreArrow,
