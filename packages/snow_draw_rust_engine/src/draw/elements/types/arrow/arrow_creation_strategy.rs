@@ -11,7 +11,7 @@ use crate::draw::elements::core::creation_strategy::{
     CreationUpdateResult, DrawState, ElementData, PointCreationMode, PointCreationStrategy,
 };
 use crate::draw::elements::types::arrow::arrow_binding::{
-    ArrowBinding, ArrowBindingResult, ArrowBindingUtils,
+    ArrowBinding, ArrowBindingMode, ArrowBindingResult, ArrowBindingUtils,
 };
 use crate::draw::elements::types::arrow::arrow_binding_snapper::{
     ArrowBindingCachePolicy, ArrowBindingElement, ArrowBindingResolver as BindingResolver,
@@ -21,6 +21,14 @@ use crate::draw::elements::types::arrow::arrow_data::{
     ArrowBinding as DomainArrowBinding, ArrowBindingMode as DomainArrowBindingMode,
     ArrowData as DomainArrowData, ArrowDataPatch as DomainArrowDataPatch,
     NullableField as DomainArrowNullableField,
+};
+use crate::draw::elements::types::arrow::arrow_core::DEFAULT_MAX_COORDINATE;
+use crate::draw::elements::types::arrow::arrow_core_bridge::build_core_engine_context;
+use crate::draw::elements::types::arrow::arrow_core_endpoint_drag::
+    finalize_arrow_core_endpoint_drag_result;
+use crate::draw::elements::types::arrow::arrow_core_ops::{
+    resolve_core_max_binding_distance, resolve_endpoint_drag_binding_enabled,
+    ArrowCoreEndpointBindingOptions,
 };
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField as DomainArrowLikeNullableField;
@@ -146,6 +154,7 @@ impl CreationStrategy for ArrowCreationStrategy {
             Some(&mut session_data.end_target_cache),
             ArrowBindingCachePolicy::default(),
         );
+        session_data.allow_binding_on_finalize = binding_result.allow_binding_on_finalize;
         adjusted_current = binding_result.position;
         let mut end_binding = binding_result.binding;
 
@@ -258,6 +267,7 @@ impl CreationStrategy for ArrowCreationStrategy {
             Some(&mut session_data.end_target_cache),
             ArrowBindingCachePolicy::default(),
         );
+        session_data.allow_binding_on_finalize = binding_result.allow_binding_on_finalize;
         adjusted_position = binding_result.position;
 
         let mut updated_fixed_points = endpoints.fixed_points;
@@ -295,6 +305,7 @@ impl CreationStrategy for ArrowCreationStrategy {
 
     fn finish(
         &self,
+        state: &DrawState,
         config: &DrawConfig,
         creating_state: &CreatingState,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
@@ -327,16 +338,32 @@ impl CreationStrategy for ArrowCreationStrategy {
                 creating_state.element_data(),
                 creating_state.current_rect,
                 false,
+                None,
             );
         }
 
-        let arrow_rect = calculate_arrow_rect(&closed_points, data_ref.arrow_type());
-        let normalized_points = ArrowGeometry::normalize_points(&closed_points, arrow_rect);
-        let updated_data = data_ref.copy_with(Some(normalized_points), None, None);
+        let mut finish_rect = calculate_arrow_rect(&closed_points, data_ref.arrow_type());
+        let normalized_points = ArrowGeometry::normalize_points(&closed_points, finish_rect);
+        let mut finalized_data = data_ref.copy_with(Some(normalized_points), None, None);
+        let session_data = resolve_creation_session_data(creating_state);
+        let mut ordered_element_ids = None;
+        if config.snap.enable_arrow_binding {
+            let finalized = finalize_connector_creation_bindings(
+                state,
+                config,
+                creating_state.element.id.as_str(),
+                &finish_rect,
+                &finalized_data,
+                &session_data,
+            );
+            finish_rect = finalized.rect;
+            finalized_data = finalized.data;
+            ordered_element_ids = finalized.ordered_element_ids;
+        }
         let updated_data_ref =
-            resolve_arrow_like_data(&updated_data, "ArrowCreationStrategy.finish.length");
+            resolve_arrow_like_data(&finalized_data, "ArrowCreationStrategy.finish.length");
         let updated_world_points =
-            ArrowGeometry::resolve_world_points(arrow_rect, updated_data_ref.points());
+            ArrowGeometry::resolve_world_points(finish_rect, updated_data_ref.points());
         let length = ArrowGeometry::calculate_shaft_length(
             &updated_world_points,
             updated_data_ref.arrow_type(),
@@ -346,10 +373,150 @@ impl CreationStrategy for ArrowCreationStrategy {
                 creating_state.element_data(),
                 creating_state.current_rect,
                 false,
+                None,
             );
         }
 
-        CreationFinishResult::new(updated_data, arrow_rect, true)
+        CreationFinishResult::new(finalized_data, finish_rect, true, ordered_element_ids)
+    }
+}
+
+#[derive(Debug)]
+struct ConnectorCreationFinishState {
+    rect: DrawRect,
+    data: Arc<dyn ElementData>,
+    ordered_element_ids: Option<Vec<String>>,
+}
+
+fn finalize_connector_creation_bindings(
+    state: &DrawState,
+    config: &DrawConfig,
+    element_id: &str,
+    rect: &DrawRect,
+    data: &Arc<dyn ElementData>,
+    session_data: &ArrowCreationSessionData,
+) -> ConnectorCreationFinishState {
+    let data_ref = resolve_arrow_like_data(data, "ArrowCreationStrategy.finish.finalize");
+    let world_points = ArrowGeometry::resolve_world_points(*rect, data_ref.points());
+    if world_points.len() < 2 {
+        return ConnectorCreationFinishState {
+            rect: *rect,
+            data: Arc::clone(data),
+            ordered_element_ids: None,
+        };
+    }
+
+    let preview_data = data_ref.to_arrow_data();
+    let preview_element = DomainElementState::new(
+        element_id.to_owned(),
+        *rect,
+        0.0,
+        1.0,
+        0,
+        Arc::new(preview_data.clone()),
+    );
+    let preserve_dragged_inside_binding = data_ref
+        .end_binding()
+        .as_ref()
+        .is_some_and(|binding| binding.mode == ArrowBindingMode::Inside);
+    let preserve_opposite_inside_binding = session_data.preserve_start_inside_binding
+        || data_ref
+            .start_binding()
+            .as_ref()
+            .is_some_and(|binding| binding.mode == ArrowBindingMode::Inside);
+    let opposite_orbit_focus_point = session_data.start_orbit_focus_point.or_else(|| {
+        data_ref.start_binding().as_ref().and_then(|binding| {
+            (binding.mode == ArrowBindingMode::Orbit).then_some(world_points[0])
+        })
+    });
+    let ordered_ids = state
+        .domain
+        .document
+        .elements
+        .iter()
+        .map(|element| element.id.clone())
+        .chain(std::iter::once(element_id.to_owned()))
+        .collect::<Vec<_>>();
+    let finalized = finalize_arrow_core_endpoint_drag_result(
+        state,
+        &preview_element,
+        &preview_data,
+        &world_points,
+        world_points.len() - 1,
+        *world_points.last().unwrap_or(&world_points[0]),
+        data_ref.start_binding().as_ref(),
+        data_ref.end_binding().as_ref(),
+        element_id,
+        true,
+        session_data.allow_binding_on_finalize,
+        resolve_core_max_binding_distance(state.application.view.camera.zoom),
+        build_core_engine_context(
+            state.application.view.camera.zoom,
+            config.snap.enable_arrow_binding,
+            resolve_endpoint_drag_binding_enabled(config.snap.enable_arrow_binding),
+            DEFAULT_MAX_COORDINATE,
+        ),
+        preview_data.fixed_segments.as_deref(),
+        Some(ordered_ids.as_slice()),
+        ArrowCoreEndpointBindingOptions {
+            new_arrow: true,
+            alt_key: preserve_dragged_inside_binding,
+            preserve_opposite_inside_binding,
+            opposite_orbit_focus_point,
+            ..ArrowCoreEndpointBindingOptions::default()
+        },
+    );
+    let Some(finalized) = finalized else {
+        return ConnectorCreationFinishState {
+            rect: *rect,
+            data: Arc::clone(data),
+            ordered_element_ids: None,
+        };
+    };
+
+    match data_ref {
+        ArrowLikeDataRef::DomainArrow(current) => {
+            let next_rect = calculate_arrow_rect(&finalized.world_points, current.arrow_type);
+            let next_points = ArrowGeometry::normalize_points(&finalized.world_points, next_rect);
+            let next_data = Arc::new(current.copy_with(DomainArrowDataPatch {
+                points: Some(next_points),
+                start_binding: to_domain_arrow_nullable_binding(Some(finalized.start_binding)),
+                end_binding: to_domain_arrow_nullable_binding(Some(finalized.end_binding)),
+                fixed_segments: match finalized.fixed_segments.clone() {
+                    Some(segments) => DomainArrowNullableField::Value(segments),
+                    None => DomainArrowNullableField::Null,
+                },
+                start_is_special: match finalized.arrow.start_is_special {
+                    Some(value) => DomainArrowNullableField::Value(value),
+                    None => DomainArrowNullableField::Null,
+                },
+                end_is_special: match finalized.arrow.end_is_special {
+                    Some(value) => DomainArrowNullableField::Value(value),
+                    None => DomainArrowNullableField::Null,
+                },
+                ..DomainArrowDataPatch::default()
+            }));
+            ConnectorCreationFinishState {
+                rect: next_rect,
+                data: next_data,
+                ordered_element_ids: finalized.ordered_element_ids,
+            }
+        }
+        ArrowLikeDataRef::DomainLine(current) => {
+            let next_rect = calculate_arrow_rect(&finalized.world_points, current.arrow_type);
+            let next_points = ArrowGeometry::normalize_points(&finalized.world_points, next_rect);
+            let next_data = Arc::new(current.copy_with(DomainLineDataPatch {
+                points: Some(next_points),
+                start_binding: to_domain_line_nullable_binding(Some(finalized.start_binding)),
+                end_binding: to_domain_line_nullable_binding(Some(finalized.end_binding)),
+                ..DomainLineDataPatch::default()
+            }));
+            ConnectorCreationFinishState {
+                rect: next_rect,
+                data: next_data,
+                ordered_element_ids: finalized.ordered_element_ids,
+            }
+        }
     }
 }
 
@@ -636,7 +803,9 @@ fn snap_binding_point(
         if let Some(cache) = target_cache {
             cache.reset();
         }
-        return BindingSnapResult::new(position, None);
+        let mut result = BindingSnapResult::new(position, None);
+        result.allow_binding_on_finalize = false;
+        return result;
     }
 
     let candidate = ArrowBindingSnapper::resolve_endpoint_binding_candidate(
@@ -717,6 +886,22 @@ fn resolve_start_binding_point(
         Some(&mut session_data.start_target_cache),
         cache_policy,
     );
+    if preferred_binding.is_none() {
+        match resolved.binding.as_ref().map(|binding| binding.mode) {
+            Some(ArrowBindingMode::Inside) => {
+                session_data.preserve_start_inside_binding = true;
+                session_data.start_orbit_focus_point = None;
+            }
+            Some(ArrowBindingMode::Orbit) => {
+                session_data.preserve_start_inside_binding = false;
+                session_data.start_orbit_focus_point = Some(resolved.position);
+            }
+            _ => {
+                session_data.preserve_start_inside_binding = false;
+                session_data.start_orbit_focus_point = None;
+            }
+        }
+    }
     session_data.cache_start_binding(
         start_position,
         preferred_binding,
@@ -740,6 +925,9 @@ struct ArrowCreationSessionData {
     cached_start_binding_enabled: Option<bool>,
     cached_start_binding_distance: Option<f64>,
     cached_start_elements_version: i64,
+    preserve_start_inside_binding: bool,
+    start_orbit_focus_point: Option<DrawPoint>,
+    allow_binding_on_finalize: bool,
     reference_elements_version: i64,
     reference_elements: Vec<DomainElementState>,
     reference_aabbs_version: i64,
@@ -759,6 +947,9 @@ impl Default for ArrowCreationSessionData {
             cached_start_binding_enabled: None,
             cached_start_binding_distance: None,
             cached_start_elements_version: -1,
+            preserve_start_inside_binding: false,
+            start_orbit_focus_point: None,
+            allow_binding_on_finalize: true,
             reference_elements_version: -1,
             reference_elements: Vec::new(),
             reference_aabbs_version: -1,
@@ -895,11 +1086,20 @@ impl PointSnapResult {
 struct BindingSnapResult {
     position: DrawPoint,
     binding: Option<ArrowBinding>,
+    start_binding: Option<ArrowBinding>,
+    end_binding: Option<ArrowBinding>,
+    allow_binding_on_finalize: bool,
 }
 
 impl BindingSnapResult {
     fn new(position: DrawPoint, binding: Option<ArrowBinding>) -> Self {
-        Self { position, binding }
+        Self {
+            position,
+            binding,
+            start_binding: None,
+            end_binding: None,
+            allow_binding_on_finalize: true,
+        }
     }
 }
 
@@ -994,6 +1194,32 @@ impl<'a> ArrowLikeDataRef<'a> {
                 end_binding: to_domain_line_nullable_binding(end_binding),
                 ..DomainLineDataPatch::default()
             })),
+        }
+    }
+
+    fn to_arrow_data(&self) -> DomainArrowData {
+        match self {
+            Self::DomainArrow(data) => (*data).clone(),
+            Self::DomainLine(data) => DomainArrowData {
+                points: data.points.clone(),
+                color: data.color,
+                stroke_width: data.stroke_width,
+                stroke_style: data.stroke_style,
+                arrow_type: data.arrow_type,
+                start_arrowhead: data.start_arrowhead,
+                end_arrowhead: data.end_arrowhead,
+                start_binding: data
+                    .start_binding
+                    .clone()
+                    .map(|binding| local_binding_to_domain_arrow(&binding)),
+                end_binding: data
+                    .end_binding
+                    .clone()
+                    .map(|binding| local_binding_to_domain_arrow(&binding)),
+                fixed_segments: data.fixed_segments.clone(),
+                start_is_special: data.start_is_special,
+                end_is_special: data.end_is_special,
+            },
         }
     }
 }

@@ -304,6 +304,7 @@ impl CreationStrategy for FreeDrawCreationStrategy {
 
     fn finish(
         &self,
+        _state: &DrawState,
         config: &DrawConfig,
         creating_state: &CreatingState,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
@@ -330,6 +331,7 @@ impl CreationStrategy for FreeDrawCreationStrategy {
                 creating_state.element_data(),
                 creating_state.current_rect,
                 false,
+                None,
             );
         }
 
@@ -345,6 +347,7 @@ impl CreationStrategy for FreeDrawCreationStrategy {
                 creating_state.element_data(),
                 creating_state.current_rect,
                 false,
+                None,
             );
         }
 
@@ -356,7 +359,7 @@ impl CreationStrategy for FreeDrawCreationStrategy {
             ..DomainFreeDrawDataPatch::default()
         }));
 
-        CreationFinishResult::new(finalized_data, rect, true)
+        CreationFinishResult::new(finalized_data, rect, true, None)
     }
 }
 

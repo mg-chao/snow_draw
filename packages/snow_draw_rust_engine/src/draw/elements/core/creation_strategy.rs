@@ -179,14 +179,21 @@ pub struct CreationFinishResult {
     pub data: Arc<dyn ElementData>,
     pub rect: DrawRect,
     pub should_commit: bool,
+    pub ordered_element_ids: Option<Vec<String>>,
 }
 
 impl CreationFinishResult {
-    pub fn new(data: Arc<dyn ElementData>, rect: DrawRect, should_commit: bool) -> Self {
+    pub fn new(
+        data: Arc<dyn ElementData>,
+        rect: DrawRect,
+        should_commit: bool,
+        ordered_element_ids: Option<Vec<String>>,
+    ) -> Self {
         Self {
             data,
             rect,
             should_commit,
+            ordered_element_ids,
         }
     }
 }
@@ -295,6 +302,7 @@ pub trait CreationStrategy {
 
     fn finish(
         &self,
+        state: &DrawState,
         config: &DrawConfig,
         creating_state: &CreatingState,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
@@ -367,6 +375,7 @@ pub fn finish_creation_with_current_rect(
         creating_state.element_data(),
         rect,
         should_commit_creation_result(config, creating_state, Some(rect)),
+        None,
     )
 }
 

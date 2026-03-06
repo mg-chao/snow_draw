@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 
 use crate::draw::config::draw_config::{DrawConfig, ElementStyleConfig, ElementStyleConfigPatch};
@@ -374,7 +375,13 @@ impl CreateElementReducer {
             interaction.element.type_id_value.as_str(),
         );
         let config = context.draw_config();
-        let finish_result = strategy.finish(&config, &interaction, context.text_metrics_service());
+        let strategy_state = state.creation_strategy_state();
+        let finish_result = strategy.finish(
+            &strategy_state,
+            &config,
+            &interaction,
+            context.text_metrics_service(),
+        );
         if !finish_result.should_commit {
             return self.cancel_create_element(state);
         }
@@ -390,6 +397,10 @@ impl CreateElementReducer {
 
         let mut new_elements = state.document_elements().to_vec();
         new_elements.push(updated_element);
+        new_elements = reorder_creation_elements_by_id_order(
+            new_elements,
+            finish_result.ordered_element_ids.as_deref(),
+        );
 
         let next_state = state
             .with_document_elements(new_elements)
@@ -485,6 +496,52 @@ impl CreateElementReducer {
 
         state.with_creating_state(Some(next_interaction))
     }
+}
+
+fn reorder_creation_elements_by_id_order(
+    elements: Vec<CreationElementState>,
+    ordered_element_ids: Option<&[String]>,
+) -> Vec<CreationElementState> {
+    let Some(ordered_ids) = ordered_element_ids else {
+        return elements;
+    };
+    if ordered_ids.is_empty() || elements.is_empty() || ordered_ids.len() != elements.len() {
+        return elements;
+    }
+
+    let by_id = elements
+        .iter()
+        .cloned()
+        .map(|element| (element.id.clone(), element))
+        .collect::<HashMap<_, _>>();
+    if by_id.len() != elements.len() {
+        return elements;
+    }
+
+    let mut seen_ids = HashSet::with_capacity(ordered_ids.len());
+    let mut reordered = Vec::with_capacity(elements.len());
+    for id in ordered_ids {
+        if !seen_ids.insert(id.as_str()) {
+            return elements;
+        }
+        let Some(element) = by_id.get(id) else {
+            return elements;
+        };
+        reordered.push(element.clone());
+    }
+
+    let base_z = reordered
+        .iter()
+        .map(|element| element.z_index)
+        .min()
+        .unwrap_or(0);
+    reordered
+        .into_iter()
+        .enumerate()
+        .map(|(index, element)| {
+            element.copy_with(None, None, None, None, Some(base_z + index as i64), None)
+        })
+        .collect()
 }
 
 /// Convenience free function mirroring Dart-style reducer usage.

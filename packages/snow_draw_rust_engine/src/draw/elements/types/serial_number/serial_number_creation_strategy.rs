@@ -115,6 +115,7 @@ impl CreationStrategy for SerialNumberCreationStrategy {
 
     fn finish(
         &self,
+        _state: &DrawState,
         config: &DrawConfig,
         creating_state: &CreatingState,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
