@@ -129,17 +129,14 @@ List<ElementState> syncArrowBindingsAfterDeletion({
     context: session.context,
   );
   final patchedById = session.applyArrowPatches(syncResult.arrowPatches);
-  final reorderedElementIds = session.reduceEventsToOrderedElementIds(
-    syncResult.events,
-  );
-  if (patchedById.isEmpty && reorderedElementIds == null) {
+  if (patchedById.isEmpty) {
     return elements;
   }
 
   final synced = applyElementReplacementsAndOrder(
     elements: elements,
     replacementsById: patchedById,
-    orderedElementIds: reorderedElementIds,
+    orderedElementIds: null,
   );
   return synced;
 }
@@ -211,17 +208,14 @@ List<ElementState> syncArrowBindingsAfterDuplication({
     context: session.context,
   );
   final patchedById = session.applyArrowPatches(syncResult.arrowPatches);
-  final reorderedElementIds = session.reduceEventsToOrderedElementIds(
-    syncResult.events,
-  );
-  if (patchedById.isEmpty && reorderedElementIds == null) {
+  if (patchedById.isEmpty) {
     return elements;
   }
 
   final synced = applyElementReplacementsAndOrder(
     elements: elements,
     replacementsById: patchedById,
-    orderedElementIds: reorderedElementIds,
+    orderedElementIds: null,
   );
   return synced;
 }

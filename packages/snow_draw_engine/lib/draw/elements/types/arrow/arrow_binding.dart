@@ -704,14 +704,28 @@ DrawPoint _arrowWorldEndpoint(
 }
 
 DrawPoint _normalizeFixedPoint(DrawPoint point) => DrawPoint(
-  x: _normalizeFixedRatio(point.x),
-  y: _normalizeFixedRatio(point.y),
+  x: _resolveNormalizedFixedRatioX(point),
+  y: _resolveNormalizedFixedRatioY(point),
 );
 
-double _normalizeFixedRatio(double value) {
-  if (!value.isFinite) {
+double _resolveNormalizedFixedRatioX(DrawPoint point) {
+  if (!_isFiniteFixedPoint(point)) {
     return 0.5001;
   }
+  return _resolveHalfEpsilonRatio(point.x);
+}
+
+double _resolveNormalizedFixedRatioY(DrawPoint point) {
+  if (!_isFiniteFixedPoint(point)) {
+    return 0.5001;
+  }
+  return _resolveHalfEpsilonRatio(point.y);
+}
+
+bool _isFiniteFixedPoint(DrawPoint point) =>
+    point.x.isFinite && point.y.isFinite;
+
+double _resolveHalfEpsilonRatio(double value) {
   const epsilon = 0.0001;
   if ((value - 0.5).abs() < epsilon) {
     return 0.5001;

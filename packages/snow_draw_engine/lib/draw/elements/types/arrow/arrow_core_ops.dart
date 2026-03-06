@@ -208,19 +208,12 @@ ArrowCoreRuntime get _runtime => ArrowCoreRuntime.instance;
 Map<String, dynamic> _composeEndpointBindingOptionsPayload(
   Map<String, dynamic>? options,
 ) {
-  final normalizedOptions = _normalizeEndpointBindingOptions(options);
-  return <String, dynamic>{'options': normalizedOptions};
-}
-
-Map<String, dynamic> _normalizeEndpointBindingOptions(
-  Map<String, dynamic>? options,
-) {
-  final normalized = <String, dynamic>{...?options};
-  final complexBindings = normalized['complexBindings'];
-  if (complexBindings is! bool) {
-    normalized['complexBindings'] = false;
+  if (options == null || options.isEmpty) {
+    return const <String, dynamic>{};
   }
-  return normalized;
+  return <String, dynamic>{
+    'options': <String, dynamic>{...options},
+  };
 }
 
 /// Typed wrapper around `snow_draw_arrow_core` endpoint-drag computation.
