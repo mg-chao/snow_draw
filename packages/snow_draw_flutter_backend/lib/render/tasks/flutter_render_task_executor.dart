@@ -3,6 +3,7 @@ import 'dart:ui';
 
 import 'package:snow_draw_engine/snow_draw_engine.dart';
 
+import '../arrow/arrow_visual_cache.dart';
 import '../free_draw/free_draw_visual_cache.dart';
 import '../geometry/arrow_geometry.dart';
 import '../patterns/stroke_pattern_utils.dart';
@@ -185,57 +186,10 @@ class FlutterRenderTaskExecutor {
   void _renderArrow({required Canvas canvas, required ArrowRenderTask task}) {
     final element = task.element;
     final data = task.data;
-    final descriptor = FlutterArrowGeometryDescriptor(
-      data: data,
-      rect: element.rect,
-    );
-    if (descriptor.localPoints.length < 2 ||
-        descriptor.insetPoints.length < 2) {
+    final cached = arrowVisualCache.resolve(element: element, data: data);
+    if (cached.geometry.localPoints.length < 2 ||
+        cached.geometry.insetPoints.length < 2) {
       return;
-    }
-
-    final worldLocalPoints = <Offset>[
-      for (final point in descriptor.localPoints)
-        Offset(element.rect.minX + point.dx, element.rect.minY + point.dy),
-    ];
-    final worldInsetPoints = <Offset>[
-      for (final point in descriptor.insetPoints)
-        Offset(element.rect.minX + point.dx, element.rect.minY + point.dy),
-    ];
-    final shaftPath = FlutterArrowGeometry.buildShaftPathFromResolvedPoints(
-      points: worldInsetPoints,
-      arrowType: data.arrowType,
-    );
-
-    final arrowheadsStrokePath = Path();
-    final arrowheadsFillPath = Path();
-    final startDirection = descriptor.startDirection;
-    if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
-      final arrowheadPaths = FlutterArrowGeometry.buildArrowheadPaths(
-        points: worldLocalPoints,
-        arrowType: data.arrowType,
-        style: data.startArrowhead,
-        strokeStyle: data.strokeStyle,
-        strokeWidth: data.strokeWidth,
-        position: ArrowEndpointPosition.start,
-        directionOverride: startDirection,
-      );
-      arrowheadsStrokePath.addPath(arrowheadPaths.strokePath, Offset.zero);
-      arrowheadsFillPath.addPath(arrowheadPaths.fillPath, Offset.zero);
-    }
-    final endDirection = descriptor.endDirection;
-    if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
-      final arrowheadPaths = FlutterArrowGeometry.buildArrowheadPaths(
-        points: worldLocalPoints,
-        arrowType: data.arrowType,
-        style: data.endArrowhead,
-        strokeStyle: data.strokeStyle,
-        strokeWidth: data.strokeWidth,
-        position: ArrowEndpointPosition.end,
-        directionOverride: endDirection,
-      );
-      arrowheadsStrokePath.addPath(arrowheadPaths.strokePath, Offset.zero);
-      arrowheadsFillPath.addPath(arrowheadPaths.fillPath, Offset.zero);
     }
 
     final strokeColor = _withOpacity(data.color, element.opacity);
@@ -246,10 +200,11 @@ class FlutterRenderTaskExecutor {
 
     canvas.save();
     _applyElementRotation(canvas, element);
+    canvas.translate(element.rect.minX, element.rect.minY);
 
     _drawPathStroke(
       canvas: canvas,
-      path: shaftPath,
+      path: cached.shaftPath,
       color: strokeColor,
       strokeWidth: data.strokeWidth,
       strokeStyle: data.strokeStyle,
@@ -257,18 +212,18 @@ class FlutterRenderTaskExecutor {
       strokeJoin: StrokeJoin.round,
     );
 
-    if (!arrowheadsFillPath.getBounds().isEmpty) {
+    if (!cached.arrowheadPaths.fillPath.getBounds().isEmpty) {
       final fillPaint = _fillPaint..color = strokeColor;
-      canvas.drawPath(arrowheadsFillPath, fillPaint);
+      canvas.drawPath(cached.arrowheadPaths.fillPath, fillPaint);
     }
 
-    if (!arrowheadsStrokePath.getBounds().isEmpty) {
+    if (!cached.arrowheadPaths.strokePath.getBounds().isEmpty) {
       final paint = _strokePaint
         ..color = strokeColor
         ..strokeWidth = data.strokeWidth
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
-      canvas.drawPath(arrowheadsStrokePath, paint);
+      canvas.drawPath(cached.arrowheadPaths.strokePath, paint);
     }
 
     canvas.restore();

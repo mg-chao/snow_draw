@@ -3,6 +3,7 @@ import 'package:snow_draw_engine/draw/core/draw_context.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/elbow/elbow_routing_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/models/document_state.dart';
 import 'package:snow_draw_engine/draw/models/domain_state.dart';
@@ -128,8 +129,10 @@ List<ElementState> _buildScenarioElements() {
       startArrowhead: ArrowheadStyle.standard,
       startBinding: startBinding,
       endBinding: endBinding,
-      startIsSpecial: true,
-      endIsSpecial: true,
+      elbowRoutingData: const ElbowRoutingData(
+        startIsSpecial: true,
+        endIsSpecial: true,
+      ),
     ),
   );
 

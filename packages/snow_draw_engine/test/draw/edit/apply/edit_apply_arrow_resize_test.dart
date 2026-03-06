@@ -4,6 +4,7 @@ import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_like_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/elbow/elbow_routing_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
@@ -295,7 +296,9 @@ ElementState _elbowArrowElement({
       arrowType: ArrowType.elbow,
       startBinding: startBinding,
       endBinding: endBinding,
-      fixedSegments: fixedSegments,
+      elbowRoutingData: fixedSegments == null
+          ? null
+          : ElbowRoutingData(fixedSegments: fixedSegments),
     ),
   );
 }

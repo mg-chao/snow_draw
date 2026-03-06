@@ -46,6 +46,27 @@ class ArrowGeometry {
     );
   }
 
+  /// Resolves rounded elbow path commands for [points].
+  ///
+  /// This exposes the elbow shaft shape in a typed form so backends do not
+  /// need to parse SVG-like path strings emitted by arrow-core.
+  static List<ArrowPathCommand> resolveElbowPathCommands({
+    required List<DrawPoint> points,
+    double radius = 16,
+  }) {
+    if (points.isEmpty) {
+      return const <ArrowPathCommand>[];
+    }
+
+    final commands = _parsePathCommands(
+      generateElbowPathData(points: points, radius: radius),
+    );
+    if (commands == null || commands.isEmpty) {
+      return _buildStraightPathCommands(points);
+    }
+    return List<ArrowPathCommand>.unmodifiable(commands);
+  }
+
   static double calculateShaftLength({
     required List<DrawPoint> points,
     required ArrowType arrowType,
@@ -177,6 +198,36 @@ class ArrowGeometry {
   }
 }
 
+/// A typed path command for rendering an arrow shaft.
+sealed class ArrowPathCommand {
+  const ArrowPathCommand();
+}
+
+/// Moves the current shaft path cursor to [point] without drawing.
+final class ArrowPathMoveCommand extends ArrowPathCommand {
+  const ArrowPathMoveCommand(this.point);
+
+  final DrawPoint point;
+}
+
+/// Draws a straight shaft segment to [point].
+final class ArrowPathLineCommand extends ArrowPathCommand {
+  const ArrowPathLineCommand(this.point);
+
+  final DrawPoint point;
+}
+
+/// Draws a quadratic shaft segment using [controlPoint] and [point].
+final class ArrowPathQuadraticCommand extends ArrowPathCommand {
+  const ArrowPathQuadraticCommand({
+    required this.controlPoint,
+    required this.point,
+  });
+
+  final DrawPoint controlPoint;
+  final DrawPoint point;
+}
+
 class ArrowGeometryDescriptor {
   ArrowGeometryDescriptor({required this.data, required this.rect});
 
@@ -258,3 +309,83 @@ class ArrowGeometryDescriptor {
 
 DrawPoint? _toDrawPointOrNull(core.Point? point) =>
     point == null ? null : decodeArrowCorePoint(point);
+
+List<ArrowPathCommand>? _parsePathCommands(String pathData) {
+  if (pathData.isEmpty) {
+    return const <ArrowPathCommand>[];
+  }
+
+  final tokens = pathData
+      .replaceAll(',', ' ')
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((token) => token.isNotEmpty)
+      .toList(growable: false);
+  if (tokens.isEmpty) {
+    return const <ArrowPathCommand>[];
+  }
+
+  final commands = <ArrowPathCommand>[];
+  var index = 0;
+
+  double? readNumber() {
+    if (index >= tokens.length) {
+      return null;
+    }
+    return double.tryParse(tokens[index++]);
+  }
+
+  while (index < tokens.length) {
+    final commandToken = tokens[index++];
+    if (commandToken.length != 1) {
+      return null;
+    }
+
+    switch (commandToken.toUpperCase()) {
+      case 'M':
+        final x = readNumber();
+        final y = readNumber();
+        if (x == null || y == null) {
+          return null;
+        }
+        commands.add(ArrowPathMoveCommand(DrawPoint(x: x, y: y)));
+      case 'L':
+        final x = readNumber();
+        final y = readNumber();
+        if (x == null || y == null) {
+          return null;
+        }
+        commands.add(ArrowPathLineCommand(DrawPoint(x: x, y: y)));
+      case 'Q':
+        final cx = readNumber();
+        final cy = readNumber();
+        final x = readNumber();
+        final y = readNumber();
+        if (cx == null || cy == null || x == null || y == null) {
+          return null;
+        }
+        commands.add(
+          ArrowPathQuadraticCommand(
+            controlPoint: DrawPoint(x: cx, y: cy),
+            point: DrawPoint(x: x, y: y),
+          ),
+        );
+      default:
+        return null;
+    }
+  }
+
+  return commands;
+}
+
+List<ArrowPathCommand> _buildStraightPathCommands(List<DrawPoint> points) {
+  if (points.isEmpty) {
+    return const <ArrowPathCommand>[];
+  }
+
+  final commands = <ArrowPathCommand>[ArrowPathMoveCommand(points.first)];
+  for (final point in points.skip(1)) {
+    commands.add(ArrowPathLineCommand(point));
+  }
+  return List<ArrowPathCommand>.unmodifiable(commands);
+}

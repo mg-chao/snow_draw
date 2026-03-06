@@ -33,9 +33,6 @@ final class LineData extends ElementData
     this.strokeStyle = ConfigDefaults.defaultStrokeStyle,
     this.startBinding,
     this.endBinding,
-    this.fixedSegments,
-    this.startIsSpecial,
-    this.endIsSpecial,
   }) : arrowType = ArrowType.curved,
        startArrowhead = ArrowheadStyle.none,
        endArrowhead = ArrowheadStyle.none;
@@ -60,17 +57,6 @@ final class LineData extends ElementData
     ),
     startBinding: ArrowLikeDataCodec.decodeBinding(json['startBinding']),
     endBinding: ArrowLikeDataCodec.decodeBinding(json['endBinding']),
-    fixedSegments: ArrowLikeDataCodec.decodeFixedSegments(
-      json['fixedSegments'],
-    ),
-    startIsSpecial: ElementDataCodec.decodeNullableBool(
-      json['startIsSpecial'],
-      fieldName: 'startIsSpecial',
-    ),
-    endIsSpecial: ElementDataCodec.decodeNullableBool(
-      json['endIsSpecial'],
-      fieldName: 'endIsSpecial',
-    ),
   );
 
   static const typeIdToken = ElementTypeId<LineData>('line');
@@ -96,11 +82,11 @@ final class LineData extends ElementData
   @override
   final ArrowBinding? endBinding;
   @override
-  final List<ElbowFixedSegment>? fixedSegments;
+  List<ElbowFixedSegment>? get fixedSegments => null;
   @override
-  final bool? startIsSpecial;
+  bool? get startIsSpecial => null;
   @override
-  final bool? endIsSpecial;
+  bool? get endIsSpecial => null;
 
   @override
   ElementTypeId<LineData> get typeId => LineData.typeIdToken;
@@ -151,18 +137,6 @@ final class LineData extends ElementData
         rawBinding: endBinding,
         currentBinding: this.endBinding,
       ),
-      fixedSegments: ArrowLikeDataCodec.resolveFixedSegmentsUpdate(
-        rawFixedSegments: fixedSegments,
-        currentFixedSegments: this.fixedSegments,
-      ),
-      startIsSpecial: ArrowLikeDataCodec.resolveNullableBoolUpdate(
-        rawValue: startIsSpecial,
-        currentValue: this.startIsSpecial,
-      ),
-      endIsSpecial: ArrowLikeDataCodec.resolveNullableBoolUpdate(
-        rawValue: endIsSpecial,
-        currentValue: this.endIsSpecial,
-      ),
     );
   }
 
@@ -198,9 +172,6 @@ final class LineData extends ElementData
     'endArrowhead': endArrowhead.name,
     'startBinding': startBinding?.toJson(),
     'endBinding': endBinding?.toJson(),
-    'fixedSegments': ArrowLikeDataCodec.encodeFixedSegments(fixedSegments),
-    'startIsSpecial': startIsSpecial,
-    'endIsSpecial': endIsSpecial,
   };
 
   @override
@@ -214,10 +185,7 @@ final class LineData extends ElementData
           other.strokeWidth == strokeWidth &&
           other.strokeStyle == strokeStyle &&
           other.startBinding == startBinding &&
-          other.endBinding == endBinding &&
-          fixedSegmentListEquals(other.fixedSegments, fixedSegments) &&
-          other.startIsSpecial == startIsSpecial &&
-          other.endIsSpecial == endIsSpecial;
+          other.endBinding == endBinding;
 
   @override
   int get hashCode => Object.hash(
@@ -229,8 +197,5 @@ final class LineData extends ElementData
     strokeStyle,
     startBinding,
     endBinding,
-    fixedSegments == null ? null : Object.hashAll(fixedSegments!),
-    startIsSpecial,
-    endIsSpecial,
   );
 }

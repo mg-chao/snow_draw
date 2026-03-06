@@ -1467,8 +1467,8 @@ class SceneCanvasPainter extends CustomPainter {
     // Draw shaft (always solid for hover outline)
     canvas.drawPath(cached.shaftPath, strokePaint);
 
-    for (final arrowheadPath in cached.arrowheadPaths) {
-      canvas.drawPath(arrowheadPath, strokePaint);
+    if (!cached.arrowheadPaths.strokePath.getBounds().isEmpty) {
+      canvas.drawPath(cached.arrowheadPaths.strokePath, strokePaint);
     }
 
     canvas.restore();

@@ -1,10 +1,8 @@
-import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../geometry/arrow_geometry.dart';
-import '../patterns/stroke_pattern_utils.dart';
 
 class ArrowVisualCacheEntry {
   ArrowVisualCacheEntry({
@@ -14,9 +12,6 @@ class ArrowVisualCacheEntry {
     required this.geometry,
     required this.shaftPath,
     required this.arrowheadPaths,
-    required this.combinedStrokePath,
-    this.dotPositions,
-    this.dotRadius = 0,
   });
 
   final ArrowLikeData data;
@@ -24,18 +19,7 @@ class ArrowVisualCacheEntry {
   final double height;
   final FlutterArrowGeometryDescriptor geometry;
   final Path shaftPath;
-  final List<Path> arrowheadPaths;
-  final Path? combinedStrokePath;
-
-  /// Pre-computed dot center positions for dotted strokes.
-  ///
-  /// Stored as a flat [Float32List] of (x, y) pairs for use with
-  /// [Canvas.drawRawPoints], which batches all dots into a single GPU
-  /// draw call instead of tessellating individual ovals.
-  final Float32List? dotPositions;
-
-  /// Radius of each dot for dotted strokes.
-  final double dotRadius;
+  final FlutterArrowheadPaths arrowheadPaths;
 
   bool matches(ArrowLikeData data, double width, double height) =>
       identical(this.data, data) &&
@@ -83,26 +67,6 @@ class ArrowVisualCache {
 
     final arrowheadPaths = _buildArrowheadPaths(geometry);
 
-    Path? combinedStrokePath;
-    Float32List? dotPositions;
-    double dotRadius = 0;
-
-    if (data.strokeWidth > 0) {
-      switch (data.strokeStyle) {
-        case StrokeStyle.solid:
-          combinedStrokePath = _combineStrokePaths(shaftPath, arrowheadPaths);
-        case StrokeStyle.dashed:
-          final dashLength = data.strokeWidth * 2.0;
-          final gapLength = dashLength * 1.2;
-          final dashedShaft = buildDashedPath(shaftPath, dashLength, gapLength);
-          combinedStrokePath = _combineStrokePaths(dashedShaft, arrowheadPaths);
-        case StrokeStyle.dotted:
-          final dotSpacing = data.strokeWidth * 2.0;
-          dotRadius = data.strokeWidth * 0.5;
-          dotPositions = buildDotPositions(shaftPath, dotSpacing);
-      }
-    }
-
     return ArrowVisualCacheEntry(
       data: data,
       width: rect.width,
@@ -110,23 +74,23 @@ class ArrowVisualCache {
       geometry: geometry,
       shaftPath: shaftPath,
       arrowheadPaths: arrowheadPaths,
-      combinedStrokePath: combinedStrokePath,
-      dotPositions: dotPositions,
-      dotRadius: dotRadius,
     );
   }
 
-  List<Path> _buildArrowheadPaths(FlutterArrowGeometryDescriptor geometry) {
+  FlutterArrowheadPaths _buildArrowheadPaths(
+    FlutterArrowGeometryDescriptor geometry,
+  ) {
     final points = geometry.localPoints;
     final data = geometry.data;
     if (data.strokeWidth <= 0) {
-      return const [];
+      return FlutterArrowheadPaths.empty();
     }
 
-    final paths = <Path>[];
+    final strokePath = Path();
+    final fillPath = Path();
     final startDirection = geometry.startDirection;
     if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
-      final arrowheadPaths = FlutterArrowGeometry.buildArrowheadPaths(
+      final startPaths = FlutterArrowGeometry.buildArrowheadPaths(
         points: points,
         arrowType: data.arrowType,
         style: data.startArrowhead,
@@ -135,14 +99,13 @@ class ArrowVisualCache {
         position: ArrowEndpointPosition.start,
         directionOverride: startDirection,
       );
-      if (!arrowheadPaths.strokePath.getBounds().isEmpty) {
-        paths.add(arrowheadPaths.strokePath);
-      }
+      strokePath.addPath(startPaths.strokePath, Offset.zero);
+      fillPath.addPath(startPaths.fillPath, Offset.zero);
     }
 
     final endDirection = geometry.endDirection;
     if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
-      final arrowheadPaths = FlutterArrowGeometry.buildArrowheadPaths(
+      final endPaths = FlutterArrowGeometry.buildArrowheadPaths(
         points: points,
         arrowType: data.arrowType,
         style: data.endArrowhead,
@@ -151,20 +114,11 @@ class ArrowVisualCache {
         position: ArrowEndpointPosition.end,
         directionOverride: endDirection,
       );
-      if (!arrowheadPaths.strokePath.getBounds().isEmpty) {
-        paths.add(arrowheadPaths.strokePath);
-      }
+      strokePath.addPath(endPaths.strokePath, Offset.zero);
+      fillPath.addPath(endPaths.fillPath, Offset.zero);
     }
 
-    return paths;
-  }
-
-  Path _combineStrokePaths(Path shaftPath, List<Path> arrowheadPaths) {
-    final combined = Path()..addPath(shaftPath, Offset.zero);
-    for (final arrowhead in arrowheadPaths) {
-      combined.addPath(arrowhead, Offset.zero);
-    }
-    return combined;
+    return FlutterArrowheadPaths(strokePath: strokePath, fillPath: fillPath);
   }
 }
 

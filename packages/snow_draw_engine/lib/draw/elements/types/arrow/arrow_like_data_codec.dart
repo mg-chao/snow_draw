@@ -3,6 +3,7 @@ import '../shared/element_data_codec.dart';
 import 'arrow_binding.dart';
 import 'arrow_like_data.dart';
 import 'elbow/elbow_fixed_segment.dart';
+import 'elbow/elbow_routing_data.dart';
 
 /// Shared serialization helpers for arrow-like data implementations.
 final class ArrowLikeDataCodec {
@@ -90,6 +91,54 @@ final class ArrowLikeDataCodec {
     currentValue: currentValue,
     decode: (raw) => raw as bool?,
   );
+
+  static ElbowRoutingData? decodeElbowRoutingData({
+    required Object? rawFixedSegments,
+    required Object? rawStartIsSpecial,
+    required Object? rawEndIsSpecial,
+  }) {
+    final routingData = ElbowRoutingData(
+      fixedSegments: decodeFixedSegments(rawFixedSegments),
+      startIsSpecial: ElementDataCodec.decodeNullableBool(
+        rawStartIsSpecial,
+        fieldName: 'startIsSpecial',
+      ),
+      endIsSpecial: ElementDataCodec.decodeNullableBool(
+        rawEndIsSpecial,
+        fieldName: 'endIsSpecial',
+      ),
+    );
+    return routingData.isEmpty ? null : routingData;
+  }
+
+  static ElbowRoutingData? resolveElbowRoutingUpdate({
+    required Object? rawFixedSegments,
+    required Object? rawStartIsSpecial,
+    required Object? rawEndIsSpecial,
+    required ElbowRoutingData? currentRoutingData,
+  }) {
+    if (identical(rawFixedSegments, ArrowLikeData.unset) &&
+        identical(rawStartIsSpecial, ArrowLikeData.unset) &&
+        identical(rawEndIsSpecial, ArrowLikeData.unset)) {
+      return currentRoutingData;
+    }
+
+    final routingData = ElbowRoutingData(
+      fixedSegments: resolveFixedSegmentsUpdate(
+        rawFixedSegments: rawFixedSegments,
+        currentFixedSegments: currentRoutingData?.fixedSegments,
+      ),
+      startIsSpecial: resolveNullableBoolUpdate(
+        rawValue: rawStartIsSpecial,
+        currentValue: currentRoutingData?.startIsSpecial,
+      ),
+      endIsSpecial: resolveNullableBoolUpdate(
+        rawValue: rawEndIsSpecial,
+        currentValue: currentRoutingData?.endIsSpecial,
+      ),
+    );
+    return routingData.isEmpty ? null : routingData;
+  }
 
   static List<Map<String, double>> encodePoints(List<DrawPoint> points) => [
     for (final point in points) {'x': point.x, 'y': point.y},

@@ -136,76 +136,34 @@ class FlutterArrowGeometry {
       return Path();
     }
 
-    final pathData = ArrowGeometry.generateElbowPathData(
+    final commands = ArrowGeometry.resolveElbowPathCommands(
       points: points
           .map((point) => DrawPoint(x: point.dx, y: point.dy))
           .toList(growable: false),
     );
-    final parsedPath = _pathFromCorePathData(pathData);
-    return parsedPath ?? _buildStraightPath(points);
+    if (commands.isEmpty) {
+      return _buildStraightPath(points);
+    }
+    return _pathFromCommands(commands);
   }
 
-  static Path? _pathFromCorePathData(String pathData) {
-    if (pathData.isEmpty) {
-      return Path();
-    }
-
-    final tokens = pathData
-        .replaceAll(',', ' ')
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((token) => token.isNotEmpty)
-        .toList(growable: false);
-    if (tokens.isEmpty) {
-      return Path();
-    }
-
+  static Path _pathFromCommands(List<ArrowPathCommand> commands) {
     final path = Path();
-    var index = 0;
-
-    double? readNumber() {
-      if (index >= tokens.length) {
-        return null;
+    for (final command in commands) {
+      switch (command) {
+        case ArrowPathMoveCommand(:final point):
+          path.moveTo(point.x, point.y);
+        case ArrowPathLineCommand(:final point):
+          path.lineTo(point.x, point.y);
+        case ArrowPathQuadraticCommand(:final controlPoint, :final point):
+          path.quadraticBezierTo(
+            controlPoint.x,
+            controlPoint.y,
+            point.x,
+            point.y,
+          );
       }
-      return double.tryParse(tokens[index++]);
     }
-
-    while (index < tokens.length) {
-      final commandToken = tokens[index++];
-      if (commandToken.length != 1) {
-        return null;
-      }
-      final command = commandToken.toUpperCase();
-
-      if (command == 'M' || command == 'L') {
-        final x = readNumber();
-        final y = readNumber();
-        if (x == null || y == null) {
-          return null;
-        }
-        if (command == 'M') {
-          path.moveTo(x, y);
-        } else {
-          path.lineTo(x, y);
-        }
-        continue;
-      }
-
-      if (command == 'Q') {
-        final cx = readNumber();
-        final cy = readNumber();
-        final x = readNumber();
-        final y = readNumber();
-        if (cx == null || cy == null || x == null || y == null) {
-          return null;
-        }
-        path.quadraticBezierTo(cx, cy, x, y);
-        continue;
-      }
-
-      return null;
-    }
-
     return path;
   }
 
