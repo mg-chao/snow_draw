@@ -90,16 +90,24 @@ final class ArrowBindingResolver {
         continue;
       }
 
-      final result = recomputeCoreBindingsAfterBindableChange(
-        arrow: arrow,
-        bindables: session.bindables,
-        context: session.context,
-        changedBindableIds: sortedChangedBindableIds,
-        options: _buildPerArrowRecomputeOptions(
-          arrow: arrow,
-          changedBindableIds: changedBindableIdSet,
-        ),
-      );
+      final result = arrow.elbowed
+          ? _recomputeElbowBindingsAfterBindableChange(
+              arrow: arrow,
+              bindables: session.bindables,
+              context: session.context,
+              changedBindableIds: sortedChangedBindableIds,
+              changedBindableIdSet: changedBindableIdSet,
+            )
+          : recomputeCoreBindingsAfterBindableChange(
+              arrow: arrow,
+              bindables: session.bindables,
+              context: session.context,
+              changedBindableIds: sortedChangedBindableIds,
+              options: _buildPerArrowRecomputeOptions(
+                arrow: arrow,
+                changedBindableIds: changedBindableIdSet,
+              ),
+            );
       if (result.arrowPatch.isNotEmpty) {
         arrowPatches.add(
           core.ArrowStatePatchWithId(id: arrow.id, patch: result.arrowPatch),
@@ -122,6 +130,115 @@ final class ArrowBindingResolver {
       orderedElementIds: reorderedElementIds,
     );
   }
+}
+
+const _emptyEngineResult = core.EngineResult(
+  arrowPatch: <String, dynamic>{},
+  bindablePatches: <core.BindablePatch>[],
+  suggestedBinding: null,
+  events: <core.ArrowEngineEvent>[],
+);
+
+core.EngineResult _recomputeElbowBindingsAfterBindableChange({
+  required core.ArrowState arrow,
+  required List<core.BindableState> bindables,
+  required core.EngineContext context,
+  required List<String> changedBindableIds,
+  required Set<String> changedBindableIdSet,
+}) {
+  final bindablesById = <String, core.BindableState>{
+    for (final bindable in bindables) bindable.id: bindable,
+  };
+  final startBinding = arrow.startBinding;
+  final endBinding = arrow.endBinding;
+  if (startBinding == null && endBinding == null) {
+    return _emptyEngineResult;
+  }
+
+  final shouldUpdateStart =
+      startBinding != null &&
+      (changedBindableIds.isEmpty ||
+          changedBindableIdSet.contains(startBinding.elementId));
+  final shouldUpdateEnd =
+      endBinding != null &&
+      (changedBindableIds.isEmpty ||
+          changedBindableIdSet.contains(endBinding.elementId));
+
+  if (!shouldUpdateStart && !shouldUpdateEnd) {
+    return _emptyEngineResult;
+  }
+
+  core.Point? nextStartPoint;
+  core.Point? nextEndPoint;
+
+  if (shouldUpdateStart && startBinding != null) {
+    final startBindable = bindablesById[startBinding.elementId];
+    if (startBindable == null) {
+      return recomputeCoreBindingsAfterBindableChange(
+        arrow: arrow,
+        bindables: bindables,
+        context: context,
+        changedBindableIds: changedBindableIds,
+      );
+    }
+    final updatedStart = updateCoreBoundPoint(
+      arrow: arrow,
+      edge: 'startBinding',
+      binding: startBinding,
+      bindable: startBindable,
+      bindablesById: bindablesById,
+    );
+    if (updatedStart != null) {
+      nextStartPoint = updatedStart;
+    }
+  }
+
+  if (shouldUpdateEnd && endBinding != null) {
+    final endBindable = bindablesById[endBinding.elementId];
+    if (endBindable == null) {
+      return recomputeCoreBindingsAfterBindableChange(
+        arrow: arrow,
+        bindables: bindables,
+        context: context,
+        changedBindableIds: changedBindableIds,
+      );
+    }
+    final updatedEnd = updateCoreBoundPoint(
+      arrow: arrow,
+      edge: 'endBinding',
+      binding: endBinding,
+      bindable: endBindable,
+      bindablesById: bindablesById,
+    );
+    if (updatedEnd != null) {
+      nextEndPoint = updatedEnd;
+    }
+  }
+
+  final resolvedStartPoint = nextStartPoint ?? arrow.points.first;
+  final resolvedEndPoint = nextEndPoint ?? arrow.points.last;
+  if (nextStartPoint == null && nextEndPoint == null) {
+    return _emptyEngineResult;
+  }
+
+  final patch = updateCoreElbowArrowPatch(
+    arrow: arrow,
+    updates: <String, dynamic>{
+      'points': <core.Point>[resolvedStartPoint, resolvedEndPoint],
+    },
+    bindables: bindables,
+    context: context,
+  );
+  if (patch.isEmpty) {
+    return _emptyEngineResult;
+  }
+
+  return core.EngineResult(
+    arrowPatch: patch,
+    bindablePatches: const <core.BindablePatch>[],
+    suggestedBinding: null,
+    events: const <core.ArrowEngineEvent>[],
+  );
 }
 
 bool _isArrowAffectedByChangedBindables(
