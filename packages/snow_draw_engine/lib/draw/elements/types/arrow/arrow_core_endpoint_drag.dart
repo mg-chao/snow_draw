@@ -183,7 +183,7 @@ ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
   final session = ArrowCoreSession.fromDocument(
     state.domain.document,
     orderedElementIds: orderedElementIds,
-    context: coreEngineContext,
+    context: dragContext,
   );
   final mergedOptions = <String, dynamic>{...?options};
   final computed = _runEndpointDragViaStrategy(
@@ -299,8 +299,19 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
           context: dragContext,
           options: mergedOptions,
         );
+  final suggestedBindableId = _resolveSuggestedBindableId(
+    result: result,
+    strategy: draggedIndex == 0 ? startStrategy : endStrategy,
+  );
 
-  var nextArrow = core.applyArrowPatch(arrow, result.arrowPatch);
+  final applied = session.applyEngineResultWithOrderFallback(
+    arrow: arrow,
+    result: result,
+    hoveredBindableId: suggestedBindableId,
+    point: toCorePoint(worldPointer),
+    orderedElementIds: orderedElementIds,
+  );
+  var nextArrow = applied.arrow;
   final draggedStrategy = draggedIndex == 0 ? startStrategy : endStrategy;
   nextArrow = _applyLegacyNewArrowDraggedFocusPointOverride(
     arrow: nextArrow,
@@ -310,18 +321,6 @@ _ComputedEndpointDrag? _runEndpointDragViaStrategy({
     bindablesById: bindablesById,
     maxCoordinate: dragContext.maxCoordinate,
     isNewArrow: isNewArrow,
-  );
-
-  final suggestedBindableId = _resolveSuggestedBindableId(
-    result: result,
-    strategy: draggedStrategy,
-  );
-  final applied = session.applyEngineResultWithOrderFallback(
-    arrow: arrow,
-    result: result,
-    hoveredBindableId: suggestedBindableId,
-    point: toCorePoint(worldPointer),
-    orderedElementIds: orderedElementIds,
   );
   final nextOrderedElementIds = applied.orderedElementIds;
 
