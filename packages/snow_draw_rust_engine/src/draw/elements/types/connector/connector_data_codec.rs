@@ -4,8 +4,84 @@ use crate::draw::elements::types::arrow::arrow_binding::ArrowBinding;
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField;
 use crate::draw::elements::types::arrow::elbow::elbow_fixed_segment::ElbowFixedSegment;
 use crate::draw::elements::types::arrow::elbow::elbow_routing_data::ElbowRoutingData;
+use crate::draw::elements::types::shared::element_data_codec::{
+    ElementDataCodec, ElementDataCodecError,
+};
 use crate::draw::types::draw_point::DrawPoint;
-use serde_json::Value;
+use serde_json::{Map, Value};
+
+pub type ConnectorDataCodecError = ElementDataCodecError;
+
+/// Decodes connector points from JSON.
+pub fn decode_points(raw_points: &Value) -> Result<Vec<DrawPoint>, ConnectorDataCodecError> {
+    let entries = raw_points.as_array().ok_or_else(|| {
+        ElementDataCodecError::new("Connector points must be a JSON array")
+    })?;
+
+    let mut points = Vec::with_capacity(entries.len());
+    for entry in entries {
+        points.push(ElementDataCodec::decode_point(entry, "points entry", true, Some("pressure"))?);
+    }
+
+    if points.len() < 2 {
+        return Err(ElementDataCodecError::new(
+            "Connector payload must include at least two points",
+        ));
+    }
+
+    Ok(points)
+}
+
+/// Decodes an optional connector binding from JSON.
+pub fn decode_binding(raw: Option<&Value>) -> Result<Option<ArrowBinding>, ConnectorDataCodecError> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    if raw.is_null() {
+        return Ok(None);
+    }
+
+    ArrowBinding::from_json(raw)
+        .map(Some)
+        .map_err(ElementDataCodecError::new)
+}
+
+/// Decodes optional elbow fixed segments from JSON.
+pub fn decode_fixed_segments(
+    raw: Option<&Value>,
+) -> Result<Option<Vec<ElbowFixedSegment>>, ConnectorDataCodecError> {
+    let Some(raw) = raw else {
+        return Ok(None);
+    };
+    if raw.is_null() {
+        return Ok(None);
+    }
+
+    let entries = raw.as_array().ok_or_else(|| {
+        ElementDataCodecError::new("fixedSegments must be a JSON array")
+    })?;
+
+    let mut segments = Vec::with_capacity(entries.len());
+    for entry in entries {
+        let map = ElementDataCodec::as_json_map(entry, Some("fixedSegments entry"))?;
+        segments.push(
+            ElbowFixedSegment::from_json(map)
+                .map_err(|error| ElementDataCodecError::new(error.to_string()))?,
+        );
+    }
+
+    Ok(normalize_fixed_segments(Some(segments)))
+}
+
+/// Normalizes optional fixed segments by clearing empty collections.
+pub fn normalize_fixed_segments(
+    segments: Option<Vec<ElbowFixedSegment>>,
+) -> Option<Vec<ElbowFixedSegment>> {
+    match segments {
+        Some(segments) if !segments.is_empty() => Some(segments),
+        _ => None,
+    }
+}
 
 /// Encodes connector points using the shared JSON point shape.
 pub fn encode_points(points: &[DrawPoint]) -> Value {
@@ -21,6 +97,14 @@ pub fn encode_points(points: &[DrawPoint]) -> Value {
             })
             .collect(),
     )
+}
+
+/// Encodes optional fixed segments using the shared connector JSON shape.
+pub fn encode_fixed_segments(
+    segments: Option<&[ElbowFixedSegment]>,
+) -> Option<Vec<Map<String, Value>>> {
+    let segments = segments.filter(|value| !value.is_empty())?;
+    Some(segments.iter().cloned().map(ElbowFixedSegment::to_json).collect())
 }
 
 /// Resolves a nullable binding update using connector semantics.
@@ -108,4 +192,37 @@ pub fn resolve_elbow_routing_update(
         resolve_bool_update(raw_start_is_special, current_start_is_special),
         resolve_bool_update(raw_end_is_special, current_end_is_special),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn decode_points_requires_two_entries() {
+        let error = decode_points(&json!([{ "x": 0.0, "y": 0.0 }]))
+            .expect_err("single-point connector should fail");
+
+        assert!(error.to_string().contains("at least two points"));
+    }
+
+    #[test]
+    fn decode_and_encode_fixed_segments_round_trip() {
+        let raw = json!([
+            {
+                "index": 2,
+                "start": { "x": 10.0, "y": 20.0 },
+                "end": { "x": 30.0, "y": 20.0 }
+            }
+        ]);
+
+        let decoded = decode_fixed_segments(Some(&raw))
+            .expect("fixed segments should decode")
+            .expect("segments should exist");
+        let encoded = encode_fixed_segments(Some(&decoded)).expect("segments should encode");
+
+        assert_eq!(encoded.len(), 1);
+        assert_eq!(encoded[0].get("index").and_then(Value::as_u64), Some(2));
+    }
 }

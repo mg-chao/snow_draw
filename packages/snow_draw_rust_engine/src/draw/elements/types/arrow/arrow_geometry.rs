@@ -446,7 +446,8 @@ impl ArrowGeometry {
         vec![points[0], points[0]]
     }
 
-    fn apply_insets(points: &[DrawPoint], start_inset: f64, end_inset: f64) -> Vec<DrawPoint> {
+    /// Applies start/end shaft insets and returns the shortened point list.
+    pub fn apply_insets(points: &[DrawPoint], start_inset: f64, end_inset: f64) -> Vec<DrawPoint> {
         if points.len() < 2 {
             return points.to_vec();
         }
