@@ -1,17 +1,17 @@
 import '../../../types/draw_point.dart';
 import '../shared/element_data_codec.dart';
-import 'arrow_binding.dart';
-import 'arrow_like_data.dart';
-import 'elbow/elbow_fixed_segment.dart';
-import 'elbow/elbow_routing_data.dart';
+import '../arrow/arrow_binding.dart';
+import '../arrow/elbow/elbow_fixed_segment.dart';
+import '../arrow/elbow/elbow_routing_data.dart';
+import 'connector_data.dart';
 
-/// Shared serialization helpers for arrow-like data implementations.
+/// Shared serialization helpers for connector-style data implementations.
 final class ConnectorDataCodec {
   const ConnectorDataCodec._();
 
   static List<DrawPoint> decodePoints(Object? rawPoints) {
     if (rawPoints is! List) {
-      throw const FormatException('Arrow points must be a JSON array');
+      throw const FormatException('Connector points must be a JSON array');
     }
 
     final points = <DrawPoint>[
@@ -21,7 +21,7 @@ final class ConnectorDataCodec {
 
     if (points.length < 2) {
       throw const FormatException(
-        'Arrow payload must include at least two points',
+        'Connector payload must include at least two points',
       );
     }
 

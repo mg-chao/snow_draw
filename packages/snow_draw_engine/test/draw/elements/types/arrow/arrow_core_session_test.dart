@@ -2,7 +2,7 @@ import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core.dart'
     as core;
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_geometry.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_scene.dart';
 import 'package:snow_draw_engine/draw/elements/types/serial_number/serial_number_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/text/text_data.dart';

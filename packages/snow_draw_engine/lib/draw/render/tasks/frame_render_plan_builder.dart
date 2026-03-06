@@ -1,7 +1,7 @@
 import '../../config/draw_config.dart';
-import '../../edit/arrow/arrow_point_operation.dart';
-import '../../elements/types/arrow/arrow_like_data.dart';
-import '../../elements/types/arrow/arrow_points.dart';
+import '../../edit/connector/connector_point_operation.dart';
+import '../../elements/types/connector/connector_data.dart';
+import '../../elements/types/connector/connector_points.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/draw_state_view.dart';
 import '../../models/element_state.dart';

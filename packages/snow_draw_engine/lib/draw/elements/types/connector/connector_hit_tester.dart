@@ -6,13 +6,13 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
 import '../../core/element_hit_tester.dart';
+import '../arrow/arrow_render_primitives.dart';
 import '../shared/hit_test_geometry.dart';
-import 'arrow_geometry.dart';
-import 'arrow_like_data.dart';
-import 'arrow_render_primitives.dart';
+import 'connector_data.dart';
+import 'connector_geometry.dart';
 
-class ArrowHitTester implements ElementHitTester {
-  const ArrowHitTester();
+class ConnectorHitTester implements ElementHitTester {
+  const ConnectorHitTester();
 
   static const _cacheLimit = 512;
   static final _cache = LruCache<String, _ArrowHitTestCacheEntry>(
@@ -28,7 +28,7 @@ class ArrowHitTester implements ElementHitTester {
     final data = element.data;
     if (data is! ConnectorData) {
       throw StateError(
-        'ArrowHitTester can only hit test ConnectorData '
+        'ConnectorHitTester can only hit test ConnectorData '
         '(got ${data.runtimeType})',
       );
     }

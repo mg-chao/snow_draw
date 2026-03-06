@@ -1,12 +1,11 @@
 import 'dart:math' as math;
 
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_hit_tester.dart';
 import 'package:snow_draw_engine/snow_draw_engine.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('ArrowHitTester path sampling integration', () {
-    const tester = ArrowHitTester();
+  group('ConnectorHitTester path sampling integration', () {
+    const tester = ConnectorHitTester();
 
     test('hits a curved shaft sample point', () {
       final element = _buildCurvedArrowElement(rotation: 0);

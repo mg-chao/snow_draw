@@ -5,7 +5,7 @@ import '../../elements/types/arrow/arrow_binding_resolver.dart';
 import '../../elements/types/arrow/arrow_core.dart' as core;
 import '../../elements/types/arrow/arrow_core_bridge.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
-import '../../elements/types/arrow/arrow_like_data.dart';
+import '../../elements/types/connector/connector_data.dart';
 import '../../elements/types/arrow/arrow_scene.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';

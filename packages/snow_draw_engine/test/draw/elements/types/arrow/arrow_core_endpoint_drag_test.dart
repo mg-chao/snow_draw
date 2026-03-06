@@ -5,7 +5,7 @@ import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dar
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_endpoint_drag.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_ops.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_geometry.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_scene.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/models/document_state.dart';

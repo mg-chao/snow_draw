@@ -11,12 +11,12 @@ import '../../elements/types/arrow/arrow_core_geometry_adapter.dart';
 import '../../elements/types/arrow/arrow_core_ops.dart';
 import '../../elements/types/arrow/arrow_data.dart';
 import '../../elements/types/arrow/arrow_focus.dart';
-import '../../elements/types/arrow/arrow_geometry.dart';
-import '../../elements/types/arrow/arrow_like_data.dart';
-import '../../elements/types/arrow/arrow_points.dart';
 import '../../elements/types/arrow/arrow_scene.dart';
 import '../../elements/types/arrow/elbow/elbow_editing.dart';
 import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
+import '../../elements/types/connector/connector_data.dart';
+import '../../elements/types/connector/connector_geometry.dart';
+import '../../elements/types/connector/connector_points.dart';
 import '../../elements/types/line/line_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
@@ -60,7 +60,7 @@ class ConnectorPointOperation extends EditOperation with StandardFinishMixin {
       operationName: 'ConnectorPointOperation.createHistoryMetadata',
     );
     return HistoryMetadata.forEdit(
-      operationType: 'Arrow point',
+      operationType: 'Connector point',
       elementIds: typedContext.selectedIdsAtStart,
     );
   }
@@ -78,7 +78,7 @@ class ConnectorPointOperation extends EditOperation with StandardFinishMixin {
     final element = state.domain.document.getElementById(typedParams.elementId);
     if (element == null || element.data is! ConnectorData) {
       throw const EditMissingDataError(
-        dataName: 'arrow element',
+        dataName: 'connector element',
         operationName: 'ConnectorPointOperation.createContext',
       );
     }

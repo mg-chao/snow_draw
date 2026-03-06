@@ -4,12 +4,12 @@ import '../../../core/coordinates/element_space.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
-import 'arrow_core_bridge.dart';
-import 'arrow_core_geometry_adapter.dart';
-import 'arrow_focus.dart';
-import 'arrow_geometry.dart';
-import 'arrow_like_data.dart';
-import 'elbow/elbow_fixed_segment.dart';
+import '../arrow/arrow_core_bridge.dart';
+import '../arrow/arrow_core_geometry_adapter.dart';
+import '../arrow/arrow_focus.dart';
+import '../arrow/elbow/elbow_fixed_segment.dart';
+import 'connector_data.dart';
+import 'connector_geometry.dart';
 
 enum ConnectorPointKind {
   turning,

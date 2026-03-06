@@ -1,10 +1,9 @@
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_hit_tester.dart';
 import 'package:snow_draw_engine/snow_draw_engine.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('ArrowHitTester arrowhead integration', () {
-    const tester = ArrowHitTester();
+  group('ConnectorHitTester arrowhead integration', () {
+    const tester = ConnectorHitTester();
 
     test('core-rendered standard arrowhead is hittable', () {
       final element = _buildArrowElement(endArrowhead: ArrowheadStyle.standard);

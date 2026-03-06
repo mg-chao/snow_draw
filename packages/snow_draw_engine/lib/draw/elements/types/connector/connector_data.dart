@@ -1,8 +1,8 @@
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
 import '../../core/element_data.dart';
-import 'arrow_binding.dart';
-import 'elbow/elbow_fixed_segment.dart';
+import '../arrow/arrow_binding.dart';
+import '../arrow/elbow/elbow_fixed_segment.dart';
 
 /// Shared interface for connector-style path elements.
 ///

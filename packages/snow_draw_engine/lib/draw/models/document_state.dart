@@ -2,7 +2,7 @@ import 'package:meta/meta.dart';
 import '../elements/types/arrow/arrow_core.dart' as core;
 
 import '../elements/types/arrow/arrow_core_bridge.dart';
-import '../elements/types/arrow/arrow_like_data.dart';
+import '../elements/types/connector/connector_data.dart';
 import '../elements/types/highlight/highlight_data.dart';
 import '../elements/types/serial_number/serial_number_data.dart';
 import '../types/draw_point.dart';

@@ -1,5 +1,5 @@
 import '../../config/draw_config.dart';
-import '../../elements/types/arrow/arrow_like_data.dart';
+import '../../elements/types/connector/connector_data.dart';
 import '../../history/history_metadata.dart';
 import '../../models/draw_state.dart';
 import '../../models/element_state.dart';

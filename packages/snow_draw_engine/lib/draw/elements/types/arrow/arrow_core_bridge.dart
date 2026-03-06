@@ -5,6 +5,7 @@ import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
+import '../connector/connector_data.dart';
 import '../highlight/highlight_data.dart';
 import '../rectangle/rectangle_data.dart';
 import '../serial_number/serial_number_data.dart';
@@ -14,7 +15,6 @@ import 'arrow_binding.dart';
 import 'arrow_core.dart' as core;
 import 'arrow_core_codec.dart';
 import 'arrow_core_geometry_adapter.dart';
-import 'arrow_like_data.dart';
 import 'elbow/elbow_fixed_segment.dart';
 
 @immutable

@@ -10,8 +10,8 @@ import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
 import '../arrow/arrow_binding.dart';
-import '../arrow/arrow_like_data.dart';
-import '../arrow/arrow_like_data_codec.dart';
+import '../connector/connector_data.dart';
+import '../connector/connector_data_codec.dart';
 import '../arrow/elbow/elbow_fixed_segment.dart';
 import '../shared/element_data_codec.dart';
 

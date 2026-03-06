@@ -1,7 +1,7 @@
-import '../edit/arrow/arrow_point_operation.dart';
+import '../edit/connector/connector_point_operation.dart';
 import '../elements/types/arrow/arrow_binding.dart';
-import '../elements/types/arrow/arrow_like_data.dart';
-import '../elements/types/arrow/arrow_points.dart';
+import '../elements/types/connector/connector_data.dart';
+import '../elements/types/connector/connector_points.dart';
 import '../types/edit_transform.dart';
 
 enum _ArrowEndpoint { start, end }

@@ -1,8 +1,8 @@
 import 'package:snow_draw_engine/draw/config/draw_config.dart';
 import 'package:snow_draw_engine/draw/elements/core/element_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_creation_strategy.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_creation_strategy.dart';
 import 'package:snow_draw_engine/draw/elements/types/highlight/highlight_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/line/line_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
@@ -21,8 +21,8 @@ import 'package:snow_draw_engine/draw/utils/snapping_mode.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('ArrowCreationStrategy core binding integration', () {
-    const strategy = ArrowCreationStrategy();
+  group('ConnectorCreationStrategy core binding integration', () {
+    const strategy = ConnectorCreationStrategy();
 
     test('update binds end endpoint to nearby bindable via core', () {
       const startPosition = DrawPoint(x: 20, y: 60);
@@ -729,7 +729,7 @@ void main() {
 }
 
 CreatingState _startCreatingArrow({
-  required ArrowCreationStrategy strategy,
+  required ConnectorCreationStrategy strategy,
   required DrawPoint startPosition,
 }) => _startCreating(
   strategy: strategy,
@@ -738,7 +738,7 @@ CreatingState _startCreatingArrow({
 );
 
 CreatingState _startCreating({
-  required ArrowCreationStrategy strategy,
+  required ConnectorCreationStrategy strategy,
   required DrawPoint startPosition,
   required ElementData data,
 }) {

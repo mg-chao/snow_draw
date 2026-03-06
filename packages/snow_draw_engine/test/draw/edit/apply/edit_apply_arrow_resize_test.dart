@@ -1,8 +1,8 @@
 import 'package:snow_draw_engine/draw/edit/apply/edit_apply.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_like_data.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/elbow/elbow_routing_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/line/line_data.dart';

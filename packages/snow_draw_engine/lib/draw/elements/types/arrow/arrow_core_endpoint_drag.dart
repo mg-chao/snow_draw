@@ -4,11 +4,11 @@ import '../../../models/draw_state.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
 import '../../../types/element_style.dart';
+import '../connector/connector_data.dart';
 import 'arrow_binding.dart';
 import 'arrow_core.dart' as core;
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
-import 'arrow_like_data.dart';
 import 'arrow_scene.dart';
 import 'elbow/elbow_fixed_segment.dart';
 

@@ -1,5 +1,5 @@
 import '../types/edit_operation_id.dart';
-import 'arrow/arrow_point_operation.dart';
+import 'connector/connector_point_operation.dart';
 import 'core/edit_operation.dart';
 import 'move/move_operation.dart';
 import 'resize/resize_operation.dart';

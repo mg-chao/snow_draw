@@ -1,6 +1,6 @@
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_points.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_points.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
 import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';

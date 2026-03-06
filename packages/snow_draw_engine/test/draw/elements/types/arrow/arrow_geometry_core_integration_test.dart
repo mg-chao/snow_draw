@@ -1,4 +1,4 @@
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_geometry.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:test/test.dart';
 

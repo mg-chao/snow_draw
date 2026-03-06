@@ -3,11 +3,11 @@ import 'package:meta/meta.dart';
 import '../../../models/document_state.dart';
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
+import '../connector/connector_data.dart';
 import 'arrow_binding.dart';
 import 'arrow_core.dart' as core;
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
-import 'arrow_like_data.dart';
 
 /// Ordered bindable candidates projected for arrow algorithm queries.
 ///

@@ -1,7 +1,7 @@
 import '../../actions/draw_actions.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
-import '../../elements/types/arrow/arrow_like_data.dart';
+import '../../elements/types/connector/connector_data.dart';
 import '../../elements/types/free_draw/free_draw_data.dart';
 import '../../models/draw_state.dart';
 import '../../models/draw_state_view.dart';

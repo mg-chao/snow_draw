@@ -1,4 +1,4 @@
-import '../elements/types/arrow/arrow_points.dart';
+import '../elements/types/connector/connector_points.dart';
 
 String? resolveHoverBindingHighlightId({
   required String? hoveredBindingElementId,

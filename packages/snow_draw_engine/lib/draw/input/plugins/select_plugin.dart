@@ -1,8 +1,8 @@
 import '../../actions/draw_actions.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/core/element_type_id.dart';
-import '../../elements/types/arrow/arrow_like_data.dart';
-import '../../elements/types/arrow/arrow_points.dart';
+import '../../elements/types/connector/connector_data.dart';
+import '../../elements/types/connector/connector_points.dart';
 import '../../elements/types/serial_number/serial_number_data.dart';
 import '../../elements/types/text/text_data.dart';
 import '../../models/draw_state.dart';
@@ -35,7 +35,8 @@ class SelectPlugin extends DrawInputPlugin {
            PointerCancelInputEvent,
          },
        );
-  final _arrowHandleDoubleTapTracker = DoubleTapTracker<ConnectorPointHandle>();
+  final _connectorHandleDoubleTapTracker =
+      DoubleTapTracker<ConnectorPointHandle>();
   final InputRoutingPolicy _routingPolicy;
   DrawStateViewBuilder? _stateViewBuilder;
   ElementTypeId<ElementData>? currentToolTypeId;
@@ -55,7 +56,7 @@ class SelectPlugin extends DrawInputPlugin {
 
   @override
   void reset() {
-    _arrowHandleDoubleTapTracker.clear();
+    _connectorHandleDoubleTapTracker.clear();
   }
 
   @override
@@ -99,27 +100,27 @@ class SelectPlugin extends DrawInputPlugin {
 
     if (intent is StartConnectorPointIntent) {
       final now = DateTime.now();
-      final data = _arrowDataForElement(stateView, intent.elementId);
+      final data = _connectorDataForElement(stateView, intent.elementId);
       if (data == null) {
-        _arrowHandleDoubleTapTracker.clear();
+        _connectorHandleDoubleTapTracker.clear();
       } else {
-        final handle = _resolveArrowHandleForIntent(
+        final handle = _resolveConnectorHandleForIntent(
           intent: intent,
           position: position,
           data: data,
         );
-        final canDoubleClick = _isArrowHandleDoubleClickCandidate(
+        final canDoubleClick = _isConnectorHandleDoubleClickCandidate(
           handle: handle,
           data: data,
         );
         if (canDoubleClick &&
-            _arrowHandleDoubleTapTracker.isDoubleTap(
+            _connectorHandleDoubleTapTracker.isDoubleTap(
               target: handle,
               position: position,
               now: now,
               baseTolerance: selectionConfig.interaction.handleTolerance,
             )) {
-          _arrowHandleDoubleTapTracker.clear();
+          _connectorHandleDoubleTapTracker.clear();
           final doubleClickIntent = StartConnectorPointIntent(
             elementId: intent.elementId,
             pointKind: intent.pointKind,
@@ -129,22 +130,22 @@ class SelectPlugin extends DrawInputPlugin {
           await _executeIntent(doubleClickIntent, position);
           return handled(
             message: handle.isFixed
-                ? 'Arrow segment released'
-                : 'Arrow point deleted',
+                ? 'Connector segment released'
+                : 'Connector point deleted',
           );
         }
         if (canDoubleClick) {
-          _arrowHandleDoubleTapTracker.recordTap(
+          _connectorHandleDoubleTapTracker.recordTap(
             target: handle,
             position: position,
             now: now,
           );
         } else {
-          _arrowHandleDoubleTapTracker.clear();
+          _connectorHandleDoubleTapTracker.clear();
         }
       }
     } else {
-      _arrowHandleDoubleTapTracker.clear();
+      _connectorHandleDoubleTapTracker.clear();
     }
 
     if (intent is SelectIntent && intent.deferSelectionForDrag) {
@@ -360,7 +361,7 @@ class SelectPlugin extends DrawInputPlugin {
   bool _isBoundSerialText(String textElementId) =>
       state.domain.document.boundTextIds.contains(textElementId);
 
-  ConnectorData? _arrowDataForElement(
+  ConnectorData? _connectorDataForElement(
     DrawStateView stateView,
     String elementId,
   ) {
@@ -372,7 +373,7 @@ class SelectPlugin extends DrawInputPlugin {
     return null;
   }
 
-  ConnectorPointHandle _resolveArrowHandleForIntent({
+  ConnectorPointHandle _resolveConnectorHandleForIntent({
     required StartConnectorPointIntent intent,
     required DrawPoint position,
     required ConnectorData data,
@@ -393,7 +394,7 @@ class SelectPlugin extends DrawInputPlugin {
     );
   }
 
-  bool _isArrowHandleDoubleClickCandidate({
+  bool _isConnectorHandleDoubleClickCandidate({
     required ConnectorPointHandle handle,
     required ConnectorData data,
   }) {

@@ -3,7 +3,7 @@ import 'package:snow_draw_engine/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_engine/draw/edit/core/edit_operation_params.dart';
 import 'package:snow_draw_engine/draw/edit/rotate/rotate_operation.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_geometry.dart';
 import 'package:snow_draw_engine/draw/models/document_state.dart';
 import 'package:snow_draw_engine/draw/models/domain_state.dart';
 import 'package:snow_draw_engine/draw/models/draw_state.dart';

@@ -20,24 +20,24 @@ import '../../../utils/snapping_mode.dart';
 import '../../../utils/visible_elements.dart';
 import '../arrow/arrow_binding.dart';
 import '../arrow/arrow_binding_policy.dart';
+import '../arrow/arrow_core.dart' as core;
+import '../arrow/arrow_core_bridge.dart';
+import '../arrow/arrow_core_endpoint_drag.dart';
+import '../arrow/arrow_core_geometry_adapter.dart';
+import '../arrow/arrow_core_ops.dart';
+import '../arrow/arrow_data.dart';
+import '../arrow/arrow_scene.dart';
+import '../arrow/elbow/elbow_editing.dart';
+import '../arrow/elbow/elbow_fixed_segment.dart';
+import '../arrow/elbow/elbow_router.dart';
 import '../line/line_data.dart';
-import 'arrow_core.dart' as core;
-import 'arrow_core_bridge.dart';
-import 'arrow_core_endpoint_drag.dart';
-import 'arrow_core_geometry_adapter.dart';
-import 'arrow_core_ops.dart';
-import 'arrow_data.dart';
-import 'arrow_geometry.dart';
-import 'arrow_like_data.dart';
-import 'arrow_scene.dart';
-import 'elbow/elbow_editing.dart';
-import 'elbow/elbow_fixed_segment.dart';
-import 'elbow/elbow_router.dart';
+import 'connector_data.dart';
+import 'connector_geometry.dart';
 
-/// Creation strategy for arrow elements (single- and multi-point).
+/// Creation strategy for connector elements (single- and multi-point).
 @immutable
-class ArrowCreationStrategy extends PointCreationStrategy {
-  const ArrowCreationStrategy();
+class ConnectorCreationStrategy extends PointCreationStrategy {
+  const ConnectorCreationStrategy();
 
   @override
   CreationUpdateResult start({
@@ -47,7 +47,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
   }) {
     final arrowData = requireCreationDataType<ConnectorData>(
       data: data,
-      strategyName: 'ArrowCreationStrategy.start',
+      strategyName: 'ConnectorCreationStrategy.start',
     );
 
     final arrowRect = _calculateArrowRect(
@@ -85,7 +85,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
   }) {
     final elementData = requireCreatingElementDataType<ConnectorData>(
       creatingState: creatingState,
-      strategyName: 'ArrowCreationStrategy.update',
+      strategyName: 'ConnectorCreationStrategy.update',
     );
     if (elementData is LineData) {
       return _updateLine(
@@ -245,7 +245,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
 
     final elementData = requireCreatingElementDataType<ConnectorData>(
       creatingState: creatingState,
-      strategyName: 'ArrowCreationStrategy.addPoint',
+      strategyName: 'ConnectorCreationStrategy.addPoint',
     );
     if (elementData.arrowType == ArrowType.elbow) {
       return null;
@@ -338,7 +338,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
   }) {
     final data = requireCreatingElementDataType<ConnectorData>(
       creatingState: creatingState,
-      strategyName: 'ArrowCreationStrategy.finish',
+      strategyName: 'ConnectorCreationStrategy.finish',
     );
 
     final minSize = config.element.minCreateSize;

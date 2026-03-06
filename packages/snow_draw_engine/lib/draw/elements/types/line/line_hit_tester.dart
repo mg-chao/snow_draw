@@ -4,7 +4,7 @@ import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
 import '../../../utils/lru_cache.dart';
 import '../../core/element_hit_tester.dart';
-import '../arrow/arrow_hit_tester.dart';
+import '../connector/connector_hit_tester.dart';
 import '../shared/hit_test_geometry.dart';
 import 'line_data.dart';
 
@@ -12,7 +12,7 @@ class LineHitTester implements ElementHitTester {
   const LineHitTester();
 
   static const _cacheLimit = 512;
-  static const _strokeTester = ArrowHitTester();
+  static const _strokeTester = ConnectorHitTester();
   static final _fillOutlineCache = LruCache<String, _LineFillOutlineCacheEntry>(
     maxEntries: _cacheLimit,
   );

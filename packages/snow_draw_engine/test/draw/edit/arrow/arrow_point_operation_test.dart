@@ -1,12 +1,12 @@
 import 'package:snow_draw_engine/draw/config/draw_config.dart';
-import 'package:snow_draw_engine/draw/edit/arrow/arrow_point_operation.dart';
+import 'package:snow_draw_engine/draw/edit/connector/connector_point_operation.dart';
 import 'package:snow_draw_engine/draw/edit/core/edit_modifiers.dart';
 import 'package:snow_draw_engine/draw/edit/core/edit_operation_params.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_creation_strategy.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_creation_strategy.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_points.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_points.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/elbow/elbow_fixed_segment.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/elbow/elbow_routing_data.dart';
 import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.dart';
@@ -1169,7 +1169,7 @@ ElementState _createElbowArrowViaCreation({
   required DrawPoint endPosition,
   required int zIndex,
 }) {
-  const strategy = ArrowCreationStrategy();
+  const strategy = ConnectorCreationStrategy();
   final start = strategy.start(
     data: const ArrowData(arrowType: ArrowType.elbow),
     startPosition: startPosition,

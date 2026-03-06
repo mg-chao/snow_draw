@@ -3,7 +3,7 @@ import 'package:meta/meta.dart';
 import '../../config/draw_config.dart';
 import '../../elements/core/element_data.dart';
 import '../../elements/types/arrow/arrow_data.dart';
-import '../../elements/types/arrow/arrow_points.dart';
+import '../../elements/types/connector/connector_points.dart';
 import '../../elements/types/filter/filter_data.dart';
 import '../../elements/types/free_draw/free_draw_data.dart';
 import '../../elements/types/highlight/highlight_data.dart';

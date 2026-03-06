@@ -1,7 +1,7 @@
 import 'package:meta/meta.dart';
 
 import '../../config/draw_config.dart';
-import '../../elements/types/arrow/arrow_points.dart';
+import '../../elements/types/connector/connector_points.dart';
 import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/resize_mode.dart';

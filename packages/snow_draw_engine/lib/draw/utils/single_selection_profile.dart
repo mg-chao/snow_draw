@@ -1,4 +1,4 @@
-import '../elements/types/arrow/arrow_like_data.dart';
+import '../elements/types/connector/connector_data.dart';
 import '../elements/types/text/text_data.dart';
 import '../models/element_state.dart';
 import '../types/element_style.dart';

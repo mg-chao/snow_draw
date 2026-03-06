@@ -2,7 +2,7 @@ import 'dart:collection';
 
 import '../../../models/element_state.dart';
 import '../arrow/arrow_binding.dart';
-import '../arrow/arrow_like_data.dart';
+import '../connector/connector_data.dart';
 import 'serial_number_data.dart';
 
 /// Expands [seedIds] with transitive serial-number bound text dependencies.

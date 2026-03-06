@@ -2,7 +2,7 @@ import 'package:snow_draw_engine/draw/actions/draw_actions.dart';
 import 'package:snow_draw_engine/draw/core/draw_context.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_binding.dart';
 import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_data.dart';
-import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_geometry.dart';
+import 'package:snow_draw_engine/draw/elements/types/connector/connector_geometry.dart';
 import 'package:snow_draw_engine/draw/elements/types/text/text_data.dart';
 import 'package:snow_draw_engine/draw/models/document_state.dart';
 import 'package:snow_draw_engine/draw/models/domain_state.dart';

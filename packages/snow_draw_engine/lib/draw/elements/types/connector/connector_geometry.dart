@@ -1,11 +1,11 @@
 import '../../../types/draw_point.dart';
 import '../../../types/draw_rect.dart';
 import '../../../types/element_style.dart';
+import '../arrow/arrow_core.dart' as core;
+import '../arrow/arrow_core_codec.dart';
+import '../arrow/arrow_core_geometry_adapter.dart' as core_geometry_adapter;
 import '../shared/hit_test_geometry.dart';
-import 'arrow_core.dart' as core;
-import 'arrow_core_codec.dart';
-import 'arrow_core_geometry_adapter.dart' as core_geometry_adapter;
-import 'arrow_like_data.dart';
+import 'connector_data.dart';
 
 class ConnectorGeometry {
   const ConnectorGeometry._();

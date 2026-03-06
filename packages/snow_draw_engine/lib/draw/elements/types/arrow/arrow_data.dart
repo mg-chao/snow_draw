@@ -9,10 +9,10 @@ import '../../core/element_data.dart';
 import '../../core/element_style_configurable_data.dart';
 import '../../core/element_style_updatable_data.dart';
 import '../../core/element_type_id.dart';
+import '../connector/connector_data.dart';
+import '../connector/connector_data_codec.dart';
 import '../shared/element_data_codec.dart';
 import 'arrow_binding.dart';
-import 'arrow_like_data.dart';
-import 'arrow_like_data_codec.dart';
 import 'elbow/elbow_fixed_segment.dart';
 import 'elbow/elbow_routing_data.dart';
 
