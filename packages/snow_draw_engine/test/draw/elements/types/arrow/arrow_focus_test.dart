@@ -5,6 +5,7 @@ import 'package:snow_draw_engine/draw/elements/types/rectangle/rectangle_data.da
 import 'package:snow_draw_engine/draw/models/element_state.dart';
 import 'package:snow_draw_engine/draw/types/draw_point.dart';
 import 'package:snow_draw_engine/draw/types/draw_rect.dart';
+import 'package:snow_draw_engine/draw/types/element_style.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -105,6 +106,56 @@ void main() {
       expect(result.suggestedBindableId, bindable.id);
       expect(result.orderedElementIds, <String>['bindable-1', 'arrow-1']);
     });
+
+    test('focus helpers are no-op for elbow arrows', () {
+      final bindable = _bindableElement();
+      final elbowArrow = _boundArrowElement(arrowType: ArrowType.elbow);
+      final data = elbowArrow.data as ArrowData;
+      final elements = <ElementState>[bindable, elbowArrow];
+
+      final focusPoints = listVisibleArrowFocusPoints(
+        element: elbowArrow,
+        data: data,
+        elements: elements,
+      );
+      final picked = pickArrowFocusPoint(
+        element: elbowArrow,
+        data: data,
+        elements: elements,
+        pointer: const DrawPoint(x: 40, y: 40),
+      );
+      final pickedWithOffset = pickArrowFocusPointWithOffset(
+        element: elbowArrow,
+        data: data,
+        elements: elements,
+        pointer: const DrawPoint(x: 40, y: 40),
+      );
+      final dragResult = dragArrowFocusPoint(
+        element: elbowArrow,
+        data: data,
+        elementsById: <String, ElementState>{
+          bindable.id: bindable,
+          elbowArrow.id: elbowArrow,
+        },
+        draggedEndpoint: ArrowFocusEndpoint.start,
+        pointer: const DrawPoint(x: 40, y: 40),
+      );
+      final finalizeResult = finalizeArrowFocusPointDrag(
+        element: elbowArrow,
+        data: data,
+        elements: elements,
+      );
+
+      expect(focusPoints, isEmpty);
+      expect(picked, isNull);
+      expect(pickedWithOffset.endpoint, isNull);
+      expect(pickedWithOffset.pointerOffset, DrawPoint.zero);
+      expect(dragResult.element, elbowArrow);
+      expect(dragResult.elementChanged, isFalse);
+      expect(dragResult.bindablePatches, isEmpty);
+      expect(dragResult.orderedElementIds, isNull);
+      expect(finalizeResult.bindablePatches, isEmpty);
+    });
   });
 }
 
@@ -117,17 +168,19 @@ ElementState _bindableElement() => const ElementState(
   data: RectangleData(),
 );
 
-ElementState _boundArrowElement() => const ElementState(
-  id: 'arrow-1',
-  rect: DrawRect(minX: 120, minY: 20, maxX: 320, maxY: 21),
-  rotation: 0,
-  opacity: 1,
-  zIndex: 1,
-  data: ArrowData(
-    points: <DrawPoint>[DrawPoint(x: 0, y: 0.5), DrawPoint(x: 1, y: 0.5)],
-    startBinding: ArrowBinding(
-      elementId: 'bindable-1',
-      anchor: DrawPoint(x: 1, y: 0.5),
-    ),
-  ),
-);
+ElementState _boundArrowElement({ArrowType arrowType = ArrowType.straight}) =>
+    ElementState(
+      id: 'arrow-1',
+      rect: const DrawRect(minX: 120, minY: 20, maxX: 320, maxY: 21),
+      rotation: 0,
+      opacity: 1,
+      zIndex: 1,
+      data: ArrowData(
+        points: <DrawPoint>[DrawPoint(x: 0, y: 0.5), DrawPoint(x: 1, y: 0.5)],
+        arrowType: arrowType,
+        startBinding: ArrowBinding(
+          elementId: 'bindable-1',
+          anchor: DrawPoint(x: 1, y: 0.5),
+        ),
+      ),
+    );

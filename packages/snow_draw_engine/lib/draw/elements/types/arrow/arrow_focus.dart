@@ -3,6 +3,7 @@ import 'package:snow_draw_arrow_core/snow_draw_arrow_core.dart' as core;
 
 import '../../../models/element_state.dart';
 import '../../../types/draw_point.dart';
+import '../../../types/element_style.dart';
 import 'arrow_binding.dart';
 import 'arrow_core_bridge.dart';
 import 'arrow_core_ops.dart';
@@ -77,6 +78,10 @@ List<ArrowFocusPoint> listVisibleArrowFocusPoints({
   core.EngineContext? engineContext,
   bool ignoreOverlap = false,
 }) {
+  if (data.arrowType == ArrowType.elbow) {
+    return const <ArrowFocusPoint>[];
+  }
+
   final session = ArrowCoreSession.fromElements(
     elements,
     context: engineContext,
@@ -128,6 +133,10 @@ ArrowFocusEndpoint? pickArrowFocusPoint({
   core.EngineContext? engineContext,
   bool ignoreOverlap = false,
 }) {
+  if (data.arrowType == ArrowType.elbow) {
+    return null;
+  }
+
   final session = ArrowCoreSession.fromElements(
     elements,
     context: engineContext,
@@ -165,6 +174,10 @@ ArrowFocusHit pickArrowFocusPointWithOffset({
   core.EngineContext? engineContext,
   bool ignoreOverlap = false,
 }) {
+  if (data.arrowType == ArrowType.elbow) {
+    return const ArrowFocusHit(endpoint: null, pointerOffset: DrawPoint.zero);
+  }
+
   final session = ArrowCoreSession.fromElements(
     elements,
     context: engineContext,
@@ -204,6 +217,14 @@ ArrowFocusDragResult dragArrowFocusPoint({
   double? gridSize,
   List<String>? orderedElementIds,
 }) {
+  if (data.arrowType == ArrowType.elbow) {
+    return ArrowFocusDragResult(
+      element: element,
+      elementChanged: false,
+      bindablePatches: const <core.BindablePatch>[],
+    );
+  }
+
   final session = ArrowCoreSession.fromElements(
     elementsById.values,
     orderedElementIds: orderedElementIds,
@@ -260,6 +281,12 @@ ArrowFocusFinalizeResult finalizeArrowFocusPointDrag({
   required ArrowLikeData data,
   required Iterable<ElementState> elements,
 }) {
+  if (data.arrowType == ArrowType.elbow) {
+    return const ArrowFocusFinalizeResult(
+      bindablePatches: <core.BindablePatch>[],
+    );
+  }
+
   final result = finalizeCoreFocusPointDrag(
     arrowId: element.id,
     startBinding: toCoreBinding(data.startBinding),
