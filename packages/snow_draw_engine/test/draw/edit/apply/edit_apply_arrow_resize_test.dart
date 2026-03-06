@@ -148,49 +148,52 @@ void main() {
       );
     });
 
-    test('horizontal flip mirrors straight-arrow points and bindings', () {
-      final arrow = _straightArrowElement(
-        id: 'arrow-straight-flip-x',
-        points: const <DrawPoint>[
-          DrawPoint(x: 100, y: 100),
-          DrawPoint(x: 300, y: 160),
-        ],
-        startBinding: const ArrowBinding(
-          elementId: 'start-target',
-          anchor: DrawPoint(x: 0.2, y: 0.35),
-        ),
-        endBinding: const ArrowBinding(
-          elementId: 'end-target',
-          anchor: DrawPoint(x: 0.8, y: 0.65),
-        ),
-      );
+    test(
+      'horizontal flip mirrors straight-arrow points without remapping bindings',
+      () {
+        final arrow = _straightArrowElement(
+          id: 'arrow-straight-flip-x',
+          points: const <DrawPoint>[
+            DrawPoint(x: 100, y: 100),
+            DrawPoint(x: 300, y: 160),
+          ],
+          startBinding: const ArrowBinding(
+            elementId: 'start-target',
+            anchor: DrawPoint(x: 0.2, y: 0.35),
+          ),
+          endBinding: const ArrowBinding(
+            elementId: 'end-target',
+            anchor: DrawPoint(x: 0.8, y: 0.65),
+          ),
+        );
 
-      final resized = _applySingleArrowResize(
-        element: arrow,
-        scaleX: -1,
-        scaleY: 1,
-        anchor: DrawPoint(x: arrow.rect.minX, y: arrow.rect.minY),
-      );
+        final resized = _applySingleArrowResize(
+          element: arrow,
+          scaleX: -1,
+          scaleY: 1,
+          anchor: DrawPoint(x: arrow.rect.minX, y: arrow.rect.minY),
+        );
 
-      final resizedData = resized.data as ArrowData;
-      final resizedWorldPoints = _resolveArrowWorldPoints(resized);
+        final resizedData = resized.data as ArrowData;
+        final resizedWorldPoints = _resolveArrowWorldPoints(resized);
 
-      expect(
-        resizedWorldPoints,
-        equals(<DrawPoint>[
-          const DrawPoint(x: 100, y: 100),
-          const DrawPoint(x: -100, y: 160),
-        ]),
-      );
-      expect(resizedData.startBinding, isNotNull);
-      expect(resizedData.endBinding, isNotNull);
-      expect(resizedData.startBinding!.anchor.x, closeTo(0.8, 1e-9));
-      expect(resizedData.startBinding!.anchor.y, closeTo(0.35, 1e-9));
-      expect(resizedData.endBinding!.anchor.x, closeTo(0.2, 1e-9));
-      expect(resizedData.endBinding!.anchor.y, closeTo(0.65, 1e-9));
-    });
+        expect(
+          resizedWorldPoints,
+          equals(<DrawPoint>[
+            const DrawPoint(x: 100, y: 100),
+            const DrawPoint(x: -100, y: 160),
+          ]),
+        );
+        expect(resizedData.startBinding, isNotNull);
+        expect(resizedData.endBinding, isNotNull);
+        expect(resizedData.startBinding!.anchor.x, closeTo(0.2, 1e-9));
+        expect(resizedData.startBinding!.anchor.y, closeTo(0.35, 1e-9));
+        expect(resizedData.endBinding!.anchor.x, closeTo(0.8, 1e-9));
+        expect(resizedData.endBinding!.anchor.y, closeTo(0.65, 1e-9));
+      },
+    );
 
-    test('vertical flip mirrors line points and bindings', () {
+    test('vertical flip mirrors line points without remapping bindings', () {
       final line = _lineElement(
         id: 'line-flip-y',
         points: const <DrawPoint>[
@@ -229,9 +232,9 @@ void main() {
       expect(resizedData.startBinding, isNotNull);
       expect(resizedData.endBinding, isNotNull);
       expect(resizedData.startBinding!.anchor.x, closeTo(0.3, 1e-9));
-      expect(resizedData.startBinding!.anchor.y, closeTo(0.9, 1e-9));
+      expect(resizedData.startBinding!.anchor.y, closeTo(0.1, 1e-9));
       expect(resizedData.endBinding!.anchor.x, closeTo(0.7, 1e-9));
-      expect(resizedData.endBinding!.anchor.y, closeTo(0.1, 1e-9));
+      expect(resizedData.endBinding!.anchor.y, closeTo(0.9, 1e-9));
     });
   });
 }

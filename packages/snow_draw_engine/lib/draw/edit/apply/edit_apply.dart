@@ -19,6 +19,7 @@ import '../../types/draw_point.dart';
 import '../../types/draw_rect.dart';
 import '../../types/edit_context.dart';
 import '../../types/element_geometry.dart';
+import '../../types/element_style.dart';
 import '../../types/resize_mode.dart';
 
 const _resizeTolerance = 0.01;
@@ -480,6 +481,14 @@ ElementState _applyArrowResize({
   final nextPoints = flipX || flipY
       ? _flipNormalizedArrowPoints(data.points, flipX: flipX, flipY: flipY)
       : data.points;
+
+  if (data.arrowType != ArrowType.elbow) {
+    final nextData = data.copyWith(points: nextPoints);
+    if (nextData == data) {
+      return element;
+    }
+    return element.copyWith(data: nextData);
+  }
 
   final worldPoints = resolveArrowWorldPoints(
     rect: element.rect,
