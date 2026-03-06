@@ -224,11 +224,14 @@ ArrowFocusDragResult dragArrowFocusPoint({
     switchToInsideBinding: switchToInsideBinding,
     gridSize: gridSize,
   );
+  final suggestedBindableId =
+      result.suggestedBinding?.bindableId ??
+      result.suggestedBinding?.element.id;
 
   final applied = session.applyEngineResultWithOrderFallback(
     arrow: arrow,
     result: result,
-    hoveredBindableId: result.suggestedBinding?.bindableId,
+    hoveredBindableId: suggestedBindableId,
     point: toCorePoint(pointer),
     orderedElementIds: orderedElementIds,
   );
@@ -247,7 +250,7 @@ ArrowFocusDragResult dragArrowFocusPoint({
       result.bindablePatches,
     ),
     orderedElementIds: applied.orderedElementIds,
-    suggestedBindableId: result.suggestedBinding?.bindableId,
+    suggestedBindableId: suggestedBindableId,
   );
 }
 

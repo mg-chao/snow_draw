@@ -217,7 +217,9 @@ final class ArrowCoreSession {
           hoveredBindableId != null && hoveredBindableId.isNotEmpty
           ? hoveredBindableId
           : null;
-      final suggestedBindableId = result.suggestedBinding?.bindableId;
+      final suggestedBindableId =
+          result.suggestedBinding?.bindableId ??
+          result.suggestedBinding?.element.id;
       final suggestedId =
           suggestedBindableId != null && suggestedBindableId.isNotEmpty
           ? suggestedBindableId

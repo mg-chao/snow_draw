@@ -76,18 +76,38 @@ final class ArrowBindingResolver {
         }
         return left.compareTo(right);
       });
+    final changedBindableIdSet = sortedChangedBindableIds.toSet();
 
-    final recomputed = recomputeCoreBindingsForChangedBindables(
-      arrows: session.arrows,
-      bindables: session.bindables,
-      relations: session.bindableRelations,
-      changedBindableIds: sortedChangedBindableIds,
-      context: session.context,
-    );
-    final patchedUpdates = session.applyArrowPatches(recomputed.arrowPatches);
-    final reorderedElementIds = session.reduceEventsToOrderedElementIds(
-      recomputed.events,
-    );
+    final arrowPatches = <core.ArrowStatePatchWithId>[];
+    final events = <core.ArrowEngineEvent>[];
+
+    for (final arrow in session.arrows) {
+      if (!_isArrowAffectedByChangedBindables(arrow, changedBindableIdSet)) {
+        continue;
+      }
+
+      final result = recomputeCoreBindingsAfterBindableChange(
+        arrow: arrow,
+        bindables: session.bindables,
+        context: session.context,
+        changedBindableIds: sortedChangedBindableIds,
+        options: _buildPerArrowRecomputeOptions(
+          arrow: arrow,
+          changedBindableIds: changedBindableIdSet,
+        ),
+      );
+      if (result.arrowPatch.isNotEmpty) {
+        arrowPatches.add(
+          core.ArrowStatePatchWithId(id: arrow.id, patch: result.arrowPatch),
+        );
+      }
+      if (result.events.isNotEmpty) {
+        events.addAll(result.events);
+      }
+    }
+
+    final patchedUpdates = session.applyArrowPatches(arrowPatches);
+    final reorderedElementIds = session.reduceEventsToOrderedElementIds(events);
 
     if (patchedUpdates.isEmpty && reorderedElementIds == null) {
       return ArrowBindingResolutionResult.empty;
@@ -98,4 +118,39 @@ final class ArrowBindingResolver {
       orderedElementIds: reorderedElementIds,
     );
   }
+}
+
+bool _isArrowAffectedByChangedBindables(
+  core.ArrowState arrow,
+  Set<String> changedBindableIds,
+) {
+  if (changedBindableIds.isEmpty) {
+    return true;
+  }
+  final startBindableId = arrow.startBinding?.elementId;
+  if (startBindableId != null && changedBindableIds.contains(startBindableId)) {
+    return true;
+  }
+  final endBindableId = arrow.endBinding?.elementId;
+  if (endBindableId != null && changedBindableIds.contains(endBindableId)) {
+    return true;
+  }
+  return false;
+}
+
+Map<String, dynamic>? _buildPerArrowRecomputeOptions({
+  required core.ArrowState arrow,
+  required Set<String> changedBindableIds,
+}) {
+  final startBindableId = arrow.startBinding?.elementId;
+  final endBindableId = arrow.endBinding?.elementId;
+  if (startBindableId == null ||
+      endBindableId == null ||
+      startBindableId != endBindableId) {
+    return null;
+  }
+  if (!changedBindableIds.contains(startBindableId)) {
+    return null;
+  }
+  return const <String, dynamic>{'moveMidPointsWithElement': true};
 }
