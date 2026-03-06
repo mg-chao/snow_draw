@@ -3,6 +3,7 @@
 use crate::draw::elements::types::arrow::arrow_binding::ArrowBinding;
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField;
 use crate::draw::elements::types::arrow::elbow::elbow_fixed_segment::ElbowFixedSegment;
+use crate::draw::elements::types::arrow::elbow::elbow_routing_data::ElbowRoutingData;
 use crate::draw::types::draw_point::DrawPoint;
 use serde_json::Value;
 
@@ -62,4 +63,49 @@ pub fn resolve_bool_update(
         NullableField::Null => None,
         NullableField::Value(value) => Some(value),
     }
+}
+
+/// Builds elbow-only routing metadata from decoded connector fields.
+pub fn decode_elbow_routing_data(
+    fixed_segments: Option<Vec<ElbowFixedSegment>>,
+    start_is_special: Option<bool>,
+    end_is_special: Option<bool>,
+) -> Option<ElbowRoutingData> {
+    let routing = ElbowRoutingData::new(fixed_segments, start_is_special, end_is_special);
+    if routing.is_empty() {
+        None
+    } else {
+        Some(routing)
+    }
+}
+
+/// Resolves an elbow-routing update using connector semantics.
+pub fn resolve_elbow_routing_update(
+    raw_fixed_segments: NullableField<Vec<ElbowFixedSegment>>,
+    raw_start_is_special: NullableField<bool>,
+    raw_end_is_special: NullableField<bool>,
+    current_routing_data: Option<ElbowRoutingData>,
+) -> Option<ElbowRoutingData> {
+    if matches!(raw_fixed_segments, NullableField::Unset)
+        && matches!(raw_start_is_special, NullableField::Unset)
+        && matches!(raw_end_is_special, NullableField::Unset)
+    {
+        return current_routing_data;
+    }
+
+    let current_fixed_segments = current_routing_data
+        .as_ref()
+        .and_then(|routing| routing.fixed_segments.clone());
+    let current_start_is_special = current_routing_data
+        .as_ref()
+        .and_then(|routing| routing.start_is_special);
+    let current_end_is_special = current_routing_data
+        .as_ref()
+        .and_then(|routing| routing.end_is_special);
+
+    decode_elbow_routing_data(
+        resolve_fixed_segments_update(raw_fixed_segments, current_fixed_segments),
+        resolve_bool_update(raw_start_is_special, current_start_is_special),
+        resolve_bool_update(raw_end_is_special, current_end_is_special),
+    )
 }

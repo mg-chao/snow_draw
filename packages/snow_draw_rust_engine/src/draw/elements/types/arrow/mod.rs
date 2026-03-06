@@ -24,4 +24,5 @@ pub mod arrow_render_primitives;
 pub mod arrow_scene;
 pub mod arrow_task_encoder;
 pub mod arrow_two_point_layout;
+pub mod core;
 pub mod elbow;

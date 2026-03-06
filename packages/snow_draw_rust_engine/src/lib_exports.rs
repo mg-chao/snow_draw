@@ -52,6 +52,7 @@ pub use crate::draw::elements::types::arrow::arrow_like_data::*;
 pub use crate::draw::elements::types::arrow::arrow_points::*;
 pub use crate::draw::elements::types::arrow::arrow_render_primitives::*;
 pub use crate::draw::elements::types::arrow::arrow_scene::*;
+pub use crate::draw::elements::types::arrow::elbow::ElbowRoutingData;
 pub use crate::draw::elements::types::connector::connector_creation_strategy::*;
 pub use crate::draw::elements::types::connector::connector_data::*;
 pub use crate::draw::elements::types::connector::connector_data_codec::*;

@@ -4,6 +4,7 @@ use std::collections::HashSet;
 
 use crate::draw::core::coordinates::element_space::ElementSpace;
 use crate::draw::elements::core::element_data::ElementData as CoreElementData;
+use crate::draw::elements::types::highlight::highlight_data::HighlightData;
 use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
 use crate::draw::elements::types::serial_number::serial_number_data::SerialNumberData;
 use crate::draw::elements::types::serial_number::serial_number_layout::resolve_serial_number_stroke_width;
@@ -158,6 +159,7 @@ impl ArrowBindingUtils {
         type_id_value == RectangleData::TYPE_ID_TOKEN
             || type_id_value == TextData::TYPE_ID_TOKEN
             || type_id_value == SerialNumberData::TYPE_ID_TOKEN
+            || type_id_value == HighlightData::TYPE_ID_TOKEN
     }
 
     /// Returns whether either endpoint binding targets any id in `target_ids`.

@@ -27,6 +27,10 @@ impl DrawRect {
         Self::new(a.x.min(b.x), a.y.min(b.y), a.x.max(b.x), a.y.max(b.y))
     }
 
+    pub fn from_ltwh(left: f64, top: f64, width: f64, height: f64) -> Self {
+        Self::new(left, top, left + width, top + height)
+    }
+
     pub fn from_point(point: DrawPoint) -> Self {
         Self::from_points(point, point)
     }

@@ -483,7 +483,10 @@ impl fmt::Display for DocumentState {
 fn is_bindable_target(element: &ElementState) -> bool {
     matches!(
         element.data,
-        ElementData::Rectangle | ElementData::Text | ElementData::SerialNumber(_)
+        ElementData::Rectangle
+            | ElementData::Text
+            | ElementData::SerialNumber(_)
+            | ElementData::Highlight(_)
     )
 }
 
@@ -575,6 +578,26 @@ mod tests {
 
         assert_eq!(state.highlight_elements.len(), 1);
         assert_eq!(state.highlight_elements[0].id, "h");
+    }
+
+    #[test]
+    fn highlights_participate_in_arrow_bindable_cache() {
+        let state = DocumentState::new(
+            vec![
+                element("rect", 1, ElementData::Rectangle),
+                element("highlight", 2, ElementData::Highlight(HighlightData)),
+            ],
+            0,
+            Default::default(),
+        );
+
+        let bindable_ids = state
+            .arrow_bindable_elements()
+            .iter()
+            .map(|element| element.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(bindable_ids, vec!["rect", "highlight"]);
     }
 
     #[test]

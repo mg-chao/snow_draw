@@ -198,7 +198,7 @@ impl ArrowLikeDataCodec {
             return None;
         }
 
-        Some(values.iter().map(ElbowFixedSegment::to_json).collect())
+        Some(values.iter().map(|segment| segment.to_json()).collect())
     }
 
     fn resolve_update<T, U, F>(raw_value: ArrowLikeUpdate<U>, current_value: T, decode: F) -> T

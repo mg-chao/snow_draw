@@ -4,6 +4,8 @@ use crate::draw::config::draw_config::{ConfigDefaults, ElementStyleConfig};
 use crate::draw::elements::core::element_data::{DynElementData, ElementData, ElementTypeId};
 use crate::draw::elements::core::element_style_configurable_data::ElementStyleConfigurableData;
 use crate::draw::elements::core::element_style_updatable_data::ElementStyleUpdatableData;
+pub use crate::draw::elements::types::arrow::elbow::elbow_fixed_segment::ElbowFixedSegment;
+use crate::draw::elements::types::arrow::elbow::elbow_routing_data::ElbowRoutingData;
 use crate::draw::types::draw_color::DrawColor;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::element_style::{
@@ -58,43 +60,6 @@ impl ArrowBinding {
             "mode".to_string(),
             Value::String(binding_mode_to_name(self.mode).to_string()),
         );
-        json
-    }
-}
-
-/// Fixed segment metadata for elbow arrows.
-#[derive(Clone, Debug, PartialEq, Hash)]
-pub struct ElbowFixedSegment {
-    pub index: usize,
-    pub start: DrawPoint,
-    pub end: DrawPoint,
-}
-
-impl ElbowFixedSegment {
-    /// Decodes an elbow fixed segment from JSON.
-    pub fn from_json(json: &Map<String, Value>) -> Result<Self, ArrowDataDecodeError> {
-        let index_raw = decode_required_i64(json, "index")?;
-        if index_raw < 0 {
-            return Err(ArrowDataDecodeError::invalid_field(
-                "index",
-                "must be non-negative",
-            ));
-        }
-        let start = decode_required_point(json, "start")?;
-        let end = decode_required_point(json, "end")?;
-        Ok(Self {
-            index: index_raw as usize,
-            start,
-            end,
-        })
-    }
-
-    /// Encodes an elbow fixed segment to JSON.
-    pub fn to_json(&self) -> Map<String, Value> {
-        let mut json = Map::new();
-        json.insert("index".to_string(), Value::from(self.index as u64));
-        json.insert("start".to_string(), point_to_json(self.start));
-        json.insert("end".to_string(), point_to_json(self.end));
         json
     }
 }
@@ -159,19 +124,41 @@ impl ArrowData {
 
     /// Decodes `ArrowData` from JSON.
     pub fn from_json(json: &Map<String, Value>) -> Result<Self, ArrowDataDecodeError> {
+        let arrow_type = decode_required_arrow_type(json, "arrowType")?;
+        let elbow_routing_data = if arrow_type == ArrowType::Elbow {
+            let routing = ElbowRoutingData::new(
+                decode_optional_fixed_segments(json, "fixedSegments")?,
+                decode_optional_bool(json, "startIsSpecial")?,
+                decode_optional_bool(json, "endIsSpecial")?,
+            );
+            if routing.is_empty() {
+                None
+            } else {
+                Some(routing)
+            }
+        } else {
+            None
+        };
+
         Ok(Self {
             points: decode_required_points(json, "points")?,
             color: decode_required_color(json, "color")?,
             stroke_width: decode_required_f64(json, "strokeWidth")?,
             stroke_style: decode_required_stroke_style(json, "strokeStyle")?,
-            arrow_type: decode_required_arrow_type(json, "arrowType")?,
+            arrow_type,
             start_arrowhead: decode_required_arrowhead_style(json, "startArrowhead")?,
             end_arrowhead: decode_required_arrowhead_style(json, "endArrowhead")?,
             start_binding: decode_optional_binding(json, "startBinding")?,
             end_binding: decode_optional_binding(json, "endBinding")?,
-            fixed_segments: decode_optional_fixed_segments(json, "fixedSegments")?,
-            start_is_special: decode_optional_bool(json, "startIsSpecial")?,
-            end_is_special: decode_optional_bool(json, "endIsSpecial")?,
+            fixed_segments: elbow_routing_data
+                .as_ref()
+                .and_then(|routing| routing.fixed_segments.clone()),
+            start_is_special: elbow_routing_data
+                .as_ref()
+                .and_then(|routing| routing.start_is_special),
+            end_is_special: elbow_routing_data
+                .as_ref()
+                .and_then(|routing| routing.end_is_special),
         })
     }
 
@@ -190,25 +177,62 @@ impl ArrowData {
 
     /// Returns an updated payload while preserving immutability.
     pub fn copy_with(&self, patch: ArrowDataPatch) -> Self {
+        let next_arrow_type = patch.arrow_type.unwrap_or(self.arrow_type);
+        let elbow_routing_data = if next_arrow_type == ArrowType::Elbow {
+            let routing = ElbowRoutingData::new(
+                normalize_fixed_segments(resolve_nullable_update(
+                    patch.fixed_segments,
+                    &self.fixed_segments,
+                )),
+                resolve_nullable_update(patch.start_is_special, &self.start_is_special),
+                resolve_nullable_update(patch.end_is_special, &self.end_is_special),
+            );
+            if routing.is_empty() {
+                None
+            } else {
+                Some(routing)
+            }
+        } else {
+            None
+        };
+
         Self {
             points: patch.points.unwrap_or_else(|| self.points.clone()),
             color: patch.color.unwrap_or(self.color),
             stroke_width: patch.stroke_width.unwrap_or(self.stroke_width),
             stroke_style: patch.stroke_style.unwrap_or(self.stroke_style),
-            arrow_type: patch.arrow_type.unwrap_or(self.arrow_type),
+            arrow_type: next_arrow_type,
             start_arrowhead: patch.start_arrowhead.unwrap_or(self.start_arrowhead),
             end_arrowhead: patch.end_arrowhead.unwrap_or(self.end_arrowhead),
             start_binding: resolve_nullable_update(patch.start_binding, &self.start_binding),
             end_binding: resolve_nullable_update(patch.end_binding, &self.end_binding),
-            fixed_segments: normalize_fixed_segments(resolve_nullable_update(
-                patch.fixed_segments,
-                &self.fixed_segments,
-            )),
-            start_is_special: resolve_nullable_update(
-                patch.start_is_special,
-                &self.start_is_special,
-            ),
-            end_is_special: resolve_nullable_update(patch.end_is_special, &self.end_is_special),
+            fixed_segments: elbow_routing_data
+                .as_ref()
+                .and_then(|routing| routing.fixed_segments.clone()),
+            start_is_special: elbow_routing_data
+                .as_ref()
+                .and_then(|routing| routing.start_is_special),
+            end_is_special: elbow_routing_data
+                .as_ref()
+                .and_then(|routing| routing.end_is_special),
+        }
+    }
+
+    /// Returns elbow-only routing metadata when this payload represents an elbow arrow.
+    pub fn elbow_routing_data(&self) -> Option<ElbowRoutingData> {
+        if self.arrow_type != ArrowType::Elbow {
+            return None;
+        }
+
+        let routing = ElbowRoutingData::new(
+            self.fixed_segments.clone(),
+            self.start_is_special,
+            self.end_is_special,
+        );
+        if routing.is_empty() {
+            None
+        } else {
+            Some(routing)
         }
     }
 
@@ -501,7 +525,10 @@ fn decode_optional_fixed_segments(
         let map = entry.as_object().ok_or_else(|| {
             ArrowDataDecodeError::invalid_field(field, "segment entry must be object")
         })?;
-        segments.push(ElbowFixedSegment::from_json(map)?);
+        let segment = ElbowFixedSegment::from_json(map).map_err(|_| {
+            ArrowDataDecodeError::invalid_field(field, "invalid fixed segment entry")
+        })?;
+        segments.push(segment);
     }
     Ok(normalize_fixed_segments(Some(segments)))
 }
@@ -548,6 +575,71 @@ fn point_to_json(point: DrawPoint) -> Value {
     json.insert("x".to_string(), Value::from(point.x));
     json.insert("y".to_string(), Value::from(point.y));
     Value::Object(json)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn from_json_ignores_elbow_metadata_for_non_elbow_arrows() {
+        let value = json!({
+            "typeId": "arrow",
+            "points": [{"x": 0.0, "y": 0.0}, {"x": 1.0, "y": 1.0}],
+            "color": 0,
+            "strokeWidth": 2.0,
+            "strokeStyle": "solid",
+            "arrowType": "straight",
+            "startArrowhead": "none",
+            "endArrowhead": "standard",
+            "startBinding": null,
+            "endBinding": null,
+            "fixedSegments": [
+                {
+                    "index": 1,
+                    "start": {"x": 0.0, "y": 0.0},
+                    "end": {"x": 1.0, "y": 0.0}
+                }
+            ],
+            "startIsSpecial": true,
+            "endIsSpecial": false
+        });
+
+        let data = ArrowData::from_json_value(&value).expect("arrow data should decode");
+
+        assert_eq!(data.arrow_type, ArrowType::Straight);
+        assert!(data.fixed_segments.is_none());
+        assert_eq!(data.start_is_special, None);
+        assert_eq!(data.end_is_special, None);
+        assert!(data.elbow_routing_data().is_none());
+    }
+
+    #[test]
+    fn copy_with_clears_elbow_metadata_when_arrow_type_changes() {
+        let original = ArrowData {
+            arrow_type: ArrowType::Elbow,
+            fixed_segments: Some(vec![ElbowFixedSegment::new(
+                1,
+                DrawPoint::new(0.0, 0.0),
+                DrawPoint::new(1.0, 0.0),
+            )]),
+            start_is_special: Some(true),
+            end_is_special: Some(false),
+            ..ArrowData::default()
+        };
+
+        let updated = original.copy_with(ArrowDataPatch {
+            arrow_type: Some(ArrowType::Straight),
+            ..ArrowDataPatch::default()
+        });
+
+        assert_eq!(updated.arrow_type, ArrowType::Straight);
+        assert!(updated.fixed_segments.is_none());
+        assert_eq!(updated.start_is_special, None);
+        assert_eq!(updated.end_is_special, None);
+        assert!(updated.elbow_routing_data().is_none());
+    }
 }
 
 fn option_binding_to_json(binding: Option<&ArrowBinding>) -> Value {
