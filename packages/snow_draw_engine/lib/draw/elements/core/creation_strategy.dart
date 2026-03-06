@@ -60,6 +60,7 @@ abstract class CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    bool snapOverrideActive = false,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   });
 
@@ -76,6 +77,7 @@ abstract class CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    bool snapOverrideActive = false,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     if (positions.isEmpty) {
@@ -97,6 +99,7 @@ abstract class CreationStrategy {
         maintainAspectRatio: maintainAspectRatio,
         createFromCenter: createFromCenter,
         snappingMode: snappingMode,
+        snapOverrideActive: snapOverrideActive,
         textMetricsService: textMetricsService,
       );
 
@@ -127,6 +130,7 @@ abstract class CreationStrategy {
     required CreatingState creatingState,
     required DrawPoint position,
     required SnappingMode snappingMode,
+    bool snapOverrideActive = false,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) => null;
 

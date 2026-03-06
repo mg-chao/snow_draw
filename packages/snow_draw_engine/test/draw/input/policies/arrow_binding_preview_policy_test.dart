@@ -20,6 +20,15 @@ void main() {
         shouldPreviewArrowBinding(
           snapConfig: enabled,
           snappingMode: SnappingMode.none,
+          snapOverrideActive: true,
+        ),
+        isFalse,
+      );
+
+      expect(
+        shouldPreviewArrowBinding(
+          snapConfig: enabled,
+          snappingMode: SnappingMode.none,
         ),
         isTrue,
       );

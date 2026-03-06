@@ -76,6 +76,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    bool snapOverrideActive = false,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final elementData = requireCreatingElementDataType<ArrowLikeData>(
@@ -89,6 +90,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
         creatingState: creatingState,
         currentPosition: currentPosition,
         snappingMode: snappingMode,
+        snapOverrideActive: snapOverrideActive,
         maintainAspectRatio: maintainAspectRatio,
         createFromCenter: createFromCenter,
         data: elementData,
@@ -103,6 +105,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       data: elementData,
       currentPosition: currentPosition,
       snappingMode: snappingMode,
+      snapOverrideActive: snapOverrideActive,
       sessionData: sessionData,
       maintainAspectRatio: maintainAspectRatio,
       createFromCenter: createFromCenter,
@@ -124,7 +127,9 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       oppositeOrbitFocusPoint: sessionData.startOrbitFocusPoint,
       angleLocked: maintainAspectRatio,
       altKey: createFromCenter,
+      snapOverrideActive: snapOverrideActive,
     );
+    sessionData.allowBindingOnFinalize = bindingResult.allowBindingOnFinalize;
     adjustedCurrent = bindingResult.position;
     var endBinding = bindingResult.binding;
     final startBinding = bindingResult.startBinding ?? endpoints.startBinding;
@@ -227,6 +232,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     required CreatingState creatingState,
     required DrawPoint position,
     required SnappingMode snappingMode,
+    bool snapOverrideActive = false,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     if (!creatingState.isPointCreation) {
@@ -248,6 +254,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       data: elementData,
       currentPosition: position,
       snappingMode: snappingMode,
+      snapOverrideActive: snapOverrideActive,
       sessionData: sessionData,
       maintainAspectRatio: false,
       createFromCenter: false,
@@ -269,7 +276,9 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       oppositeOrbitFocusPoint: sessionData.startOrbitFocusPoint,
       angleLocked: false,
       altKey: false,
+      snapOverrideActive: snapOverrideActive,
     );
+    sessionData.allowBindingOnFinalize = bindingResult.allowBindingOnFinalize;
     adjustedPosition = bindingResult.position;
     final resolvedStartBinding =
         bindingResult.startBinding ?? endpoints.startBinding;
@@ -449,6 +458,7 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
     zoom: state.application.view.camera.zoom,
     isBindingEnabled: config.snap.enableArrowBinding,
   );
+  final allowNewBinding = sessionData.allowBindingOnFinalize;
   final orderedElementIds = <String>[
     ...state.domain.document.elements.map((element) => element.id),
     elementId,
@@ -464,7 +474,7 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
     endBinding: result.data.endBinding,
     excludedElementId: elementId,
     shouldLookupBindings: true,
-    allowNewBinding: true,
+    allowNewBinding: allowNewBinding,
     bindingDistance: bindingDistance,
     coreEngineContext: coreContext,
     orderedElementIds: orderedElementIds,
@@ -511,6 +521,7 @@ CreationUpdateResult _updateLine({
   required CreatingState creatingState,
   required DrawPoint currentPosition,
   required SnappingMode snappingMode,
+  required bool snapOverrideActive,
   required bool maintainAspectRatio,
   required bool createFromCenter,
   required LineData data,
@@ -523,6 +534,7 @@ CreationUpdateResult _updateLine({
     data: data,
     currentPosition: currentPosition,
     snappingMode: snappingMode,
+    snapOverrideActive: snapOverrideActive,
     sessionData: sessionData,
     maintainAspectRatio: maintainAspectRatio,
     createFromCenter: createFromCenter,
@@ -544,7 +556,9 @@ CreationUpdateResult _updateLine({
     oppositeOrbitFocusPoint: sessionData.startOrbitFocusPoint,
     angleLocked: maintainAspectRatio,
     altKey: createFromCenter,
+    snapOverrideActive: snapOverrideActive,
   );
+  sessionData.allowBindingOnFinalize = bindingResult.allowBindingOnFinalize;
   adjustedCurrent = bindingResult.position;
   var endBinding = bindingResult.binding;
   final resolvedStartBinding =
@@ -612,10 +626,16 @@ _CreationEndpointResolution _resolveCreationEndpoints({
   required ArrowLikeData data,
   required DrawPoint currentPosition,
   required SnappingMode snappingMode,
+  required bool snapOverrideActive,
   required _ArrowCreationSessionData sessionData,
   required bool maintainAspectRatio,
   required bool createFromCenter,
 }) {
+  sessionData.allowBindingOnFinalize = _shouldAttemptBinding(
+    snapConfig: config.snap,
+    snappingMode: snappingMode,
+    snapOverrideActive: snapOverrideActive,
+  );
   var startPosition = _snapPointToGridIfNeeded(
     point: creatingState.startPosition,
     config: config,
@@ -642,6 +662,7 @@ _CreationEndpointResolution _resolveCreationEndpoints({
     sessionData: sessionData,
     angleLocked: maintainAspectRatio,
     altKey: createFromCenter,
+    snapOverrideActive: snapOverrideActive,
   );
   startPosition = startBindingResult.position;
 
@@ -814,6 +835,7 @@ _BindingSnapResult _snapBindingPoint({
   required bool initialBinding,
   required bool angleLocked,
   required bool altKey,
+  required bool snapOverrideActive,
   bool newArrow = true,
   bool? preserveOppositeInsideBinding,
   DrawPoint? oppositeOrbitFocusPoint,
@@ -822,12 +844,16 @@ _BindingSnapResult _snapBindingPoint({
   final shouldLookupBindings = _shouldAttemptBinding(
     snapConfig: snapConfig,
     snappingMode: snappingMode,
+    snapOverrideActive: snapOverrideActive,
   );
   final bindingDistance = shouldLookupBindings
       ? resolveCoreMaxBindingDistance(zoom: state.application.view.camera.zoom)
       : 0.0;
   if (!shouldLookupBindings || bindingDistance <= 0) {
-    return _BindingSnapResult(position: position);
+    return _BindingSnapResult(
+      position: position,
+      allowBindingOnFinalize: false,
+    );
   }
 
   final coreEngineContext = buildCoreEngineContext(
@@ -866,7 +892,7 @@ _BindingSnapResult _snapBindingPoint({
     },
   );
   if (bindingResult == null || bindingResult.binding == null) {
-    return _BindingSnapResult(position: position);
+    return _BindingSnapResult(position: position, allowBindingOnFinalize: true);
   }
 
   return _BindingSnapResult(
@@ -874,6 +900,7 @@ _BindingSnapResult _snapBindingPoint({
     binding: bindingResult.binding,
     startBinding: bindingResult.startBinding,
     endBinding: bindingResult.endBinding,
+    allowBindingOnFinalize: true,
   );
 }
 
@@ -977,11 +1004,13 @@ _BindingSnapResult _resolveStartBindingPoint({
   required _ArrowCreationSessionData sessionData,
   required bool angleLocked,
   required bool altKey,
+  required bool snapOverrideActive,
 }) {
   final snapConfig = config.snap;
   final bindingEnabled = _shouldAttemptBinding(
     snapConfig: snapConfig,
     snappingMode: snappingMode,
+    snapOverrideActive: snapOverrideActive,
   );
   final bindingDistance = bindingEnabled
       ? resolveCoreMaxBindingDistance(zoom: state.application.view.camera.zoom)
@@ -1055,6 +1084,7 @@ _BindingSnapResult _resolveStartBindingPoint({
     initialBinding: preferredBinding == null,
     angleLocked: angleLocked,
     altKey: altKey,
+    snapOverrideActive: snapOverrideActive,
   );
   if (preferredBinding == null) {
     final resolvedMode = resolved.binding?.mode;
@@ -1081,9 +1111,11 @@ _BindingSnapResult _resolveStartBindingPoint({
 bool _shouldAttemptBinding({
   required SnapConfig snapConfig,
   required SnappingMode snappingMode,
+  required bool snapOverrideActive,
 }) => shouldAttemptArrowBinding(
   snapConfig: snapConfig,
   snappingMode: snappingMode,
+  snapOverrideActive: snapOverrideActive,
 );
 
 _ArrowCreationSessionData _resolveSessionData(CreationMode mode) {
@@ -1106,6 +1138,7 @@ class _ArrowCreationSessionData {
   bool? _cachedStartAltKey;
   var preserveStartInsideBinding = false;
   DrawPoint? startOrbitFocusPoint;
+  var allowBindingOnFinalize = true;
   var _cachedStartElementsVersion = -1;
 
   var _referenceElementsVersion = -1;
@@ -1258,12 +1291,14 @@ class _BindingSnapResult {
     this.binding,
     this.startBinding,
     this.endBinding,
+    this.allowBindingOnFinalize = true,
   });
 
   final DrawPoint position;
   final ArrowBinding? binding;
   final ArrowBinding? startBinding;
   final ArrowBinding? endBinding;
+  final bool allowBindingOnFinalize;
 }
 
 @immutable

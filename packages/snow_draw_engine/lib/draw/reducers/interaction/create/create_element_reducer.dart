@@ -192,6 +192,7 @@ class CreateElementReducer {
           maintainAspectRatio: action.maintainAspectRatio,
           createFromCenter: action.createFromCenter,
           snappingMode: snappingMode,
+          snapOverrideActive: action.snapOverride,
           textMetricsService: context.textMetricsService,
         );
       }
@@ -203,6 +204,7 @@ class CreateElementReducer {
         maintainAspectRatio: action.maintainAspectRatio,
         createFromCenter: action.createFromCenter,
         snappingMode: snappingMode,
+        snapOverrideActive: action.snapOverride,
         textMetricsService: context.textMetricsService,
       );
     },
@@ -273,6 +275,7 @@ class CreateElementReducer {
       creatingState: interaction,
       position: action.position,
       snappingMode: snappingMode,
+      snapOverrideActive: action.snapOverride,
       textMetricsService: context.textMetricsService,
     ),
   );

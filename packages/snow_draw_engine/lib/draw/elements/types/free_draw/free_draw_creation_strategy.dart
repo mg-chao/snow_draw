@@ -76,6 +76,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    bool snapOverrideActive = false,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final elementData = requireCreatingElementDataType<FreeDrawData>(
@@ -187,6 +188,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    bool snapOverrideActive = false,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     if (positions.isEmpty) {
@@ -207,6 +209,7 @@ class FreeDrawCreationStrategy extends CreationStrategy {
         maintainAspectRatio: maintainAspectRatio,
         createFromCenter: createFromCenter,
         snappingMode: snappingMode,
+        snapOverrideActive: snapOverrideActive,
         textMetricsService: textMetricsService,
       );
     }

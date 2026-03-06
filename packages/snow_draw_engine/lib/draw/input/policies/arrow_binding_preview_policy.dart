@@ -11,9 +11,11 @@ import '../../utils/snapping_mode.dart';
 bool shouldPreviewArrowBinding({
   required SnapConfig snapConfig,
   required SnappingMode snappingMode,
+  bool snapOverrideActive = false,
 }) => shouldAttemptArrowBinding(
   snapConfig: snapConfig,
   snappingMode: snappingMode,
+  snapOverrideActive: snapOverrideActive,
 );
 
 /// Resolves bindable targets near [position].

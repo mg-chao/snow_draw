@@ -1608,6 +1608,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     if (!shouldPreviewArrowBinding(
       snapConfig: config.snap,
       snappingMode: snappingMode,
+      snapOverrideActive: _currentModifiers.control,
     )) {
       return null;
     }

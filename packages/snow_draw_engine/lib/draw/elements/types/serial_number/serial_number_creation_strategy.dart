@@ -56,6 +56,7 @@ class SerialNumberCreationStrategy extends CreationStrategy {
     required bool maintainAspectRatio,
     required bool createFromCenter,
     required SnappingMode snappingMode,
+    bool snapOverrideActive = false,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
     final serialData = requireCreatingElementDataType<SerialNumberData>(
