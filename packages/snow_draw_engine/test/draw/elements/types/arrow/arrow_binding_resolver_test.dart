@@ -131,7 +131,7 @@ ElementState _buildArrowBoundToSingleTarget({
   required List<DrawPoint> worldPoints,
 }) {
   final rect = DrawRect.fromPointCloud(worldPoints);
-  final normalized = ArrowGeometry.normalizePoints(
+  final normalized = ConnectorGeometry.normalizePoints(
     worldPoints: worldPoints,
     rect: rect,
   );
@@ -156,8 +156,8 @@ ElementState _buildArrowBoundToSingleTarget({
 }
 
 List<DrawPoint> _resolveWorldPoints(ElementState arrowElement) {
-  final data = arrowElement.data as ArrowLikeData;
-  return ArrowGeometry.resolveWorldPoints(
+  final data = arrowElement.data as ConnectorData;
+  return ConnectorGeometry.resolveWorldPoints(
     rect: arrowElement.rect,
     normalizedPoints: data.points,
   );
@@ -174,7 +174,7 @@ ElementState _copyArrowWithWorldPoints(
 ) {
   final data = arrowElement.data as ArrowData;
   final rect = DrawRect.fromPointCloud(worldPoints);
-  final normalized = ArrowGeometry.normalizePoints(
+  final normalized = ConnectorGeometry.normalizePoints(
     worldPoints: worldPoints,
     rect: rect,
   );

@@ -11,7 +11,7 @@ import 'arrow_geometry.dart';
 import 'arrow_like_data.dart';
 import 'elbow/elbow_fixed_segment.dart';
 
-enum ArrowPointKind {
+enum ConnectorPointKind {
   turning,
   addable,
   loopStart,
@@ -21,8 +21,8 @@ enum ArrowPointKind {
 }
 
 @immutable
-class ArrowPointHandle {
-  const ArrowPointHandle({
+class ConnectorPointHandle {
+  const ConnectorPointHandle({
     required this.elementId,
     required this.kind,
     required this.index,
@@ -34,7 +34,7 @@ class ArrowPointHandle {
   final String elementId;
 
   /// Control point kind.
-  final ArrowPointKind kind;
+  final ConnectorPointKind kind;
 
   /// Turning point index (or segment start index for addable points).
   final int index;
@@ -48,7 +48,7 @@ class ArrowPointHandle {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ArrowPointHandle &&
+      other is ConnectorPointHandle &&
           other.elementId == elementId &&
           other.kind == kind &&
           other.index == index &&
@@ -59,32 +59,32 @@ class ArrowPointHandle {
 
   @override
   String toString() =>
-      'ArrowPointHandle(id: $elementId, kind: $kind, index: $index, '
+      'ConnectorPointHandle(id: $elementId, kind: $kind, index: $index, '
       'isFixed: $isFixed)';
 }
 
 @immutable
-class ArrowPointOverlay {
-  const ArrowPointOverlay({
+class ConnectorPointOverlay {
+  const ConnectorPointOverlay({
     required this.turningPoints,
     required this.addablePoints,
     required this.loopPoints,
     required this.focusPoints,
   });
 
-  final List<ArrowPointHandle> turningPoints;
-  final List<ArrowPointHandle> addablePoints;
-  final List<ArrowPointHandle> loopPoints;
-  final List<ArrowPointHandle> focusPoints;
+  final List<ConnectorPointHandle> turningPoints;
+  final List<ConnectorPointHandle> addablePoints;
+  final List<ConnectorPointHandle> loopPoints;
+  final List<ConnectorPointHandle> focusPoints;
 
   bool get hasLoop => loopPoints.isNotEmpty;
   bool get hasFocus => focusPoints.isNotEmpty;
 }
 
-class ArrowPointUtils {
-  const ArrowPointUtils._();
+class ConnectorPointUtils {
+  const ConnectorPointUtils._();
 
-  static const _emptyOverlay = ArrowPointOverlay(
+  static const _emptyOverlay = ConnectorPointOverlay(
     turningPoints: [],
     addablePoints: [],
     loopPoints: [],
@@ -95,7 +95,7 @@ class ArrowPointUtils {
   static const _loopOuterHitRadiusFactor = 1.18;
   static const _loopInnerHitRadiusFactor = 0.69;
 
-  static ArrowPointOverlay buildOverlay({
+  static ConnectorPointOverlay buildOverlay({
     required ElementState element,
     required double loopThreshold,
     double? handleSize,
@@ -104,7 +104,7 @@ class ArrowPointUtils {
     bool isBindingEnabled = true,
   }) {
     final data = element.data;
-    if (data is! ArrowLikeData) {
+    if (data is! ConnectorData) {
       return _emptyOverlay;
     }
 
@@ -140,14 +140,14 @@ class ArrowPointUtils {
     }
 
     final hasStartFocus = focusPoints.any(
-      (handle) => handle.kind == ArrowPointKind.focusStart,
+      (handle) => handle.kind == ConnectorPointKind.focusStart,
     );
     final hasEndFocus = focusPoints.any(
-      (handle) => handle.kind == ArrowPointKind.focusEnd,
+      (handle) => handle.kind == ConnectorPointKind.focusEnd,
     );
     final filteredTurningPoints = overlay.turningPoints
         .where((handle) {
-          if (handle.kind != ArrowPointKind.turning) {
+          if (handle.kind != ConnectorPointKind.turning) {
             return true;
           }
           if (hasStartFocus && handle.index == 0) {
@@ -160,15 +160,17 @@ class ArrowPointUtils {
         })
         .toList(growable: false);
 
-    return ArrowPointOverlay(
-      turningPoints: List<ArrowPointHandle>.unmodifiable(filteredTurningPoints),
+    return ConnectorPointOverlay(
+      turningPoints: List<ConnectorPointHandle>.unmodifiable(
+        filteredTurningPoints,
+      ),
       addablePoints: overlay.addablePoints,
       loopPoints: overlay.loopPoints,
       focusPoints: focusPoints,
     );
   }
 
-  static ArrowPointHandle? hitTest({
+  static ConnectorPointHandle? hitTest({
     required ElementState element,
     required DrawPoint position,
     required double hitRadius,
@@ -179,7 +181,7 @@ class ArrowPointUtils {
     bool isBindingEnabled = true,
   }) {
     final data = element.data;
-    if (data is! ArrowLikeData) {
+    if (data is! ConnectorData) {
       return null;
     }
     final points = _resolveWorldPoints(element, data);
@@ -191,7 +193,7 @@ class ArrowPointUtils {
     final visualPointRadius = _resolveVisualRadius(handleSize, 0.5);
     final loopActive = _isLoopActive(points, loopThreshold);
     final focusPoints = data.arrowType == ArrowType.elbow
-        ? const <ArrowPointHandle>[]
+        ? const <ConnectorPointHandle>[]
         : _buildFocusPoints(
             element: element,
             data: data,
@@ -264,9 +266,9 @@ class ArrowPointUtils {
       );
       final distanceSq = localPosition.distanceSquared(midpoint);
       if (distanceSq <= addableHitRadiusSq) {
-        return ArrowPointHandle(
+        return ConnectorPointHandle(
           elementId: element.id,
-          kind: ArrowPointKind.addable,
+          kind: ConnectorPointKind.addable,
           index: i,
           position: midpoint,
         );
@@ -276,28 +278,28 @@ class ArrowPointUtils {
     return null;
   }
 
-  static ArrowPointOverlay _buildElbowOverlay({
+  static ConnectorPointOverlay _buildElbowOverlay({
     required String elementId,
     required List<DrawPoint> points,
     required List<ElbowFixedSegment>? fixedSegments,
     required double? handleSize,
   }) {
-    final turningPoints = List<ArrowPointHandle>.unmodifiable([
-      ArrowPointHandle(
+    final turningPoints = List<ConnectorPointHandle>.unmodifiable([
+      ConnectorPointHandle(
         elementId: elementId,
-        kind: ArrowPointKind.turning,
+        kind: ConnectorPointKind.turning,
         index: 0,
         position: points.first,
       ),
-      ArrowPointHandle(
+      ConnectorPointHandle(
         elementId: elementId,
-        kind: ArrowPointKind.turning,
+        kind: ConnectorPointKind.turning,
         index: points.length - 1,
         position: points.last,
       ),
     ]);
     final fixedSegmentIndexes = _fixedSegmentIndexSet(fixedSegments);
-    final addablePoints = <ArrowPointHandle>[];
+    final addablePoints = <ConnectorPointHandle>[];
     for (var i = 0; i < points.length - 1; i++) {
       final start = points[i];
       final end = points[i + 1];
@@ -305,24 +307,24 @@ class ArrowPointUtils {
         continue;
       }
       addablePoints.add(
-        ArrowPointHandle(
+        ConnectorPointHandle(
           elementId: elementId,
-          kind: ArrowPointKind.addable,
+          kind: ConnectorPointKind.addable,
           index: i,
           position: _midpoint(start, end),
           isFixed: fixedSegmentIndexes.contains(i + 1),
         ),
       );
     }
-    return ArrowPointOverlay(
+    return ConnectorPointOverlay(
       turningPoints: turningPoints,
-      addablePoints: List<ArrowPointHandle>.unmodifiable(addablePoints),
+      addablePoints: List<ConnectorPointHandle>.unmodifiable(addablePoints),
       loopPoints: const [],
       focusPoints: const [],
     );
   }
 
-  static ArrowPointOverlay _buildPathOverlay({
+  static ConnectorPointOverlay _buildPathOverlay({
     required String elementId,
     required List<DrawPoint> points,
     required ArrowType arrowType,
@@ -330,27 +332,27 @@ class ArrowPointUtils {
   }) {
     final loopActive = _isLoopActive(points, loopThreshold);
 
-    final turningPoints = <ArrowPointHandle>[];
+    final turningPoints = <ConnectorPointHandle>[];
     for (var i = 0; i < points.length; i++) {
       if (loopActive && (i == 0 || i == points.length - 1)) {
         continue;
       }
       turningPoints.add(
-        ArrowPointHandle(
+        ConnectorPointHandle(
           elementId: elementId,
-          kind: ArrowPointKind.turning,
+          kind: ConnectorPointKind.turning,
           index: i,
           position: points[i],
         ),
       );
     }
 
-    final addablePoints = <ArrowPointHandle>[];
+    final addablePoints = <ConnectorPointHandle>[];
     for (var i = 0; i < points.length - 1; i++) {
       addablePoints.add(
-        ArrowPointHandle(
+        ConnectorPointHandle(
           elementId: elementId,
-          kind: ArrowPointKind.addable,
+          kind: ConnectorPointKind.addable,
           index: i,
           position: _segmentMidpoint(
             points: points,
@@ -362,31 +364,31 @@ class ArrowPointUtils {
     }
 
     final loopPoints = loopActive
-        ? <ArrowPointHandle>[
-            ArrowPointHandle(
+        ? <ConnectorPointHandle>[
+            ConnectorPointHandle(
               elementId: elementId,
-              kind: ArrowPointKind.loopStart,
+              kind: ConnectorPointKind.loopStart,
               index: 0,
               position: points.first,
             ),
-            ArrowPointHandle(
+            ConnectorPointHandle(
               elementId: elementId,
-              kind: ArrowPointKind.loopEnd,
+              kind: ConnectorPointKind.loopEnd,
               index: points.length - 1,
               position: points.last,
             ),
           ]
-        : const <ArrowPointHandle>[];
+        : const <ConnectorPointHandle>[];
 
-    return ArrowPointOverlay(
-      turningPoints: List<ArrowPointHandle>.unmodifiable(turningPoints),
-      addablePoints: List<ArrowPointHandle>.unmodifiable(addablePoints),
-      loopPoints: List<ArrowPointHandle>.unmodifiable(loopPoints),
+    return ConnectorPointOverlay(
+      turningPoints: List<ConnectorPointHandle>.unmodifiable(turningPoints),
+      addablePoints: List<ConnectorPointHandle>.unmodifiable(addablePoints),
+      loopPoints: List<ConnectorPointHandle>.unmodifiable(loopPoints),
       focusPoints: const [],
     );
   }
 
-  static ArrowPointHandle? _hitTestElbow({
+  static ConnectorPointHandle? _hitTestElbow({
     required String elementId,
     required List<DrawPoint> points,
     required DrawPoint localPosition,
@@ -419,9 +421,9 @@ class ArrowPointUtils {
       final midpoint = _midpoint(start, end);
       final distanceSq = localPosition.distanceSquared(midpoint);
       if (distanceSq <= segmentHitRadiusSq) {
-        return ArrowPointHandle(
+        return ConnectorPointHandle(
           elementId: elementId,
-          kind: ArrowPointKind.addable,
+          kind: ConnectorPointKind.addable,
           index: i,
           position: midpoint,
           isFixed: fixedSegmentIndexes.contains(i + 1),
@@ -431,23 +433,23 @@ class ArrowPointUtils {
     return null;
   }
 
-  static ArrowPointHandle? _hitTestElbowTurningPoints({
+  static ConnectorPointHandle? _hitTestElbowTurningPoints({
     required String elementId,
     required List<DrawPoint> points,
     required DrawPoint localPosition,
     required double hitRadius,
   }) {
     final hitRadiusSq = hitRadius * hitRadius;
-    ArrowPointHandle? nearest;
+    ConnectorPointHandle? nearest;
     var nearestDistanceSq = double.infinity;
 
     void testPoint(int index, DrawPoint point) {
       final distanceSq = localPosition.distanceSquared(point);
       if (distanceSq <= hitRadiusSq && distanceSq < nearestDistanceSq) {
         nearestDistanceSq = distanceSq;
-        nearest = ArrowPointHandle(
+        nearest = ConnectorPointHandle(
           elementId: elementId,
-          kind: ArrowPointKind.turning,
+          kind: ConnectorPointKind.turning,
           index: index,
           position: point,
         );
@@ -459,7 +461,7 @@ class ArrowPointUtils {
     return nearest;
   }
 
-  static ArrowPointHandle? _hitTestLoop({
+  static ConnectorPointHandle? _hitTestLoop({
     required String elementId,
     required List<DrawPoint> points,
     required DrawPoint localPosition,
@@ -480,9 +482,9 @@ class ArrowPointUtils {
       visualPointRadius,
     );
     if (distanceSq <= innerRadius * innerRadius) {
-      return ArrowPointHandle(
+      return ConnectorPointHandle(
         elementId: elementId,
-        kind: ArrowPointKind.loopStart,
+        kind: ConnectorPointKind.loopStart,
         index: 0,
         position: points.first,
       );
@@ -493,9 +495,9 @@ class ArrowPointUtils {
       visualLoopOuterRadius,
     );
     if (distanceSq <= outerRadius * outerRadius) {
-      return ArrowPointHandle(
+      return ConnectorPointHandle(
         elementId: elementId,
-        kind: ArrowPointKind.loopEnd,
+        kind: ConnectorPointKind.loopEnd,
         index: points.length - 1,
         position: points.last,
       );
@@ -504,7 +506,7 @@ class ArrowPointUtils {
     return null;
   }
 
-  static ArrowPointHandle? _hitTestTurningPoints({
+  static ConnectorPointHandle? _hitTestTurningPoints({
     required String elementId,
     required List<DrawPoint> points,
     required DrawPoint localPosition,
@@ -512,7 +514,7 @@ class ArrowPointUtils {
     required bool skipEndpoints,
   }) {
     final hitRadiusSq = hitRadius * hitRadius;
-    ArrowPointHandle? nearest;
+    ConnectorPointHandle? nearest;
     var nearestDistanceSq = double.infinity;
     for (var i = 0; i < points.length; i++) {
       if (skipEndpoints && (i == 0 || i == points.length - 1)) {
@@ -522,9 +524,9 @@ class ArrowPointUtils {
       final distanceSq = localPosition.distanceSquared(point);
       if (distanceSq <= hitRadiusSq && distanceSq < nearestDistanceSq) {
         nearestDistanceSq = distanceSq;
-        nearest = ArrowPointHandle(
+        nearest = ConnectorPointHandle(
           elementId: elementId,
-          kind: ArrowPointKind.turning,
+          kind: ConnectorPointKind.turning,
           index: i,
           position: point,
         );
@@ -533,8 +535,8 @@ class ArrowPointUtils {
     return nearest;
   }
 
-  static ArrowPointHandle? _hitTestFocusPoints({
-    required List<ArrowPointHandle> focusPoints,
+  static ConnectorPointHandle? _hitTestFocusPoints({
+    required List<ConnectorPointHandle> focusPoints,
     required DrawPoint localPosition,
     required double hitRadius,
   }) {
@@ -542,7 +544,7 @@ class ArrowPointUtils {
       return null;
     }
     final hitRadiusSq = hitRadius * hitRadius;
-    ArrowPointHandle? nearest;
+    ConnectorPointHandle? nearest;
     var nearestDistanceSq = double.infinity;
     for (final handle in focusPoints) {
       final distanceSq = localPosition.distanceSquared(handle.position);
@@ -557,7 +559,7 @@ class ArrowPointUtils {
 
   static List<DrawPoint> _resolveWorldPoints(
     ElementState element,
-    ArrowLikeData data,
+    ConnectorData data,
   ) => resolveArrowWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
@@ -574,15 +576,15 @@ class ArrowPointUtils {
     return space.fromWorld(position);
   }
 
-  static List<ArrowPointHandle> _buildFocusPoints({
+  static List<ConnectorPointHandle> _buildFocusPoints({
     required ElementState element,
-    required ArrowLikeData data,
+    required ConnectorData data,
     required Iterable<ElementState> elements,
     required double zoom,
     required bool isBindingEnabled,
   }) {
     if (data.arrowType == ArrowType.elbow || elements.isEmpty) {
-      return const <ArrowPointHandle>[];
+      return const <ConnectorPointHandle>[];
     }
 
     final focusPoints = listVisibleArrowFocusPoints(
@@ -595,20 +597,20 @@ class ArrowPointUtils {
       ),
     );
     if (focusPoints.isEmpty) {
-      return const <ArrowPointHandle>[];
+      return const <ConnectorPointHandle>[];
     }
 
     final pointCount = data.points.length;
-    final handles = <ArrowPointHandle>[];
+    final handles = <ConnectorPointHandle>[];
     for (final focusPoint in focusPoints) {
       final kind = switch (focusPoint.endpoint) {
-        ArrowFocusEndpoint.start => ArrowPointKind.focusStart,
-        ArrowFocusEndpoint.end => ArrowPointKind.focusEnd,
+        ArrowFocusEndpoint.start => ConnectorPointKind.focusStart,
+        ArrowFocusEndpoint.end => ConnectorPointKind.focusEnd,
       };
-      final index = kind == ArrowPointKind.focusStart ? 0 : pointCount - 1;
+      final index = kind == ConnectorPointKind.focusStart ? 0 : pointCount - 1;
       final localPosition = _toLocalPosition(element, focusPoint.position);
       handles.add(
-        ArrowPointHandle(
+        ConnectorPointHandle(
           elementId: element.id,
           kind: kind,
           index: index,
@@ -616,7 +618,7 @@ class ArrowPointUtils {
         ),
       );
     }
-    return List<ArrowPointHandle>.unmodifiable(handles);
+    return List<ConnectorPointHandle>.unmodifiable(handles);
   }
 
   static DrawPoint _segmentMidpoint({
@@ -629,7 +631,7 @@ class ArrowPointUtils {
       'segmentIndex must reference a valid segment in points.',
     );
     if (arrowType == ArrowType.curved && points.length >= 3) {
-      final curvePoint = ArrowGeometry.calculateCurveDrawPoint(
+      final curvePoint = ConnectorGeometry.calculateCurveDrawPoint(
         points: points,
         segmentIndex: segmentIndex,
         t: 0.5,

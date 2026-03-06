@@ -288,8 +288,8 @@ final class SelectionControlsRenderTask extends FrameRenderTask {
 
 /// Arrow-point overlay task.
 @immutable
-final class ArrowPointOverlayRenderTask extends FrameRenderTask {
-  const ArrowPointOverlayRenderTask({
+final class ConnectorPointOverlayRenderTask extends FrameRenderTask {
+  const ConnectorPointOverlayRenderTask({
     required this.handles,
     required this.selectionConfig,
     this.activeHandle,
@@ -297,16 +297,16 @@ final class ArrowPointOverlayRenderTask extends FrameRenderTask {
     this.deleteIndicatorVisible = false,
   });
 
-  final List<ArrowPointHandle> handles;
+  final List<ConnectorPointHandle> handles;
   final SelectionConfig selectionConfig;
-  final ArrowPointHandle? activeHandle;
-  final ArrowPointHandle? hoveredHandle;
+  final ConnectorPointHandle? activeHandle;
+  final ConnectorPointHandle? hoveredHandle;
   final bool deleteIndicatorVisible;
 
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ArrowPointOverlayRenderTask &&
+      other is ConnectorPointOverlayRenderTask &&
           listEquals(other.handles, handles) &&
           other.selectionConfig == selectionConfig &&
           other.activeHandle == activeHandle &&

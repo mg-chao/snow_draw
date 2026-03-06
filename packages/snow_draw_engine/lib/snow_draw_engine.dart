@@ -20,7 +20,6 @@ export 'draw/elements/types/arrow/arrow_data.dart';
 export 'draw/elements/types/arrow/arrow_binding.dart';
 export 'draw/elements/types/arrow/arrow_core_bridge.dart';
 export 'draw/elements/types/arrow/connector_data.dart';
-export 'draw/elements/types/arrow/arrow_like_data.dart';
 export 'draw/elements/types/arrow/arrow_scene.dart';
 export 'draw/elements/types/arrow/arrow_render_primitives.dart';
 export 'draw/elements/types/arrow/arrow_geometry.dart';

@@ -5,7 +5,7 @@ import 'arrow_core.dart' as core;
 import 'arrow_core_codec.dart';
 
 /// Result of recomputing element geometry from edited arrow points.
-typedef ArrowGeometryUpdate = ({
+typedef ConnectorGeometryUpdate = ({
   DrawRect rect,
   List<DrawPoint> normalizedPoints,
 });
@@ -104,7 +104,7 @@ ArrowTwoPointLayout computeArrowTwoPointLayout({
 }
 
 /// Recomputes rect + normalized points after arrow local points changed.
-ArrowGeometryUpdate resolveArrowGeometryUpdate({
+ConnectorGeometryUpdate resolveConnectorGeometryUpdate({
   required List<DrawPoint> localPoints,
   required DrawRect oldRect,
   required double rotation,

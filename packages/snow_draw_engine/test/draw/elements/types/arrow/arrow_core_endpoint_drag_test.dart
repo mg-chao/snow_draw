@@ -561,7 +561,7 @@ ElementState _arrowElement({
   ArrowBinding? endBinding,
 }) {
   final rect = DrawRect.fromPointCloud(points);
-  final normalized = ArrowGeometry.normalizePoints(
+  final normalized = ConnectorGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
   );
@@ -581,7 +581,7 @@ ElementState _arrowElement({
 }
 
 List<DrawPoint> _resolveLocalPoints(ElementState element, ArrowData data) =>
-    ArrowGeometry.resolveWorldPoints(
+    ConnectorGeometry.resolveWorldPoints(
       rect: element.rect,
       normalizedPoints: data.points,
     );

@@ -25,7 +25,7 @@ import 'package:snow_draw_engine/draw/utils/snapping_mode.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('ArrowPointOperation core endpoint drag integration', () {
+  group('ConnectorPointOperation core endpoint drag integration', () {
     test('dragging endpoint without movement is treated as no-op', () {
       final arrow = _arrowElement(
         id: 'arrow-noop',
@@ -195,13 +195,13 @@ void main() {
       final session = _dragArrowHandleSession(
         state: state,
         elementId: arrow.id,
-        pointKind: ArrowPointKind.turning,
+        pointKind: ConnectorPointKind.turning,
         pointIndex: 1,
         startPosition: const DrawPoint(x: 220, y: 60),
         currentPosition: const DrawPoint(x: 360, y: 60),
         modifiers: const EditModifiers(snapOverride: true),
       );
-      final next = const ArrowPointOperation().finish(
+      final next = const ConnectorPointOperation().finish(
         state: state,
         context: session.context,
         transform: session.transform,
@@ -234,7 +234,7 @@ void main() {
       final session = _dragArrowHandleSession(
         state: state,
         elementId: arrow.id,
-        pointKind: ArrowPointKind.turning,
+        pointKind: ConnectorPointKind.turning,
         pointIndex: 1,
         startPosition: const DrawPoint(x: 160, y: 60),
         currentPosition: const DrawPoint(x: 240, y: 60),
@@ -244,7 +244,7 @@ void main() {
       expect(session.transform.endBinding, isNull);
       expect(session.transform.orderedElementIds, isNull);
 
-      final next = const ArrowPointOperation().finish(
+      final next = const ConnectorPointOperation().finish(
         state: state,
         context: session.context,
         transform: session.transform,
@@ -287,7 +287,7 @@ void main() {
         final session = _dragArrowHandleSession(
           state: state,
           elementId: arrow.id,
-          pointKind: ArrowPointKind.turning,
+          pointKind: ConnectorPointKind.turning,
           pointIndex: 0,
           startPosition: const DrawPoint(x: 100, y: 60),
           currentPosition: const DrawPoint(x: 92, y: 60),
@@ -296,7 +296,7 @@ void main() {
         expect(session.transform.startBinding, isNotNull);
         expect(session.transform.endBinding, isNotNull);
 
-        final next = const ArrowPointOperation().finish(
+        final next = const ConnectorPointOperation().finish(
           state: state,
           context: session.context,
           transform: session.transform,
@@ -335,14 +335,14 @@ void main() {
       final session = _dragArrowHandleSession(
         state: state,
         elementId: arrow.id,
-        pointKind: ArrowPointKind.turning,
+        pointKind: ConnectorPointKind.turning,
         pointIndex: 1,
         startPosition: const DrawPoint(x: 160, y: 60),
         currentPosition: const DrawPoint(x: 240, y: 60),
       );
 
       expect(session.transform.orderedElementIds, isNotNull);
-      final next = const ArrowPointOperation().finish(
+      final next = const ConnectorPointOperation().finish(
         state: state,
         context: session.context,
         transform: session.transform,
@@ -417,20 +417,20 @@ void main() {
         <ElementState>[bindTarget, arrow],
         selectedIds: <String>{arrow.id},
       );
-      final overlay = ArrowPointUtils.buildOverlay(
+      final overlay = ConnectorPointUtils.buildOverlay(
         element: arrow,
         loopThreshold: 16,
         handleSize: 10,
         elements: state.domain.document.elements,
       );
       final focusHandle = overlay.focusPoints.singleWhere(
-        (handle) => handle.kind == ArrowPointKind.focusStart,
+        (handle) => handle.kind == ConnectorPointKind.focusStart,
       );
 
       final session = _dragArrowHandleSession(
         state: state,
         elementId: arrow.id,
-        pointKind: ArrowPointKind.focusStart,
+        pointKind: ConnectorPointKind.focusStart,
         pointIndex: focusHandle.index,
         startPosition: focusHandle.position,
         currentPosition: const DrawPoint(x: 40, y: 40),
@@ -443,7 +443,7 @@ void main() {
     });
   });
 
-  group('ArrowPointOperation elbow parity', () {
+  group('ConnectorPointOperation elbow parity', () {
     test('dragging addable midpoint creates and releases fixed segment', () {
       final arrow = _elbowArrowElement(
         id: 'elbow-1',
@@ -463,12 +463,12 @@ void main() {
       final dragged = _dragArrowHandleSession(
         state: state,
         elementId: arrow.id,
-        pointKind: ArrowPointKind.addable,
+        pointKind: ConnectorPointKind.addable,
         pointIndex: 1,
         startPosition: const DrawPoint(x: 125, y: 100),
         currentPosition: const DrawPoint(x: 130, y: 100),
       );
-      final draggedState = const ArrowPointOperation().finish(
+      final draggedState = const ConnectorPointOperation().finish(
         state: state,
         context: dragged.context,
         transform: dragged.transform,
@@ -478,7 +478,7 @@ void main() {
         arrow.id,
       )!;
       final draggedData = draggedArrow.data as ArrowData;
-      final draggedPoints = ArrowGeometry.resolveWorldPoints(
+      final draggedPoints = ConnectorGeometry.resolveWorldPoints(
         rect: draggedArrow.rect,
         normalizedPoints: draggedData.points,
       );
@@ -499,13 +499,13 @@ void main() {
       final released = _dragArrowHandleSession(
         state: releaseState,
         elementId: draggedArrow.id,
-        pointKind: ArrowPointKind.addable,
+        pointKind: ConnectorPointKind.addable,
         pointIndex: 1,
         startPosition: const DrawPoint(x: 130, y: 100),
         currentPosition: const DrawPoint(x: 130, y: 100),
         isDoubleClick: true,
       );
-      final releasedState = const ArrowPointOperation().finish(
+      final releasedState = const ConnectorPointOperation().finish(
         state: releaseState,
         context: released.context,
         transform: released.transform,
@@ -514,7 +514,7 @@ void main() {
         draggedArrow.id,
       )!;
       final releasedData = releasedArrow.data as ArrowData;
-      final releasedPoints = ArrowGeometry.resolveWorldPoints(
+      final releasedPoints = ConnectorGeometry.resolveWorldPoints(
         rect: releasedArrow.rect,
         normalizedPoints: releasedData.points,
       );
@@ -552,12 +552,12 @@ void main() {
         final session = _dragArrowHandleSession(
           state: state,
           elementId: arrow.id,
-          pointKind: ArrowPointKind.addable,
+          pointKind: ConnectorPointKind.addable,
           pointIndex: 0,
           startPosition: const DrawPoint(x: 62.5, y: 0),
           currentPosition: const DrawPoint(x: 62.5, y: 20),
         );
-        final next = const ArrowPointOperation().finish(
+        final next = const ConnectorPointOperation().finish(
           state: state,
           context: session.context,
           transform: session.transform,
@@ -565,7 +565,7 @@ void main() {
 
         final updatedArrow = next.domain.document.getElementById(arrow.id)!;
         final updatedData = updatedArrow.data as ArrowData;
-        final updatedPoints = ArrowGeometry.resolveWorldPoints(
+        final updatedPoints = ConnectorGeometry.resolveWorldPoints(
           rect: updatedArrow.rect,
           normalizedPoints: updatedData.points,
         );
@@ -618,19 +618,19 @@ void main() {
       final session = _dragArrowHandleSession(
         state: state,
         elementId: arrow.id,
-        pointKind: ArrowPointKind.turning,
+        pointKind: ConnectorPointKind.turning,
         pointIndex: 3,
         startPosition: const DrawPoint(x: 250, y: 200),
         currentPosition: const DrawPoint(x: 270, y: 200),
       );
-      final next = const ArrowPointOperation().finish(
+      final next = const ConnectorPointOperation().finish(
         state: state,
         context: session.context,
         transform: session.transform,
       );
       final updatedArrow = next.domain.document.getElementById(arrow.id)!;
       final updatedData = updatedArrow.data as ArrowData;
-      final updatedPoints = ArrowGeometry.resolveWorldPoints(
+      final updatedPoints = ConnectorGeometry.resolveWorldPoints(
         rect: updatedArrow.rect,
         normalizedPoints: updatedData.points,
       );
@@ -671,19 +671,19 @@ void main() {
         final session = _dragArrowHandleSession(
           state: state,
           elementId: arrow.id,
-          pointKind: ArrowPointKind.turning,
+          pointKind: ConnectorPointKind.turning,
           pointIndex: 0,
           startPosition: const DrawPoint(x: 100, y: 150),
           currentPosition: const DrawPoint(x: 100, y: 190),
         );
-        final next = const ArrowPointOperation().finish(
+        final next = const ConnectorPointOperation().finish(
           state: state,
           context: session.context,
           transform: session.transform,
         );
         final updatedArrow = next.domain.document.getElementById(arrow.id)!;
         final updatedData = updatedArrow.data as ArrowData;
-        final updatedPoints = ArrowGeometry.resolveWorldPoints(
+        final updatedPoints = ConnectorGeometry.resolveWorldPoints(
           rect: updatedArrow.rect,
           normalizedPoints: updatedData.points,
         );
@@ -717,13 +717,13 @@ void main() {
       final session = _dragArrowHandleSession(
         state: state,
         elementId: arrow.id,
-        pointKind: ArrowPointKind.turning,
+        pointKind: ConnectorPointKind.turning,
         pointIndex: 1,
         startPosition: const DrawPoint(x: 220, y: 180),
         currentPosition: const DrawPoint(x: 320, y: 180),
         modifiers: const EditModifiers(fromCenter: true),
       );
-      final next = const ArrowPointOperation().finish(
+      final next = const ConnectorPointOperation().finish(
         state: state,
         context: session.context,
         transform: session.transform,
@@ -765,7 +765,7 @@ void main() {
         final session = _dragArrowHandleSession(
           state: state,
           elementId: arrow.id,
-          pointKind: ArrowPointKind.turning,
+          pointKind: ConnectorPointKind.turning,
           pointIndex: 1,
           startPosition: const DrawPoint(x: 300, y: 180),
           currentPosition: const DrawPoint(x: 320, y: 180),
@@ -773,7 +773,7 @@ void main() {
         );
 
         expect(session.transform.endBinding, isNull);
-        final next = const ArrowPointOperation().finish(
+        final next = const ConnectorPointOperation().finish(
           state: state,
           context: session.context,
           transform: session.transform,
@@ -818,12 +818,12 @@ void main() {
         final session = _dragArrowHandleSession(
           state: state,
           elementId: arrow.id,
-          pointKind: ArrowPointKind.turning,
+          pointKind: ConnectorPointKind.turning,
           pointIndex: 4,
           startPosition: const DrawPoint(x: 220, y: 220),
           currentPosition: const DrawPoint(x: 300, y: 260),
         );
-        final next = const ArrowPointOperation().finish(
+        final next = const ConnectorPointOperation().finish(
           state: state,
           context: session.context,
           transform: session.transform,
@@ -831,7 +831,7 @@ void main() {
 
         final updatedArrow = next.domain.document.getElementById(arrow.id)!;
         final updatedData = updatedArrow.data as ArrowData;
-        final updatedPoints = ArrowGeometry.resolveWorldPoints(
+        final updatedPoints = ConnectorGeometry.resolveWorldPoints(
           rect: updatedArrow.rect,
           normalizedPoints: updatedData.points,
         );
@@ -896,12 +896,12 @@ void main() {
         final session = _dragArrowHandleSession(
           state: state,
           elementId: arrow.id,
-          pointKind: ArrowPointKind.turning,
+          pointKind: ConnectorPointKind.turning,
           pointIndex: 1,
           startPosition: const DrawPoint(x: 260, y: 90),
           currentPosition: const DrawPoint(x: 330, y: 90),
         );
-        final next = const ArrowPointOperation().finish(
+        final next = const ConnectorPointOperation().finish(
           state: state,
           context: session.context,
           transform: session.transform,
@@ -950,7 +950,7 @@ void main() {
           zIndex: 4,
         );
         final createdData = createdArrow.data as ArrowData;
-        final createdPoints = ArrowGeometry.resolveWorldPoints(
+        final createdPoints = ConnectorGeometry.resolveWorldPoints(
           rect: createdArrow.rect,
           normalizedPoints: createdData.points,
         );
@@ -967,12 +967,12 @@ void main() {
         final session = _dragArrowHandleSession(
           state: rebindingState,
           elementId: createdArrow.id,
-          pointKind: ArrowPointKind.turning,
+          pointKind: ConnectorPointKind.turning,
           pointIndex: createdPoints.length - 1,
           startPosition: createdPoints.last,
           currentPosition: const DrawPoint(x: 700, y: 160),
         );
-        final next = const ArrowPointOperation().finish(
+        final next = const ConnectorPointOperation().finish(
           state: rebindingState,
           context: session.context,
           transform: session.transform,
@@ -981,7 +981,7 @@ void main() {
           createdArrow.id,
         )!;
         final updatedData = updatedArrow.data as ArrowData;
-        final updatedPoints = ArrowGeometry.resolveWorldPoints(
+        final updatedPoints = ConnectorGeometry.resolveWorldPoints(
           rect: updatedArrow.rect,
           normalizedPoints: updatedData.points,
         );
@@ -1020,7 +1020,7 @@ void main() {
   });
 }
 
-ArrowPointTransform _dragArrowEndpoint({
+ConnectorPointTransform _dragArrowEndpoint({
   required DrawState state,
   required String elementId,
   required int endpointIndex,
@@ -1031,7 +1031,7 @@ ArrowPointTransform _dragArrowEndpoint({
   final session = _dragArrowHandleSession(
     state: state,
     elementId: elementId,
-    pointKind: ArrowPointKind.turning,
+    pointKind: ConnectorPointKind.turning,
     pointIndex: endpointIndex,
     startPosition: startPosition,
     currentPosition: currentPosition,
@@ -1040,21 +1040,22 @@ ArrowPointTransform _dragArrowEndpoint({
   return session.transform;
 }
 
-({EditContext context, ArrowPointTransform transform}) _dragArrowHandleSession({
+({EditContext context, ConnectorPointTransform transform})
+_dragArrowHandleSession({
   required DrawState state,
   required String elementId,
-  required ArrowPointKind pointKind,
+  required ConnectorPointKind pointKind,
   required int pointIndex,
   required DrawPoint startPosition,
   required DrawPoint currentPosition,
   bool isDoubleClick = false,
   EditModifiers modifiers = const EditModifiers(),
 }) {
-  const operation = ArrowPointOperation();
+  const operation = ConnectorPointOperation();
   final context = operation.createContext(
     state: state,
     position: startPosition,
-    params: ArrowPointOperationParams(
+    params: ConnectorPointOperationParams(
       elementId: elementId,
       pointKind: pointKind,
       pointIndex: pointIndex,
@@ -1074,7 +1075,10 @@ ArrowPointTransform _dragArrowEndpoint({
     modifiers: modifiers,
     config: DrawConfig.defaultConfig,
   );
-  return (context: context, transform: update.transform as ArrowPointTransform);
+  return (
+    context: context,
+    transform: update.transform as ConnectorPointTransform,
+  );
 }
 
 ElementState _elbowArrowElement({
@@ -1086,7 +1090,7 @@ ElementState _elbowArrowElement({
   ArrowBinding? endBinding,
 }) {
   final rect = DrawRect.fromPointCloud(points);
-  final normalized = ArrowGeometry.normalizePoints(
+  final normalized = ConnectorGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
   );
@@ -1139,7 +1143,7 @@ ElementState _arrowElement({
   ArrowBinding? endBinding,
 }) {
   final rect = DrawRect.fromPointCloud(points);
-  final normalized = ArrowGeometry.normalizePoints(
+  final normalized = ConnectorGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
   );

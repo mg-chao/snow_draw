@@ -3,7 +3,7 @@ import '../config/draw_config.dart';
 const _arrowPointLoopThresholdFactor = 1.5;
 
 /// Resolves the loop-closing threshold for arrow-point interactions.
-double resolveArrowPointLoopThreshold(double hitRadius) {
+double resolveConnectorPointLoopThreshold(double hitRadius) {
   if (!hitRadius.isFinite || hitRadius <= 0) {
     return 0;
   }
@@ -11,7 +11,7 @@ double resolveArrowPointLoopThreshold(double hitRadius) {
 }
 
 /// Resolves rendered arrow-point handle size from control-point size.
-double resolveArrowPointHandleSize(double controlPointSize) {
+double resolveConnectorPointHandleSize(double controlPointSize) {
   if (!controlPointSize.isFinite || controlPointSize <= 0) {
     return 0;
   }

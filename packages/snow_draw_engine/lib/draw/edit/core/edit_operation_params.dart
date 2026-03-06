@@ -48,8 +48,8 @@ final class RotateOperationParams extends EditOperationParams {
 }
 
 @immutable
-final class ArrowPointOperationParams extends EditOperationParams {
-  const ArrowPointOperationParams({
+final class ConnectorPointOperationParams extends EditOperationParams {
+  const ConnectorPointOperationParams({
     required this.elementId,
     required this.pointKind,
     required this.pointIndex,
@@ -59,7 +59,7 @@ final class ArrowPointOperationParams extends EditOperationParams {
        assert(pointIndex >= 0, 'pointIndex must be non-negative');
 
   final String elementId;
-  final ArrowPointKind pointKind;
+  final ConnectorPointKind pointKind;
   final int pointIndex;
   final bool isDoubleClick;
 }

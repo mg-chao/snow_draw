@@ -60,7 +60,7 @@ bool isElementDependentOnIds({
     }
   }
 
-  if (!includeArrowBindings || data is! ArrowLikeData) {
+  if (!includeArrowBindings || data is! ConnectorData) {
     return false;
   }
 
@@ -127,7 +127,7 @@ ElementState clearElementDependenciesForIds({
     return element;
   }
 
-  if (!includeArrowBindings || data is! ArrowLikeData) {
+  if (!includeArrowBindings || data is! ConnectorData) {
     return element;
   }
 

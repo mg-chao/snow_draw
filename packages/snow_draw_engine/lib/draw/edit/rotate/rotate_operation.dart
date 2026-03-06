@@ -200,7 +200,7 @@ class RotateOperation extends EditOperation with StandardFinishMixin {
 
   bool _isElbowArrow(ElementState element) {
     final data = element.data;
-    return data is ArrowLikeData && data.arrowType == ArrowType.elbow;
+    return data is ConnectorData && data.arrowType == ArrowType.elbow;
   }
 
   Set<String> _resolveRotatableSelectionIds({

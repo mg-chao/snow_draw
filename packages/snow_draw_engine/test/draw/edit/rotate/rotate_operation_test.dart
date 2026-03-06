@@ -80,7 +80,7 @@ ElementState _elbowArrowElement({
   required List<DrawPoint> points,
 }) {
   final rect = DrawRect.fromPointCloud(points);
-  final normalized = ArrowGeometry.normalizePoints(
+  final normalized = ConnectorGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
   );

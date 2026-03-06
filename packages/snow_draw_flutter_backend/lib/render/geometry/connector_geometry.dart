@@ -9,7 +9,7 @@ class FlutterConnectorGeometry {
     required DrawRect rect,
     required List<DrawPoint> normalizedPoints,
   }) => _toOffsets(
-    ArrowGeometry.resolveWorldPoints(
+    ConnectorGeometry.resolveWorldPoints(
       rect: rect,
       normalizedPoints: normalizedPoints,
     ),
@@ -134,7 +134,7 @@ class FlutterConnectorGeometry {
       return Path();
     }
 
-    final commands = ArrowGeometry.resolveElbowPathCommands(
+    final commands = ConnectorGeometry.resolveElbowPathCommands(
       points: points
           .map((point) => DrawPoint(x: point.dx, y: point.dy))
           .toList(growable: false),
@@ -145,15 +145,15 @@ class FlutterConnectorGeometry {
     return _pathFromCommands(commands);
   }
 
-  static Path _pathFromCommands(List<ArrowPathCommand> commands) {
+  static Path _pathFromCommands(List<ConnectorPathCommand> commands) {
     final path = Path();
     for (final command in commands) {
       switch (command) {
-        case ArrowPathMoveCommand(:final point):
+        case ConnectorPathMoveCommand(:final point):
           path.moveTo(point.x, point.y);
-        case ArrowPathLineCommand(:final point):
+        case ConnectorPathLineCommand(:final point):
           path.lineTo(point.x, point.y);
-        case ArrowPathQuadraticCommand(:final controlPoint, :final point):
+        case ConnectorPathQuadraticCommand(:final controlPoint, :final point):
           path.quadraticBezierTo(
             controlPoint.x,
             controlPoint.y,
@@ -184,10 +184,10 @@ class FlutterConnectorGeometryDescriptor {
   FlutterConnectorGeometryDescriptor({
     required this.data,
     required DrawRect rect,
-  }) : _engineDescriptor = ArrowGeometryDescriptor(data: data, rect: rect);
+  }) : _engineDescriptor = ConnectorGeometryDescriptor(data: data, rect: rect);
 
   final ConnectorData data;
-  final ArrowGeometryDescriptor _engineDescriptor;
+  final ConnectorGeometryDescriptor _engineDescriptor;
 
   late final List<Offset> localPoints = _toOffsets(
     _engineDescriptor.localDrawPoints,

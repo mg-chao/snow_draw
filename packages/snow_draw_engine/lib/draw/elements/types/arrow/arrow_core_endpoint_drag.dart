@@ -56,7 +56,7 @@ final class ArrowCoreEndpointDragResult {
 ArrowCoreEndpointDragResult? computeArrowCoreEndpointDragResult({
   required DrawState state,
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required List<DrawPoint> localPoints,
   required int draggedIndex,
   required DrawPoint worldPointer,
@@ -95,7 +95,7 @@ ArrowCoreEndpointDragResult? computeArrowCoreEndpointDragResult({
 ArrowCoreEndpointDragResult? finalizeArrowCoreEndpointDragResult({
   required DrawState state,
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required List<DrawPoint> localPoints,
   required int draggedIndex,
   required DrawPoint worldPointer,
@@ -133,7 +133,7 @@ ArrowCoreEndpointDragResult? finalizeArrowCoreEndpointDragResult({
 ArrowCoreEndpointDragResult? _runArrowCoreEndpointDragResult({
   required DrawState state,
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required List<DrawPoint> localPoints,
   required int draggedIndex,
   required DrawPoint worldPointer,

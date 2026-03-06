@@ -139,15 +139,15 @@ class UpdateCreatingElement extends EditingConflictAction {
       'snapOverride: $snapOverride)';
 }
 
-class AddArrowPoint extends EditingConflictAction {
-  const AddArrowPoint({required this.position, this.snapOverride = false});
+class AddConnectorPoint extends EditingConflictAction {
+  const AddConnectorPoint({required this.position, this.snapOverride = false});
 
   final DrawPoint position;
   final bool snapOverride;
 
   @override
   String toString() =>
-      'AddArrowPoint(position: $position, snapOverride: $snapOverride)';
+      'AddConnectorPoint(position: $position, snapOverride: $snapOverride)';
 }
 
 class FinishCreateElement extends EditingConflictHistoryRecordingAction {

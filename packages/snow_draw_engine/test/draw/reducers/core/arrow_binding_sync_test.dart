@@ -219,7 +219,7 @@ ElementState _buildArrow({
     DrawPoint(x: 300 + offsetX, y: 50 + offsetY),
   ];
   final rect = DrawRect.fromPointCloud(worldPoints);
-  final normalized = ArrowGeometry.normalizePoints(
+  final normalized = ConnectorGeometry.normalizePoints(
     worldPoints: worldPoints,
     rect: rect,
   );

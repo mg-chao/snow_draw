@@ -8,12 +8,12 @@ import 'package:snow_draw_engine/draw/types/draw_rect.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('ArrowPointUtils focus integration', () {
+  group('ConnectorPointUtils focus integration', () {
     test('buildOverlay exposes focus handles for bound endpoints', () {
       final bindable = _bindableElement();
       final arrow = _boundArrowElement();
 
-      final overlay = ArrowPointUtils.buildOverlay(
+      final overlay = ConnectorPointUtils.buildOverlay(
         element: arrow,
         loopThreshold: 16,
         handleSize: 10,
@@ -21,14 +21,14 @@ void main() {
       );
 
       expect(overlay.focusPoints, hasLength(1));
-      expect(overlay.focusPoints.single.kind, ArrowPointKind.focusStart);
+      expect(overlay.focusPoints.single.kind, ConnectorPointKind.focusStart);
       expect(overlay.turningPoints.any((handle) => handle.index == 0), isFalse);
     });
 
     test('hitTest resolves focus handle under pointer', () {
       final bindable = _bindableElement();
       final arrow = _boundArrowElement();
-      final overlay = ArrowPointUtils.buildOverlay(
+      final overlay = ConnectorPointUtils.buildOverlay(
         element: arrow,
         loopThreshold: 16,
         handleSize: 10,
@@ -36,7 +36,7 @@ void main() {
       );
       final focusPoint = overlay.focusPoints.single.position;
 
-      final hit = ArrowPointUtils.hitTest(
+      final hit = ConnectorPointUtils.hitTest(
         element: arrow,
         position: focusPoint,
         hitRadius: 12,
@@ -46,7 +46,7 @@ void main() {
       );
 
       expect(hit, isNotNull);
-      expect(hit!.kind, ArrowPointKind.focusStart);
+      expect(hit!.kind, ConnectorPointKind.focusStart);
       expect(hit.index, 0);
     });
 
@@ -54,7 +54,7 @@ void main() {
       final bindable = _bindableElement();
       final arrow = _boundArrowElement();
 
-      final overlay = ArrowPointUtils.buildOverlay(
+      final overlay = ConnectorPointUtils.buildOverlay(
         element: arrow,
         loopThreshold: 16,
         handleSize: 10,
@@ -69,7 +69,7 @@ void main() {
     test('hitTest ignores focus handles when binding disabled', () {
       final bindable = _bindableElement();
       final arrow = _boundArrowElement();
-      final overlay = ArrowPointUtils.buildOverlay(
+      final overlay = ConnectorPointUtils.buildOverlay(
         element: arrow,
         loopThreshold: 16,
         handleSize: 10,
@@ -77,7 +77,7 @@ void main() {
       );
       final focusPoint = overlay.focusPoints.single.position;
 
-      final hit = ArrowPointUtils.hitTest(
+      final hit = ConnectorPointUtils.hitTest(
         element: arrow,
         position: focusPoint,
         hitRadius: 12,

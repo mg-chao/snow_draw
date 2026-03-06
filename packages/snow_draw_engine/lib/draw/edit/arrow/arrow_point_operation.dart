@@ -44,8 +44,8 @@ import '../core/edit_operation_params.dart';
 import '../core/edit_result.dart';
 import '../core/standard_finish_mixin.dart';
 
-class ArrowPointOperation extends EditOperation with StandardFinishMixin {
-  const ArrowPointOperation();
+class ConnectorPointOperation extends EditOperation with StandardFinishMixin {
+  const ConnectorPointOperation();
 
   @override
   EditOperationId get id => EditOperationIds.arrowPoint;
@@ -55,9 +55,9 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
     required EditContext context,
     required EditTransform transform,
   }) {
-    final typedContext = requireContext<ArrowPointEditContext>(
+    final typedContext = requireContext<ConnectorPointEditContext>(
       context,
-      operationName: 'ArrowPointOperation.createHistoryMetadata',
+      operationName: 'ConnectorPointOperation.createHistoryMetadata',
     );
     return HistoryMetadata.forEdit(
       operationType: 'Arrow point',
@@ -66,23 +66,23 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
   }
 
   @override
-  ArrowPointEditContext createContext({
+  ConnectorPointEditContext createContext({
     required DrawState state,
     required DrawPoint position,
     required EditOperationParams params,
   }) {
-    final typedParams = requireParams<ArrowPointOperationParams>(
+    final typedParams = requireParams<ConnectorPointOperationParams>(
       params,
-      operationName: 'ArrowPointOperation.createContext',
+      operationName: 'ConnectorPointOperation.createContext',
     );
     final element = state.domain.document.getElementById(typedParams.elementId);
-    if (element == null || element.data is! ArrowLikeData) {
+    if (element == null || element.data is! ConnectorData) {
       throw const EditMissingDataError(
         dataName: 'arrow element',
-        operationName: 'ArrowPointOperation.createContext',
+        operationName: 'ConnectorPointOperation.createContext',
       );
     }
-    final data = element.data as ArrowLikeData;
+    final data = element.data as ConnectorData;
     final resolved = resolveArrowWorldPoints(
       rect: element.rect,
       normalizedPoints: data.points,
@@ -90,29 +90,29 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
     final points = List<DrawPoint>.unmodifiable(resolved);
     if (points.length < 2) {
       throw const EditMissingDataError(
-        dataName: 'arrow points',
-        operationName: 'ArrowPointOperation.createContext',
+        dataName: 'connector points',
+        operationName: 'ConnectorPointOperation.createContext',
       );
     }
     final fixedSegments = data.fixedSegments ?? const [];
     final shouldReleaseSegment =
         typedParams.isDoubleClick &&
         data.arrowType == ArrowType.elbow &&
-        typedParams.pointKind == ArrowPointKind.addable &&
+        typedParams.pointKind == ConnectorPointKind.addable &&
         fixedSegments.any(
           (segment) => segment.index == typedParams.pointIndex + 1,
         );
     final shouldDeletePoint =
         typedParams.isDoubleClick &&
         !shouldReleaseSegment &&
-        typedParams.pointKind == ArrowPointKind.turning &&
+        typedParams.pointKind == ConnectorPointKind.turning &&
         typedParams.pointIndex > 0 &&
         typedParams.pointIndex < points.length - 1;
 
     final startBounds = requireSelectionBounds(
       selectionData: SelectionDataComputer.compute(state),
       initialSelectionBounds: typedParams.initialSelectionBounds,
-      operationName: 'ArrowPointOperation.createContext',
+      operationName: 'ConnectorPointOperation.createContext',
     );
     final elementSpace = element.rotation == 0
         ? null
@@ -131,7 +131,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
     final dragOffset = pointPosition - localStartPosition;
     final selectedIdsAtStart = {...state.domain.selection.selectedIds};
 
-    return ArrowPointEditContext(
+    return ConnectorPointEditContext(
       startPosition: localStartPosition,
       startBounds: startBounds,
       selectedIdsAtStart: selectedIdsAtStart,
@@ -160,24 +160,24 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
   }
 
   @override
-  ArrowPointTransform initialTransform({
+  ConnectorPointTransform initialTransform({
     required DrawState state,
     required EditContext context,
     required DrawPoint startPosition,
   }) {
-    final typedContext = requireContext<ArrowPointEditContext>(
+    final typedContext = requireContext<ConnectorPointEditContext>(
       context,
-      operationName: 'ArrowPointOperation.initialTransform',
+      operationName: 'ConnectorPointOperation.initialTransform',
     );
     final baseElement = typedContext.baseElement;
-    final data = baseElement.data as ArrowLikeData;
+    final data = baseElement.data as ConnectorData;
     var points = typedContext.initialPoints;
     var fixedSegments = data.fixedSegments;
     var startBinding = data.startBinding;
     var endBinding = data.endBinding;
     var hasChanges = false;
     if (typedContext.deletePointOnStart) {
-      return ArrowPointTransform(
+      return ConnectorPointTransform(
         currentPosition: startPosition,
         points: points,
         fixedSegments: fixedSegments,
@@ -228,7 +228,7 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
       endBinding = updated.endBinding;
       hasChanges = true;
     }
-    return ArrowPointTransform(
+    return ConnectorPointTransform(
       currentPosition: startPosition,
       points: points,
       fixedSegments: fixedSegments,
@@ -247,13 +247,13 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
     required EditModifiers modifiers,
     required DrawConfig config,
   }) {
-    final typedContext = requireContext<ArrowPointEditContext>(
+    final typedContext = requireContext<ConnectorPointEditContext>(
       context,
-      operationName: 'ArrowPointOperation.update',
+      operationName: 'ConnectorPointOperation.update',
     );
-    final typedTransform = requireTransform<ArrowPointTransform>(
+    final typedTransform = requireTransform<ConnectorPointTransform>(
       transform,
-      operationName: 'ArrowPointOperation.update',
+      operationName: 'ConnectorPointOperation.update',
     );
     if (typedContext.releaseFixedSegment || typedContext.deletePointOnStart) {
       return EditUpdateResult<EditTransform>(transform: typedTransform);
@@ -379,13 +379,13 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
     required EditTransform transform,
     required bool applyDeletion,
   }) {
-    final typedContext = requireContext<ArrowPointEditContext>(
+    final typedContext = requireContext<ConnectorPointEditContext>(
       context,
-      operationName: 'ArrowPointOperation.computeResult',
+      operationName: 'ConnectorPointOperation.computeResult',
     );
-    final typedTransform = requireTransform<ArrowPointTransform>(
+    final typedTransform = requireTransform<ConnectorPointTransform>(
       transform,
-      operationName: 'ArrowPointOperation.computeResult',
+      operationName: 'ConnectorPointOperation.computeResult',
     );
     if (!typedTransform.hasChanges) {
       return null;
@@ -444,10 +444,10 @@ class ArrowPointOperation extends EditOperation with StandardFinishMixin {
   }
 }
 
-/// Removes the active point when [ArrowPointTransform.shouldDelete] is set.
+/// Removes the active point when [ConnectorPointTransform.shouldDelete] is set.
 ///
 /// Returns the original points list when no deletion is needed.
-List<DrawPoint> _applyPointDeletion(ArrowPointTransform transform) {
+List<DrawPoint> _applyPointDeletion(ConnectorPointTransform transform) {
   if (!transform.shouldDelete ||
       transform.activeIndex == null ||
       transform.activeIndex! <= 0 ||
@@ -462,14 +462,14 @@ List<DrawPoint> _applyPointDeletion(ArrowPointTransform transform) {
 /// eliminating the duplicated elbow-edit + rect/normalize pipeline.
 ElementState _buildUpdatedElement({
   required ElementState element,
-  required ArrowPointEditContext context,
-  required ArrowPointTransform transform,
+  required ConnectorPointEditContext context,
+  required ConnectorPointTransform transform,
   required Map<String, ElementState> elementMap,
   required List<DrawPoint> localPoints,
   required core.EngineContext coreEngineContext,
   bool finalize = false,
 }) {
-  final data = element.data as ArrowLikeData;
+  final data = element.data as ConnectorData;
   final arrowData = data is ArrowData ? data : null;
   final dataWithBindings = data.copyWith(
     startBinding: transform.startBinding,
@@ -488,7 +488,8 @@ ElementState _buildUpdatedElement({
     return element.copyWith(rect: layout.rect, data: updatedData);
   }
   if (data.arrowType == ArrowType.elbow && arrowData != null) {
-    final isFixedSegmentEditing = context.pointKind == ArrowPointKind.addable;
+    final isFixedSegmentEditing =
+        context.pointKind == ConnectorPointKind.addable;
     final shouldReleaseFixedSegment =
         isFixedSegmentEditing && context.releaseFixedSegment;
     final elbowPointsOverride = shouldReleaseFixedSegment ? null : localPoints;
@@ -518,7 +519,7 @@ ElementState _buildUpdatedElement({
     var resolvedEndBinding = updated.endBinding;
     final activeIndex = transform.activeIndex;
     final isEndpointTurningDrag =
-        context.pointKind == ArrowPointKind.turning &&
+        context.pointKind == ConnectorPointKind.turning &&
         activeIndex != null &&
         (activeIndex == 0 || activeIndex == localPoints.length - 1);
     if (isEndpointTurningDrag) {
@@ -528,7 +529,7 @@ ElementState _buildUpdatedElement({
         resolvedStartBinding = transform.startBinding;
       }
     }
-    final geometry = resolveArrowGeometryUpdate(
+    final geometry = resolveConnectorGeometryUpdate(
       localPoints: updated.localPoints,
       oldRect: context.elementRect,
       rotation: context.rotation,
@@ -551,7 +552,7 @@ ElementState _buildUpdatedElement({
     return element.copyWith(rect: geometry.rect, data: updatedData);
   }
 
-  final geometry = resolveArrowGeometryUpdate(
+  final geometry = resolveConnectorGeometryUpdate(
     localPoints: localPoints,
     oldRect: context.elementRect,
     rotation: context.rotation,
@@ -564,8 +565,8 @@ ElementState _buildUpdatedElement({
 }
 
 @immutable
-final class ArrowPointEditContext extends EditContext {
-  const ArrowPointEditContext({
+final class ConnectorPointEditContext extends EditContext {
+  const ConnectorPointEditContext({
     required super.startPosition,
     required super.startBounds,
     required super.selectedIdsAtStart,
@@ -598,7 +599,7 @@ final class ArrowPointEditContext extends EditContext {
   final List<DrawPoint> initialPoints;
   final List<ElbowFixedSegment> initialFixedSegments;
   final ArrowType arrowType;
-  final ArrowPointKind pointKind;
+  final ConnectorPointKind pointKind;
   final int pointIndex;
   final DrawPoint dragOffset;
   final ElementState baseElement;
@@ -652,7 +653,7 @@ final class _ArrowPointComputation {
 }
 
 bool _isNoOpArrowTransformUpdate({
-  required ArrowPointTransform previous,
+  required ConnectorPointTransform previous,
   required _ArrowPointComputation next,
 }) =>
     previous.didInsert == next.didInsert &&
@@ -667,7 +668,7 @@ bool _isNoOpArrowTransformUpdate({
 
 _ArrowPointComputation _compute({
   required DrawState state,
-  required ArrowPointEditContext context,
+  required ConnectorPointEditContext context,
   required DrawPoint currentPosition,
   required bool didInsert,
   required EditModifiers modifiers,
@@ -689,7 +690,7 @@ _ArrowPointComputation _compute({
     zoom: state.application.view.camera.zoom,
   );
   final thresholdSquared = handleTolerance * handleTolerance;
-  final loopThreshold = resolveArrowPointLoopThreshold(handleTolerance);
+  final loopThreshold = resolveConnectorPointLoopThreshold(handleTolerance);
   final baseFixedSegmentsResult = baseFixedSegments.isEmpty
       ? null
       : baseFixedSegments;
@@ -718,7 +719,7 @@ _ArrowPointComputation _compute({
     );
   }
 
-  if (context.pointKind == ArrowPointKind.addable) {
+  if (context.pointKind == ConnectorPointKind.addable) {
     final hasValidPointIndex = _isValidAddablePointIndex(
       index: context.pointIndex,
       pointCount: basePoints.length,
@@ -807,7 +808,7 @@ _ArrowPointComputation _compute({
     activeIndex = index;
   }
 
-  if (context.pointKind != ArrowPointKind.addable &&
+  if (context.pointKind != ConnectorPointKind.addable &&
       (activeIndex == 0 || activeIndex == updatedPoints.length - 1)) {
     final start = updatedPoints.first;
     final end = updatedPoints.last;
@@ -848,7 +849,7 @@ _ArrowPointComputation _compute({
 
 _ArrowPointComputation _computeFocusComputation({
   required DrawState state,
-  required ArrowPointEditContext context,
+  required ConnectorPointEditContext context,
   required List<DrawPoint> basePoints,
   required List<ElbowFixedSegment>? baseFixedSegments,
   required DrawPoint target,
@@ -859,7 +860,7 @@ _ArrowPointComputation _computeFocusComputation({
   required core.EngineContext coreEngineContext,
   required List<String>? orderedElementIds,
 }) {
-  final data = context.baseElement.data as ArrowLikeData;
+  final data = context.baseElement.data as ConnectorData;
   if (data.arrowType == ArrowType.elbow) {
     return _noOpComputation(
       points: basePoints,
@@ -890,7 +891,7 @@ _ArrowPointComputation _computeFocusComputation({
             .toList(growable: false),
   );
   final nextData = dragResult.element.data;
-  if (nextData is! ArrowLikeData) {
+  if (nextData is! ConnectorData) {
     return _noOpComputation(
       points: basePoints,
       didInsert: false,
@@ -948,7 +949,7 @@ _ArrowPointComputation _computeFocusComputation({
 
 _ArrowPointComputation _computeCoreEndpointDragComputation({
   required DrawState state,
-  required ArrowPointEditContext context,
+  required ConnectorPointEditContext context,
   required List<DrawPoint> basePoints,
   required List<ElbowFixedSegment>? baseFixedSegments,
   required int draggedIndex,
@@ -963,7 +964,7 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
   required bool altKey,
   required List<String>? orderedElementIds,
 }) {
-  final data = context.baseElement.data as ArrowLikeData;
+  final data = context.baseElement.data as ConnectorData;
   if (data.arrowType == ArrowType.elbow && data is ArrowData) {
     return _computeElbowEndpointDragComputation(
       state: state,
@@ -1054,7 +1055,7 @@ _ArrowPointComputation _computeCoreEndpointDragComputation({
 
 _ArrowPointComputation _computeElbowEndpointDragComputation({
   required DrawState state,
-  required ArrowPointEditContext context,
+  required ConnectorPointEditContext context,
   required ArrowData data,
   required List<DrawPoint> basePoints,
   required List<ElbowFixedSegment>? baseFixedSegments,
@@ -1282,8 +1283,8 @@ final class _FinalizeEndpointComputation {
 
 _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   required DrawState state,
-  required ArrowPointEditContext context,
-  required ArrowPointTransform transform,
+  required ConnectorPointEditContext context,
+  required ConnectorPointTransform transform,
   required List<DrawPoint> localPoints,
   required core.EngineContext coreEngineContext,
 }) {
@@ -1293,9 +1294,9 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
   if (localPoints.length < 2) {
     return null;
   }
-  if (context.pointKind == ArrowPointKind.addable ||
-      context.pointKind == ArrowPointKind.focusStart ||
-      context.pointKind == ArrowPointKind.focusEnd) {
+  if (context.pointKind == ConnectorPointKind.addable ||
+      context.pointKind == ConnectorPointKind.focusStart ||
+      context.pointKind == ConnectorPointKind.focusEnd) {
     return null;
   }
 
@@ -1309,7 +1310,7 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
     return null;
   }
 
-  final data = context.baseElement.data as ArrowLikeData;
+  final data = context.baseElement.data as ConnectorData;
   final startBinding = transform.startBinding;
   final endBinding = transform.endBinding;
   final releaseLocalPointer = transform.currentPosition.translate(
@@ -1377,7 +1378,7 @@ _FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
 
 _ArrowPointComputation _computeElbowAddableComputation({
   required DrawState state,
-  required ArrowPointEditContext context,
+  required ConnectorPointEditContext context,
   required DrawPoint target,
   required List<DrawPoint> basePoints,
   required List<ElbowFixedSegment> baseFixedSegments,
@@ -1477,15 +1478,15 @@ _ArrowPointComputation _noOpComputation({
 );
 
 int? _resolveDraggedPointIndex({
-  required ArrowPointKind pointKind,
+  required ConnectorPointKind pointKind,
   required int pointIndex,
   required int pointCount,
 }) {
   final resolvedIndex = switch (pointKind) {
-    ArrowPointKind.loopStart => 0,
-    ArrowPointKind.loopEnd => pointCount - 1,
-    ArrowPointKind.focusStart => 0,
-    ArrowPointKind.focusEnd => pointCount - 1,
+    ConnectorPointKind.loopStart => 0,
+    ConnectorPointKind.loopEnd => pointCount - 1,
+    ConnectorPointKind.focusStart => 0,
+    ConnectorPointKind.focusEnd => pointCount - 1,
     _ => pointIndex,
   };
   if (resolvedIndex < 0 || resolvedIndex >= pointCount) {
@@ -1497,35 +1498,35 @@ int? _resolveDraggedPointIndex({
 bool _isValidAddablePointIndex({required int index, required int pointCount}) =>
     index >= 0 && index < pointCount - 1;
 
-bool _requiresBindingLookup(ArrowPointEditContext context) =>
+bool _requiresBindingLookup(ConnectorPointEditContext context) =>
     switch (context.pointKind) {
-      ArrowPointKind.loopStart => true,
-      ArrowPointKind.loopEnd => true,
-      ArrowPointKind.focusStart => false,
-      ArrowPointKind.focusEnd => false,
-      ArrowPointKind.turning =>
+      ConnectorPointKind.loopStart => true,
+      ConnectorPointKind.loopEnd => true,
+      ConnectorPointKind.focusStart => false,
+      ConnectorPointKind.focusEnd => false,
+      ConnectorPointKind.turning =>
         context.pointIndex == 0 ||
             context.pointIndex == context.initialPoints.length - 1,
-      ArrowPointKind.addable => false,
+      ConnectorPointKind.addable => false,
     };
 
 DrawPoint _resolvePointPosition({
   required DrawState state,
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required List<DrawPoint> points,
-  required ArrowPointKind kind,
+  required ConnectorPointKind kind,
   required int index,
   required ArrowType arrowType,
 }) {
-  if (kind == ArrowPointKind.addable) {
+  if (kind == ConnectorPointKind.addable) {
     if (!_isValidAddablePointIndex(index: index, pointCount: points.length)) {
       return points.first;
     }
 
     // For curved arrows with 3+ points, calculate point on the actual curve
     if (arrowType == ArrowType.curved && points.length >= 3) {
-      final curvePoint = ArrowGeometry.calculateCurveDrawPoint(
+      final curvePoint = ConnectorGeometry.calculateCurveDrawPoint(
         points: points,
         segmentIndex: index,
         t: 0.5,
@@ -1551,24 +1552,24 @@ DrawPoint _resolvePointPosition({
     );
   }
   final resolvedIndex = switch (kind) {
-    ArrowPointKind.loopStart => 0,
-    ArrowPointKind.loopEnd => points.length - 1,
+    ConnectorPointKind.loopStart => 0,
+    ConnectorPointKind.loopEnd => points.length - 1,
     _ => index,
   };
   return points[resolvedIndex.clamp(0, points.length - 1)];
 }
 
-ArrowFocusEndpoint? _resolveFocusEndpoint(ArrowPointKind kind) =>
+ArrowFocusEndpoint? _resolveFocusEndpoint(ConnectorPointKind kind) =>
     switch (kind) {
-      ArrowPointKind.focusStart => ArrowFocusEndpoint.start,
-      ArrowPointKind.focusEnd => ArrowFocusEndpoint.end,
+      ConnectorPointKind.focusStart => ArrowFocusEndpoint.start,
+      ConnectorPointKind.focusEnd => ArrowFocusEndpoint.end,
       _ => null,
     };
 
 DrawPoint _resolveFocusPointPosition({
   required DrawState state,
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required List<DrawPoint> fallbackPoints,
   required ArrowFocusEndpoint endpoint,
 }) {
@@ -1600,7 +1601,7 @@ DrawPoint _resolveFocusPointPosition({
 
 DrawPoint _snapTargetToGrid({
   required DrawPoint target,
-  required ArrowPointEditContext context,
+  required ConnectorPointEditContext context,
   required double gridSize,
 }) {
   if (gridSize <= 0) {
@@ -1615,7 +1616,7 @@ DrawPoint _snapTargetToGrid({
 }
 
 int _resolveElbowAddableActiveIndex({
-  required ArrowPointEditContext context,
+  required ConnectorPointEditContext context,
   required int segmentIndex,
   required int pointCount,
 }) {

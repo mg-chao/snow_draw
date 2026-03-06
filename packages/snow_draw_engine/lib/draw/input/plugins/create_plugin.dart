@@ -238,7 +238,7 @@ class CreatePlugin extends DrawInputPlugin {
     }
 
     await dispatch(
-      AddArrowPoint(
+      AddConnectorPoint(
         position: event.position,
         snapOverride: event.modifiers.control,
       ),
@@ -286,7 +286,7 @@ class CreatePlugin extends DrawInputPlugin {
 
   bool _isElbowArrowCreating(DrawState state) =>
       switch (_creatingState(state)?.elementData) {
-        ArrowLikeData(:final arrowType) => arrowType == ArrowType.elbow,
+        ConnectorData(:final arrowType) => arrowType == ArrowType.elbow,
         _ => false,
       };
 

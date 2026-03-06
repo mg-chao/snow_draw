@@ -35,7 +35,7 @@ class SelectPlugin extends DrawInputPlugin {
            PointerCancelInputEvent,
          },
        );
-  final _arrowHandleDoubleTapTracker = DoubleTapTracker<ArrowPointHandle>();
+  final _arrowHandleDoubleTapTracker = DoubleTapTracker<ConnectorPointHandle>();
   final InputRoutingPolicy _routingPolicy;
   DrawStateViewBuilder? _stateViewBuilder;
   ElementTypeId<ElementData>? currentToolTypeId;
@@ -97,7 +97,7 @@ class SelectPlugin extends DrawInputPlugin {
       return unhandled();
     }
 
-    if (intent is StartArrowPointIntent) {
+    if (intent is StartConnectorPointIntent) {
       final now = DateTime.now();
       final data = _arrowDataForElement(stateView, intent.elementId);
       if (data == null) {
@@ -120,7 +120,7 @@ class SelectPlugin extends DrawInputPlugin {
               baseTolerance: selectionConfig.interaction.handleTolerance,
             )) {
           _arrowHandleDoubleTapTracker.clear();
-          final doubleClickIntent = StartArrowPointIntent(
+          final doubleClickIntent = StartConnectorPointIntent(
             elementId: intent.elementId,
             pointKind: intent.pointKind,
             pointIndex: intent.pointIndex,
@@ -360,31 +360,31 @@ class SelectPlugin extends DrawInputPlugin {
   bool _isBoundSerialText(String textElementId) =>
       state.domain.document.boundTextIds.contains(textElementId);
 
-  ArrowLikeData? _arrowDataForElement(
+  ConnectorData? _arrowDataForElement(
     DrawStateView stateView,
     String elementId,
   ) {
     final element = stateView.state.domain.document.getElementById(elementId);
     final data = element?.data;
-    if (data is ArrowLikeData) {
+    if (data is ConnectorData) {
       return data;
     }
     return null;
   }
 
-  ArrowPointHandle _resolveArrowHandleForIntent({
-    required StartArrowPointIntent intent,
+  ConnectorPointHandle _resolveArrowHandleForIntent({
+    required StartConnectorPointIntent intent,
     required DrawPoint position,
-    required ArrowLikeData data,
+    required ConnectorData data,
   }) {
     final isFixed =
         data.arrowType == ArrowType.elbow &&
-        intent.pointKind == ArrowPointKind.addable &&
+        intent.pointKind == ConnectorPointKind.addable &&
         (data.fixedSegments?.any(
               (segment) => segment.index == intent.pointIndex + 1,
             ) ??
             false);
-    return ArrowPointHandle(
+    return ConnectorPointHandle(
       elementId: intent.elementId,
       kind: intent.pointKind,
       index: intent.pointIndex,
@@ -394,13 +394,13 @@ class SelectPlugin extends DrawInputPlugin {
   }
 
   bool _isArrowHandleDoubleClickCandidate({
-    required ArrowPointHandle handle,
-    required ArrowLikeData data,
+    required ConnectorPointHandle handle,
+    required ConnectorData data,
   }) {
     if (handle.isFixed) {
       return true;
     }
-    if (handle.kind != ArrowPointKind.turning) {
+    if (handle.kind != ConnectorPointKind.turning) {
       return false;
     }
     final pointCount = data.points.length;

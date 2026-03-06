@@ -4,8 +4,10 @@ import '../../core/element_data.dart';
 import 'arrow_binding.dart';
 import 'elbow/elbow_fixed_segment.dart';
 
-/// Shared interface for arrow-like path elements (arrows, curved lines).
-abstract class ArrowLikeData extends ElementData {
+/// Shared interface for connector-style path elements.
+///
+/// Snow Draw uses this for both arrow elements and editable line paths.
+abstract class ConnectorData extends ElementData {
   /// Sentinel used by [copyWith] to represent "keep current nullable field".
   static const unset = Object();
 
@@ -21,7 +23,7 @@ abstract class ArrowLikeData extends ElementData {
   bool? get startIsSpecial;
   bool? get endIsSpecial;
 
-  ArrowLikeData copyWith({
+  ConnectorData copyWith({
     List<DrawPoint>? points,
     double? strokeWidth,
     StrokeStyle? strokeStyle,

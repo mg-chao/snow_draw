@@ -41,8 +41,8 @@ class FrameRenderTransientState {
 
   final String? hoveredElementId;
   final String? hoveredBindingElementId;
-  final ArrowPointHandle? hoveredArrowHandle;
-  final ArrowPointHandle? activeArrowHandle;
+  final ConnectorPointHandle? hoveredArrowHandle;
+  final ConnectorPointHandle? activeArrowHandle;
   final bool arrowDeleteIndicatorVisible;
   final SelectionConfig? selectionConfig;
   final SelectionConfig? hoverSelectionConfig;
@@ -200,11 +200,11 @@ class FrameRenderPlanBuilder {
     if (selectionConfig != null && singleSelection.arrowData != null) {
       final handleTolerance =
           selectionConfig.interaction.handleTolerance / effectiveScale;
-      final loopThreshold = resolveArrowPointLoopThreshold(handleTolerance);
+      final loopThreshold = resolveConnectorPointLoopThreshold(handleTolerance);
       final baseHandleSize =
           selectionConfig.render.controlPointSize / effectiveScale;
-      final handleSize = resolveArrowPointHandleSize(baseHandleSize);
-      final overlay = ArrowPointUtils.buildOverlay(
+      final handleSize = resolveConnectorPointHandleSize(baseHandleSize);
+      final overlay = ConnectorPointUtils.buildOverlay(
         element: singleSelectedElement!,
         loopThreshold: loopThreshold,
         handleSize: handleSize,
@@ -212,7 +212,7 @@ class FrameRenderPlanBuilder {
         zoom: view.state.application.view.camera.zoom,
         isBindingEnabled: transientState.snapConfig?.enableArrowBinding ?? true,
       );
-      final handles = <ArrowPointHandle>[
+      final handles = <ConnectorPointHandle>[
         ...overlay.addablePoints,
         ...overlay.turningPoints,
         ...overlay.loopPoints,
@@ -220,8 +220,8 @@ class FrameRenderPlanBuilder {
       ];
       if (handles.isNotEmpty) {
         tasks.add(
-          ArrowPointOverlayRenderTask(
-            handles: List<ArrowPointHandle>.unmodifiable(handles),
+          ConnectorPointOverlayRenderTask(
+            handles: List<ConnectorPointHandle>.unmodifiable(handles),
             selectionConfig: selectionConfig,
             activeHandle: transientState.activeArrowHandle,
             hoveredHandle: transientState.hoveredArrowHandle,
@@ -309,16 +309,16 @@ class FrameRenderPlanBuilder {
 
     final interaction = view.state.application.interaction;
     if (interaction is EditingState &&
-        interaction.context is ArrowPointEditContext) {
-      final context = interaction.context as ArrowPointEditContext;
+        interaction.context is ConnectorPointEditContext) {
+      final context = interaction.context as ConnectorPointEditContext;
       final element = view.state.domain.document.getElementById(
         context.elementId,
       );
       if (element != null) {
         final effectiveElement = resolveEffectiveElement(element);
         final data = effectiveElement.data;
-        if (data is ArrowLikeData) {
-          final binding = resolveArrowPointEditHighlightBinding(
+        if (data is ConnectorData) {
+          final binding = resolveConnectorPointEditHighlightBinding(
             context: context,
             data: data,
             transform: interaction.currentTransform,
@@ -328,7 +328,7 @@ class FrameRenderPlanBuilder {
       }
     } else if (interaction is CreatingState && interaction.isPointCreation) {
       final data = interaction.element.data;
-      if (data is ArrowLikeData) {
+      if (data is ConnectorData) {
         _addHighlightElementId(
           highlightElementIds,
           data.startBinding?.elementId,

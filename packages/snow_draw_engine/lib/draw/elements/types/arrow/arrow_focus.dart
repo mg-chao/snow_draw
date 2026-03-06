@@ -73,7 +73,7 @@ final class ArrowFocusFinalizeResult {
 /// focus geometry is separable at the current zoom.
 List<ArrowFocusPoint> listVisibleArrowFocusPoints({
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required Iterable<ElementState> elements,
   core.EngineContext? engineContext,
   bool ignoreOverlap = false,
@@ -124,7 +124,7 @@ List<ArrowFocusPoint> listVisibleArrowFocusPoints({
 /// Picks a focus-point endpoint under [pointer], if any.
 ArrowFocusEndpoint? pickArrowFocusPoint({
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required Iterable<ElementState> elements,
   required DrawPoint pointer,
   core.EngineContext? engineContext,
@@ -162,7 +162,7 @@ ArrowFocusEndpoint? pickArrowFocusPoint({
 /// Picks a focus-point endpoint under [pointer] and returns pointer offset.
 ArrowFocusHit pickArrowFocusPointWithOffset({
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required Iterable<ElementState> elements,
   required DrawPoint pointer,
   core.EngineContext? engineContext,
@@ -199,7 +199,7 @@ ArrowFocusHit pickArrowFocusPointWithOffset({
 /// Computes and applies a focus-point drag patch to [element].
 ArrowFocusDragResult dragArrowFocusPoint({
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required Map<String, ElementState> elementsById,
   required ArrowFocusEndpoint draggedEndpoint,
   required DrawPoint pointer,
@@ -268,7 +268,7 @@ ArrowFocusDragResult dragArrowFocusPoint({
 /// Finalizes focus-point drag by deriving bindable relation patches.
 ArrowFocusFinalizeResult finalizeArrowFocusPointDrag({
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required Iterable<ElementState> elements,
 }) {
   if (data.arrowType == ArrowType.elbow) {

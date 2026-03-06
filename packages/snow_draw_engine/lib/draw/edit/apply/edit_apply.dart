@@ -147,7 +147,7 @@ class EditApply {
             element: resized,
             startRect: startElement.rect,
           );
-        } else if (resizedData is ArrowLikeData) {
+        } else if (resizedData is ConnectorData) {
           resized = _applyArrowResize(
             element: resized,
             data: resizedData,
@@ -474,7 +474,7 @@ ElementState _applySerialNumberResize({
 
 ElementState _applyArrowResize({
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required bool flipX,
   required bool flipY,
 }) {

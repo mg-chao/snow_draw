@@ -25,7 +25,7 @@ class DefaultEditOperationRegistry {
   /// Default operation set (reused by tests and extension points).
   static const List<EditOperation> defaultOperations = [
     MoveOperation(),
-    ArrowPointOperation(),
+    ConnectorPointOperation(),
     ResizeOperation(),
     RotateOperation(),
   ];

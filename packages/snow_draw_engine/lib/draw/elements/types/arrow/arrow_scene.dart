@@ -411,7 +411,7 @@ final class ArrowScene {
 
   List<core.ArrowState> get arrows => projection.arrows;
 
-  Map<String, (ElementState, ArrowLikeData)> get arrowSources =>
+  Map<String, (ElementState, ConnectorData)> get arrowSources =>
       projection.arrowSources;
 
   List<String> get orderedElementIds => projection.orderedElementIds;

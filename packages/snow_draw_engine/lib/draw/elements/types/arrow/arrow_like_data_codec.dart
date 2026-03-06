@@ -6,8 +6,8 @@ import 'elbow/elbow_fixed_segment.dart';
 import 'elbow/elbow_routing_data.dart';
 
 /// Shared serialization helpers for arrow-like data implementations.
-final class ArrowLikeDataCodec {
-  const ArrowLikeDataCodec._();
+final class ConnectorDataCodec {
+  const ConnectorDataCodec._();
 
   static List<DrawPoint> decodePoints(Object? rawPoints) {
     if (rawPoints is! List) {
@@ -117,9 +117,9 @@ final class ArrowLikeDataCodec {
     required Object? rawEndIsSpecial,
     required ElbowRoutingData? currentRoutingData,
   }) {
-    if (identical(rawFixedSegments, ArrowLikeData.unset) &&
-        identical(rawStartIsSpecial, ArrowLikeData.unset) &&
-        identical(rawEndIsSpecial, ArrowLikeData.unset)) {
+    if (identical(rawFixedSegments, ConnectorData.unset) &&
+        identical(rawStartIsSpecial, ConnectorData.unset) &&
+        identical(rawEndIsSpecial, ConnectorData.unset)) {
       return currentRoutingData;
     }
 
@@ -157,7 +157,7 @@ final class ArrowLikeDataCodec {
     required Object? rawValue,
     required T currentValue,
     required T Function(Object? raw) decode,
-  }) => identical(rawValue, ArrowLikeData.unset)
+  }) => identical(rawValue, ConnectorData.unset)
       ? currentValue
       : decode(rawValue);
 }

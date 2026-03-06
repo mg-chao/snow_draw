@@ -157,16 +157,16 @@ class EditIntentDetector {
     final element = stateView.state.domain.document.getElementById(
       selectedIds.first,
     );
-    if (element == null || element.data is! ArrowLikeData) {
+    if (element == null || element.data is! ConnectorData) {
       return null;
     }
 
     final hitRadius = config.interaction.handleTolerance;
-    final handleSize = resolveArrowPointHandleSize(
+    final handleSize = resolveConnectorPointHandleSize(
       config.render.controlPointSize,
     );
-    final loopThreshold = resolveArrowPointLoopThreshold(hitRadius);
-    final handle = ArrowPointUtils.hitTest(
+    final loopThreshold = resolveConnectorPointLoopThreshold(hitRadius);
+    final handle = ConnectorPointUtils.hitTest(
       element: stateView.effectiveElement(element),
       position: position,
       hitRadius: hitRadius,
@@ -180,7 +180,7 @@ class EditIntentDetector {
       return null;
     }
 
-    return StartArrowPointIntent(
+    return StartConnectorPointIntent(
       elementId: handle.elementId,
       pointKind: handle.kind,
       pointIndex: handle.index,
@@ -242,8 +242,8 @@ final class StartRotateIntent extends EditIntent {
   String toString() => 'StartRotateIntent()';
 }
 
-final class StartArrowPointIntent extends EditIntent {
-  const StartArrowPointIntent({
+final class StartConnectorPointIntent extends EditIntent {
+  const StartConnectorPointIntent({
     required this.elementId,
     required this.pointKind,
     required this.pointIndex,
@@ -251,13 +251,13 @@ final class StartArrowPointIntent extends EditIntent {
   });
 
   final String elementId;
-  final ArrowPointKind pointKind;
+  final ConnectorPointKind pointKind;
   final int pointIndex;
   final bool isDoubleClick;
 
   @override
   String toString() =>
-      'StartArrowPointIntent(id: $elementId, kind: $pointKind, '
+      'StartConnectorPointIntent(id: $elementId, kind: $pointKind, '
       'index: $pointIndex, doubleClick: $isDoubleClick)';
 }
 

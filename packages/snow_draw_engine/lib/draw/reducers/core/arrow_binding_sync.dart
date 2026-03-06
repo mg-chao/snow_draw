@@ -112,7 +112,7 @@ List<ElementState> syncArrowBindingsAfterDeletion({
       // Unknown ids without element metadata are ignored.
       continue;
     }
-    if (deletedElement.data is ArrowLikeData) {
+    if (deletedElement.data is ConnectorData) {
       deletedArrowIdSet.add(deletedId);
     }
     if (isArrowBindableElement(deletedElement)) {
@@ -184,7 +184,7 @@ List<ElementState> syncArrowBindingsAfterDuplication({
       bindableIdMap[entry.key] = entry.value;
       bindableIdMap[entry.value] = entry.value;
     }
-    if (duplicate.data is ArrowLikeData) {
+    if (duplicate.data is ConnectorData) {
       arrowIdMap[entry.key] = entry.value;
       arrowIdMap[entry.value] = entry.value;
     }

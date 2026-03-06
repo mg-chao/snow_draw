@@ -78,7 +78,7 @@ DrawState _stateWithTextEditing() {
     const DrawPoint(x: 340, y: 30),
   ];
   final arrowRect = DrawRect.fromPointCloud(worldPoints);
-  final normalized = ArrowGeometry.normalizePoints(
+  final normalized = ConnectorGeometry.normalizePoints(
     worldPoints: worldPoints,
     rect: arrowRect,
   );
@@ -119,7 +119,7 @@ DrawState _stateWithTextEditing() {
 double _arrowEndX(DrawState state, String arrowId) {
   final arrow = state.domain.document.getElementById(arrowId)!;
   final data = arrow.data as ArrowData;
-  final points = ArrowGeometry.resolveWorldPoints(
+  final points = ConnectorGeometry.resolveWorldPoints(
     rect: arrow.rect,
     normalizedPoints: data.points,
   );

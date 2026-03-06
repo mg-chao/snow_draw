@@ -281,7 +281,7 @@ ElementState _elbowArrowElement({
   List<ElbowFixedSegment>? fixedSegments,
 }) {
   final rect = DrawRect.fromPointCloud(points);
-  final normalizedPoints = ArrowGeometry.normalizePoints(
+  final normalizedPoints = ConnectorGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
   );
@@ -310,7 +310,7 @@ ElementState _straightArrowElement({
   ArrowBinding? endBinding,
 }) {
   final rect = DrawRect.fromPointCloud(points);
-  final normalizedPoints = ArrowGeometry.normalizePoints(
+  final normalizedPoints = ConnectorGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
   );
@@ -335,7 +335,7 @@ ElementState _lineElement({
   ArrowBinding? endBinding,
 }) {
   final rect = DrawRect.fromPointCloud(points);
-  final normalizedPoints = ArrowGeometry.normalizePoints(
+  final normalizedPoints = ConnectorGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
   );
@@ -354,8 +354,8 @@ ElementState _lineElement({
 }
 
 List<DrawPoint> _resolveArrowWorldPoints(ElementState element) {
-  final data = element.data as ArrowLikeData;
-  return ArrowGeometry.resolveWorldPoints(
+  final data = element.data as ConnectorData;
+  return ConnectorGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
   );

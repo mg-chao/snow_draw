@@ -113,7 +113,7 @@ List<ElementState> _buildScenarioElements() {
     const DrawPoint(x: 300, y: 50),
   ];
   final arrowRect = DrawRect.fromPointCloud(arrowPoints);
-  final normalizedArrowPoints = ArrowGeometry.normalizePoints(
+  final normalizedArrowPoints = ConnectorGeometry.normalizePoints(
     worldPoints: arrowPoints,
     rect: arrowRect,
   );

@@ -60,7 +60,7 @@ class EditComputePipeline {
       ),
       skipArrowIds: <String>{
         for (final entry in merged.entries)
-          if (entry.value.data is ArrowLikeData) entry.key,
+          if (entry.value.data is ConnectorData) entry.key,
       },
     );
     for (final entry in bindingUpdates.updatedElements.entries) {

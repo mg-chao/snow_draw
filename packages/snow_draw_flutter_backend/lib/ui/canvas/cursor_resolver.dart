@@ -27,7 +27,7 @@ class CursorResolver {
       return switch (context) {
         ResizeEditContext(:final resizeMode, :final rotation) =>
           _cursorForResizeMode(resizeMode, rotation),
-        RotateEditContext() || ArrowPointEditContext() => grabbingCursor(),
+        RotateEditContext() || ConnectorPointEditContext() => grabbingCursor(),
         MoveEditContext() => SystemMouseCursors.move,
         _ => SystemMouseCursors.move,
       };

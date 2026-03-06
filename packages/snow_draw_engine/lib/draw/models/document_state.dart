@@ -291,7 +291,7 @@ class DocumentState {
     final ids = <String>{};
     for (final element in elements) {
       final data = element.data;
-      if (data is! ArrowLikeData) {
+      if (data is! ConnectorData) {
         continue;
       }
       _addBoundTargetId(ids, data.startBinding?.elementId);

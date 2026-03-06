@@ -51,7 +51,7 @@ EditIntentResolution? _resolveDefaultIntent(
   EditIntent intent,
   DrawConfig config,
 ) => switch (intent) {
-  StartArrowPointIntent(
+  StartConnectorPointIntent(
     :final elementId,
     :final pointKind,
     :final pointIndex,
@@ -59,7 +59,7 @@ EditIntentResolution? _resolveDefaultIntent(
   ) =>
     (
       operationId: EditOperationIds.arrowPoint,
-      params: ArrowPointOperationParams(
+      params: ConnectorPointOperationParams(
         elementId: elementId,
         pointKind: pointKind,
         pointIndex: pointIndex,

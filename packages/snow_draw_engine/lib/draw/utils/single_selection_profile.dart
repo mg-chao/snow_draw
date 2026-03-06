@@ -25,7 +25,7 @@ class SingleSelectionProfile {
 
     final data = element.data;
     return switch (data) {
-      final ArrowLikeData arrow => SingleSelectionProfile._(
+      final ConnectorData arrow => SingleSelectionProfile._(
         element: element,
         arrowData: arrow,
       ),
@@ -38,7 +38,7 @@ class SingleSelectionProfile {
   final ElementState? element;
 
   /// Arrow payload for a selected arrow/line element.
-  final ArrowLikeData? arrowData;
+  final ConnectorData? arrowData;
 
   /// Whether the selected element is text.
   final bool isText;

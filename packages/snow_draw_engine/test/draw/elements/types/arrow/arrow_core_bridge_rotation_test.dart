@@ -8,7 +8,7 @@ void main() {
     test('toCoreArrowState projects rotated world points correctly', () {
       final element = _buildRotatedArrowElement();
       final data = element.data as ArrowData;
-      final unrotated = ArrowGeometry.resolveWorldPoints(
+      final unrotated = ConnectorGeometry.resolveWorldPoints(
         rect: element.rect,
         normalizedPoints: data.points,
       );
@@ -82,8 +82,8 @@ ElementState _buildRotatedArrowElement() => const ElementState(
 );
 
 List<DrawPoint> _resolveRenderedWorldPoints(ElementState element) {
-  final data = element.data as ArrowLikeData;
-  final unrotatedPoints = ArrowGeometry.resolveWorldPoints(
+  final data = element.data as ConnectorData;
+  final unrotatedPoints = ConnectorGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
   );

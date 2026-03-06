@@ -45,7 +45,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     required DrawPoint startPosition,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final arrowData = requireCreationDataType<ArrowLikeData>(
+    final arrowData = requireCreationDataType<ConnectorData>(
       data: data,
       strategyName: 'ArrowCreationStrategy.start',
     );
@@ -83,7 +83,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     bool snapOverrideActive = false,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final elementData = requireCreatingElementDataType<ArrowLikeData>(
+    final elementData = requireCreatingElementDataType<ConnectorData>(
       creatingState: creatingState,
       strategyName: 'ArrowCreationStrategy.update',
     );
@@ -243,7 +243,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       return null;
     }
 
-    final elementData = requireCreatingElementDataType<ArrowLikeData>(
+    final elementData = requireCreatingElementDataType<ConnectorData>(
       creatingState: creatingState,
       strategyName: 'ArrowCreationStrategy.addPoint',
     );
@@ -336,7 +336,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
     required CreatingState creatingState,
     TextMetricsService textMetricsService = defaultTextMetricsService,
   }) {
-    final data = requireCreatingElementDataType<ArrowLikeData>(
+    final data = requireCreatingElementDataType<ConnectorData>(
       creatingState: creatingState,
       strategyName: 'ArrowCreationStrategy.finish',
     );
@@ -394,7 +394,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
       rect: finalizedResult.rect,
       normalizedPoints: finalizedResult.data.points,
     );
-    final length = ArrowGeometry.calculateShaftLength(
+    final length = ConnectorGeometry.calculateShaftLength(
       points: points,
       arrowType: finalizedResult.data.arrowType,
     );
@@ -417,7 +417,7 @@ class ArrowCreationStrategy extends PointCreationStrategy {
 
 typedef _ArrowCreationFinishResult = ({
   DrawRect rect,
-  ArrowLikeData data,
+  ConnectorData data,
   List<String>? orderedElementIds,
 });
 
@@ -506,7 +506,7 @@ _ArrowCreationFinishResult _finalizeArrowCreationBindings({
           nextArrow: finalized.arrow,
         );
   final patchedData = patchedElement.data;
-  if (patchedData is! ArrowLikeData) {
+  if (patchedData is! ConnectorData) {
     return result;
   }
   return (
@@ -624,7 +624,7 @@ _CreationEndpointResolution _resolveCreationEndpoints({
   required DrawState state,
   required DrawConfig config,
   required CreatingState creatingState,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required DrawPoint currentPosition,
   required SnappingMode snappingMode,
   required bool snapOverrideActive,
@@ -826,7 +826,7 @@ _PointSnapResult _snapCreatePoint({
 _BindingSnapResult _snapBindingPoint({
   required DrawState state,
   required DrawConfig config,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required DrawPoint position,
   required SnappingMode snappingMode,
   required bool dragStart,
@@ -901,7 +901,7 @@ _BindingSnapResult _snapBindingPoint({
 
 _CorePreviewBindingResult? _resolveBindingWithCoreEndpointPreview({
   required DrawState state,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required DrawPoint worldPointer,
   required DrawPoint oppositePoint,
   required bool dragStart,
@@ -1158,7 +1158,7 @@ core.ArrowState _applyCoreEndpointStrategyToArrow({
 _BindingSnapResult _resolveStartBindingPoint({
   required DrawState state,
   required DrawConfig config,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required DrawPoint startPosition,
   required SnappingMode snappingMode,
   required ArrowType arrowType,

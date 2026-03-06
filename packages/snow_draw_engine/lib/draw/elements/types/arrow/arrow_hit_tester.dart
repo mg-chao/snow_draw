@@ -26,9 +26,9 @@ class ArrowHitTester implements ElementHitTester {
     double tolerance = 0,
   }) {
     final data = element.data;
-    if (data is! ArrowLikeData) {
+    if (data is! ConnectorData) {
       throw StateError(
-        'ArrowHitTester can only hit test ArrowLikeData '
+        'ArrowHitTester can only hit test ConnectorData '
         '(got ${data.runtimeType})',
       );
     }
@@ -101,7 +101,7 @@ class ArrowHitTester implements ElementHitTester {
 
   _ArrowHitTestCacheEntry _resolveCache(
     ElementState element,
-    ArrowLikeData data,
+    ConnectorData data,
   ) {
     final id = element.id;
     final rect = element.rect;
@@ -132,22 +132,22 @@ class _ArrowHitTestCacheEntry {
 
   final double width;
   final double height;
-  final ArrowLikeData data;
+  final ConnectorData data;
   final List<DrawPoint> shaftPoints;
   final List<_ArrowheadHitTarget> arrowheadTargets;
 
-  bool matches(double width, double height, ArrowLikeData data) =>
+  bool matches(double width, double height, ConnectorData data) =>
       this.width == width &&
       this.height == height &&
       identical(this.data, data);
 
   factory _ArrowHitTestCacheEntry.build({
     required ElementState element,
-    required ArrowLikeData data,
+    required ConnectorData data,
   }) {
     final rect = element.rect;
-    final geometry = ArrowGeometryDescriptor(data: data, rect: rect);
-    final shaftPoints = ArrowGeometry.sampleShaftForHitTest(
+    final geometry = ConnectorGeometryDescriptor(data: data, rect: rect);
+    final shaftPoints = ConnectorGeometry.sampleShaftForHitTest(
       points: geometry.insetDrawPoints,
       arrowType: data.arrowType,
       strokeWidth: data.strokeWidth,
@@ -219,7 +219,7 @@ _ArrowheadHitTarget _polygonTarget({
   return _isPointInsidePolygon(position: position, vertices: vertices);
 };
 
-double _arrowheadExtent(ArrowLikeData data) {
+double _arrowheadExtent(ConnectorData data) {
   final hasArrowhead =
       data.startArrowhead != ArrowheadStyle.none ||
       data.endArrowhead != ArrowheadStyle.none;
@@ -231,10 +231,10 @@ double _arrowheadExtent(ArrowLikeData data) {
 }
 
 double _arrowheadLength(double strokeWidth) =>
-    ArrowGeometry.resolveArrowheadLength(strokeWidth);
+    ConnectorGeometry.resolveArrowheadLength(strokeWidth);
 
 List<_ArrowheadHitTarget> _buildArrowheadTargets(
-  ArrowGeometryDescriptor geometry,
+  ConnectorGeometryDescriptor geometry,
 ) {
   final points = geometry.localDrawPoints;
   final data = geometry.data;

@@ -117,7 +117,7 @@ void main() {
             anchor: DrawPoint(x: 1, y: 0.5),
           ),
         );
-        final beforeArrowPoints = ArrowGeometry.resolveWorldPoints(
+        final beforeArrowPoints = ConnectorGeometry.resolveWorldPoints(
           rect: arrow.rect,
           normalizedPoints: (arrow.data as ArrowData).points,
         );
@@ -133,7 +133,7 @@ void main() {
         );
         final movedArrow = next.domain.document.getElementById(arrow.id)!;
         final movedData = movedArrow.data as ArrowData;
-        final afterArrowPoints = ArrowGeometry.resolveWorldPoints(
+        final afterArrowPoints = ConnectorGeometry.resolveWorldPoints(
           rect: movedArrow.rect,
           normalizedPoints: movedData.points,
         );
@@ -215,7 +215,7 @@ void main() {
           createdArrow.id,
         )!;
         final movedData = movedArrow.data as ArrowData;
-        final movedPoints = ArrowGeometry.resolveWorldPoints(
+        final movedPoints = ConnectorGeometry.resolveWorldPoints(
           rect: movedArrow.rect,
           normalizedPoints: movedData.points,
         );
@@ -313,7 +313,7 @@ ElementState _arrowElement({
   ArrowBinding? startBinding,
 }) {
   final rect = DrawRect.fromPointCloud(points);
-  final normalized = ArrowGeometry.normalizePoints(
+  final normalized = ConnectorGeometry.normalizePoints(
     worldPoints: points,
     rect: rect,
   );

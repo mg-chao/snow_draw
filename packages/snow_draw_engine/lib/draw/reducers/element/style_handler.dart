@@ -382,7 +382,7 @@ bool _hasSelectionGeometryChanges({
       elementsById: elementsById,
       engineContext: coreEngineContext,
     );
-    final geometry = resolveArrowGeometryUpdate(
+    final geometry = resolveConnectorGeometryUpdate(
       localPoints: routed.localPoints,
       oldRect: element.rect,
       rotation: element.rotation,
@@ -440,7 +440,7 @@ bool _shouldRecomputeElbowAfterStyleChange(ArrowData previous, ArrowData next) {
     finalize: true,
   );
 
-  final geometry = resolveArrowGeometryUpdate(
+  final geometry = resolveConnectorGeometryUpdate(
     localPoints: edited.localPoints,
     oldRect: element.rect,
     rotation: element.rotation,

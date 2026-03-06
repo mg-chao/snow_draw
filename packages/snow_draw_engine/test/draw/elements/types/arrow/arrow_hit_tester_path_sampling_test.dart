@@ -64,7 +64,7 @@ DrawPoint? _resolveCurveSamplePoint({
 }) {
   final data = element.data as ArrowData;
   final points = _resolveRenderedWorldPoints(element: element, data: data);
-  return ArrowGeometry.calculateCurveDrawPoint(
+  return ConnectorGeometry.calculateCurveDrawPoint(
     points: points,
     segmentIndex: 0,
     t: t,
@@ -75,7 +75,7 @@ List<DrawPoint> _resolveRenderedWorldPoints({
   required ElementState element,
   required ArrowData data,
 }) {
-  final unrotatedPoints = ArrowGeometry.resolveWorldPoints(
+  final unrotatedPoints = ConnectorGeometry.resolveWorldPoints(
     rect: element.rect,
     normalizedPoints: data.points,
   );

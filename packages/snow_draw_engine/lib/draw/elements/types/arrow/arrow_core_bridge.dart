@@ -31,7 +31,7 @@ final class ArrowCoreDocumentProjection {
   final List<core.BindableState> bindables;
   final List<core.BindableRelationState> bindableRelations;
   final List<core.ArrowState> arrows;
-  final Map<String, (ElementState, ArrowLikeData)> arrowSources;
+  final Map<String, (ElementState, ConnectorData)> arrowSources;
   final List<String> orderedElementIds;
   final Map<String, List<String>> anchorElementIdsByBindableId;
 }
@@ -228,7 +228,7 @@ List<core.BindableRelationState> collectCoreBindableRelations(
 
   for (final element in elements) {
     final data = element.data;
-    if (data is! ArrowLikeData) {
+    if (data is! ConnectorData) {
       continue;
     }
     final arrowId = element.id;
@@ -310,18 +310,18 @@ Map<String, List<String>> collectCoreAnchorElementIdsByBindableId(
 /// skipped.
 ({
   List<core.ArrowState> arrows,
-  Map<String, (ElementState, ArrowLikeData)> sources,
+  Map<String, (ElementState, ConnectorData)> sources,
 })
 collectCoreArrowStatesWithSources(
   Iterable<ElementState> elements, {
   bool onlyBoundArrows = false,
 }) {
   final arrows = <core.ArrowState>[];
-  final sources = <String, (ElementState, ArrowLikeData)>{};
+  final sources = <String, (ElementState, ConnectorData)>{};
 
   for (final element in elements) {
     final data = element.data;
-    if (data is! ArrowLikeData) {
+    if (data is! ConnectorData) {
       continue;
     }
     if (onlyBoundArrows &&
@@ -335,7 +335,7 @@ collectCoreArrowStatesWithSources(
 
   return (
     arrows: List<core.ArrowState>.unmodifiable(arrows),
-    sources: Map<String, (ElementState, ArrowLikeData)>.unmodifiable(sources),
+    sources: Map<String, (ElementState, ConnectorData)>.unmodifiable(sources),
   );
 }
 
@@ -397,7 +397,7 @@ ArrowCoreDocumentProjection projectCoreDocument(
 
 List<DrawPoint> resolveArrowLocalPoints(
   ElementState element,
-  ArrowLikeData data, [
+  ConnectorData data, [
   List<DrawPoint>? localPointsOverride,
 ]) =>
     localPointsOverride ??
@@ -498,7 +498,7 @@ List<core.FixedSegment>? _toCoreFixedSegments(
 
 core.ArrowState toCoreArrowState({
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   List<DrawPoint>? localPointsOverride,
   List<ElbowFixedSegment>? fixedSegmentsOverride,
   ArrowBinding? startBindingOverride,
@@ -571,12 +571,12 @@ List<ElbowFixedSegment>? coreArrowWorldFixedSegments(core.ArrowState arrow) {
 
 ElementState applyCoreArrowStateToElement({
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required core.ArrowState nextArrow,
 }) {
   final nextWorldPoints = coreArrowWorldPoints(nextArrow);
   final localPointsInOldFrame = worldToLocalPoints(element, nextWorldPoints);
-  final geometry = resolveArrowGeometryUpdate(
+  final geometry = resolveConnectorGeometryUpdate(
     localPoints: localPointsInOldFrame,
     oldRect: element.rect,
     rotation: element.rotation,
@@ -608,7 +608,7 @@ ElementState applyCoreArrowStateToElement({
 
 ElementState applyCoreArrowPatchToElement({
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required core.ArrowPatch patch,
 }) {
   if (patch.isEmpty) {
@@ -635,7 +635,7 @@ ElementState applyCoreArrowPatchToElement({
 /// Applies arrow-core patches onto [sources], returning only changed elements.
 Map<String, ElementState> applyCoreArrowPatchesToSources({
   required Iterable<core.ArrowStatePatchWithId> patches,
-  required Map<String, (ElementState, ArrowLikeData)> sources,
+  required Map<String, (ElementState, ConnectorData)> sources,
 }) {
   final patchedById = <String, ElementState>{};
   for (final arrowPatch in patches) {
@@ -689,30 +689,30 @@ bool _patchTouchesGeometry(core.ArrowPatch patch) =>
     patch.containsKey('height') ||
     patch.containsKey('points');
 
-ArrowLikeData _applyNonGeometryPatch({
+ConnectorData _applyNonGeometryPatch({
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required core.ArrowPatch patch,
 }) {
   final startBindingUpdate = patch.containsKey('startBinding')
       ? _decodeCoreBindingPatchValue(patch['startBinding'])
-      : ArrowLikeData.unset;
+      : ConnectorData.unset;
   final endBindingUpdate = patch.containsKey('endBinding')
       ? _decodeCoreBindingPatchValue(patch['endBinding'])
-      : ArrowLikeData.unset;
+      : ConnectorData.unset;
   final fixedSegmentsUpdate = patch.containsKey('fixedSegments')
       ? _decodeCoreFixedSegmentsPatchValue(
           element: element,
           data: data,
           patch: patch,
         )
-      : ArrowLikeData.unset;
+      : ConnectorData.unset;
   final startIsSpecialUpdate = patch.containsKey('startIsSpecial')
       ? _decodeNullableBoolPatchValue(patch['startIsSpecial'])
-      : ArrowLikeData.unset;
+      : ConnectorData.unset;
   final endIsSpecialUpdate = patch.containsKey('endIsSpecial')
       ? _decodeNullableBoolPatchValue(patch['endIsSpecial'])
-      : ArrowLikeData.unset;
+      : ConnectorData.unset;
 
   return data.copyWith(
     startBinding: startBindingUpdate,
@@ -725,7 +725,7 @@ ArrowLikeData _applyNonGeometryPatch({
 
 List<ElbowFixedSegment>? _decodeCoreFixedSegmentsPatchValue({
   required ElementState element,
-  required ArrowLikeData data,
+  required ConnectorData data,
   required core.ArrowPatch patch,
 }) {
   final rawFixedSegments = patch['fixedSegments'];

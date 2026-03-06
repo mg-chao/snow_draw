@@ -228,12 +228,12 @@ final class RotateTransform extends EditTransform {
 }
 
 @immutable
-final class ArrowPointTransform extends EditTransform {
+final class ConnectorPointTransform extends EditTransform {
   static const _bindingUnset = Object();
   static const _fixedSegmentsUnset = Object();
   static const _orderedElementIdsUnset = Object();
 
-  const ArrowPointTransform({
+  const ConnectorPointTransform({
     required this.currentPosition,
     required this.points,
     this.fixedSegments,
@@ -259,7 +259,7 @@ final class ArrowPointTransform extends EditTransform {
   final bool hasChanges;
   final bool allowBindingOnFinalize;
 
-  ArrowPointTransform copyWith({
+  ConnectorPointTransform copyWith({
     DrawPoint? currentPosition,
     List<DrawPoint>? points,
     Object? fixedSegments = _fixedSegmentsUnset,
@@ -271,7 +271,7 @@ final class ArrowPointTransform extends EditTransform {
     bool? shouldDelete,
     bool? hasChanges,
     bool? allowBindingOnFinalize,
-  }) => ArrowPointTransform(
+  }) => ConnectorPointTransform(
     currentPosition: currentPosition ?? this.currentPosition,
     points: points ?? this.points,
     fixedSegments: fixedSegments == _fixedSegmentsUnset
@@ -306,7 +306,7 @@ final class ArrowPointTransform extends EditTransform {
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
-      other is ArrowPointTransform &&
+      other is ConnectorPointTransform &&
           other.currentPosition == currentPosition &&
           pointListEquals(other.points, points) &&
           fixedSegmentStructureEquals(other.fixedSegments, fixedSegments) &&

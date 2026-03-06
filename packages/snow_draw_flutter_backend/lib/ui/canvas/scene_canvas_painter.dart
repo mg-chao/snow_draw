@@ -234,9 +234,9 @@ class SceneCanvasPainter extends CustomPainter {
     }
 
     final plannedArrowOverlayTask =
-        _firstPlannedTask<ArrowPointOverlayRenderTask>();
+        _firstPlannedTask<ConnectorPointOverlayRenderTask>();
     if (plannedArrowOverlayTask != null) {
-      _drawArrowPointOverlayTask(
+      _drawConnectorPointOverlayTask(
         canvas: canvas,
         task: plannedArrowOverlayTask,
         scale: scale,
@@ -1242,9 +1242,9 @@ class SceneCanvasPainter extends CustomPainter {
     );
   }
 
-  void _drawArrowPointOverlayTask({
+  void _drawConnectorPointOverlayTask({
     required Canvas canvas,
-    required ArrowPointOverlayRenderTask task,
+    required ConnectorPointOverlayRenderTask task,
     required double scale,
   }) {
     if (task.handles.isEmpty) {
@@ -1269,7 +1269,7 @@ class SceneCanvasPainter extends CustomPainter {
       return;
     }
 
-    final handles = <ArrowPointHandle>[
+    final handles = <ConnectorPointHandle>[
       for (final handle in task.handles)
         if (handle.elementId == elementId) handle,
     ];
@@ -1277,7 +1277,7 @@ class SceneCanvasPainter extends CustomPainter {
       return;
     }
 
-    _drawArrowPointHandles(
+    _drawConnectorPointHandles(
       canvas: canvas,
       element: effectiveElement,
       handles: handles,
@@ -1289,29 +1289,29 @@ class SceneCanvasPainter extends CustomPainter {
     );
   }
 
-  void _drawArrowPointHandles({
+  void _drawConnectorPointHandles({
     required Canvas canvas,
     required ElementState element,
-    required List<ArrowPointHandle> handles,
+    required List<ConnectorPointHandle> handles,
     required SelectionConfig selectionConfig,
-    required ArrowPointHandle? activeHandle,
-    required ArrowPointHandle? hoveredHandle,
+    required ConnectorPointHandle? activeHandle,
+    required ConnectorPointHandle? hoveredHandle,
     required bool deleteIndicatorVisible,
     required double scale,
   }) {
-    final addablePoints = <ArrowPointHandle>[];
-    final turningPoints = <ArrowPointHandle>[];
-    final loopPoints = <ArrowPointHandle>[];
+    final addablePoints = <ConnectorPointHandle>[];
+    final turningPoints = <ConnectorPointHandle>[];
+    final loopPoints = <ConnectorPointHandle>[];
     for (final handle in handles) {
       switch (handle.kind) {
-        case ArrowPointKind.turning:
-        case ArrowPointKind.focusStart:
-        case ArrowPointKind.focusEnd:
+        case ConnectorPointKind.turning:
+        case ConnectorPointKind.focusStart:
+        case ConnectorPointKind.focusEnd:
           turningPoints.add(handle);
-        case ArrowPointKind.addable:
+        case ConnectorPointKind.addable:
           addablePoints.add(handle);
-        case ArrowPointKind.loopStart:
-        case ArrowPointKind.loopEnd:
+        case ConnectorPointKind.loopStart:
+        case ConnectorPointKind.loopEnd:
           loopPoints.add(handle);
       }
     }
@@ -1399,10 +1399,10 @@ class SceneCanvasPainter extends CustomPainter {
       if (isHighlighted) {
         canvas.drawCircle(center, hoverOuterRadius, paints.hoverOuterFill);
       }
-      final radius = handle.kind == ArrowPointKind.loopEnd
+      final radius = handle.kind == ConnectorPointKind.loopEnd
           ? loopOuterRadius
           : loopInnerRadius;
-      if (handle.kind == ArrowPointKind.loopStart) {
+      if (handle.kind == ConnectorPointKind.loopStart) {
         canvas.drawCircle(center, radius, paints.turningFill);
       }
       canvas.drawCircle(
@@ -1703,8 +1703,8 @@ class SceneCanvasPainter extends CustomPainter {
   }
 
   DrawPoint? _resolveHandlePositionFromHandles(
-    List<ArrowPointHandle> handles,
-    ArrowPointHandle handle,
+    List<ConnectorPointHandle> handles,
+    ConnectorPointHandle handle,
   ) {
     for (final candidate in handles) {
       if (candidate == handle) {

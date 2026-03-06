@@ -47,7 +47,7 @@ class CreateElementReducer {
           a,
           context,
         ),
-        final AddArrowPoint a => _addCreationPoint(state, a, context),
+        final AddConnectorPoint a => _addCreationPoint(state, a, context),
         FinishCreateElement _ => _finishCreateElement(state, context),
         CancelCreateElement _ => _cancelCreateElement(state),
         _ => null,
@@ -263,7 +263,7 @@ class CreateElementReducer {
 
   DrawState _addCreationPoint(
     DrawState state,
-    AddArrowPoint action,
+    AddConnectorPoint action,
     DrawContext context,
   ) => _runCreationUpdate(
     state: state,

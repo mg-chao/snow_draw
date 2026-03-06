@@ -7,8 +7,8 @@ import 'arrow_core_codec.dart';
 import 'arrow_core_geometry_adapter.dart' as core_geometry_adapter;
 import 'arrow_like_data.dart';
 
-class ArrowGeometry {
-  const ArrowGeometry._();
+class ConnectorGeometry {
+  const ConnectorGeometry._();
 
   static List<DrawPoint> resolveLocalPoints({
     required DrawRect rect,
@@ -50,12 +50,12 @@ class ArrowGeometry {
   ///
   /// This exposes the elbow shaft shape in a typed form so backends do not
   /// need to parse SVG-like path strings emitted by arrow-core.
-  static List<ArrowPathCommand> resolveElbowPathCommands({
+  static List<ConnectorPathCommand> resolveElbowPathCommands({
     required List<DrawPoint> points,
     double radius = 16,
   }) {
     if (points.isEmpty) {
-      return const <ArrowPathCommand>[];
+      return const <ConnectorPathCommand>[];
     }
 
     final commands = _parsePathCommands(
@@ -64,7 +64,7 @@ class ArrowGeometry {
     if (commands == null || commands.isEmpty) {
       return _buildStraightPathCommands(points);
     }
-    return List<ArrowPathCommand>.unmodifiable(commands);
+    return List<ConnectorPathCommand>.unmodifiable(commands);
   }
 
   static double calculateShaftLength({
@@ -199,27 +199,27 @@ class ArrowGeometry {
 }
 
 /// A typed path command for rendering an arrow shaft.
-sealed class ArrowPathCommand {
-  const ArrowPathCommand();
+sealed class ConnectorPathCommand {
+  const ConnectorPathCommand();
 }
 
 /// Moves the current shaft path cursor to [point] without drawing.
-final class ArrowPathMoveCommand extends ArrowPathCommand {
-  const ArrowPathMoveCommand(this.point);
+final class ConnectorPathMoveCommand extends ConnectorPathCommand {
+  const ConnectorPathMoveCommand(this.point);
 
   final DrawPoint point;
 }
 
 /// Draws a straight shaft segment to [point].
-final class ArrowPathLineCommand extends ArrowPathCommand {
-  const ArrowPathLineCommand(this.point);
+final class ConnectorPathLineCommand extends ConnectorPathCommand {
+  const ConnectorPathLineCommand(this.point);
 
   final DrawPoint point;
 }
 
 /// Draws a quadratic shaft segment using [controlPoint] and [point].
-final class ArrowPathQuadraticCommand extends ArrowPathCommand {
-  const ArrowPathQuadraticCommand({
+final class ConnectorPathQuadraticCommand extends ConnectorPathCommand {
+  const ConnectorPathQuadraticCommand({
     required this.controlPoint,
     required this.point,
   });
@@ -228,10 +228,10 @@ final class ArrowPathQuadraticCommand extends ArrowPathCommand {
   final DrawPoint point;
 }
 
-class ArrowGeometryDescriptor {
-  ArrowGeometryDescriptor({required this.data, required this.rect});
+class ConnectorGeometryDescriptor {
+  ConnectorGeometryDescriptor({required this.data, required this.rect});
 
-  final ArrowLikeData data;
+  final ConnectorData data;
   final DrawRect rect;
 
   List<DrawPoint>? _localDrawPoints;
@@ -244,30 +244,31 @@ class ArrowGeometryDescriptor {
   double? _endDirectionOffset;
 
   List<DrawPoint> get localDrawPoints =>
-      _localDrawPoints ??= ArrowGeometry.resolveLocalPoints(
+      _localDrawPoints ??= ConnectorGeometry.resolveLocalPoints(
         rect: rect,
         normalizedPoints: data.points,
       );
 
   double get startInset =>
-      _startInset ??= ArrowGeometry.calculateArrowheadInset(
+      _startInset ??= ConnectorGeometry.calculateArrowheadInset(
         style: data.startArrowhead,
         strokeWidth: data.strokeWidth,
       );
 
-  double get endInset => _endInset ??= ArrowGeometry.calculateArrowheadInset(
-    style: data.endArrowhead,
-    strokeWidth: data.strokeWidth,
-  );
+  double get endInset =>
+      _endInset ??= ConnectorGeometry.calculateArrowheadInset(
+        style: data.endArrowhead,
+        strokeWidth: data.strokeWidth,
+      );
 
-  double get startDirectionOffset =>
-      _startDirectionOffset ??= ArrowGeometry.calculateArrowheadDirectionOffset(
+  double get startDirectionOffset => _startDirectionOffset ??=
+      ConnectorGeometry.calculateArrowheadDirectionOffset(
         style: data.startArrowhead,
         strokeWidth: data.strokeWidth,
       );
 
-  double get endDirectionOffset =>
-      _endDirectionOffset ??= ArrowGeometry.calculateArrowheadDirectionOffset(
+  double get endDirectionOffset => _endDirectionOffset ??=
+      ConnectorGeometry.calculateArrowheadDirectionOffset(
         style: data.endArrowhead,
         strokeWidth: data.strokeWidth,
       );
@@ -279,7 +280,7 @@ class ArrowGeometryDescriptor {
     }
     final applied = (startInset <= 0 && endInset <= 0)
         ? localDrawPoints
-        : ArrowGeometry.applyInsets(
+        : ConnectorGeometry.applyInsets(
             points: localDrawPoints,
             startInset: startInset,
             endInset: endInset,
@@ -289,7 +290,7 @@ class ArrowGeometryDescriptor {
   }
 
   DrawPoint? get startDirectionPoint =>
-      _startDirectionPoint ??= ArrowGeometry.resolveStartDirection(
+      _startDirectionPoint ??= ConnectorGeometry.resolveStartDirection(
         localDrawPoints,
         data.arrowType,
         startInset: startInset,
@@ -298,7 +299,7 @@ class ArrowGeometryDescriptor {
       );
 
   DrawPoint? get endDirectionPoint =>
-      _endDirectionPoint ??= ArrowGeometry.resolveEndDirection(
+      _endDirectionPoint ??= ConnectorGeometry.resolveEndDirection(
         localDrawPoints,
         data.arrowType,
         startInset: startInset,
@@ -310,9 +311,9 @@ class ArrowGeometryDescriptor {
 DrawPoint? _toDrawPointOrNull(core.Point? point) =>
     point == null ? null : decodeArrowCorePoint(point);
 
-List<ArrowPathCommand>? _parsePathCommands(String pathData) {
+List<ConnectorPathCommand>? _parsePathCommands(String pathData) {
   if (pathData.isEmpty) {
-    return const <ArrowPathCommand>[];
+    return const <ConnectorPathCommand>[];
   }
 
   final tokens = pathData
@@ -322,10 +323,10 @@ List<ArrowPathCommand>? _parsePathCommands(String pathData) {
       .where((token) => token.isNotEmpty)
       .toList(growable: false);
   if (tokens.isEmpty) {
-    return const <ArrowPathCommand>[];
+    return const <ConnectorPathCommand>[];
   }
 
-  final commands = <ArrowPathCommand>[];
+  final commands = <ConnectorPathCommand>[];
   var index = 0;
 
   double? readNumber() {
@@ -348,14 +349,14 @@ List<ArrowPathCommand>? _parsePathCommands(String pathData) {
         if (x == null || y == null) {
           return null;
         }
-        commands.add(ArrowPathMoveCommand(DrawPoint(x: x, y: y)));
+        commands.add(ConnectorPathMoveCommand(DrawPoint(x: x, y: y)));
       case 'L':
         final x = readNumber();
         final y = readNumber();
         if (x == null || y == null) {
           return null;
         }
-        commands.add(ArrowPathLineCommand(DrawPoint(x: x, y: y)));
+        commands.add(ConnectorPathLineCommand(DrawPoint(x: x, y: y)));
       case 'Q':
         final cx = readNumber();
         final cy = readNumber();
@@ -365,7 +366,7 @@ List<ArrowPathCommand>? _parsePathCommands(String pathData) {
           return null;
         }
         commands.add(
-          ArrowPathQuadraticCommand(
+          ConnectorPathQuadraticCommand(
             controlPoint: DrawPoint(x: cx, y: cy),
             point: DrawPoint(x: x, y: y),
           ),
@@ -378,14 +379,16 @@ List<ArrowPathCommand>? _parsePathCommands(String pathData) {
   return commands;
 }
 
-List<ArrowPathCommand> _buildStraightPathCommands(List<DrawPoint> points) {
+List<ConnectorPathCommand> _buildStraightPathCommands(List<DrawPoint> points) {
   if (points.isEmpty) {
-    return const <ArrowPathCommand>[];
+    return const <ConnectorPathCommand>[];
   }
 
-  final commands = <ArrowPathCommand>[ArrowPathMoveCommand(points.first)];
+  final commands = <ConnectorPathCommand>[
+    ConnectorPathMoveCommand(points.first),
+  ];
   for (final point in points.skip(1)) {
-    commands.add(ArrowPathLineCommand(point));
+    commands.add(ConnectorPathLineCommand(point));
   }
-  return List<ArrowPathCommand>.unmodifiable(commands);
+  return List<ConnectorPathCommand>.unmodifiable(commands);
 }

@@ -90,7 +90,7 @@ DrawState _stateWithBoundArrowToText() {
     const DrawPoint(x: 340, y: 30),
   ];
   final arrowRect = DrawRect.fromPointCloud(worldPoints);
-  final normalized = ArrowGeometry.normalizePoints(
+  final normalized = ConnectorGeometry.normalizePoints(
     worldPoints: worldPoints,
     rect: arrowRect,
   );
@@ -121,7 +121,7 @@ DrawState _stateWithNonOrthogonalElbowArrow() {
     const DrawPoint(x: 320, y: 220),
   ];
   final rect = DrawRect.fromPointCloud(worldPoints);
-  final normalized = ArrowGeometry.normalizePoints(
+  final normalized = ConnectorGeometry.normalizePoints(
     worldPoints: worldPoints,
     rect: rect,
   );
@@ -151,7 +151,7 @@ double _arrowEndX(DrawState state, String arrowId) {
 
 List<DrawPoint> _arrowWorldPoints(ElementState arrow) {
   final data = arrow.data as ArrowData;
-  return ArrowGeometry.resolveWorldPoints(
+  return ConnectorGeometry.resolveWorldPoints(
     rect: arrow.rect,
     normalizedPoints: data.points,
   );
