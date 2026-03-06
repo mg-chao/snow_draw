@@ -98,6 +98,7 @@ impl CreationStrategy for ArrowCreationStrategy {
         maintain_aspect_ratio: bool,
         create_from_center: bool,
         snapping_mode: SnappingMode,
+        snap_override_active: bool,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> CreationUpdateResult {
         let _ = text_metrics_service.unwrap_or_else(default_text_metrics_service);
@@ -113,6 +114,7 @@ impl CreationStrategy for ArrowCreationStrategy {
                 creating_state,
                 current_position,
                 snapping_mode,
+                snap_override_active,
                 &data_ref,
                 &mut session_data,
             );
@@ -127,6 +129,7 @@ impl CreationStrategy for ArrowCreationStrategy {
             data_ref.start_binding(),
             current_position,
             snapping_mode,
+            snap_override_active,
             &mut session_data,
         );
         let mut adjusted_current = endpoints.current_position;
@@ -135,7 +138,7 @@ impl CreationStrategy for ArrowCreationStrategy {
             state,
             config,
             adjusted_current,
-            snapping_mode,
+            snap_override_active,
             data_ref.arrow_type(),
             data_ref.end_arrowhead(),
             data_ref.end_binding(),
@@ -212,6 +215,7 @@ impl CreationStrategy for ArrowCreationStrategy {
         creating_state: &CreatingState,
         position: DrawPoint,
         snapping_mode: SnappingMode,
+        snap_override_active: bool,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> Option<CreationUpdateResult> {
         let _ = text_metrics_service.unwrap_or_else(default_text_metrics_service);
@@ -237,6 +241,7 @@ impl CreationStrategy for ArrowCreationStrategy {
             data_ref.start_binding(),
             position,
             snapping_mode,
+            snap_override_active,
             &mut session_data,
         );
         let mut adjusted_position = endpoints.current_position;
@@ -245,7 +250,7 @@ impl CreationStrategy for ArrowCreationStrategy {
             state,
             config,
             adjusted_position,
-            snapping_mode,
+            snap_override_active,
             data_ref.arrow_type(),
             data_ref.end_arrowhead(),
             data_ref.end_binding(),
@@ -354,6 +359,7 @@ fn update_line(
     creating_state: &CreatingState,
     current_position: DrawPoint,
     snapping_mode: SnappingMode,
+    snap_override_active: bool,
     data_ref: &ArrowLikeDataRef<'_>,
     session_data: &mut ArrowCreationSessionData,
 ) -> CreationUpdateResult {
@@ -366,6 +372,7 @@ fn update_line(
         data_ref.start_binding(),
         current_position,
         snapping_mode,
+        snap_override_active,
         session_data,
     );
     let mut adjusted_current = endpoints.current_position;
@@ -374,7 +381,7 @@ fn update_line(
         state,
         config,
         adjusted_current,
-        snapping_mode,
+        snap_override_active,
         data_ref.arrow_type(),
         data_ref.end_arrowhead(),
         data_ref.end_binding(),
@@ -432,6 +439,7 @@ fn resolve_creation_endpoints(
     preferred_start_binding: Option<ArrowBinding>,
     current_position: DrawPoint,
     snapping_mode: SnappingMode,
+    snap_override_active: bool,
     session_data: &mut ArrowCreationSessionData,
 ) -> CreationEndpointResolution {
     let mut start_position =
@@ -444,6 +452,7 @@ fn resolve_creation_endpoints(
         config,
         start_position,
         snapping_mode,
+        snap_override_active,
         arrow_type,
         start_arrowhead,
         preferred_start_binding,
@@ -606,7 +615,7 @@ fn snap_binding_point(
     state: &DrawState,
     config: &DrawConfig,
     position: DrawPoint,
-    snapping_mode: SnappingMode,
+    snap_override_active: bool,
     arrow_type: ArrowType,
     arrowhead_style: ArrowheadStyle,
     preferred_binding: Option<ArrowBinding>,
@@ -616,7 +625,7 @@ fn snap_binding_point(
 ) -> BindingSnapResult {
     let snap_config = &config.snap;
     let should_lookup_bindings =
-        ArrowBindingSnapper::should_attempt_binding(snap_config, snapping_mode);
+        ArrowBindingSnapper::should_attempt_binding(snap_config, snap_override_active);
     let binding_distance = if should_lookup_bindings {
         ArrowBindingSnapper::resolve_binding_distance(state, snap_config)
     } else {
@@ -659,6 +668,7 @@ fn resolve_start_binding_point(
     config: &DrawConfig,
     start_position: DrawPoint,
     snapping_mode: SnappingMode,
+    snap_override_active: bool,
     arrow_type: ArrowType,
     arrowhead_style: ArrowheadStyle,
     preferred_binding: Option<ArrowBinding>,
@@ -667,7 +677,8 @@ fn resolve_start_binding_point(
     cache_policy: ArrowBindingCachePolicy,
 ) -> BindingSnapResult {
     let snap_config = &config.snap;
-    let binding_enabled = ArrowBindingSnapper::should_attempt_binding(snap_config, snapping_mode);
+    let binding_enabled =
+        ArrowBindingSnapper::should_attempt_binding(snap_config, snap_override_active);
     let binding_distance = if binding_enabled {
         ArrowBindingSnapper::resolve_binding_distance(state, snap_config)
     } else {
@@ -698,7 +709,7 @@ fn resolve_start_binding_point(
         state,
         config,
         start_position,
-        snapping_mode,
+        snap_override_active,
         arrow_type,
         arrowhead_style,
         preferred_binding.clone(),

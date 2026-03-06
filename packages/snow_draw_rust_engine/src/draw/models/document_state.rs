@@ -273,6 +273,42 @@ impl DocumentState {
         }
     }
 
+    /// Queries bindable arrow targets from top-most to bottom-most z-order.
+    ///
+    /// When `stop_at_opaque` is true, iteration stops after the first bindable
+    /// whose arrow-binding surface is considered opaque.
+    pub fn query_arrow_bindable_elements_at_point_top_down(
+        &self,
+        point: DrawPoint,
+        tolerance: f64,
+        excluded_element_id: Option<&str>,
+        stop_at_opaque: bool,
+    ) -> Vec<ElementState> {
+        if !self.has_arrow_bindable_elements {
+            return Vec::new();
+        }
+
+        let mut result = Vec::<ElementState>::new();
+        let entries = self
+            .arrow_bindable_spatial_index
+            .search_point_entries(point, tolerance);
+        for entry in entries {
+            if excluded_element_id.is_some_and(|excluded| entry.id == excluded) {
+                continue;
+            }
+
+            let Some(element) = self.element_for_entry(&entry).cloned() else {
+                continue;
+            };
+            result.push(element);
+            if stop_at_opaque {
+                break;
+            }
+        }
+
+        result
+    }
+
     /// Touches cached indexes eagerly to avoid interactive stalls.
     pub fn warm_caches(&self) -> usize {
         self.element_map.len()

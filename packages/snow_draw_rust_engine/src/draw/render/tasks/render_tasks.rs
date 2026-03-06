@@ -6,7 +6,7 @@ use crate::draw::config::highlight_config::HighlightMaskConfig;
 use crate::draw::config::snap_config::SnapConfig;
 use crate::draw::config::watermark_config::WatermarkConfig;
 use crate::draw::elements::types::arrow::arrow_data::ArrowData;
-use crate::draw::elements::types::arrow::arrow_points::ArrowPointHandle;
+use crate::draw::elements::types::connector::connector_points::ConnectorPointHandle;
 use crate::draw::elements::types::filter::filter_data::FilterData;
 use crate::draw::elements::types::free_draw::free_draw_data::FreeDrawData;
 use crate::draw::elements::types::highlight::highlight_data::HighlightData;
@@ -137,12 +137,14 @@ pub struct SelectionControlsRenderTask {
 /// Arrow-point overlay task.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ArrowPointOverlayRenderTask {
-    pub handles: Vec<ArrowPointHandle>,
+    pub handles: Vec<ConnectorPointHandle>,
     pub selection_config: SelectionConfig,
-    pub active_handle: Option<ArrowPointHandle>,
-    pub hovered_handle: Option<ArrowPointHandle>,
+    pub active_handle: Option<ConnectorPointHandle>,
+    pub hovered_handle: Option<ConnectorPointHandle>,
     pub delete_indicator_visible: bool,
 }
+
+pub type ConnectorPointOverlayRenderTask = ArrowPointOverlayRenderTask;
 
 /// Arrow-binding highlight task.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

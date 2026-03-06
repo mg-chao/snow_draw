@@ -209,6 +209,7 @@ pub trait CreationStrategy {
         maintain_aspect_ratio: bool,
         create_from_center: bool,
         snapping_mode: SnappingMode,
+        snap_override_active: bool,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> CreationUpdateResult;
 
@@ -226,6 +227,7 @@ pub trait CreationStrategy {
         maintain_aspect_ratio: bool,
         create_from_center: bool,
         snapping_mode: SnappingMode,
+        snap_override_active: bool,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> CreationUpdateResult {
         if positions.is_empty() {
@@ -250,6 +252,7 @@ pub trait CreationStrategy {
                 maintain_aspect_ratio,
                 create_from_center,
                 snapping_mode,
+                snap_override_active,
                 Some(Arc::clone(&text_metrics_service)),
             );
 
@@ -284,6 +287,7 @@ pub trait CreationStrategy {
         creating_state: &CreatingState,
         position: DrawPoint,
         snapping_mode: SnappingMode,
+        snap_override_active: bool,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> Option<CreationUpdateResult> {
         None

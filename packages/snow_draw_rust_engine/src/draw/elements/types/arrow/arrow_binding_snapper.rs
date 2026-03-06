@@ -8,7 +8,6 @@ pub use crate::draw::elements::types::arrow::arrow_binding_target_cache::ArrowBi
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::element_style::{ArrowType, ArrowheadStyle};
 use crate::draw::utils::camera_zoom::resolve_zoom_adjusted_distance;
-use crate::draw::utils::snapping_mode::SnappingMode;
 
 const PREFERRED_BINDING_STICKINESS_FACTOR: f64 = 0.3;
 const DEFAULT_TARGET_CACHE_THRESHOLD_FACTOR: f64 = 0.4;
@@ -120,11 +119,9 @@ where
 pub struct ArrowBindingSnapper;
 
 impl ArrowBindingSnapper {
-    /// Returns whether binding lookup should run for this snapping mode.
-    pub fn should_attempt_binding(snap_config: &SnapConfig, snapping_mode: SnappingMode) -> bool {
-        snap_config.enable_arrow_binding
-            && snapping_mode != SnappingMode::Grid
-            && !(snap_config.enabled && snapping_mode == SnappingMode::None)
+    /// Returns whether binding lookup should run for the current pointer state.
+    pub fn should_attempt_binding(snap_config: &SnapConfig, snap_override_active: bool) -> bool {
+        snap_config.enable_arrow_binding && !snap_override_active
     }
 
     /// Resolves effective binding distance in world units.
@@ -532,21 +529,14 @@ mod tests {
     fn should_attempt_binding_matches_dart_logic() {
         let mut snap = SnapConfig::default();
         snap.enable_arrow_binding = true;
-        snap.enabled = false;
-        assert!(ArrowBindingSnapper::should_attempt_binding(
-            &snap,
-            SnappingMode::Object
-        ));
-        assert!(!ArrowBindingSnapper::should_attempt_binding(
-            &snap,
-            SnappingMode::Grid
-        ));
+        assert!(ArrowBindingSnapper::should_attempt_binding(&snap, false));
+        assert!(!ArrowBindingSnapper::should_attempt_binding(&snap, true));
 
         snap.enabled = true;
-        assert!(!ArrowBindingSnapper::should_attempt_binding(
-            &snap,
-            SnappingMode::None
-        ));
+        assert!(ArrowBindingSnapper::should_attempt_binding(&snap, false));
+
+        snap.enable_arrow_binding = false;
+        assert!(!ArrowBindingSnapper::should_attempt_binding(&snap, false));
     }
 
     #[test]

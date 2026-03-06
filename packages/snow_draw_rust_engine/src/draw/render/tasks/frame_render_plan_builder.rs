@@ -8,7 +8,9 @@ use crate::draw::config::grid_config::GridConfig;
 use crate::draw::config::highlight_config::HighlightMaskConfig;
 use crate::draw::config::snap_config::SnapConfig;
 use crate::draw::config::watermark_config::WatermarkConfig;
-use crate::draw::elements::types::arrow::arrow_points::{ArrowPointHandle, ArrowPointUtils};
+use crate::draw::elements::types::connector::connector_points::{
+    ConnectorPointHandle, ConnectorPointUtils,
+};
 use crate::draw::elements::types::text::text_data::TextData;
 use crate::draw::models::application_state::InteractionState;
 use crate::draw::models::draw_state_view::{DrawStateView, ElementState};
@@ -16,7 +18,7 @@ use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_operation_id::EditOperationIds;
 use crate::draw::types::edit_transform::EditTransform;
 use crate::draw::utils::arrow_binding_highlight::{
-    resolve_arrow_binding_pair, resolve_arrow_point_highlight_binding_from_active_index,
+    resolve_arrow_binding_pair, resolve_connector_point_highlight_binding_from_active_index,
 };
 use crate::draw::utils::arrow_point_metrics::{
     resolve_arrow_point_handle_size, resolve_arrow_point_loop_threshold,
@@ -42,8 +44,8 @@ use super::render_tasks::{
 pub struct FrameRenderTransientState {
     pub hovered_element_id: Option<String>,
     pub hovered_binding_element_id: Option<String>,
-    pub hovered_arrow_handle: Option<ArrowPointHandle>,
-    pub active_arrow_handle: Option<ArrowPointHandle>,
+    pub hovered_arrow_handle: Option<ConnectorPointHandle>,
+    pub active_arrow_handle: Option<ConnectorPointHandle>,
     pub arrow_delete_indicator_visible: bool,
     pub selection_config: Option<SelectionConfig>,
     pub hover_selection_config: Option<SelectionConfig>,
@@ -235,16 +237,24 @@ impl FrameRenderPlanBuilder {
                 let loop_threshold = resolve_arrow_point_loop_threshold(handle_tolerance);
                 let base_handle_size = selection_config.render.control_point_size / effective_scale;
                 let handle_size = resolve_arrow_point_handle_size(base_handle_size);
-                let overlay = ArrowPointUtils::build_overlay(
+                let overlay = ConnectorPointUtils::build_overlay_with_options(
                     &single_selected_element,
                     loop_threshold,
                     Some(handle_size),
+                    view.elements(),
+                    camera.zoom,
+                    transient_state
+                        .snap_config
+                        .as_ref()
+                        .map(|config| config.enable_arrow_binding)
+                        .unwrap_or(true),
                 );
 
-                let mut handles = Vec::<ArrowPointHandle>::new();
+                let mut handles = Vec::<ConnectorPointHandle>::new();
                 handles.extend(overlay.addable_points);
                 handles.extend(overlay.turning_points);
                 handles.extend(overlay.loop_points);
+                handles.extend(overlay.focus_points);
                 if !handles.is_empty() {
                     tasks.push(FrameRenderTask::ArrowPointOverlay(
                         ArrowPointOverlayRenderTask {
@@ -353,7 +363,7 @@ impl FrameRenderPlanBuilder {
 
         match &view.state.application.interaction {
             InteractionState::Editing(interaction)
-                if interaction.operation_id == EditOperationIds::ARROW_POINT =>
+                if interaction.operation_id == EditOperationIds::CONNECTOR_POINT =>
             {
                 if let EditTransform::ArrowPoint(transform) = &interaction.current_transform {
                     if let Some(selected_id) = view.selected_ids().iter().next() {
@@ -365,7 +375,7 @@ impl FrameRenderPlanBuilder {
                                 resolve_arrow_binding_pair(effective.data.as_ref())
                             {
                                 let highlight =
-                                    resolve_arrow_point_highlight_binding_from_active_index(
+                                    resolve_connector_point_highlight_binding_from_active_index(
                                         transform.points.len(),
                                         transform.active_index,
                                         &bindings,

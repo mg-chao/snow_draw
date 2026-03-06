@@ -74,6 +74,7 @@ impl CreationStrategy for FreeDrawCreationStrategy {
         maintain_aspect_ratio: bool,
         create_from_center: bool,
         snapping_mode: SnappingMode,
+        _snap_override_active: bool,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> CreationUpdateResult {
         let _ = state;
@@ -190,6 +191,7 @@ impl CreationStrategy for FreeDrawCreationStrategy {
         maintain_aspect_ratio: bool,
         create_from_center: bool,
         snapping_mode: SnappingMode,
+        _snap_override_active: bool,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> CreationUpdateResult {
         if positions.is_empty() {
@@ -212,6 +214,7 @@ impl CreationStrategy for FreeDrawCreationStrategy {
                 maintain_aspect_ratio,
                 create_from_center,
                 snapping_mode,
+                false,
                 Some(resolved_text_metrics_service),
             );
         }

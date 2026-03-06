@@ -73,6 +73,7 @@ impl CreationStrategy for SerialNumberCreationStrategy {
         _maintain_aspect_ratio: bool,
         _create_from_center: bool,
         snapping_mode: SnappingMode,
+        _snap_override_active: bool,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> CreationUpdateResult {
         let text_metrics_service =

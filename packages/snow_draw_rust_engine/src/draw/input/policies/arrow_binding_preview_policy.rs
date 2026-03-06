@@ -4,11 +4,10 @@ use crate::draw::config::draw_config::SnapConfig;
 use crate::draw::elements::types::arrow::arrow_binding_snapper::ArrowBindingSnapper;
 use crate::draw::models::document_state::{DocumentState, ElementData, ElementState};
 use crate::draw::types::draw_point::DrawPoint;
-use crate::draw::utils::snapping_mode::SnappingMode;
 
 /// Returns whether arrow binding preview should be evaluated.
-pub fn should_preview_arrow_binding(snap_config: &SnapConfig, snapping_mode: SnappingMode) -> bool {
-    ArrowBindingSnapper::should_attempt_binding(snap_config, snapping_mode)
+pub fn should_preview_arrow_binding(snap_config: &SnapConfig, snap_override_active: bool) -> bool {
+    ArrowBindingSnapper::should_attempt_binding(snap_config, snap_override_active)
 }
 
 /// Minimal element capabilities required by arrow-binding preview.
@@ -53,7 +52,15 @@ pub fn resolve_arrow_binding_targets_in_document(
     position: DrawPoint,
     distance: f64,
 ) -> Vec<ElementState> {
-    resolve_arrow_binding_targets(document, position, distance)
+    if distance <= 0.0 || !document.has_arrow_bindable_elements {
+        return Vec::new();
+    }
+
+    document
+        .query_arrow_bindable_elements_at_point_top_down(position, distance, None, true)
+        .into_iter()
+        .filter(|element| element.opacity > 0.0)
+        .collect()
 }
 
 impl ArrowBindingPreviewElement for ElementState {
@@ -88,14 +95,16 @@ impl ArrowBindingPreviewState for DocumentState {
 
 #[cfg(test)]
 mod tests {
-    use super::{resolve_arrow_binding_targets, should_preview_arrow_binding};
+    use super::{
+        resolve_arrow_binding_targets, resolve_arrow_binding_targets_in_document,
+        should_preview_arrow_binding,
+    };
     use crate::draw::config::draw_config::SnapConfig;
     use crate::draw::models::document_state::{
         DocumentState, ElementData, ElementState, HighlightData, SerialNumberData,
     };
     use crate::draw::types::draw_point::DrawPoint;
     use crate::draw::types::draw_rect::DrawRect;
-    use crate::draw::utils::snapping_mode::SnappingMode;
 
     fn element(id: &str, z_index: i64, opacity: f64, data: ElementData) -> ElementState {
         ElementState::new(
@@ -112,13 +121,11 @@ mod tests {
     fn should_preview_arrow_binding_matches_snapper_rules() {
         let mut snap = SnapConfig::default();
         snap.enable_arrow_binding = true;
-        snap.enabled = false;
-        assert!(should_preview_arrow_binding(&snap, SnappingMode::Object));
+        assert!(should_preview_arrow_binding(&snap, false));
+        assert!(!should_preview_arrow_binding(&snap, true));
 
-        assert!(!should_preview_arrow_binding(&snap, SnappingMode::Grid));
-
-        snap.enabled = true;
-        assert!(!should_preview_arrow_binding(&snap, SnappingMode::None));
+        snap.enable_arrow_binding = false;
+        assert!(!should_preview_arrow_binding(&snap, false));
     }
 
     #[test]
@@ -146,6 +153,41 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(target_ids, vec!["serial".to_owned(), "rect".to_owned()]);
+    }
+
+    #[test]
+    fn document_preview_resolution_returns_empty_for_non_positive_distance() {
+        let state = DocumentState::new(
+            vec![element("rect", 1, 1.0, ElementData::Rectangle)],
+            0,
+            Default::default(),
+        );
+
+        assert!(
+            resolve_arrow_binding_targets_in_document(&state, DrawPoint::new(5.0, 5.0), 0.0,)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn document_preview_resolution_stops_at_first_opaque_bindable() {
+        let state = DocumentState::new(
+            vec![
+                element("bottom", 1, 1.0, ElementData::Rectangle),
+                element("top", 2, 1.0, ElementData::Rectangle),
+            ],
+            0,
+            Default::default(),
+        );
+
+        let targets =
+            resolve_arrow_binding_targets_in_document(&state, DrawPoint::new(5.0, 5.0), 8.0);
+        let target_ids = targets
+            .into_iter()
+            .map(|element| element.id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(target_ids, vec!["top".to_owned()]);
     }
 
     #[test]

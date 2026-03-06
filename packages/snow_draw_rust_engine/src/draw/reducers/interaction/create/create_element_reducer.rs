@@ -317,6 +317,7 @@ impl CreateElementReducer {
                         action.maintain_aspect_ratio,
                         action.create_from_center,
                         snapping_mode,
+                        action.snap_override,
                         text_metrics_service,
                     ));
                 }
@@ -329,6 +330,7 @@ impl CreateElementReducer {
                     action.maintain_aspect_ratio,
                     action.create_from_center,
                     snapping_mode,
+                    action.snap_override,
                     text_metrics_service,
                 ))
             },
@@ -351,6 +353,7 @@ impl CreateElementReducer {
                     interaction,
                     action.position,
                     snapping_mode,
+                    action.snap_override,
                     text_metrics_service,
                 )
             },
