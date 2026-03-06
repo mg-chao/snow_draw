@@ -49,6 +49,15 @@ final class ArrowBindingResolver {
       base: baseElements,
       overlay: updatedElements,
     );
+    final changedBindableIds = <String>{
+      for (final id in changedElementIds)
+        if (lookup[id] case final element? when isArrowBindableElement(element))
+          id,
+    };
+    if (changedBindableIds.isEmpty) {
+      return ArrowBindingResolutionResult.empty;
+    }
+
     final session = ArrowCoreSession.fromElements(
       lookup.values,
       onlyBoundArrows: true,
@@ -59,30 +68,124 @@ final class ArrowBindingResolver {
       return ArrowBindingResolutionResult.empty;
     }
 
-    final result = recomputeCoreBindingsForChangedBindables(
-      arrows: session.arrows,
-      bindables: session.bindables,
-      relations: session.bindableRelations,
-      changedBindableIds: changedElementIds.toList(growable: false),
-      context: session.context,
+    final updates = _refreshBoundArrowsForChangedBindables(
+      session: session,
+      changedBindableIds: changedBindableIds,
     );
-
-    final updates = session.applyArrowPatches(result.arrowPatches);
     final normalizedUpdates = _normalizeUpdatedElbowArrows(
       baseElements: baseElements,
       updatedElements: updatedElements,
       patchedUpdates: updates,
       context: session.context,
     );
-    final reorderedElementIds = session.reduceEventsToOrderedElementIds(
-      result.events,
-    );
 
     return ArrowBindingResolutionResult(
       updatedElements: normalizedUpdates,
-      orderedElementIds: reorderedElementIds,
+      orderedElementIds: null,
     );
   }
+}
+
+Map<String, ElementState> _refreshBoundArrowsForChangedBindables({
+  required ArrowCoreSession session,
+  required Set<String> changedBindableIds,
+}) {
+  if (changedBindableIds.isEmpty || !session.hasArrows) {
+    return const <String, ElementState>{};
+  }
+
+  final bindablesById = <String, core.BindableState>{
+    for (final bindable in session.bindables) bindable.id: bindable,
+  };
+  final updated = <String, ElementState>{};
+  for (final arrow in session.arrows) {
+    final source = session.arrowSources[arrow.id];
+    if (source == null) {
+      continue;
+    }
+    final (element, data) = source;
+
+    final startBinding = arrow.startBinding;
+    final endBinding = arrow.endBinding;
+    final touchesChangedBindable =
+        (startBinding != null &&
+            changedBindableIds.contains(startBinding.elementId)) ||
+        (endBinding != null &&
+            changedBindableIds.contains(endBinding.elementId));
+    if (!touchesChangedBindable) {
+      continue;
+    }
+
+    var nextArrow = arrow;
+    var changed = false;
+    final nextPoints = nextArrow.points
+        .map((point) => <double>[point[0], point[1]])
+        .toList(growable: true);
+
+    void updateEdge({
+      required core.ArrowEndpointSelector edge,
+      required core.FixedPointBinding? binding,
+      required int pointIndex,
+    }) {
+      if (binding == null) {
+        return;
+      }
+      final bindable = bindablesById[binding.elementId];
+      if (bindable == null) {
+        return;
+      }
+      final nextPoint = updateCoreBoundPoint(
+        arrow: nextArrow,
+        edge: edge,
+        binding: binding,
+        bindable: bindable,
+        bindablesById: bindablesById,
+      );
+      if (nextPoint == null) {
+        return;
+      }
+      nextPoints[pointIndex] = <double>[nextPoint[0], nextPoint[1]];
+      changed = true;
+    }
+
+    updateEdge(edge: 'startBinding', binding: startBinding, pointIndex: 0);
+    updateEdge(
+      edge: 'endBinding',
+      binding: endBinding,
+      pointIndex: nextPoints.length - 1,
+    );
+
+    if (!changed) {
+      continue;
+    }
+
+    final normalized = core.normalizeArrowFromGlobalPoints(
+      nextPoints
+          .map(
+            (point) => <double>[nextArrow.x + point[0], nextArrow.y + point[1]],
+          )
+          .toList(growable: false),
+      session.context.maxCoordinate,
+    );
+    nextArrow = nextArrow.copyWith(
+      x: normalized.x,
+      y: normalized.y,
+      width: normalized.width,
+      height: normalized.height,
+      points: normalized.points,
+    );
+
+    final patched = applyCoreArrowStateToElement(
+      element: element,
+      data: data,
+      nextArrow: nextArrow,
+    );
+    if (patched != element) {
+      updated[patched.id] = patched;
+    }
+  }
+
+  return Map<String, ElementState>.unmodifiable(updated);
 }
 
 Map<String, ElementState> _normalizeUpdatedElbowArrows({
