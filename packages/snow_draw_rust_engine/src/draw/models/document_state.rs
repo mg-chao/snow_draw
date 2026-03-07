@@ -300,8 +300,9 @@ impl DocumentState {
             let Some(element) = self.element_for_entry(&entry).cloned() else {
                 continue;
             };
+            let stop_on_element = stop_at_opaque && is_arrow_bindable_background_opaque(&element);
             result.push(element);
-            if stop_at_opaque {
+            if stop_on_element {
                 break;
             }
         }
@@ -526,6 +527,14 @@ fn is_bindable_target(element: &ElementState) -> bool {
     )
 }
 
+fn is_arrow_bindable_background_opaque(element: &ElementState) -> bool {
+    match element.data {
+        ElementData::Text => false,
+        ElementData::Rectangle | ElementData::SerialNumber(_) | ElementData::Highlight(_) => true,
+        ElementData::ArrowLike(_) | ElementData::Other => false,
+    }
+}
+
 fn to_spatial_index_elements(elements: &[ElementState]) -> Vec<SpatialIndexElementState> {
     elements
         .iter()
@@ -634,6 +643,31 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(bindable_ids, vec!["rect", "highlight"]);
+    }
+
+    #[test]
+    fn query_arrow_bindables_only_stops_on_opaque_targets() {
+        let state = DocumentState::new(
+            vec![
+                element("bottom", 1, ElementData::Rectangle),
+                element("top", 2, ElementData::Text),
+            ],
+            0,
+            Default::default(),
+        );
+
+        let hits = state.query_arrow_bindable_elements_at_point_top_down(
+            DrawPoint::new(5.0, 5.0),
+            0.0,
+            None,
+            true,
+        );
+
+        let hit_ids = hits
+            .into_iter()
+            .map(|element| element.id)
+            .collect::<Vec<_>>();
+        assert_eq!(hit_ids, vec!["top".to_owned(), "bottom".to_owned()]);
     }
 
     #[test]

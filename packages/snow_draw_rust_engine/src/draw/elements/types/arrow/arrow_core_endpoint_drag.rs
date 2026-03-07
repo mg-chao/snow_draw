@@ -3,9 +3,6 @@
 use crate::draw::elements::types::arrow::arrow_binding::{
     ArrowBinding, ArrowBindingResult, ArrowBindingUtils,
 };
-use crate::draw::elements::types::arrow::arrow_binding_snapper::{
-    ArrowBindingCachePolicy, ArrowBindingResolver as SnapperBindingResolver, ArrowBindingSnapper,
-};
 use crate::draw::elements::types::arrow::arrow_core::EngineContext;
 use crate::draw::elements::types::arrow::arrow_core_bridge::{
     core_arrow_world_points, to_core_arrow_state, to_local_fixed_segments_from_core_arrow,
@@ -15,7 +12,9 @@ use crate::draw::elements::types::arrow::arrow_core_ops::{
     calculate_core_fixed_point_for_binding, resolve_core_max_binding_distance,
     ArrowCoreEndpointBindingOptions,
 };
-use crate::draw::elements::types::arrow::arrow_scene::project_arrow_bindable_candidates;
+use crate::draw::elements::types::arrow::arrow_scene::{
+    project_arrow_bindable_candidates, resolve_arrow_bindable_candidates_for_endpoint_strategy,
+};
 use crate::draw::elements::types::arrow::core::arrow_order_core::{
     reorder_arrow_above_hovered_bindable, reordered_element_ids_from_hovered_reorder,
 };
@@ -176,25 +175,37 @@ fn run_arrow_core_endpoint_drag_result(
                 Endpoint::End => next_end_binding = None,
             };
             world_pointer
+        } else if !should_lookup_bindings {
+            match endpoint {
+                Endpoint::Start => next_start_binding = None,
+                Endpoint::End => next_end_binding = None,
+            };
+            world_pointer
         } else if let Some(ArrowBindingResult {
             mut binding,
             snap_point,
             ..
-        }) = ArrowBindingSnapper::resolve_endpoint_binding_candidate(
-            state,
+        }) = resolve_endpoint_binding_candidate_from_candidates(
+            resolve_arrow_bindable_candidates_for_endpoint_strategy(
+                &state.domain.document,
+                true,
+                existing_binding,
+                match endpoint {
+                    Endpoint::Start => next_end_binding.as_ref(),
+                    Endpoint::End => next_start_binding.as_ref(),
+                },
+                Some(excluded_element_id),
+                ordered_element_ids,
+            )
+            .elements
+            .as_slice(),
             world_pointer,
             data.arrow_type,
             endpoint_arrowhead_style(data, endpoint),
-            should_lookup_bindings,
             effective_distance,
-            allow_new_binding,
-            has_bindable_targets(state, excluded_element_id),
             existing_binding,
             endpoint_reference_point(&world_points, endpoint),
-            None,
-            Some(excluded_element_id),
-            ArrowBindingCachePolicy::default(),
-            &ENDPOINT_DRAG_BINDING_RESOLVER,
+            true,
         ) {
             if options.new_arrow {
                 if let Some(target_element) = state
@@ -342,92 +353,35 @@ fn to_local_point(element: &ElementState, world_point: DrawPoint) -> DrawPoint {
     )
 }
 
-fn has_bindable_targets(state: &DrawState, excluded_element_id: &str) -> bool {
-    state.domain.document.elements.iter().any(|element| {
-        element.id != excluded_element_id && ArrowBindingUtils::is_bindable_target(element)
-    })
-}
-
-struct EndpointDragBindingResolver;
-
-const ENDPOINT_DRAG_BINDING_RESOLVER: EndpointDragBindingResolver = EndpointDragBindingResolver;
-
-impl SnapperBindingResolver<DomainElementState> for EndpointDragBindingResolver {
-    fn is_bindable_target(&self, target: &DomainElementState) -> bool {
-        ArrowBindingUtils::is_bindable_target(target)
-    }
-
-    fn resolve_binding_search_distance(&self, snap_distance: f64) -> f64 {
-        ArrowBindingUtils::resolve_binding_search_distance(snap_distance)
-    }
-
-    fn resolve_binding_candidate_for_target(
-        &self,
-        world_point: DrawPoint,
-        target: &DomainElementState,
-        snap_distance: f64,
-        reference_point: Option<DrawPoint>,
-    ) -> Option<ArrowBindingResult> {
-        ArrowBindingUtils::resolve_binding_candidate_for_target(
-            world_point,
-            target,
-            snap_distance,
-            reference_point,
-        )
-    }
-
-    fn resolve_elbow_binding_candidate_for_target(
-        &self,
-        world_point: DrawPoint,
-        target: &DomainElementState,
-        snap_distance: f64,
-        has_arrowhead: bool,
-    ) -> Option<ArrowBindingResult> {
-        ArrowBindingUtils::resolve_elbow_binding_candidate_for_target(
-            world_point,
-            target,
-            snap_distance,
-            has_arrowhead,
-        )
-    }
-
-    fn resolve_binding_candidate(
-        &self,
-        world_point: DrawPoint,
-        targets: &[DomainElementState],
-        snap_distance: f64,
-        preferred_binding: Option<&ArrowBinding>,
-        allow_new_binding: bool,
-        reference_point: Option<DrawPoint>,
-    ) -> Option<ArrowBindingResult> {
-        ArrowBindingUtils::resolve_binding_candidate(
+fn resolve_endpoint_binding_candidate_from_candidates(
+    targets: &[DomainElementState],
+    world_point: DrawPoint,
+    arrow_type: ArrowType,
+    arrowhead_style: ArrowheadStyle,
+    snap_distance: f64,
+    preferred_binding: Option<&ArrowBinding>,
+    reference_point: Option<DrawPoint>,
+    allow_new_binding: bool,
+) -> Option<ArrowBindingResult> {
+    if arrow_type == ArrowType::Elbow {
+        return ArrowBindingUtils::resolve_elbow_binding_candidate(
             world_point,
             targets.iter(),
             snap_distance,
+            arrowhead_style != ArrowheadStyle::None,
             preferred_binding,
             allow_new_binding,
-            reference_point,
-        )
+        );
     }
 
-    fn resolve_elbow_binding_candidate(
-        &self,
-        world_point: DrawPoint,
-        targets: &[DomainElementState],
-        snap_distance: f64,
-        preferred_binding: Option<&ArrowBinding>,
-        allow_new_binding: bool,
-        has_arrowhead: bool,
-    ) -> Option<ArrowBindingResult> {
-        ArrowBindingUtils::resolve_elbow_binding_candidate(
-            world_point,
-            targets.iter(),
-            snap_distance,
-            has_arrowhead,
-            preferred_binding,
-            allow_new_binding,
-        )
-    }
+    ArrowBindingUtils::resolve_binding_candidate(
+        world_point,
+        targets.iter(),
+        snap_distance,
+        preferred_binding,
+        allow_new_binding,
+        reference_point,
+    )
 }
 
 #[cfg(test)]

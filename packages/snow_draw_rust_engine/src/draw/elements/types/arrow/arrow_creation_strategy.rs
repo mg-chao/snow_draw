@@ -17,18 +17,17 @@ use crate::draw::elements::types::arrow::arrow_binding_snapper::{
     ArrowBindingCachePolicy, ArrowBindingElement, ArrowBindingResolver as BindingResolver,
     ArrowBindingSnapper, ArrowBindingState, ArrowBindingTargetCache,
 };
+use crate::draw::elements::types::arrow::arrow_core::DEFAULT_MAX_COORDINATE;
+use crate::draw::elements::types::arrow::arrow_core_bridge::build_core_engine_context;
+use crate::draw::elements::types::arrow::arrow_core_endpoint_drag::finalize_arrow_core_endpoint_drag_result;
+use crate::draw::elements::types::arrow::arrow_core_ops::{
+    resolve_core_max_binding_distance, resolve_endpoint_drag_binding_enabled,
+    ArrowCoreEndpointBindingOptions,
+};
 use crate::draw::elements::types::arrow::arrow_data::{
     ArrowBinding as DomainArrowBinding, ArrowBindingMode as DomainArrowBindingMode,
     ArrowData as DomainArrowData, ArrowDataPatch as DomainArrowDataPatch,
     NullableField as DomainArrowNullableField,
-};
-use crate::draw::elements::types::arrow::arrow_core::DEFAULT_MAX_COORDINATE;
-use crate::draw::elements::types::arrow::arrow_core_bridge::build_core_engine_context;
-use crate::draw::elements::types::arrow::arrow_core_endpoint_drag::
-    finalize_arrow_core_endpoint_drag_result;
-use crate::draw::elements::types::arrow::arrow_core_ops::{
-    resolve_core_max_binding_distance, resolve_endpoint_drag_binding_enabled,
-    ArrowCoreEndpointBindingOptions,
 };
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField as DomainArrowLikeNullableField;
@@ -123,6 +122,8 @@ impl CreationStrategy for ArrowCreationStrategy {
                 current_position,
                 snapping_mode,
                 snap_override_active,
+                maintain_aspect_ratio,
+                create_from_center,
                 &data_ref,
                 &mut session_data,
             );
@@ -138,6 +139,8 @@ impl CreationStrategy for ArrowCreationStrategy {
             current_position,
             snapping_mode,
             snap_override_active,
+            maintain_aspect_ratio,
+            create_from_center,
             &mut session_data,
         );
         let mut adjusted_current = endpoints.current_position;
@@ -151,6 +154,8 @@ impl CreationStrategy for ArrowCreationStrategy {
             data_ref.end_arrowhead(),
             data_ref.end_binding(),
             Some(endpoints.segment_start),
+            maintain_aspect_ratio,
+            create_from_center,
             Some(&mut session_data.end_target_cache),
             ArrowBindingCachePolicy::default(),
         );
@@ -251,6 +256,8 @@ impl CreationStrategy for ArrowCreationStrategy {
             position,
             snapping_mode,
             snap_override_active,
+            false,
+            false,
             &mut session_data,
         );
         let mut adjusted_position = endpoints.current_position;
@@ -264,6 +271,8 @@ impl CreationStrategy for ArrowCreationStrategy {
             data_ref.end_arrowhead(),
             data_ref.end_binding(),
             Some(endpoints.segment_start),
+            false,
+            false,
             Some(&mut session_data.end_target_cache),
             ArrowBindingCachePolicy::default(),
         );
@@ -527,6 +536,8 @@ fn update_line(
     current_position: DrawPoint,
     snapping_mode: SnappingMode,
     snap_override_active: bool,
+    maintain_aspect_ratio: bool,
+    create_from_center: bool,
     data_ref: &ArrowLikeDataRef<'_>,
     session_data: &mut ArrowCreationSessionData,
 ) -> CreationUpdateResult {
@@ -540,6 +551,8 @@ fn update_line(
         current_position,
         snapping_mode,
         snap_override_active,
+        maintain_aspect_ratio,
+        create_from_center,
         session_data,
     );
     let mut adjusted_current = endpoints.current_position;
@@ -553,6 +566,8 @@ fn update_line(
         data_ref.end_arrowhead(),
         data_ref.end_binding(),
         Some(endpoints.segment_start),
+        maintain_aspect_ratio,
+        create_from_center,
         Some(&mut session_data.end_target_cache),
         ArrowBindingCachePolicy::default(),
     );
@@ -607,6 +622,8 @@ fn resolve_creation_endpoints(
     current_position: DrawPoint,
     snapping_mode: SnappingMode,
     snap_override_active: bool,
+    angle_locked: bool,
+    alt_key: bool,
     session_data: &mut ArrowCreationSessionData,
 ) -> CreationEndpointResolution {
     let mut start_position =
@@ -624,6 +641,8 @@ fn resolve_creation_endpoints(
         start_arrowhead,
         preferred_start_binding,
         adjusted_current,
+        angle_locked,
+        alt_key,
         session_data,
         ArrowBindingCachePolicy::default(),
     );
@@ -787,6 +806,8 @@ fn snap_binding_point(
     arrowhead_style: ArrowheadStyle,
     preferred_binding: Option<ArrowBinding>,
     reference_point: Option<DrawPoint>,
+    _angle_locked: bool,
+    _alt_key: bool,
     target_cache: Option<&mut ArrowBindingTargetCache<DomainElementState>>,
     cache_policy: ArrowBindingCachePolicy,
 ) -> BindingSnapResult {
@@ -842,6 +863,8 @@ fn resolve_start_binding_point(
     arrowhead_style: ArrowheadStyle,
     preferred_binding: Option<ArrowBinding>,
     reference_point: DrawPoint,
+    angle_locked: bool,
+    alt_key: bool,
     session_data: &mut ArrowCreationSessionData,
     cache_policy: ArrowBindingCachePolicy,
 ) -> BindingSnapResult {
@@ -862,6 +885,8 @@ fn resolve_start_binding_point(
         elements_version,
         binding_enabled,
         binding_distance,
+        angle_locked,
+        alt_key,
     ) {
         if let Some(cached) = session_data.resolve_cached_start_binding(
             state,
@@ -883,6 +908,8 @@ fn resolve_start_binding_point(
         arrowhead_style,
         preferred_binding.clone(),
         Some(reference_point),
+        angle_locked,
+        alt_key,
         Some(&mut session_data.start_target_cache),
         cache_policy,
     );
@@ -909,6 +936,8 @@ fn resolve_start_binding_point(
         elements_version,
         binding_enabled,
         binding_distance,
+        angle_locked,
+        alt_key,
         &resolved,
     );
     resolved
@@ -924,6 +953,8 @@ struct ArrowCreationSessionData {
     cached_start_snapping_mode: Option<SnappingMode>,
     cached_start_binding_enabled: Option<bool>,
     cached_start_binding_distance: Option<f64>,
+    cached_start_angle_locked: Option<bool>,
+    cached_start_alt_key: Option<bool>,
     cached_start_elements_version: i64,
     preserve_start_inside_binding: bool,
     start_orbit_focus_point: Option<DrawPoint>,
@@ -946,6 +977,8 @@ impl Default for ArrowCreationSessionData {
             cached_start_snapping_mode: None,
             cached_start_binding_enabled: None,
             cached_start_binding_distance: None,
+            cached_start_angle_locked: None,
+            cached_start_alt_key: None,
             cached_start_elements_version: -1,
             preserve_start_inside_binding: false,
             start_orbit_focus_point: None,
@@ -968,12 +1001,16 @@ impl ArrowCreationSessionData {
         elements_version: i64,
         binding_enabled: bool,
         binding_distance: f64,
+        angle_locked: bool,
+        alt_key: bool,
     ) -> bool {
         self.cached_start_position == Some(start_position)
             && self.cached_start_preferred_binding.as_ref() == preferred_binding
             && self.cached_start_snapping_mode == Some(snapping_mode)
             && self.cached_start_binding_enabled == Some(binding_enabled)
             && self.cached_start_binding_distance == Some(binding_distance)
+            && self.cached_start_angle_locked == Some(angle_locked)
+            && self.cached_start_alt_key == Some(alt_key)
             && self.cached_start_elements_version == elements_version
     }
 
@@ -1021,6 +1058,8 @@ impl ArrowCreationSessionData {
         elements_version: i64,
         binding_enabled: bool,
         binding_distance: f64,
+        angle_locked: bool,
+        alt_key: bool,
         result: &BindingSnapResult,
     ) {
         self.cached_start_position = Some(start_position);
@@ -1029,6 +1068,8 @@ impl ArrowCreationSessionData {
         self.cached_start_snapping_mode = Some(snapping_mode);
         self.cached_start_binding_enabled = Some(binding_enabled);
         self.cached_start_binding_distance = Some(binding_distance);
+        self.cached_start_angle_locked = Some(angle_locked);
+        self.cached_start_alt_key = Some(alt_key);
         self.cached_start_elements_version = elements_version;
     }
 
@@ -1541,4 +1582,60 @@ fn resolve_creation_session_data(creating_state: &CreatingState) -> ArrowCreatio
                 .cloned()
         })
         .unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{ArrowCreationSessionData, BindingSnapResult};
+    use crate::draw::types::draw_point::DrawPoint;
+    use crate::draw::utils::snapping_mode::SnappingMode;
+
+    #[test]
+    fn start_binding_cache_includes_modifier_flags() {
+        let mut session = ArrowCreationSessionData::default();
+        let result = BindingSnapResult::new(DrawPoint::ZERO, None);
+
+        session.cache_start_binding(
+            DrawPoint::ZERO,
+            None,
+            SnappingMode::Object,
+            7,
+            true,
+            12.0,
+            true,
+            false,
+            &result,
+        );
+
+        assert!(session.can_reuse_start_binding(
+            DrawPoint::ZERO,
+            None,
+            SnappingMode::Object,
+            7,
+            true,
+            12.0,
+            true,
+            false,
+        ));
+        assert!(!session.can_reuse_start_binding(
+            DrawPoint::ZERO,
+            None,
+            SnappingMode::Object,
+            7,
+            true,
+            12.0,
+            false,
+            false,
+        ));
+        assert!(!session.can_reuse_start_binding(
+            DrawPoint::ZERO,
+            None,
+            SnappingMode::Object,
+            7,
+            true,
+            12.0,
+            true,
+            true,
+        ));
+    }
 }
