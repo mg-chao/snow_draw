@@ -1,11 +1,7 @@
 #![allow(dead_code)]
 
 use std::collections::BTreeSet;
-
-use serde_json::Value;
-
-use crate::draw::elements::types::arrow::arrow_data::ArrowData;
-use crate::draw::elements::types::line::line_data::LineData;
+use crate::draw::elements::types::connector::connector_type_utils::read_connector_summary;
 use crate::draw::elements::types::text::text_data::TextData;
 use crate::draw::models::element_state::ElementState;
 use crate::draw::types::element_style::ArrowType;
@@ -94,42 +90,16 @@ where
 }
 
 fn resolve_arrow_like_data(element: &ElementState) -> Option<BasicArrowLikeData> {
-    let type_id = element.data.type_id();
-    let type_id = type_id.as_str();
-    if type_id != ArrowData::TYPE_ID_TOKEN && type_id != LineData::TYPE_ID_TOKEN {
-        return None;
-    }
-
-    let payload = element.data.to_json_value();
-    let json = payload.as_object()?;
-    let points_len = json.get("points").and_then(Value::as_array)?.len();
-
-    let arrow_type = if type_id == LineData::TYPE_ID_TOKEN {
-        ArrowType::Curved
-    } else {
-        json.get("arrowType")
-            .and_then(Value::as_str)
-            .and_then(parse_arrow_type)
-            .unwrap_or(ArrowType::Straight)
-    };
+    let connector = read_connector_summary(element.data.as_ref())?;
 
     Some(BasicArrowLikeData {
-        points_len,
-        arrow_type,
+        points_len: connector.points_len,
+        arrow_type: connector.arrow_type,
     })
 }
 
 fn is_text_element(element: &ElementState) -> bool {
     element.data.type_id().as_str() == TextData::TYPE_ID_TOKEN
-}
-
-fn parse_arrow_type(raw: &str) -> Option<ArrowType> {
-    match raw {
-        "straight" => Some(ArrowType::Straight),
-        "curved" => Some(ArrowType::Curved),
-        "elbow" => Some(ArrowType::Elbow),
-        _ => None,
-    }
 }
 
 #[cfg(test)]
@@ -139,7 +109,11 @@ mod tests {
     use std::collections::BTreeSet;
     use std::sync::Arc;
 
+    use crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode;
+    use crate::draw::elements::types::arrow::arrow_binding::ArrowBinding;
     use crate::draw::elements::types::arrow::arrow_data::{ArrowData, ArrowDataPatch};
+    use crate::draw::elements::types::arrow::arrow_like_data::NullableField;
+    use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
     use crate::draw::models::element_state::ElementState;
     use crate::draw::types::draw_point::DrawPoint;
     use crate::draw::types::draw_rect::DrawRect;
@@ -165,6 +139,35 @@ mod tests {
 
         assert!(profile.is_arrow());
         assert!(!profile.is_two_point_arrow());
+        assert_eq!(profile.corner_handle_offset(), 8.0);
+    }
+
+    #[test]
+    fn line_selection_uses_shared_connector_profile_data() {
+        let element = ElementState::new(
+            "line-1",
+            DrawRect::new(0.0, 0.0, 120.0, 40.0),
+            0.0,
+            1.0,
+            0,
+            Arc::new(LineData::default().copy_with(LineDataPatch {
+                start_binding: NullableField::Value(ArrowBinding::new(
+                    "rect-start",
+                    DrawPoint::new(0.0, 0.5),
+                    ArrowBindingMode::Orbit,
+                )),
+                ..LineDataPatch::default()
+            })),
+        );
+
+        let profile = resolve_single_selection_profile(
+            &BTreeSet::from([String::from("line-1")]),
+            |id| (id == "line-1").then(|| element.clone()),
+        );
+
+        assert!(profile.is_arrow());
+        assert!(profile.is_two_point_arrow());
+        assert!(!profile.is_elbow_arrow());
         assert_eq!(profile.corner_handle_offset(), 8.0);
     }
 }

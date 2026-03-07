@@ -20,6 +20,9 @@ use crate::draw::elements::types::filter::filter_data::FilterData;
 use crate::draw::elements::types::free_draw::free_draw_data::FreeDrawData;
 use crate::draw::elements::types::highlight::highlight_data::HighlightData;
 use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
+use crate::draw::elements::types::connector::connector_type_utils::{
+    decode_connector_payload, is_connector_type_id, ConnectorPayload,
+};
 use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
 use crate::draw::elements::types::serial_number::serial_number_data::{
     SerialNumberData, SerialNumberDataPatch,
@@ -145,100 +148,73 @@ impl SerialNumberDependencyElement for ElementState {
     }
 
     fn is_arrow_like_element(&self) -> bool {
-        matches!(
-            self.data.type_id().as_str(),
-            ArrowData::TYPE_ID_TOKEN | LineData::TYPE_ID_TOKEN
-        )
+        is_connector_type_id(self.data.type_id().as_str())
     }
 
     fn arrow_start_binding_element_id(&self) -> Option<String> {
-        if let Some(data) = decode_arrow_data(self.data.as_ref()) {
-            return data
-                .start_binding
-                .as_ref()
-                .map(|binding| binding.element_id.clone());
-        }
-        if let Some(data) = decode_line_data(self.data.as_ref()) {
-            return data
-                .start_binding
-                .as_ref()
-                .map(|binding| binding.element_id.clone());
-        }
-        None
+        decode_connector_payload(self.data.as_ref())?.start_binding_element_id()
     }
 
     fn arrow_end_binding_element_id(&self) -> Option<String> {
-        if let Some(data) = decode_arrow_data(self.data.as_ref()) {
-            return data
-                .end_binding
-                .as_ref()
-                .map(|binding| binding.element_id.clone());
-        }
-        if let Some(data) = decode_line_data(self.data.as_ref()) {
-            return data
-                .end_binding
-                .as_ref()
-                .map(|binding| binding.element_id.clone());
-        }
-        None
+        decode_connector_payload(self.data.as_ref())?.end_binding_element_id()
     }
 
     fn with_cleared_arrow_bindings(&self, clear_start: bool, clear_end: bool) -> Self {
-        if let Some(data) = decode_arrow_data(self.data.as_ref()) {
-            let next_data = data.copy_with(ArrowDataPatch {
-                start_binding: if clear_start {
-                    ArrowNullableField::Null
-                } else {
-                    ArrowNullableField::Unset
-                },
-                end_binding: if clear_end {
-                    ArrowNullableField::Null
-                } else {
-                    ArrowNullableField::Unset
-                },
-                start_is_special: if clear_start {
-                    ArrowNullableField::Null
-                } else {
-                    ArrowNullableField::Unset
-                },
-                end_is_special: if clear_end {
-                    ArrowNullableField::Null
-                } else {
-                    ArrowNullableField::Unset
-                },
-                ..ArrowDataPatch::default()
-            });
-            return self.copy_with(None, None, None, None, None, Some(Arc::new(next_data)));
+        match decode_connector_payload(self.data.as_ref()) {
+            Some(ConnectorPayload::Arrow(data)) => {
+                let next_data = data.copy_with(ArrowDataPatch {
+                    start_binding: if clear_start {
+                        ArrowNullableField::Null
+                    } else {
+                        ArrowNullableField::Unset
+                    },
+                    end_binding: if clear_end {
+                        ArrowNullableField::Null
+                    } else {
+                        ArrowNullableField::Unset
+                    },
+                    start_is_special: if clear_start {
+                        ArrowNullableField::Null
+                    } else {
+                        ArrowNullableField::Unset
+                    },
+                    end_is_special: if clear_end {
+                        ArrowNullableField::Null
+                    } else {
+                        ArrowNullableField::Unset
+                    },
+                    ..ArrowDataPatch::default()
+                });
+                self.copy_with(None, None, None, None, None, Some(Arc::new(next_data)))
+            }
+            Some(ConnectorPayload::Line(data)) => {
+                let next_data = data.copy_with(LineDataPatch {
+                    start_binding: if clear_start {
+                        ArrowLikeNullableField::Null
+                    } else {
+                        ArrowLikeNullableField::Unset
+                    },
+                    end_binding: if clear_end {
+                        ArrowLikeNullableField::Null
+                    } else {
+                        ArrowLikeNullableField::Unset
+                    },
+                    start_is_special: if clear_start {
+                        ArrowLikeNullableField::Null
+                    } else {
+                        ArrowLikeNullableField::Unset
+                    },
+                    end_is_special: if clear_end {
+                        ArrowLikeNullableField::Null
+                    } else {
+                        ArrowLikeNullableField::Unset
+                    },
+                    ..LineDataPatch::default()
+                });
+                self.copy_with(None, None, None, None, None, Some(Arc::new(next_data)))
+            }
+            None => self.clone(),
         }
-
-        if let Some(data) = decode_line_data(self.data.as_ref()) {
-            let next_data = data.copy_with(LineDataPatch {
-                start_binding: if clear_start {
-                    ArrowLikeNullableField::Null
-                } else {
-                    ArrowLikeNullableField::Unset
-                },
-                end_binding: if clear_end {
-                    ArrowLikeNullableField::Null
-                } else {
-                    ArrowLikeNullableField::Unset
-                },
-                start_is_special: if clear_start {
-                    ArrowLikeNullableField::Null
-                } else {
-                    ArrowLikeNullableField::Unset
-                },
-                end_is_special: if clear_end {
-                    ArrowLikeNullableField::Null
-                } else {
-                    ArrowLikeNullableField::Unset
-                },
-                ..LineDataPatch::default()
-            });
-            return self.copy_with(None, None, None, None, None, Some(Arc::new(next_data)));
-        }
-
-        self.clone()
     }
 }
 
@@ -712,7 +688,13 @@ fn decode_serial_number_data(data: &dyn CoreElementData) -> Option<SerialNumberD
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::draw::elements::types::arrow::arrow_binding::{ArrowBinding, ArrowBindingMode};
+    use crate::draw::elements::types::arrow::arrow_like_data::NullableField;
+    use crate::draw::elements::types::serial_number::serial_number_dependencies::{
+        clear_element_dependencies_for_ids, DependencyFilter,
+    };
     use crate::draw::types::element_style::ElementStyleUpdate;
+    use crate::draw::types::draw_rect::DrawRect;
 
     #[test]
     fn unknown_action_returns_none() {
@@ -734,5 +716,40 @@ mod tests {
 
         let next = element_reducer(state.clone(), &action, &context);
         assert!(next.is_some());
+    }
+
+    #[test]
+    fn clear_element_dependencies_clears_line_connector_bindings() {
+        let element = ElementState::new(
+            "line-1",
+            DrawRect::new(0.0, 0.0, 100.0, 20.0),
+            0.0,
+            1.0,
+            1,
+            Arc::new(LineData::default().copy_with(LineDataPatch {
+                start_binding: NullableField::Value(ArrowBinding::new(
+                    "rect-a",
+                    DrawPoint::new(0.0, 0.5),
+                    ArrowBindingMode::Orbit,
+                )),
+                end_binding: NullableField::Value(ArrowBinding::new(
+                    "rect-b",
+                    DrawPoint::new(1.0, 0.5),
+                    ArrowBindingMode::Inside,
+                )),
+                ..LineDataPatch::default()
+            })),
+        );
+
+        let next = clear_element_dependencies_for_ids(
+            &element,
+            &HashSet::from([String::from("rect-b")]),
+            DependencyFilter::default(),
+        );
+        let next_line = decode_line_data(next.data.as_ref()).expect("updated line data");
+
+        assert_eq!(next_line.start_binding.as_ref().map(|binding| binding.element_id.as_str()), Some("rect-a"));
+        assert!(next_line.end_binding.is_none());
+        assert!(next_line.end_is_special.is_none());
     }
 }

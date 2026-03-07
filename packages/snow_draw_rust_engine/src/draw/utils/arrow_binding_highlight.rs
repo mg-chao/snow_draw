@@ -1,13 +1,10 @@
-#![allow(dead_code)]
-
-use serde_json::Value;
-
 use crate::draw::edit::arrow::arrow_point_operation::{ArrowPointEditContext, ArrowPointKind};
 use crate::draw::edit::connector::connector_point_operation::ConnectorPointEditContext;
 use crate::draw::elements::core::element_data::ElementData;
-use crate::draw::elements::types::arrow::arrow_data::{ArrowBinding, ArrowBindingMode, ArrowData};
-use crate::draw::elements::types::line::line_data::LineData;
-use crate::draw::types::draw_point::DrawPoint;
+use crate::draw::elements::types::arrow::arrow_data::ArrowBinding;
+use crate::draw::elements::types::connector::connector_type_utils::{
+    decode_connector_payload, ConnectorBindingPair,
+};
 use crate::draw::types::edit_transform::EditTransform;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -21,6 +18,15 @@ enum ArrowEndpoint {
 pub struct ArrowBindingPair {
     pub start_binding: Option<ArrowBinding>,
     pub end_binding: Option<ArrowBinding>,
+}
+
+impl From<ConnectorBindingPair> for ArrowBindingPair {
+    fn from(value: ConnectorBindingPair) -> Self {
+        Self {
+            start_binding: value.start_binding,
+            end_binding: value.end_binding,
+        }
+    }
 }
 
 /// Resolves the binding to highlight during arrow-point editing.
@@ -105,18 +111,8 @@ pub fn resolve_connector_point_highlight_binding_from_active_index(
 
 /// Extracts endpoint bindings from a runtime element payload.
 pub fn resolve_arrow_binding_pair(data: &dyn ElementData) -> Option<ArrowBindingPair> {
-    let type_id = data.type_id();
-    let type_id = type_id.as_str();
-    if type_id != ArrowData::TYPE_ID_TOKEN && type_id != LineData::TYPE_ID_TOKEN {
-        return None;
-    }
-
-    let payload = data.to_json_value();
-    let json = payload.as_object()?;
-    Some(ArrowBindingPair {
-        start_binding: parse_binding(json.get("startBinding"))?,
-        end_binding: parse_binding(json.get("endBinding"))?,
-    })
+    let connector = decode_connector_payload(data)?;
+    Some(connector.binding_pair().into())
 }
 
 fn resolve_endpoint_for_context(context: &ArrowPointEditContext) -> Option<ArrowEndpoint> {
@@ -153,37 +149,35 @@ fn binding_from_transform(
     }
 }
 
-fn parse_binding(raw: Option<&Value>) -> Option<Option<ArrowBinding>> {
-    let raw = match raw {
-        Some(raw) => raw,
-        None => return Some(None),
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use crate::draw::elements::types::arrow::arrow_binding::{
+        ArrowBinding as LineArrowBinding, ArrowBindingMode,
     };
-    if raw.is_null() {
-        return Some(None);
-    }
-    let json = raw.as_object()?;
-    let element_id = json.get("elementId").and_then(Value::as_str)?.to_owned();
-    let anchor_json = json.get("anchor")?.as_object()?;
-    let anchor_x = anchor_json.get("x").and_then(Value::as_f64)?;
-    let anchor_y = anchor_json.get("y").and_then(Value::as_f64)?;
-    let mode = json
-        .get("mode")
-        .and_then(Value::as_str)
-        .and_then(parse_binding_mode)
-        .unwrap_or(ArrowBindingMode::Orbit);
+    use crate::draw::elements::types::arrow::arrow_like_data::NullableField;
+    use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
+    use crate::draw::types::draw_point::DrawPoint;
 
-    Some(Some(ArrowBinding::new(
-        element_id,
-        DrawPoint::new(anchor_x, anchor_y),
-        mode,
-    )))
-}
+    #[test]
+    fn resolve_arrow_binding_pair_reads_line_connector_bindings() {
+        let line = LineData::default().copy_with(LineDataPatch {
+            start_binding: NullableField::Value(LineArrowBinding::new(
+                "rect-start",
+                DrawPoint::new(0.0, 0.5),
+                ArrowBindingMode::Orbit,
+            )),
+            end_binding: NullableField::Value(LineArrowBinding::new(
+                "rect-end",
+                DrawPoint::new(1.0, 0.5),
+                ArrowBindingMode::Inside,
+            )),
+            ..LineDataPatch::default()
+        });
 
-fn parse_binding_mode(raw: &str) -> Option<ArrowBindingMode> {
-    match raw {
-        "inside" => Some(ArrowBindingMode::Inside),
-        "orbit" => Some(ArrowBindingMode::Orbit),
-        "skip" => Some(ArrowBindingMode::Skip),
-        _ => None,
+        let pair = resolve_arrow_binding_pair(&line).expect("line connector binding pair");
+        assert_eq!(pair.start_binding.as_ref().map(|binding| binding.element_id.as_str()), Some("rect-start"));
+        assert_eq!(pair.end_binding.as_ref().map(|binding| binding.element_id.as_str()), Some("rect-end"));
     }
 }
