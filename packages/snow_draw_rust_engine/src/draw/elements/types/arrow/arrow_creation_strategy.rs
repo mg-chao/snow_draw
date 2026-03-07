@@ -571,6 +571,7 @@ fn update_line(
         Some(&mut session_data.end_target_cache),
         ArrowBindingCachePolicy::default(),
     );
+    session_data.allow_binding_on_finalize = binding_result.allow_binding_on_finalize;
     adjusted_current = binding_result.position;
     let mut end_binding = binding_result.binding;
 

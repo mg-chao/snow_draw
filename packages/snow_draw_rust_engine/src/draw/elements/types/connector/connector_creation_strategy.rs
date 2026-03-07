@@ -184,6 +184,36 @@ impl CreationStrategy for ArrowCreationStrategy {
         )
     }
 
+    fn add_point(
+        &self,
+        state: &DrawState,
+        config: &DrawConfig,
+        creating_state: &CreatingState,
+        position: DrawPoint,
+        snapping_mode: SnappingMode,
+        snap_override_active: bool,
+        text_metrics_service: Option<Arc<dyn TextMetricsService>>,
+    ) -> Option<CreationUpdateResult> {
+        assert!(
+            creating_state
+                .element_data_ref()
+                .as_ref()
+                .as_any()
+                .downcast_ref::<DomainArrowData>()
+                .is_some(),
+            "ArrowCreationStrategy.add_point only supports ArrowData"
+        );
+        ConnectorCreationStrategy::new().add_point(
+            state,
+            config,
+            creating_state,
+            position,
+            snapping_mode,
+            snap_override_active,
+            text_metrics_service,
+        )
+    }
+
     fn finish(
         &self,
         state: &DrawState,
@@ -362,5 +392,39 @@ mod tests {
             false,
             None,
         );
+    }
+
+    #[test]
+    fn arrow_strategy_add_point_delegates_to_connector_strategy() {
+        let shared = ConnectorCreationStrategy::new();
+        let arrow = ArrowCreationStrategy::new();
+        let started = shared.start(Arc::new(DomainArrowData::default()), DrawPoint::ZERO, None);
+        let creating_state = CreatingState {
+            element: ElementState {
+                id: "arrow-1".to_owned(),
+                type_id_value: DomainArrowData::TYPE_ID_TOKEN.to_owned(),
+                rect: started.rect,
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index: 0,
+                data: started.data,
+            },
+            start_position: DrawPoint::ZERO,
+            current_rect: started.rect,
+            snap_guides: started.snap_guides,
+            creation_mode: started.creation_mode,
+        };
+
+        let result = arrow.add_point(
+            &DrawState::default(),
+            &DrawConfig::default(),
+            &creating_state,
+            DrawPoint::new(24.0, 12.0),
+            SnappingMode::None,
+            false,
+            None,
+        );
+
+        assert!(result.is_some());
     }
 }

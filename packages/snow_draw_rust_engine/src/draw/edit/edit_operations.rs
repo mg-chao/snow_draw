@@ -51,6 +51,7 @@ use crate::draw::elements::types::arrow::elbow::elbow_editing::{
 };
 use crate::draw::elements::types::arrow::elbow::elbow_fixed_segment::ElbowFixedSegment as CompatElbowFixedSegment;
 use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
+use crate::draw::history::history_metadata::HistoryMetadata;
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::element_state::ElementState as DomainElementState;
 use crate::draw::models::multi_select_lifecycle::MultiSelectOverlayState;
@@ -707,7 +708,19 @@ impl EditOperation for ArrowPointEditOperationAdapter {
     }
 
     fn records_history(&self) -> bool {
-        false
+        true
+    }
+
+    fn create_history_metadata(
+        &self,
+        context: &EditContext,
+        _transform: &EditTransform,
+    ) -> HistoryMetadata {
+        HistoryMetadata::for_edit(
+            "Connector point",
+            context.selected_ids_at_start.clone(),
+            None,
+        )
     }
 
     fn create_context(
@@ -1960,6 +1973,7 @@ mod tests {
     use super::*;
 
     use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
+    use crate::draw::history::history_metadata::HistoryRecordType;
     use crate::draw::models::application_state::ApplicationState;
     use crate::draw::models::draw_state::{DomainDocumentState, DomainState, DrawState};
 
@@ -2203,5 +2217,32 @@ mod tests {
             Some(DrawPoint::new(80.0, 90.0))
         );
         assert_eq!(updated_data.fixed_segments.as_ref().map(Vec::len), Some(2));
+    }
+
+    #[test]
+    fn connector_point_operation_records_connector_history() {
+        let operation = ArrowPointEditOperationAdapter::new();
+        let context = EditContext::new(
+            DrawPoint::new(10.0, 20.0),
+            DrawRect::new(0.0, 0.0, 40.0, 40.0),
+            ["arrow-1".to_owned()].into_iter().collect(),
+            3,
+            5,
+        );
+        let metadata = operation.create_history_metadata(
+            &context,
+            &EditTransform::ArrowPoint(ArrowPointTransform::new(
+                DrawPoint::new(10.0, 20.0),
+                vec![],
+            )),
+        );
+
+        assert!(operation.records_history());
+        assert_eq!(metadata.record_type(), HistoryRecordType::Edit);
+        assert_eq!(metadata.description(), "Connector point 1 element");
+        assert_eq!(
+            metadata.affected_element_ids(),
+            &context.selected_ids_at_start
+        );
     }
 }
