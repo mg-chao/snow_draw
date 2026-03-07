@@ -8,7 +8,7 @@ use crate::draw::elements::types::connector::connector_geometry::{
     resolve_connector_geometry_update, resolve_connector_world_points,
 };
 use crate::draw::elements::types::highlight::highlight_data::HighlightData;
-use crate::draw::elements::types::line::line_data::LineData;
+use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
 use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
 use crate::draw::elements::types::serial_number::serial_number_data::SerialNumberData;
 use crate::draw::elements::types::serial_number::serial_number_layout::resolve_serial_number_stroke_width;
@@ -32,7 +32,35 @@ use crate::draw::types::element_style::ArrowheadStyle;
 
 pub type ArrowCoreState = ArrowState;
 pub type ArrowBindableState = BindableState;
-pub type ConnectorSourceData = ArrowData;
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum ConnectorSourceData {
+    Arrow(ArrowData),
+    Line(LineData),
+}
+
+impl ConnectorSourceData {
+    pub fn arrow_type(&self) -> ArrowType {
+        match self {
+            Self::Arrow(data) => data.arrow_type,
+            Self::Line(data) => data.arrow_type,
+        }
+    }
+
+    pub fn start_arrowhead(&self) -> ArrowheadStyle {
+        match self {
+            Self::Arrow(data) => data.start_arrowhead,
+            Self::Line(data) => data.start_arrowhead,
+        }
+    }
+
+    pub fn end_arrowhead(&self) -> ArrowheadStyle {
+        match self {
+            Self::Arrow(data) => data.end_arrowhead,
+            Self::Line(data) => data.end_arrowhead,
+        }
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ArrowCoreDocumentProjection {
@@ -357,16 +385,13 @@ pub fn collect_core_arrow_states_with_sources(
     let mut sources = HashMap::<String, (ElementState, ConnectorSourceData)>::new();
 
     for element in elements {
-        if element.data.type_id().as_str() != ArrowData::TYPE_ID_TOKEN {
-            continue;
-        }
-        let Ok(data) = ArrowData::from_json(&element.data.to_json()) else {
+        let Some(data) = decode_connector_source_data(element) else {
             continue;
         };
-        if only_bound_arrows && data.start_binding.is_none() && data.end_binding.is_none() {
+        if only_bound_arrows && !connector_source_has_bindings(&data) {
             continue;
         }
-        arrows.push(to_core_arrow_state(
+        arrows.push(to_core_arrow_state_from_source(
             element,
             &data,
             None,
@@ -677,12 +702,218 @@ pub fn apply_core_arrow_patches_to_sources(
         let Some((element, data)) = sources.get(&arrow_patch.id) else {
             continue;
         };
-        let patched = apply_core_arrow_patch_to_element(element, data, &arrow_patch.patch);
+        let patched = match data {
+            ConnectorSourceData::Arrow(data) => {
+                apply_core_arrow_patch_to_element(element, data, &arrow_patch.patch)
+            }
+            ConnectorSourceData::Line(data) => {
+                apply_core_line_patch_to_element(element, data, &arrow_patch.patch)
+            }
+        };
         if patched != *element {
             patched_by_id.insert(patched.id.clone(), patched);
         }
     }
     patched_by_id
+}
+
+fn decode_connector_source_data(element: &ElementState) -> Option<ConnectorSourceData> {
+    match element.data.type_id().as_str() {
+        ArrowData::TYPE_ID_TOKEN => ArrowData::from_json(&element.data.to_json())
+            .ok()
+            .map(ConnectorSourceData::Arrow),
+        LineData::TYPE_ID_TOKEN => LineData::from_json(&element.data.to_json())
+            .ok()
+            .map(ConnectorSourceData::Line),
+        _ => None,
+    }
+}
+
+fn connector_source_has_bindings(data: &ConnectorSourceData) -> bool {
+    match data {
+        ConnectorSourceData::Arrow(data) => {
+            data.start_binding.is_some() || data.end_binding.is_some()
+        }
+        ConnectorSourceData::Line(data) => data.start_binding.is_some() || data.end_binding.is_some(),
+    }
+}
+
+pub fn to_core_arrow_state_from_source(
+    element: &ElementState,
+    data: &ConnectorSourceData,
+    local_points_override: Option<&[DrawPoint]>,
+    fixed_segments_override: Option<&[ElbowFixedSegment]>,
+    start_binding_override: Option<Option<&ArrowBinding>>,
+    end_binding_override: Option<Option<&ArrowBinding>>,
+    max_coordinate: f64,
+) -> ArrowCoreState {
+    match data {
+        ConnectorSourceData::Arrow(data) => to_core_arrow_state(
+            element,
+            data,
+            local_points_override,
+            fixed_segments_override,
+            start_binding_override,
+            end_binding_override,
+            max_coordinate,
+        ),
+        ConnectorSourceData::Line(data) => to_core_line_state(
+            element,
+            data,
+            local_points_override,
+            start_binding_override,
+            end_binding_override,
+            max_coordinate,
+        ),
+    }
+}
+
+fn to_core_line_state(
+    element: &ElementState,
+    data: &LineData,
+    local_points_override: Option<&[DrawPoint]>,
+    start_binding_override: Option<Option<&ArrowBinding>>,
+    end_binding_override: Option<Option<&ArrowBinding>>,
+    max_coordinate: f64,
+) -> ArrowCoreState {
+    let local_points = local_points_override
+        .map(|points| points.to_vec())
+        .unwrap_or_else(|| resolve_connector_world_points(element.rect, &data.points));
+    let world_points = local_to_world_points(element, &local_points);
+    let normalized =
+        super::arrow_core::normalize_arrow_from_global_points(&world_points, max_coordinate);
+    ArrowCoreState {
+        id: element.id.clone(),
+        x: normalized.x,
+        y: normalized.y,
+        width: normalized.width,
+        height: normalized.height,
+        points: normalized.points,
+        start_binding: match start_binding_override {
+            Some(binding) => binding.cloned(),
+            None => data.start_binding.clone(),
+        },
+        end_binding: match end_binding_override {
+            Some(binding) => binding.cloned(),
+            None => data.end_binding.clone(),
+        },
+        start_arrowhead: Some(arrowhead_name(data.start_arrowhead).to_string()),
+        end_arrowhead: Some(arrowhead_name(data.end_arrowhead).to_string()),
+        elbowed: data.arrow_type == ArrowType::Elbow,
+        fixed_segments: None,
+        start_is_special: None,
+        end_is_special: None,
+    }
+}
+
+fn apply_core_line_state_to_element(
+    element: &ElementState,
+    data: &LineData,
+    next_arrow: &ArrowCoreState,
+) -> ElementState {
+    let next_world_points = core_arrow_world_points(next_arrow);
+    let local_points = world_to_local_points(element, &next_world_points);
+    let geometry = resolve_connector_geometry_update(
+        &local_points,
+        element.rect,
+        element.rotation,
+        data.arrow_type,
+    );
+    let next_data = data.copy_with(LineDataPatch {
+        points: Some(geometry.normalized_points),
+        start_binding: match &next_arrow.start_binding {
+            Some(binding) => {
+                crate::draw::elements::types::arrow::arrow_like_data::NullableField::Value(
+                    binding.clone(),
+                )
+            }
+            None => crate::draw::elements::types::arrow::arrow_like_data::NullableField::Null,
+        },
+        end_binding: match &next_arrow.end_binding {
+            Some(binding) => {
+                crate::draw::elements::types::arrow::arrow_like_data::NullableField::Value(
+                    binding.clone(),
+                )
+            }
+            None => crate::draw::elements::types::arrow::arrow_like_data::NullableField::Null,
+        },
+        ..Default::default()
+    });
+    element.copy_with(
+        None,
+        Some(geometry.rect),
+        None,
+        None,
+        None,
+        Some(Arc::new(next_data)),
+    )
+}
+
+fn apply_non_geometry_patch_to_line(data: &LineData, patch: &ArrowPatch) -> LineData {
+    let start_binding = if patch.contains_key("startBinding") {
+        decode_core_binding_patch_value(patch.get("startBinding"))
+    } else {
+        None
+    };
+    let end_binding = if patch.contains_key("endBinding") {
+        decode_core_binding_patch_value(patch.get("endBinding"))
+    } else {
+        None
+    };
+
+    data.copy_with(LineDataPatch {
+        start_binding: match patch.contains_key("startBinding") {
+            true => match start_binding {
+                Some(binding) => {
+                    crate::draw::elements::types::arrow::arrow_like_data::NullableField::Value(
+                        binding,
+                    )
+                }
+                None => crate::draw::elements::types::arrow::arrow_like_data::NullableField::Null,
+            },
+            false => crate::draw::elements::types::arrow::arrow_like_data::NullableField::Unset,
+        },
+        end_binding: match patch.contains_key("endBinding") {
+            true => match end_binding {
+                Some(binding) => {
+                    crate::draw::elements::types::arrow::arrow_like_data::NullableField::Value(
+                        binding,
+                    )
+                }
+                None => crate::draw::elements::types::arrow::arrow_like_data::NullableField::Null,
+            },
+            false => crate::draw::elements::types::arrow::arrow_like_data::NullableField::Unset,
+        },
+        ..Default::default()
+    })
+}
+
+fn apply_core_line_patch_to_element(
+    element: &ElementState,
+    data: &LineData,
+    patch: &ArrowPatch,
+) -> ElementState {
+    if patch.is_empty() {
+        return element.clone();
+    }
+    if !patch_touches_geometry(patch) {
+        let next_data = apply_non_geometry_patch_to_line(data, patch);
+        if next_data == *data {
+            return element.clone();
+        }
+        return element.copy_with(None, None, None, None, None, Some(Arc::new(next_data)));
+    }
+
+    let current_arrow = to_core_line_state(
+        element,
+        data,
+        None,
+        None,
+        None,
+        crate::draw::elements::types::arrow::arrow_core::DEFAULT_MAX_COORDINATE,
+    );
+    let next_arrow = apply_arrow_patch(&current_arrow, patch);
+    apply_core_line_state_to_element(element, data, &next_arrow)
 }
 
 pub fn transform_arrow_local_fixed_segments(
@@ -1029,20 +1260,25 @@ fn apply_arrow_patch(arrow: &ArrowCoreState, patch: &ArrowPatch) -> ArrowCoreSta
 
 #[cfg(test)]
 mod tests {
+    use std::collections::HashMap;
     use std::sync::Arc;
 
     use super::{
-        apply_core_arrow_state_to_element, to_local_fixed_segments_from_core_arrow,
-        transform_arrow_local_fixed_segments, ArrowCoreState,
+        apply_core_arrow_patches_to_sources, apply_core_arrow_state_to_element,
+        collect_core_arrow_states_with_sources, to_local_fixed_segments_from_core_arrow,
+        transform_arrow_local_fixed_segments, ArrowCoreState, ConnectorSourceData,
     };
     use crate::draw::elements::types::arrow::arrow_binding::{ArrowBinding, ArrowBindingMode};
+    use crate::draw::elements::types::arrow::core::arrow_types::ArrowStatePatchWithId;
     use crate::draw::elements::types::arrow::arrow_data::{
         ArrowBinding as DataArrowBinding, ArrowBindingMode as DataArrowBindingMode, ArrowData,
         ElbowFixedSegment,
     };
+    use crate::draw::elements::types::line::line_data::LineData;
     use crate::draw::models::element_state::ElementState;
     use crate::draw::types::draw_point::DrawPoint;
     use crate::draw::types::draw_rect::DrawRect;
+    use serde_json::json;
 
     fn binding(id: &str) -> ArrowBinding {
         ArrowBinding::new(
@@ -1118,5 +1354,73 @@ mod tests {
         assert_eq!(patched_data.fixed_segments, expected_fixed_segments);
         assert_eq!(patched_data.start_is_special, next_arrow.start_is_special);
         assert_eq!(patched_data.end_is_special, next_arrow.end_is_special);
+    }
+
+    #[test]
+    fn collect_core_arrow_states_with_sources_includes_line_connectors() {
+        let arrow = ElementState::new(
+            "arrow",
+            DrawRect::new(0.0, 0.0, 10.0, 10.0),
+            0.0,
+            1.0,
+            1,
+            Arc::new(ArrowData::default()),
+        );
+        let line = ElementState::new(
+            "line",
+            DrawRect::new(10.0, 0.0, 20.0, 10.0),
+            0.0,
+            1.0,
+            2,
+            Arc::new(LineData::default()),
+        );
+
+        let (states, sources) = collect_core_arrow_states_with_sources(&[arrow, line], false);
+
+        assert_eq!(states.len(), 2);
+        assert!(matches!(sources.get("line"), Some((_, ConnectorSourceData::Line(_)))));
+    }
+
+    #[test]
+    fn apply_core_arrow_patches_to_sources_updates_line_bindings() {
+        let line = LineData::default();
+        let line_element = ElementState::new(
+            "line",
+            DrawRect::new(0.0, 0.0, 10.0, 10.0),
+            0.0,
+            1.0,
+            1,
+            Arc::new(line.clone()),
+        );
+        let sources = HashMap::from([(
+            "line".to_owned(),
+            (line_element.clone(), ConnectorSourceData::Line(line)),
+        )]);
+        let patch = serde_json::Map::from_iter([(
+            "startBinding".to_owned(),
+            json!({
+                "elementId": "target",
+                "fixedPoint": [0.25, 0.75],
+                "mode": "orbit",
+            }),
+        )]);
+
+        let patched = apply_core_arrow_patches_to_sources(
+            &[ArrowStatePatchWithId {
+                id: "line".to_owned(),
+                patch,
+            }],
+            &sources,
+        );
+
+        let updated = patched.get("line").expect("patched line element");
+        let updated_data = LineData::from_json(&updated.data.to_json()).expect("line data");
+        assert_eq!(
+            updated_data
+                .start_binding
+                .as_ref()
+                .map(|binding| binding.element_id.as_str()),
+            Some("target")
+        );
     }
 }

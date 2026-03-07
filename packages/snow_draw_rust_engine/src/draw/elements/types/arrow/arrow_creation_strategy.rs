@@ -19,7 +19,8 @@ use crate::draw::elements::types::arrow::arrow_binding_snapper::{
 };
 use crate::draw::elements::types::arrow::arrow_core::DEFAULT_MAX_COORDINATE;
 use crate::draw::elements::types::arrow::arrow_core_bridge::build_core_engine_context;
-use crate::draw::elements::types::arrow::arrow_core_endpoint_drag::finalize_arrow_core_endpoint_drag_result;
+use crate::draw::elements::types::arrow::arrow_core_bridge::ConnectorSourceData;
+use crate::draw::elements::types::arrow::arrow_core_endpoint_drag::finalize_connector_core_endpoint_drag_result;
 use crate::draw::elements::types::arrow::arrow_core_ops::{
     resolve_core_max_binding_distance, resolve_endpoint_drag_binding_enabled,
     ArrowCoreEndpointBindingOptions,
@@ -446,10 +447,11 @@ fn finalize_connector_creation_bindings(
         .map(|element| element.id.clone())
         .chain(std::iter::once(element_id.to_owned()))
         .collect::<Vec<_>>();
-    let finalized = finalize_arrow_core_endpoint_drag_result(
+    let preview_connector = ConnectorSourceData::Arrow(preview_data.clone());
+    let finalized = finalize_connector_core_endpoint_drag_result(
         state,
         &preview_element,
-        &preview_data,
+        &preview_connector,
         &world_points,
         world_points.len() - 1,
         *world_points.last().unwrap_or(&world_points[0]),

@@ -31,8 +31,12 @@ use crate::draw::elements::types::arrow::arrow_binding_snapper::{
     ArrowBindingTargetCache as SnapperTargetCache,
 };
 use crate::draw::elements::types::arrow::arrow_core::DEFAULT_MAX_COORDINATE;
-use crate::draw::elements::types::arrow::arrow_core_bridge::build_core_engine_context;
-use crate::draw::elements::types::arrow::arrow_core_endpoint_drag::finalize_arrow_core_endpoint_drag_result;
+use crate::draw::elements::types::arrow::arrow_core_bridge::{
+    build_core_engine_context, ConnectorSourceData,
+};
+use crate::draw::elements::types::arrow::arrow_core_endpoint_drag::{
+    finalize_arrow_core_endpoint_drag_result, finalize_connector_core_endpoint_drag_result,
+};
 use crate::draw::elements::types::arrow::arrow_core_ops::resolve_endpoint_drag_binding_enabled;
 use crate::draw::elements::types::arrow::arrow_data::{
     ArrowBinding as ArrowDataBinding, ArrowBindingMode as ArrowDataBindingMode, ArrowData,
@@ -834,13 +838,34 @@ impl EditOperation for ArrowPointEditOperationAdapter {
             },
             &mut binding_lookup,
         );
-        let next_transform = ArrowPointTransform::with_state(
+        let provisional_transform = ArrowPointTransform::with_state(
             updated.current_position,
             updated.points.clone(),
             updated.fixed_segments.clone(),
             updated.start_binding.clone(),
             updated.end_binding.clone(),
             typed_transform.ordered_element_ids.clone(),
+            updated.active_index,
+            updated.did_insert,
+            updated.should_delete,
+            updated.has_changes,
+            allow_binding_on_finalize,
+        );
+        let preview_ordered_element_ids = finalize_endpoint_drag_on_finish(
+            state,
+            &typed_context,
+            &provisional_transform,
+            provisional_transform.points.as_slice(),
+        )
+        .map(|result| result.ordered_element_ids)
+        .unwrap_or_else(|| typed_transform.ordered_element_ids.clone());
+        let next_transform = ArrowPointTransform::with_state(
+            updated.current_position,
+            updated.points.clone(),
+            updated.fixed_segments.clone(),
+            updated.start_binding.clone(),
+            updated.end_binding.clone(),
+            preview_ordered_element_ids,
             updated.active_index,
             updated.did_insert,
             updated.should_delete,
@@ -1396,17 +1421,19 @@ fn finalize_endpoint_drag_on_finish(
         .clone()
         .unwrap_or_else(|| current_ordered_element_ids(state));
 
-    if source_data.arrow_type == ArrowType::Elbow {
-        return finalize_elbow_endpoint_drag_on_finish(
-            state,
-            context,
-            transform,
-            &current_element,
-            &source_data,
-            local_points,
-            release_local_pointer,
-            ordered_element_ids.as_slice(),
-        );
+    if let ConnectorSourceData::Arrow(source_data) = &source_data {
+        if source_data.arrow_type == ArrowType::Elbow {
+            return finalize_elbow_endpoint_drag_on_finish(
+                state,
+                context,
+                transform,
+                &current_element,
+                source_data,
+                local_points,
+                release_local_pointer,
+                ordered_element_ids.as_slice(),
+            );
+        }
     }
 
     let start_binding = transform
@@ -1417,7 +1444,7 @@ fn finalize_endpoint_drag_on_finish(
         .end_binding
         .as_ref()
         .map(internal_binding_to_compat);
-    let drag_result = finalize_arrow_core_endpoint_drag_result(
+    let drag_result = finalize_connector_core_endpoint_drag_result(
         state,
         &current_element,
         &source_data,
@@ -1660,27 +1687,28 @@ fn finalize_elbow_endpoint_drag_on_finish(
     })
 }
 
-fn connector_source_data_from_payload(payload: &ArrowEditPayload) -> ArrowData {
+fn connector_source_data_from_payload(payload: &ArrowEditPayload) -> ConnectorSourceData {
     match payload {
-        ArrowEditPayload::Arrow(data) => data.clone(),
-        ArrowEditPayload::Line(data) => ArrowData::default().copy_with(ArrowDataPatch {
-            points: Some(data.points.clone()),
-            stroke_width: Some(data.stroke_width),
-            stroke_style: Some(data.stroke_style),
-            arrow_type: Some(data.arrow_type),
-            start_arrowhead: Some(data.start_arrowhead),
-            end_arrowhead: Some(data.end_arrowhead),
-            start_binding: match data.start_binding.as_ref() {
-                Some(binding) => ArrowDataNullableField::Value(compat_binding_to_internal(binding)),
-                None => ArrowDataNullableField::Null,
-            },
-            end_binding: match data.end_binding.as_ref() {
-                Some(binding) => ArrowDataNullableField::Value(compat_binding_to_internal(binding)),
-                None => ArrowDataNullableField::Null,
-            },
-            fixed_segments: ArrowDataNullableField::Null,
-            ..ArrowDataPatch::default()
-        }),
+        ArrowEditPayload::Arrow(data) => ConnectorSourceData::Arrow(data.clone()),
+        ArrowEditPayload::Line(data) => ConnectorSourceData::Line(
+            LineData::default().copy_with(LineDataPatch {
+                points: Some(data.points.clone()),
+                color: Some(data.color),
+                fill_color: Some(data.fill_color),
+                fill_style: Some(data.fill_style),
+                stroke_width: Some(data.stroke_width),
+                stroke_style: Some(data.stroke_style),
+                start_binding: match data.start_binding.as_ref() {
+                    Some(binding) => ArrowLikeNullableField::Value(binding.clone()),
+                    None => ArrowLikeNullableField::Null,
+                },
+                end_binding: match data.end_binding.as_ref() {
+                    Some(binding) => ArrowLikeNullableField::Value(binding.clone()),
+                    None => ArrowLikeNullableField::Null,
+                },
+                ..LineDataPatch::default()
+            }),
+        ),
     }
 }
 

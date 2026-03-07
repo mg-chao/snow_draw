@@ -99,7 +99,6 @@ pub fn encode_points(points: &[DrawPoint]) -> Value {
                 serde_json::json!({
                     "x": point.x,
                     "y": point.y,
-                    "pressure": point.pressure,
                 })
             })
             .collect(),
@@ -237,5 +236,20 @@ mod tests {
 
         assert_eq!(encoded.len(), 1);
         assert_eq!(encoded[0].get("index").and_then(Value::as_u64), Some(2));
+    }
+
+    #[test]
+    fn encode_points_omits_pressure_field() {
+        let encoded = encode_points(&[
+            DrawPoint::with_pressure_and_timestamp(1.0, 2.0, 0.8, 42),
+            DrawPoint::new(3.0, 4.0),
+        ]);
+
+        let points = encoded.as_array().expect("points array");
+        assert_eq!(points.len(), 2);
+        assert_eq!(points[0].get("x").and_then(Value::as_f64), Some(1.0));
+        assert_eq!(points[0].get("y").and_then(Value::as_f64), Some(2.0));
+        assert!(points[0].get("pressure").is_none());
+        assert!(points[1].get("pressure").is_none());
     }
 }

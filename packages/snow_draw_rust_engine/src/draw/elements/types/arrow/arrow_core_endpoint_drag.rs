@@ -3,10 +3,12 @@
 use crate::draw::elements::types::arrow::arrow_binding::{
     ArrowBinding, ArrowBindingResult, ArrowBindingUtils,
 };
+use crate::draw::elements::types::arrow::arrow_data::ArrowData;
 use crate::draw::elements::types::arrow::arrow_core::EngineContext;
 use crate::draw::elements::types::arrow::arrow_core_bridge::{
-    core_arrow_world_points, to_core_arrow_state, to_local_fixed_segments_from_core_arrow,
-    world_to_local_points, ArrowCoreState, ConnectorSourceData,
+    core_arrow_world_points, to_core_arrow_state_from_source,
+    to_local_fixed_segments_from_core_arrow, world_to_local_points, ArrowCoreState,
+    ConnectorSourceData,
 };
 use crate::draw::elements::types::arrow::arrow_core_ops::{
     calculate_core_fixed_point_for_binding, resolve_core_max_binding_distance,
@@ -39,6 +41,46 @@ pub struct ArrowCoreEndpointDragResult {
 
 #[allow(clippy::too_many_arguments)]
 pub fn compute_arrow_core_endpoint_drag_result(
+    state: &DrawState,
+    element: &ElementState,
+    data: &ArrowData,
+    local_points: &[DrawPoint],
+    dragged_index: usize,
+    world_pointer: DrawPoint,
+    start_binding: Option<&ArrowBinding>,
+    end_binding: Option<&ArrowBinding>,
+    excluded_element_id: &str,
+    should_lookup_bindings: bool,
+    allow_new_binding: bool,
+    binding_distance: f64,
+    core_engine_context: EngineContext,
+    fixed_segments: Option<&[ElbowFixedSegment]>,
+    ordered_element_ids: Option<&[String]>,
+    options: ArrowCoreEndpointBindingOptions,
+) -> Option<ArrowCoreEndpointDragResult> {
+    let connector_data = ConnectorSourceData::Arrow(data.clone());
+    compute_connector_core_endpoint_drag_result(
+        state,
+        element,
+        &connector_data,
+        local_points,
+        dragged_index,
+        world_pointer,
+        start_binding,
+        end_binding,
+        excluded_element_id,
+        should_lookup_bindings,
+        allow_new_binding,
+        binding_distance,
+        core_engine_context,
+        fixed_segments,
+        ordered_element_ids,
+        options,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compute_connector_core_endpoint_drag_result(
     state: &DrawState,
     element: &ElementState,
     data: &ConnectorSourceData,
@@ -79,6 +121,46 @@ pub fn compute_arrow_core_endpoint_drag_result(
 
 #[allow(clippy::too_many_arguments)]
 pub fn finalize_arrow_core_endpoint_drag_result(
+    state: &DrawState,
+    element: &ElementState,
+    data: &ArrowData,
+    local_points: &[DrawPoint],
+    dragged_index: usize,
+    world_pointer: DrawPoint,
+    start_binding: Option<&ArrowBinding>,
+    end_binding: Option<&ArrowBinding>,
+    excluded_element_id: &str,
+    should_lookup_bindings: bool,
+    allow_new_binding: bool,
+    binding_distance: f64,
+    core_engine_context: EngineContext,
+    fixed_segments: Option<&[ElbowFixedSegment]>,
+    ordered_element_ids: Option<&[String]>,
+    options: ArrowCoreEndpointBindingOptions,
+) -> Option<ArrowCoreEndpointDragResult> {
+    let connector_data = ConnectorSourceData::Arrow(data.clone());
+    finalize_connector_core_endpoint_drag_result(
+        state,
+        element,
+        &connector_data,
+        local_points,
+        dragged_index,
+        world_pointer,
+        start_binding,
+        end_binding,
+        excluded_element_id,
+        should_lookup_bindings,
+        allow_new_binding,
+        binding_distance,
+        core_engine_context,
+        fixed_segments,
+        ordered_element_ids,
+        options,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn finalize_connector_core_endpoint_drag_result(
     state: &DrawState,
     element: &ElementState,
     data: &ConnectorSourceData,
@@ -200,7 +282,7 @@ fn run_arrow_core_endpoint_drag_result(
             .elements
             .as_slice(),
             world_pointer,
-            data.arrow_type,
+            data.arrow_type(),
             endpoint_arrowhead_style(data, endpoint),
             effective_distance,
             existing_binding,
@@ -245,7 +327,7 @@ fn run_arrow_core_endpoint_drag_result(
         next_local_points[dragged_index] = to_local_point(element, world_pointer);
     }
 
-    if data.arrow_type != ArrowType::Elbow && next_local_points.len() >= 2 && dragged_is_endpoint {
+    if data.arrow_type() != ArrowType::Elbow && next_local_points.len() >= 2 && dragged_is_endpoint {
         let loop_threshold = effective_distance.max(1.0);
         let start_index = 0;
         let end_index = next_local_points.len() - 1;
@@ -274,12 +356,12 @@ fn run_arrow_core_endpoint_drag_result(
         }
     }
 
-    let fixed_segments_for_core = if data.arrow_type == ArrowType::Elbow {
+    let fixed_segments_for_core = if data.arrow_type() == ArrowType::Elbow {
         fixed_segments
     } else {
         None
     };
-    let next_arrow = to_core_arrow_state(
+    let next_arrow = to_core_arrow_state_from_source(
         element,
         data,
         Some(&next_local_points),
@@ -311,7 +393,7 @@ fn run_arrow_core_endpoint_drag_result(
         local_points: world_to_local_points(element, &next_world_points),
         start_binding: next_arrow.start_binding.clone(),
         end_binding: next_arrow.end_binding.clone(),
-        fixed_segments: if data.arrow_type == ArrowType::Elbow {
+        fixed_segments: if data.arrow_type() == ArrowType::Elbow {
             to_local_fixed_segments_from_core_arrow(&next_arrow, element)
         } else {
             fixed_segments.map(|segments| segments.to_vec())
@@ -329,8 +411,8 @@ enum Endpoint {
 
 fn endpoint_arrowhead_style(data: &ConnectorSourceData, endpoint: Endpoint) -> ArrowheadStyle {
     match endpoint {
-        Endpoint::Start => data.start_arrowhead,
-        Endpoint::End => data.end_arrowhead,
+        Endpoint::Start => data.start_arrowhead(),
+        Endpoint::End => data.end_arrowhead(),
     }
 }
 

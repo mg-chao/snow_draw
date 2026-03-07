@@ -219,7 +219,7 @@ pub fn sync_arrow_bindings_after_deletion(
         let Some(deleted_element) = deleted_elements_by_id.get(&deleted_id) else {
             continue;
         };
-        if decode_arrow_data(deleted_element.data.as_ref()).is_some() {
+        if has_connector_data(deleted_element.data.as_ref()) {
             deleted_arrow_ids.push(deleted_id.clone());
         }
         if is_arrow_bindable_element(deleted_element) {
@@ -306,7 +306,7 @@ pub fn sync_arrow_bindings_after_duplication(
             bindable_id_map.insert(source_id.clone(), duplicate_id.clone());
             bindable_id_map.insert(duplicate_id.clone(), duplicate_id.clone());
         }
-        if decode_arrow_data(duplicate.data.as_ref()).is_some() {
+        if has_connector_data(duplicate.data.as_ref()) {
             arrow_id_map.insert(source_id.clone(), duplicate_id.clone());
             arrow_id_map.insert(duplicate_id.clone(), duplicate_id.clone());
         }
@@ -574,6 +574,10 @@ fn decode_arrow_data(data: &dyn CoreElementData) -> Option<ArrowData> {
         return None;
     }
     ArrowData::from_json(&data.to_json()).ok()
+}
+
+fn has_connector_data(data: &dyn CoreElementData) -> bool {
+    decode_arrow_data(data).is_some() || decode_line_data(data).is_some()
 }
 
 fn to_lifecycle_arrow_state(
