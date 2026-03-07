@@ -22,6 +22,7 @@ use super::arrow_binding::{ArrowBinding, ArrowBindingMode};
 use super::arrow_core::{
     ArrowState, BindableState, EngineContext, BIND_MODE_INSIDE, BIND_MODE_ORBIT, BIND_MODE_SKIP,
 };
+use super::arrow_core_codec::encode_arrow_core_arrowhead;
 use super::arrow_data::{
     ArrowBinding as SourceArrowBinding, ArrowBindingMode as SourceArrowBindingMode, ArrowData,
     ElbowFixedSegment,
@@ -129,6 +130,13 @@ pub fn build_core_engine_context(
     max_coordinate: f64,
 ) -> EngineContext {
     EngineContext::new(zoom, is_binding_enabled, bind_mode, max_coordinate)
+}
+
+/// Converts the local arrowhead enum to the arrow-core shape id.
+pub const fn to_core_arrowhead(
+    style: ArrowheadStyle,
+) -> Option<super::core::arrow_types::Arrowhead> {
+    encode_arrow_core_arrowhead(style)
 }
 
 /// Resolves local-space arrow points from normalized element-local points.

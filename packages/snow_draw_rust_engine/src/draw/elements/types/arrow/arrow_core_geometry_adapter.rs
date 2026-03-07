@@ -9,7 +9,8 @@ use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::ArrowType;
 
 use crate::draw::elements::types::connector::connector_geometry::{
-    calculate_connector_rect, normalize_connector_points, resolve_connector_geometry_update,
+    calculate_connector_rect, normalize_connector_points,
+    resolve_connector_geometry_update as resolve_connector_geometry_update_impl,
     resolve_connector_local_points, resolve_connector_world_points, ConnectorGeometryUpdate,
 };
 
@@ -50,6 +51,16 @@ pub fn resolve_core_geometry_update(
     arrow_type: ArrowType,
 ) -> ConnectorGeometryUpdate {
     resolve_connector_geometry_update(local_points, old_rect, rotation, arrow_type)
+}
+
+/// Recomputes geometry for arrow-core local point edits.
+pub fn resolve_connector_geometry_update(
+    local_points: &[DrawPoint],
+    old_rect: DrawRect,
+    rotation: f64,
+    arrow_type: ArrowType,
+) -> ConnectorGeometryUpdate {
+    resolve_connector_geometry_update_impl(local_points, old_rect, rotation, arrow_type)
 }
 
 #[cfg(test)]
