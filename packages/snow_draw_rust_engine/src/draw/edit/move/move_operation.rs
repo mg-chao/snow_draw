@@ -5,7 +5,9 @@ use std::collections::{HashMap, HashSet};
 use crate::draw::config::draw_config::DrawConfig;
 use crate::draw::core::geometry::move_geometry::MoveGeometry;
 use crate::draw::edit::apply::edit_apply::EditApply;
-use crate::draw::edit::core::edit_compute_pipeline::finalize_domain_result;
+use crate::draw::edit::core::edit_compute_pipeline::{
+    finalize_domain_result, ordered_element_ids_from_element_map,
+};
 use crate::draw::edit::core::edit_computed_result::EditComputedResult;
 use crate::draw::edit::core::edit_modifiers::EditModifiers;
 use crate::draw::edit::core::edit_operation_params::MoveOperationParams;
@@ -277,10 +279,12 @@ impl MoveOperation {
             .start_bounds
             .translate(DrawPoint::new(transform.dx, transform.dy));
         let multi_select_bounds = context.base.is_multi_select().then_some(translated_bounds);
+        let ordered_element_ids = ordered_element_ids_from_element_map(current_elements_by_id);
 
         finalize_domain_result(
             current_elements_by_id,
             updated_by_id,
+            ordered_element_ids.as_slice(),
             multi_select_bounds,
             None,
             None,

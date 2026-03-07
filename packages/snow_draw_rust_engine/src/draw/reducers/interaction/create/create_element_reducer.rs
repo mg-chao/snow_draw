@@ -530,18 +530,41 @@ fn reorder_creation_elements_by_id_order(
         reordered.push(element.clone());
     }
 
-    let base_z = reordered
+    if same_creation_element_order(&elements, &reordered) {
+        return reindex_creation_elements_if_needed(elements);
+    }
+
+    reindex_creation_elements_if_needed(reordered)
+}
+
+fn same_creation_element_order(
+    current: &[CreationElementState],
+    candidate: &[CreationElementState],
+) -> bool {
+    if std::ptr::eq(current, candidate) {
+        return true;
+    }
+    if current.len() != candidate.len() {
+        return false;
+    }
+    current
         .iter()
-        .map(|element| element.z_index)
-        .min()
-        .unwrap_or(0);
-    reordered
-        .into_iter()
-        .enumerate()
-        .map(|(index, element)| {
-            element.copy_with(None, None, None, None, Some(base_z + index as i64), None)
-        })
-        .collect()
+        .zip(candidate)
+        .all(|(current, candidate)| current.id == candidate.id)
+}
+
+fn reindex_creation_elements_if_needed(
+    elements: Vec<CreationElementState>,
+) -> Vec<CreationElementState> {
+    let mut reindexed = None;
+    for (index, element) in elements.iter().enumerate() {
+        if element.z_index == index as i64 {
+            continue;
+        }
+        let next = reindexed.get_or_insert_with(|| elements.clone());
+        next[index] = element.copy_with(None, None, None, None, Some(index as i64), None);
+    }
+    reindexed.unwrap_or(elements)
 }
 
 /// Convenience free function mirroring Dart-style reducer usage.
@@ -715,7 +738,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Mutex};
 
     #[derive(Clone, Debug, Default)]
     struct TestState {
@@ -789,6 +812,18 @@ mod tests {
         }
     }
 
+    fn rect_creation_element(id: &str, z_index: i64) -> CreationElementState {
+        CreationElementState {
+            id: id.to_owned(),
+            type_id_value: RectangleData::TYPE_ID_TOKEN.to_owned(),
+            rect: DrawRect::new(0.0, 0.0, 10.0, 10.0),
+            rotation: 0.0,
+            opacity: 1.0,
+            z_index,
+            data: Arc::new(RectangleData::default()),
+        }
+    }
+
     #[test]
     fn non_creation_action_returns_none() {
         let reducer = CreateElementReducer::new();
@@ -798,6 +833,33 @@ mod tests {
         let next = reducer.reduce(&state, &CreateElementReducerAction::Other, &context);
 
         assert!(next.is_none());
+    }
+
+    #[test]
+    fn reorder_creation_elements_by_id_order_reindexes_sparse_order_to_zero_base() {
+        let elements = vec![
+            rect_creation_element("a", 4),
+            rect_creation_element("b", 8),
+            rect_creation_element("c", 12),
+        ];
+        let ordered = vec!["b".to_owned(), "c".to_owned(), "a".to_owned()];
+
+        let reordered = reorder_creation_elements_by_id_order(elements, Some(&ordered));
+
+        assert_eq!(
+            reordered
+                .iter()
+                .map(|element| element.id.as_str())
+                .collect::<Vec<_>>(),
+            vec!["b", "c", "a"]
+        );
+        assert_eq!(
+            reordered
+                .iter()
+                .map(|element| element.z_index)
+                .collect::<Vec<_>>(),
+            vec![0, 1, 2]
+        );
     }
 
     #[test]

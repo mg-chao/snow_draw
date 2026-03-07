@@ -32,7 +32,8 @@ use crate::draw::elements::types::arrow::arrow_binding_snapper::{
 };
 use crate::draw::elements::types::arrow::arrow_core::DEFAULT_MAX_COORDINATE;
 use crate::draw::elements::types::arrow::arrow_core_bridge::{
-    build_core_engine_context, ConnectorSourceData,
+    apply_core_arrow_patches_to_sources, build_core_engine_context,
+    to_core_arrow_state_from_source, ConnectorSourceData,
 };
 use crate::draw::elements::types::arrow::arrow_core_endpoint_drag::{
     finalize_arrow_core_endpoint_drag_result, finalize_connector_core_endpoint_drag_result,
@@ -49,11 +50,15 @@ use crate::draw::elements::types::arrow::arrow_focus::{
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_layout::resolve_arrow_geometry_update;
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField as ArrowLikeNullableField;
+use crate::draw::elements::types::arrow::arrow_scene::ArrowScene;
 use crate::draw::elements::types::arrow::arrow_two_point_layout::compute_arrow_two_point_layout;
+use crate::draw::elements::types::arrow::core::arrow_engine::compute_focus_drag;
 use crate::draw::elements::types::arrow::core::arrow_order_core::{
     reorder_arrow_above_hovered_bindable, reordered_element_ids_from_hovered_reorder,
 };
-use crate::draw::elements::types::arrow::core::arrow_types::ReorderArrowAboveHoveredBindableInput;
+use crate::draw::elements::types::arrow::core::arrow_types::{
+    ArrowEndpointEdge, ArrowStatePatchWithId, ReorderArrowAboveHoveredBindableInput,
+};
 use crate::draw::elements::types::arrow::elbow::elbow_editing::{
     compute_elbow_edit, transform_fixed_segments, BindingOverride as ElbowBindingOverride,
 };
@@ -819,6 +824,14 @@ impl EditOperation for ArrowPointEditOperationAdapter {
             || typed_transform.end_binding.is_some();
         let allow_binding_on_finalize =
             config.snap.enable_arrow_binding && !modifiers.snap_override;
+        let start_binding = typed_transform
+            .start_binding
+            .clone()
+            .or_else(|| typed_context.initial_start_binding.clone());
+        let end_binding = typed_transform
+            .end_binding
+            .clone()
+            .or_else(|| typed_context.initial_end_binding.clone());
         let updated = self.operation.update(
             &typed_context,
             &into_internal_arrow_transform(typed_transform),
@@ -838,6 +851,21 @@ impl EditOperation for ArrowPointEditOperationAdapter {
             },
             &mut binding_lookup,
         );
+        if let Some(next_transform) = compute_focus_drag_update_transform(
+            state,
+            &typed_context,
+            typed_transform,
+            &updated,
+            start_binding,
+            end_binding,
+            allow_binding_on_finalize,
+            modifiers.from_center,
+        ) {
+            if next_transform == *typed_transform {
+                return EditUpdateResult::new(transform.clone());
+            }
+            return EditUpdateResult::new(EditTransform::ArrowPoint(next_transform));
+        }
         let provisional_transform = ArrowPointTransform::with_state(
             updated.current_position,
             updated.points.clone(),
@@ -1712,6 +1740,284 @@ fn connector_source_data_from_payload(payload: &ArrowEditPayload) -> ConnectorSo
             }))
         }
     }
+}
+
+fn connector_source_data_with_bindings(
+    source_data: &ConnectorSourceData,
+    start_binding: Option<&ArrowDataBinding>,
+    end_binding: Option<&ArrowDataBinding>,
+) -> ConnectorSourceData {
+    match source_data {
+        ConnectorSourceData::Arrow(data) => {
+            ConnectorSourceData::Arrow(data.copy_with(ArrowDataPatch {
+                start_binding: match start_binding {
+                    Some(binding) => ArrowDataNullableField::Value(binding.clone()),
+                    None => ArrowDataNullableField::Null,
+                },
+                end_binding: match end_binding {
+                    Some(binding) => ArrowDataNullableField::Value(binding.clone()),
+                    None => ArrowDataNullableField::Null,
+                },
+                ..ArrowDataPatch::default()
+            }))
+        }
+        ConnectorSourceData::Line(data) => {
+            ConnectorSourceData::Line(data.copy_with(LineDataPatch {
+                start_binding: match start_binding {
+                    Some(binding) => {
+                        ArrowLikeNullableField::Value(internal_binding_to_compat(binding))
+                    }
+                    None => ArrowLikeNullableField::Null,
+                },
+                end_binding: match end_binding {
+                    Some(binding) => {
+                        ArrowLikeNullableField::Value(internal_binding_to_compat(binding))
+                    }
+                    None => ArrowLikeNullableField::Null,
+                },
+                ..LineDataPatch::default()
+            }))
+        }
+    }
+}
+
+fn element_with_connector_source_data(
+    element: &DomainElementState,
+    source_data: &ConnectorSourceData,
+) -> DomainElementState {
+    match source_data {
+        ConnectorSourceData::Arrow(data) => {
+            element.copy_with(None, None, None, None, None, Some(Arc::new(data.clone())))
+        }
+        ConnectorSourceData::Line(data) => {
+            element.copy_with(None, None, None, None, None, Some(Arc::new(data.clone())))
+        }
+    }
+}
+
+fn resolve_focus_dragged_edge(kind: OperationArrowPointKind) -> Option<ArrowEndpointEdge> {
+    match kind {
+        OperationArrowPointKind::FocusStart => Some(ArrowEndpointEdge::Start),
+        OperationArrowPointKind::FocusEnd => Some(ArrowEndpointEdge::End),
+        _ => None,
+    }
+}
+
+fn to_lifecycle_focus_arrow_state(
+    arrow: &crate::draw::elements::types::arrow::arrow_core::ArrowState,
+) -> crate::draw::elements::types::arrow::core::arrow_types::ArrowState {
+    crate::draw::elements::types::arrow::core::arrow_types::ArrowState {
+        id: arrow.id.clone(),
+        x: arrow.x,
+        y: arrow.y,
+        width: arrow.width,
+        height: arrow.height,
+        points: arrow.points.clone(),
+        start_binding: arrow.start_binding.as_ref().map(to_lifecycle_focus_binding),
+        end_binding: arrow.end_binding.as_ref().map(to_lifecycle_focus_binding),
+        start_arrowhead: arrow.start_arrowhead.clone(),
+        end_arrowhead: arrow.end_arrowhead.clone(),
+        elbowed: arrow.elbowed,
+        fixed_segments: arrow.fixed_segments.as_ref().map(|segments| {
+            segments
+                .iter()
+                .copied()
+                .map(|segment| {
+                    crate::draw::elements::types::arrow::core::arrow_types::FixedSegment {
+                        start: segment.start,
+                        end: segment.end,
+                        index: segment.index,
+                    }
+                })
+                .collect()
+        }),
+        start_is_special: arrow.start_is_special,
+        end_is_special: arrow.end_is_special,
+    }
+}
+
+fn to_lifecycle_focus_binding(
+    binding: &CompatArrowBinding,
+) -> crate::draw::elements::types::arrow::core::arrow_types::FixedPointBinding {
+    crate::draw::elements::types::arrow::core::arrow_types::FixedPointBinding::new(
+        binding.element_id.clone(),
+        binding.anchor,
+        binding.mode.as_str().to_string(),
+    )
+}
+
+fn to_lifecycle_focus_bindable_state(
+    bindable: &crate::draw::elements::types::arrow::arrow_core::BindableState,
+) -> crate::draw::elements::types::arrow::core::arrow_types::BindableState {
+    crate::draw::elements::types::arrow::core::arrow_types::BindableState {
+        id: bindable.id.clone(),
+        shape: bindable.shape.as_str().to_string(),
+        x: bindable.x,
+        y: bindable.y,
+        width: bindable.width,
+        height: bindable.height,
+        angle: bindable.angle,
+        stroke_width: bindable.stroke_width,
+        roundness: None,
+        z_index: bindable.z_index,
+        background_opaque: bindable.background_opaque,
+        binding_enabled: bindable.binding_enabled,
+        interior_hit_enabled: bindable.interior_hit_enabled,
+        visibility_bounds: bindable.visibility_bounds,
+    }
+}
+
+fn to_lifecycle_focus_context(
+    context: &crate::draw::elements::types::arrow::arrow_core::EngineContext,
+) -> crate::draw::elements::types::arrow::core::arrow_types::EngineContext {
+    crate::draw::elements::types::arrow::core::arrow_types::EngineContext {
+        zoom: context.zoom,
+        is_binding_enabled: context.is_binding_enabled,
+        bind_mode: context.bind_mode,
+        max_coordinate: context.max_coordinate,
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn compute_focus_drag_update_transform(
+    state: &DrawState,
+    context: &ArrowPointEditContext,
+    previous_transform: &ArrowPointTransform,
+    updated: &InternalArrowPointTransform,
+    start_binding: Option<ArrowDataBinding>,
+    end_binding: Option<ArrowDataBinding>,
+    allow_binding_on_finalize: bool,
+    switch_to_inside_binding: bool,
+) -> Option<ArrowPointTransform> {
+    let dragged_edge = resolve_focus_dragged_edge(context.point_kind)?;
+    if updated.points.len() < 2 {
+        return None;
+    }
+
+    let active_index = match dragged_edge {
+        ArrowEndpointEdge::Start => 0,
+        ArrowEndpointEdge::End => updated.points.len().checked_sub(1)?,
+    };
+    let current_element = state
+        .domain
+        .document
+        .get_element_by_id(context.element_id.as_str())?
+        .clone();
+    let target = resolve_arrow_target_for_element(current_element.clone())?;
+    let source_data = connector_source_data_from_payload(&target.payload);
+    if source_data.arrow_type() == ArrowType::Elbow {
+        return None;
+    }
+
+    let drag_source_data = connector_source_data_with_bindings(
+        &source_data,
+        start_binding.as_ref(),
+        end_binding.as_ref(),
+    );
+    let drag_source_element =
+        element_with_connector_source_data(&current_element, &drag_source_data);
+    let ordered_element_ids = previous_transform
+        .ordered_element_ids
+        .clone()
+        .unwrap_or_else(|| current_ordered_element_ids(state));
+    let pointer = context.to_world(updated.points[active_index]);
+    let session = ArrowScene::from_elements_with_options(
+        state.domain.document.elements.clone(),
+        false,
+        Some(ordered_element_ids.as_slice()),
+        Some(core_context_for_state(state, allow_binding_on_finalize)),
+    );
+    let arrow = to_core_arrow_state_from_source(
+        &drag_source_element,
+        &drag_source_data,
+        None,
+        None,
+        None,
+        None,
+        session.context.max_coordinate,
+    );
+    let lifecycle_arrow = to_lifecycle_focus_arrow_state(&arrow);
+    let lifecycle_bindables = session
+        .bindables()
+        .iter()
+        .map(to_lifecycle_focus_bindable_state)
+        .collect::<Vec<_>>();
+    let result = compute_focus_drag(
+        &lifecycle_arrow,
+        pointer,
+        dragged_edge,
+        &lifecycle_bindables,
+        to_lifecycle_focus_context(&session.context),
+        switch_to_inside_binding,
+    );
+    let suggested_bindable_id = result.suggested_binding.as_ref().and_then(|binding| {
+        binding
+            .bindable_id
+            .clone()
+            .or_else(|| (!binding.element.id.is_empty()).then(|| binding.element.id.clone()))
+    });
+    let applied = session.apply_engine_result_with_order_fallback(
+        &arrow,
+        &result,
+        suggested_bindable_id.as_deref(),
+        Some(pointer),
+        Some(ordered_element_ids.as_slice()),
+        None,
+    );
+
+    let patched_elements = apply_core_arrow_patches_to_sources(
+        &[ArrowStatePatchWithId {
+            id: drag_source_element.id.clone(),
+            patch: result.arrow_patch.clone(),
+        }],
+        &HashMap::from([(
+            drag_source_element.id.clone(),
+            (drag_source_element.clone(), drag_source_data),
+        )]),
+    );
+    let patched_element = patched_elements
+        .get(&drag_source_element.id)
+        .cloned()
+        .unwrap_or(drag_source_element.clone());
+    let patched_target = resolve_arrow_target_for_element(patched_element.clone())?;
+    let next_points =
+        ArrowGeometry::resolve_world_points(patched_target.element.rect, patched_target.points());
+    if next_points.len() < 2 {
+        return None;
+    }
+
+    let next_start_binding = patched_target.start_binding();
+    let next_end_binding = patched_target.end_binding();
+    let next_fixed_segments = {
+        let segments = patched_target.fixed_segments();
+        (!segments.is_empty()).then_some(segments)
+    };
+    let base_fixed_segments = (!context.initial_fixed_segments.is_empty())
+        .then_some(context.initial_fixed_segments.clone());
+    let points_changed = !point_list_equals(&context.initial_points, &next_points);
+    let bindings_changed = next_start_binding != start_binding || next_end_binding != end_binding;
+    let segments_changed = !fixed_segment_structure_equals_with_tolerance(
+        base_fixed_segments.as_deref(),
+        next_fixed_segments.as_deref(),
+        1.0,
+    );
+    let drag_result_has_changes = patched_element != drag_source_element
+        || !result.bindable_patches.is_empty()
+        || applied.ordered_element_ids.is_some();
+
+    Some(ArrowPointTransform::with_state(
+        updated.current_position,
+        next_points,
+        next_fixed_segments,
+        next_start_binding,
+        next_end_binding,
+        applied.ordered_element_ids,
+        Some(active_index),
+        false,
+        false,
+        drag_result_has_changes || points_changed || bindings_changed || segments_changed,
+        allow_binding_on_finalize,
+    ))
 }
 
 fn current_ordered_element_ids(state: &DrawState) -> Vec<String> {
@@ -2898,6 +3204,78 @@ mod tests {
         let end_binding = transform.end_binding.expect("end binding");
         assert_eq!(end_binding.element_id, bind_target.id);
         assert_eq!(end_binding.mode, ArrowDataBindingMode::Inside);
+    }
+
+    #[test]
+    fn focus_drag_update_rebinds_with_order_and_inside_mode() {
+        let initial_target = rectangle_element(
+            "focus-initial-target",
+            DrawRect::new(20.0, 20.0, 120.0, 120.0),
+            1,
+        );
+        let next_target = rectangle_element(
+            "focus-next-target",
+            DrawRect::new(220.0, 0.0, 320.0, 120.0),
+            2,
+        );
+        let arrow_data = ArrowData::default().copy_with(ArrowDataPatch {
+            points: Some(ArrowGeometry::normalize_points(
+                &[DrawPoint::new(60.0, 60.0), DrawPoint::new(180.0, 60.0)],
+                DrawRect::new(60.0, 60.0, 180.0, 60.0),
+            )),
+            start_binding: ArrowDataNullableField::Value(ArrowDataBinding::new(
+                initial_target.id.clone(),
+                DrawPoint::new(0.5, 0.5),
+                ArrowDataBindingMode::Orbit,
+            )),
+            ..ArrowDataPatch::default()
+        });
+        let arrow = arrow_element(
+            "arrow-focus-drag",
+            DrawRect::new(60.0, 60.0, 180.0, 60.0),
+            arrow_data.clone(),
+            0,
+        );
+        let state = draw_state_with_selection(
+            vec![arrow.clone(), initial_target.clone(), next_target.clone()],
+            &[arrow.id.as_str()],
+        );
+        let focus_handle = list_visible_arrow_focus_points(
+            &arrow,
+            &arrow_data,
+            state.domain.document.elements.as_slice(),
+            None,
+            false,
+        )
+        .into_iter()
+        .find(|handle| handle.endpoint == ArrowFocusEndpoint::Start)
+        .expect("start focus handle");
+
+        let (_operation, _context, transform) = drag_arrow_handle_session_with_modifiers(
+            &state,
+            &arrow.id,
+            EditConnectorPointKind::FocusStart,
+            0,
+            focus_handle.point,
+            DrawPoint::new(260.0, 60.0),
+            EditModifiers {
+                from_center: true,
+                ..EditModifiers::default()
+            },
+        );
+
+        let start_binding = transform.start_binding.expect("start binding");
+        assert_eq!(start_binding.element_id, next_target.id);
+        assert_eq!(start_binding.mode, ArrowDataBindingMode::Inside);
+        assert_eq!(
+            transform.ordered_element_ids,
+            Some(vec![
+                initial_target.id.clone(),
+                next_target.id.clone(),
+                arrow.id.clone(),
+            ])
+        );
+        assert!(transform.has_changes);
     }
 
     #[test]

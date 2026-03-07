@@ -21,6 +21,16 @@ use super::arrow_types::{
 };
 use crate::draw::types::draw_point::DrawPoint;
 
+pub type PartialBindingArrowPatch = ArrowPatch;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ResolveBindableRelationPatchesInput {
+    pub arrow: ArrowBindingState,
+    pub bindables: Vec<BindableRelationState>,
+    pub arrow_patch: Option<PartialBindingArrowPatch>,
+    pub bindable_patches: Option<Vec<BindablePatch>>,
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ResolvedBindableRelationPatches {
     pub bindable_patches: Vec<BindablePatch>,

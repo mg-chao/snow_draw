@@ -4,7 +4,6 @@
 ///
 /// This mirrors `snow_draw_engine.dart` by exposing the Rust module surface in
 /// one place for consumers that prefer a single import path.
-pub use crate::draw::actions::actions::*;
 pub use crate::draw::actions::config_actions::*;
 pub use crate::draw::actions::draw_actions::*;
 pub use crate::draw::actions::history_coalescing::*;

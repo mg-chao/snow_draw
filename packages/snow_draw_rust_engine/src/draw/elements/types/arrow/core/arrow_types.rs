@@ -2,7 +2,7 @@
 
 use std::collections::HashMap;
 
-use serde_json::Value;
+use serde_json::{Map, Value};
 
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
@@ -10,16 +10,47 @@ use crate::draw::types::draw_rect::DrawRect;
 pub type Point = DrawPoint;
 pub type Bounds = DrawRect;
 pub type BindMode = &'static str;
+pub type ArrowEndpointBindingField = &'static str;
+pub type ArrowEndpointSelector = &'static str;
 pub type Arrowhead = &'static str;
 pub type ArrowStrokeStyle = &'static str;
 pub type ArrowheadDashMode = &'static str;
 pub type ArrowheadFillMode = &'static str;
+pub type ArrowheadPoints = Vec<f64>;
 pub type CanonicalBindableShape = &'static str;
 pub type BindableShape = String;
 pub type ArrowPatch = serde_json::Map<String, Value>;
 pub type ArrowBindingStatePatch = serde_json::Map<String, Value>;
 pub type IdMapRecord = HashMap<String, String>;
+pub type IdMapEntry = String;
+pub type IdMapInput = IdMapRecord;
 pub type AnchorElementIdsLookupRecord = HashMap<String, Vec<String>>;
+pub type AnchorElementIdsLookupInput = AnchorElementIdsLookupRecord;
+pub type JsonMap = Map<String, Value>;
+pub type BindableLookupRecord = HashMap<String, BindableState>;
+pub type BindableLookupInput = BindableLookupRecord;
+pub type PointUpdatesRecord = HashMap<usize, Point>;
+pub type PointUpdates = Value;
+pub type ComputeEndpointDragInput = JsonMap;
+pub type RefreshEndpointBindingInput = JsonMap;
+pub type PruneArrowBindingsInput = JsonMap;
+pub type RecomputeAfterBindableChangeInput = JsonMap;
+pub type RecomputeBindingsForChangedBindablesInput = JsonMap;
+pub type RecomputeElbowInput = JsonMap;
+pub type ElbowUpdatePatch = JsonMap;
+pub type UpdateElbowArrowInput = JsonMap;
+pub type ComputeElbowResizePatchInput = JsonMap;
+pub type MoveFixedSegmentToPointInput = JsonMap;
+pub type ListVisibleFocusPointsInput = JsonMap;
+pub type PickFocusPointInput = JsonMap;
+pub type PickFocusPointWithOffsetInput = JsonMap;
+pub type ResizeHandleDirection = Value;
+pub type ComputeFocusPointDragInput = JsonMap;
+pub type FinalizeFocusPointDragInput = JsonMap;
+pub type LifecycleSyncBaseInput = JsonMap;
+pub type SyncBindingsAfterDuplicationInput = JsonMap;
+pub type SyncBindingsAfterDeletionInput = JsonMap;
+pub type SyncBindingsAfterBindablePruneInput = JsonMap;
 
 pub const BIND_MODE_INSIDE: BindMode = "inside";
 pub const BIND_MODE_ORBIT: BindMode = "orbit";
@@ -297,6 +328,58 @@ pub struct ApplyEngineResultValue {
 pub struct ValidationReport {
     pub valid: bool,
     pub violations: Vec<String>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct EndpointBindingStrategy {
+    pub mode: Option<String>,
+    pub bindable_id: Option<String>,
+    pub element: Option<BindableState>,
+    pub focus_point: Option<Point>,
+}
+
+impl EndpointBindingStrategy {
+    pub fn new(
+        mode: Option<String>,
+        bindable_id: Option<String>,
+        element: Option<BindableState>,
+        focus_point: Option<Point>,
+    ) -> Self {
+        Self {
+            mode,
+            bindable_id,
+            element,
+            focus_point,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct PointUpdate {
+    pub index: usize,
+    pub point: Point,
+}
+
+impl PointUpdate {
+    pub fn new(index: usize, point: Point) -> Self {
+        Self { index, point }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct RecomputeBindingsForChangedBindablesResult {
+    pub arrows: Vec<ArrowState>,
+    pub bindables: Vec<BindableRelationState>,
+    pub arrow_patches: Vec<ArrowStatePatchWithId>,
+    pub relation_patches: Vec<BindableRelationPatch>,
+    pub events: Vec<ArrowEngineEvent>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MoveFixedSegmentToPointResult {
+    pub patch: ArrowPatch,
+    pub active_segment_index: Option<usize>,
+    pub active_segment_mid_point: Option<Point>,
 }
 
 #[derive(Clone, Debug, PartialEq)]

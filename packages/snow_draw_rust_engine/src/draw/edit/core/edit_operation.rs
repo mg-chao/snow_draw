@@ -1,12 +1,13 @@
 #![allow(dead_code)]
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use crate::draw::config::draw_config::DrawConfig;
 use crate::draw::history::history_metadata::{HistoryMetadata, HistoryRecordType};
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::types::draw_point::DrawPoint;
-use crate::draw::types::edit_context::EditContext;
+use crate::draw::types::edit_context::{EditContext, TextMetricsService};
 use crate::draw::types::edit_operation_id::EditOperationId;
 use crate::draw::types::edit_transform::EditTransform;
 use crate::draw::types::snap_guides::SnapGuide;
@@ -75,6 +76,14 @@ pub trait EditOperation: Send + Sync {
         position: DrawPoint,
         params: &EditOperationParams,
     ) -> EditContext;
+
+    /// Attaches the session text metrics service to any operation-local state.
+    fn attach_text_metrics_service(
+        &self,
+        _context: &EditContext,
+        _text_metrics_service: Arc<dyn TextMetricsService>,
+    ) {
+    }
 
     /// Returns the initial transform for a newly started edit session.
     fn initial_transform(

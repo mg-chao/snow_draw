@@ -27,6 +27,28 @@ const TAIL_REPLACE_MAX_TURN_SIN: f64 = 0.08;
 const LENGTH_EPSILON: f64 = 1e-6;
 const BAKE_ITERATIONS: usize = 3;
 
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FreeDrawCreationMode {
+    pub is_line_active: bool,
+    pub world_points: Option<Vec<DrawPoint>>,
+    pub preview_points: Option<Vec<DrawPoint>>,
+    pub line_anchor: Option<DrawPoint>,
+    pub line_current: Option<DrawPoint>,
+    pub revision: u64,
+}
+
+pub fn resolve_free_draw_creation_mode(mode: &CreationMode) -> FreeDrawCreationMode {
+    match mode {
+        CreationMode::Point(point_mode) => point_mode
+            .session_data
+            .as_ref()
+            .and_then(|value| value.as_ref().downcast_ref::<FreeDrawCreationMode>())
+            .cloned()
+            .unwrap_or_default(),
+        CreationMode::Rect => FreeDrawCreationMode::default(),
+    }
+}
+
 /// Creation strategy for freehand drawing.
 ///
 /// During interaction, this strategy keeps world-space points in a lightweight
@@ -700,10 +722,18 @@ fn update_line_segment(world_points: &mut Vec<DrawPoint>, current_position: Draw
 }
 
 fn creation_mode_from_world_points(world_points: &[DrawPoint]) -> CreationMode {
+    let session_data = FreeDrawCreationMode {
+        is_line_active: false,
+        world_points: Some(world_points.to_vec()),
+        preview_points: None,
+        line_anchor: None,
+        line_current: world_points.last().copied(),
+        revision: 0,
+    };
     CreationMode::Point(PointCreationMode {
         fixed_points: world_points.to_vec(),
         current_point: world_points.last().copied(),
-        session_data: None,
+        session_data: Some(Arc::new(session_data)),
     })
 }
 

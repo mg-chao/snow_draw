@@ -92,10 +92,11 @@ impl DrawContext {
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
         event_bus: Option<EventBus>,
     ) -> Self {
-        let provided_registry = element_registry.clone();
-        let resolved_registry =
-            crate::draw::elements::registration::resolve_element_registry(element_registry)
-                .unwrap_or_else(|_| provided_registry.unwrap_or_default());
+        let resolved_registry = match element_registry {
+            Some(registry) => registry,
+            None => crate::draw::elements::registration::resolve_element_registry(None)
+                .unwrap_or_default(),
+        };
         Self::new(
             resolved_registry,
             edit_operations.unwrap_or_else(DefaultEditOperationRegistry::with_defaults),
@@ -179,6 +180,7 @@ impl Default for DrawContext {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::draw::elements::registration::TEXT_TYPE_VALUE;
 
     #[test]
     fn defaults_create_working_context() {
@@ -203,5 +205,23 @@ mod tests {
             &copied.edit_operations
         ));
         assert!(Arc::ptr_eq(&context.config_manager, &copied.config_manager));
+    }
+
+    #[test]
+    fn with_defaults_uses_provided_registry_as_is() {
+        let registry = DefaultElementRegistry::new();
+
+        let context = DrawContext::with_defaults(
+            Some(registry),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert!(!context.element_registry.supports_type_value(TEXT_TYPE_VALUE));
     }
 }

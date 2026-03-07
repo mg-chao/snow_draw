@@ -31,6 +31,29 @@ pub struct ArrowheadRenderPrimitivesInput {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct ArrowheadLinePrimitive {
+    pub from: DrawPoint,
+    pub to: DrawPoint,
+    pub dash_mode: String,
+    pub roughness_cap: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ArrowheadPolygonPrimitive {
+    pub points: Vec<DrawPoint>,
+    pub fill_mode: String,
+    pub roughness_cap: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ArrowheadCirclePrimitive {
+    pub center: DrawPoint,
+    pub diameter: f64,
+    pub fill_mode: String,
+    pub roughness_cap: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum ArrowheadRenderPrimitive {
     Line {
         from: DrawPoint,
@@ -49,6 +72,38 @@ pub enum ArrowheadRenderPrimitive {
         fill_mode: String,
         roughness_cap: Option<f64>,
     },
+}
+
+impl From<ArrowheadLinePrimitive> for ArrowheadRenderPrimitive {
+    fn from(value: ArrowheadLinePrimitive) -> Self {
+        Self::Line {
+            from: value.from,
+            to: value.to,
+            dash_mode: value.dash_mode,
+            roughness_cap: value.roughness_cap,
+        }
+    }
+}
+
+impl From<ArrowheadPolygonPrimitive> for ArrowheadRenderPrimitive {
+    fn from(value: ArrowheadPolygonPrimitive) -> Self {
+        Self::Polygon {
+            points: value.points,
+            fill_mode: value.fill_mode,
+            roughness_cap: value.roughness_cap,
+        }
+    }
+}
+
+impl From<ArrowheadCirclePrimitive> for ArrowheadRenderPrimitive {
+    fn from(value: ArrowheadCirclePrimitive) -> Self {
+        Self::Circle {
+            center: value.center,
+            diameter: value.diameter,
+            fill_mode: value.fill_mode,
+            roughness_cap: value.roughness_cap,
+        }
+    }
 }
 
 pub fn get_arrowhead_size(arrowhead: &str) -> f64 {

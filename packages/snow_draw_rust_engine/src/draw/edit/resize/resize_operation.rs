@@ -1,13 +1,15 @@
 #![allow(dead_code)]
 
 use std::collections::{HashMap, HashSet};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use crate::draw::config::draw_config::DrawConfig;
 use crate::draw::core::coordinates::overlay_space::OverlaySpace;
 use crate::draw::core::geometry::resize_geometry::ResizeGeometry;
 use crate::draw::edit::apply::edit_apply::EditApply;
-use crate::draw::edit::core::edit_compute_pipeline::finalize_domain_result;
+use crate::draw::edit::core::edit_compute_pipeline::{
+    finalize_domain_result, ordered_element_ids_from_element_map,
+};
 use crate::draw::edit::core::edit_computed_result::EditComputedResult;
 use crate::draw::edit::core::edit_modifiers::EditModifiers;
 use crate::draw::edit::core::edit_operation::{
@@ -28,7 +30,8 @@ use crate::draw::services::selection_data_computer::SelectionDataComputer;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_context::{
-    EditContext, ElementState as ResizeReferenceElement, ResizeEditContext,
+    default_text_metrics_service, EditContext, ElementState as ResizeReferenceElement,
+    ResizeEditContext, TextMetricsService,
 };
 use crate::draw::types::edit_operation_id::{EditOperationId, EditOperationIds};
 use crate::draw::types::edit_transform::{EditTransform, ResizeTransform};
@@ -151,6 +154,7 @@ struct ResizeOperationSession {
     reference_elements: Vec<ResizeReferenceElement>,
     reference_element_aabbs: Vec<DrawRect>,
     force_serial_number_aspect_ratio: bool,
+    text_metrics_service: Arc<dyn TextMetricsService>,
 }
 
 impl ResizeOperationSession {
@@ -165,6 +169,7 @@ impl ResizeOperationSession {
             reference_elements: Vec::new(),
             reference_element_aabbs: Vec::new(),
             force_serial_number_aspect_ratio: false,
+            text_metrics_service: default_text_metrics_service(),
         }
     }
 
@@ -180,6 +185,7 @@ impl ResizeOperationSession {
         context.reference_elements = self.reference_elements.clone();
         context.reference_element_aabbs = self.reference_element_aabbs.clone();
         context.force_serial_number_aspect_ratio = self.force_serial_number_aspect_ratio;
+        context.text_metrics_service = self.text_metrics_service.clone();
         context
     }
 }
@@ -501,10 +507,28 @@ impl EditOperation for ResizeOperation {
             reference_elements,
             reference_element_aabbs,
             force_serial_number_aspect_ratio,
+            text_metrics_service: default_text_metrics_service(),
         };
         self.replace_session(Some(session));
 
         context
+    }
+
+    fn attach_text_metrics_service(
+        &self,
+        context: &EditContext,
+        text_metrics_service: Arc<dyn TextMetricsService>,
+    ) {
+        let mut guard = self
+            .session
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let Some(cached) = guard.as_mut() else {
+            return;
+        };
+        if cached.context_fingerprint.matches(context) {
+            cached.text_metrics_service = text_metrics_service;
+        }
     }
 
     fn initial_transform(
@@ -647,10 +671,12 @@ impl StandardFinishMixin for ResizeOperation {
         } else {
             None
         };
+        let ordered_element_ids = ordered_element_ids_from_element_map(&current_elements_by_id);
 
         finalize_domain_result(
             &current_elements_by_id,
             updated_by_id,
+            ordered_element_ids.as_slice(),
             multi_select_bounds,
             None,
             None,

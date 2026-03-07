@@ -150,18 +150,15 @@ where
     }
 
     /// Releases resources and clears all pending/subscriber state.
-    ///
-    /// Returns `true` when this call transitions the manager to disposed.
-    pub fn dispose(&mut self) -> bool {
+    pub fn dispose(&mut self) {
         if self.is_disposed {
-            return false;
+            return;
         }
 
         self.is_disposed = true;
         self.freeze_depth = 0;
         self.pending_config = None;
         self.subscribers.clear();
-        true
     }
 
     /// Returns `true` when the manager has been disposed.
@@ -287,7 +284,7 @@ mod tests {
             canvas: 1,
         });
 
-        assert!(manager.dispose());
+        manager.dispose();
         assert!(manager.is_disposed());
         assert!(!manager.update_canvas(9));
         assert_eq!(
@@ -297,5 +294,8 @@ mod tests {
                 canvas: 1,
             }
         );
+
+        manager.dispose();
+        assert!(manager.is_disposed());
     }
 }

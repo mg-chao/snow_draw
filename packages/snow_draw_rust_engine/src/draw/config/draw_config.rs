@@ -567,13 +567,10 @@ fn resolve_font_family(update: Option<Option<String>>, current: &Option<String>)
         None => current.clone(),
         Some(None) => None,
         Some(Some(value)) => {
-            let trimmed = value.trim();
-            if trimmed.is_empty() {
+            if value.trim().is_empty() {
                 None
-            } else if trimmed.len() == value.len() {
-                Some(value)
             } else {
-                Some(trimmed.to_owned())
+                Some(value)
             }
         }
     }
@@ -623,5 +620,25 @@ mod tests {
         let config = DrawConfig::default();
         assert!(!config.grid_enabled());
         assert!(!config.object_enabled());
+    }
+
+    #[test]
+    fn copy_with_preserves_non_blank_font_family_whitespace() {
+        let config = ElementStyleConfig::default().copy_with(ElementStyleConfigPatch {
+            font_family: Some(Some("  Inter  ".to_owned())),
+            ..ElementStyleConfigPatch::default()
+        });
+
+        assert_eq!(config.font_family.as_deref(), Some("  Inter  "));
+    }
+
+    #[test]
+    fn copy_with_normalizes_blank_font_family_to_none() {
+        let config = ElementStyleConfig::default().copy_with(ElementStyleConfigPatch {
+            font_family: Some(Some("   ".to_owned())),
+            ..ElementStyleConfigPatch::default()
+        });
+
+        assert_eq!(config.font_family, None);
     }
 }

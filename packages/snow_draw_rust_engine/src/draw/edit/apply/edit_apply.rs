@@ -164,6 +164,7 @@ impl EditApply {
                     TextData::TYPE_ID_TOKEN => {
                         resized = apply_text_resize(
                             resized,
+                            context,
                             start_element.rect,
                             anchor,
                             keep_text_center,
@@ -394,6 +395,7 @@ fn apply_multi_rotated_resize(
 
 fn apply_text_resize(
     element: ElementState,
+    context: &ResizeEditContext,
     start_rect: DrawRect,
     anchor: DrawPoint,
     keep_center: bool,
@@ -432,11 +434,12 @@ fn apply_text_resize(
     }
 
     if height_delta > RESIZE_TOLERANCE {
+        let text_metrics_service = context.text_metrics_service.as_text_resize_metrics_service();
         let fitted_font_size = fit_text_font_size_to_height(
             &data,
             rect.height(),
             rect.width(),
-            None,
+            text_metrics_service,
             1.0,
             8,
             RESIZE_TOLERANCE,
@@ -449,8 +452,14 @@ fn apply_text_resize(
         }
     }
 
-    let clamped_rect =
-        clamp_text_rect_to_layout(rect, start_rect, anchor, &data, None, keep_center);
+    let clamped_rect = clamp_text_rect_to_layout(
+        rect,
+        start_rect,
+        anchor,
+        &data,
+        context.text_metrics_service.as_text_resize_metrics_service(),
+        keep_center,
+    );
 
     if data.auto_resize {
         data = data.copy_with(TextDataPatch {
@@ -712,10 +721,39 @@ fn decode_line_data(data: &dyn ElementData) -> Option<LineData> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::draw::services::text::text_metrics_service::{
+        TextLayoutRequest as ResizeTextLayoutRequest, TextLineMetrics as ResizeTextLineMetrics,
+        TextMetrics as ResizeTextMetrics, TextMetricsService as ResizeTextMetricsService,
+    };
     use crate::draw::elements::types::arrow::arrow_data::{
         ArrowBinding as ArrowDataBinding, ArrowBindingMode,
     };
+    use crate::draw::elements::types::text::text_data::TextData;
     use crate::draw::types::element_style::{FillStyle, StrokeStyle};
+    use crate::draw::types::edit_context::{EditContext, TextMetricsService as EditTextMetricsService};
+    use crate::draw::types::element_geometry::ElementResizeSnapshot;
+    use crate::draw::types::resize_mode::ResizeMode;
+
+    #[derive(Debug)]
+    struct TestResizeTextMetricsService;
+
+    impl EditTextMetricsService for TestResizeTextMetricsService {
+        fn as_text_resize_metrics_service(&self) -> Option<&dyn ResizeTextMetricsService> {
+            Some(self)
+        }
+    }
+
+    impl ResizeTextMetricsService for TestResizeTextMetricsService {
+        fn measure(&self, request: &ResizeTextLayoutRequest<'_>) -> ResizeTextMetrics {
+            let line_height = request.data.font_size * 2.0;
+            ResizeTextMetrics::new(
+                request.max_width.max(1.0),
+                line_height,
+                line_height,
+                vec![ResizeTextLineMetrics::new(request.max_width.max(1.0), line_height)],
+            )
+        }
+    }
 
     fn element_with_arrow(id: &str, data: ArrowData, z_index: i64) -> ElementState {
         ElementState::new(
@@ -839,5 +877,66 @@ mod tests {
 
         assert_point_close(resized_data.points[0], DrawPoint::new(0.9, 0.2));
         assert_point_close(resized_data.points[1], DrawPoint::new(0.1, 0.8));
+    }
+
+    #[test]
+    fn apply_resize_to_elements_uses_context_text_metrics_service_for_text() {
+        let text_id = "text-1".to_owned();
+        let start_rect = DrawRect::new(0.0, 0.0, 50.0, 20.0);
+        let text_element = ElementState::new(
+            &text_id,
+            start_rect,
+            0.0,
+            1.0,
+            0,
+            Arc::new(TextData::default()),
+        );
+        let mut snapshots = HashMap::new();
+        snapshots.insert(
+            text_id.clone(),
+            ElementResizeSnapshot {
+                rect: start_rect,
+                rotation: 0.0,
+            },
+        );
+        let selected_ids = HashSet::from([text_id.clone()]);
+        let current_elements = HashMap::from([(text_id.clone(), text_element)]);
+        let base = EditContext::new(
+            DrawPoint::ZERO,
+            start_rect,
+            selected_ids.clone(),
+            0,
+            0,
+        );
+        let context = ResizeEditContext::new(
+            base,
+            ResizeMode::Bottom,
+            DrawPoint::ZERO,
+            0.0,
+            snapshots.clone(),
+        )
+        .with_text_metrics_service(Arc::new(TestResizeTextMetricsService));
+
+        let resized = EditApply::apply_resize_to_elements(
+            &snapshots,
+            &selected_ids,
+            &context,
+            DrawRect::new(0.0, 0.0, 50.0, 100.0),
+            1.0,
+            5.0,
+            DrawPoint::ZERO,
+            &current_elements,
+        );
+
+        let resized_text = decode_text_data(
+            resized
+                .get(&text_id)
+                .expect("resized element")
+                .data
+                .as_ref(),
+        )
+        .expect("text data");
+
+        assert!((resized_text.font_size - 50.0).abs() <= 0.5);
     }
 }

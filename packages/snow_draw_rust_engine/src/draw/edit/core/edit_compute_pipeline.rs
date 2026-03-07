@@ -18,6 +18,10 @@ use crate::draw::elements::types::arrow::arrow_data::{
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_layout::resolve_arrow_geometry_update;
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField as ArrowLikeNullableField;
+use crate::draw::elements::types::arrow::arrow_scene::ArrowScene;
+use crate::draw::elements::types::arrow::core::arrow_types::{
+    ArrowEngineEvent, ArrowEndpointEdge, BindingBrokenEvent, ReorderArrowEvent,
+};
 use crate::draw::elements::types::arrow::elbow::elbow_editing::{
     compute_elbow_edit as compute_domain_elbow_edit,
     transform_fixed_segments as transform_domain_fixed_segments,
@@ -194,6 +198,7 @@ impl EditComputePipeline {
 pub fn finalize_domain_result(
     base_elements: &HashMap<String, DomainElementState>,
     updated_by_id: HashMap<String, DomainElementState>,
+    ordered_element_ids: &[String],
     multi_select_bounds: Option<DrawRect>,
     multi_select_rotation: Option<f64>,
     skip_binding_update: Option<&dyn Fn(&str, &DomainElementState) -> bool>,
@@ -221,6 +226,13 @@ pub fn finalize_domain_result(
         &delegate,
         &skip_arrow_ids,
     );
+    let reordered_element_ids = resolve_binding_update_ordered_ids(
+        base_elements,
+        &merged,
+        &merged_for_resolver,
+        &binding_updates,
+        ordered_element_ids,
+    );
 
     for (id, element) in binding_updates {
         let updated_element = element.into_domain();
@@ -235,10 +247,113 @@ pub fn finalize_domain_result(
 
     Some(DomainEditComputedResult::new(
         merged,
-        None,
+        reordered_element_ids,
         multi_select_bounds,
         multi_select_rotation,
     ))
+}
+
+pub fn ordered_element_ids_from_element_map(
+    elements_by_id: &HashMap<String, DomainElementState>,
+) -> Vec<String> {
+    let mut ordered = elements_by_id
+        .values()
+        .map(|element| (element.z_index, element.id.clone()))
+        .collect::<Vec<_>>();
+    ordered.sort_by(|left, right| left.0.cmp(&right.0).then_with(|| left.1.cmp(&right.1)));
+    ordered.into_iter().map(|(_, id)| id).collect()
+}
+
+fn resolve_binding_update_ordered_ids(
+    base_elements: &HashMap<String, DomainElementState>,
+    merged: &HashMap<String, DomainElementState>,
+    previous_elements: &HashMap<String, ResolverElementState>,
+    binding_updates: &HashMap<String, ResolverElementState>,
+    ordered_element_ids: &[String],
+) -> Option<Vec<String>> {
+    if binding_updates.is_empty() || ordered_element_ids.is_empty() {
+        return None;
+    }
+
+    let mut events = Vec::new();
+    for (id, updated_element) in binding_updates {
+        let Some(previous_element) = previous_elements.get(id) else {
+            continue;
+        };
+        let Some(previous_data) = previous_element.arrow_like_data() else {
+            continue;
+        };
+        let Some(updated_data) = updated_element.arrow_like_data() else {
+            continue;
+        };
+
+        let mut reorder_targets = HashSet::new();
+        collect_binding_transition_events(
+            id.as_str(),
+            ArrowEndpointEdge::Start,
+            previous_data.start_binding(),
+            updated_data.start_binding(),
+            &mut events,
+            &mut reorder_targets,
+        );
+        collect_binding_transition_events(
+            id.as_str(),
+            ArrowEndpointEdge::End,
+            previous_data.end_binding(),
+            updated_data.end_binding(),
+            &mut events,
+            &mut reorder_targets,
+        );
+    }
+
+    if events.is_empty() {
+        return None;
+    }
+
+    let mut combined = base_elements.clone();
+    combined.extend(merged.clone());
+    let session = ArrowScene::from_elements_with_options(
+        combined.into_values().collect::<Vec<_>>(),
+        false,
+        Some(ordered_element_ids),
+        None,
+    );
+    session.reduce_events_to_ordered_element_ids(&events)
+}
+
+fn collect_binding_transition_events(
+    arrow_id: &str,
+    edge: ArrowEndpointEdge,
+    previous_binding: Option<&ArrowBinding>,
+    next_binding: Option<&ArrowBinding>,
+    events: &mut Vec<ArrowEngineEvent>,
+    reorder_targets: &mut HashSet<String>,
+) {
+    if let Some(previous_binding) = previous_binding {
+        if next_binding
+            .map(|binding| binding.element_id.as_str() != previous_binding.element_id.as_str())
+            .unwrap_or(true)
+            && next_binding.is_none()
+        {
+            events.push(ArrowEngineEvent::BindingBroken(BindingBrokenEvent {
+                arrow_id: arrow_id.to_owned(),
+                edge,
+            }));
+        }
+    }
+
+    if let Some(next_binding) = next_binding {
+        if previous_binding
+            .map(|binding| binding.element_id.as_str() != next_binding.element_id.as_str())
+            .unwrap_or(true)
+            && reorder_targets.insert(next_binding.element_id.clone())
+        {
+            events.push(ArrowEngineEvent::ReorderArrow(ReorderArrowEvent {
+                arrow_id: arrow_id.to_owned(),
+                bindable_id: next_binding.element_id.clone(),
+            }));
+        }
+    }
 }
 
 fn to_resolver_map(

@@ -5,6 +5,10 @@ use crate::draw::elements::types::text::text_editing_geometry::{
     TextLayoutRequest as GeometryTextLayoutRequest, TextMetrics as GeometryTextMetrics,
     TextMetricsService as GeometryTextMetricsService,
 };
+use crate::draw::services::text::text_metrics_service::{
+    FallbackTextMetricsService as ResizeFallbackTextMetricsService,
+    TextMetricsService as ResizeTextMetricsService,
+};
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_geometry::{
@@ -144,6 +148,10 @@ pub trait TextMetricsService: fmt::Debug + Send + Sync {
     fn as_text_editing_metrics_service(&self) -> Option<&dyn GeometryTextMetricsService> {
         None
     }
+
+    fn as_text_resize_metrics_service(&self) -> Option<&dyn ResizeTextMetricsService> {
+        None
+    }
 }
 
 #[derive(Debug, Default)]
@@ -153,11 +161,25 @@ impl TextMetricsService for DefaultTextMetricsService {
     fn as_text_editing_metrics_service(&self) -> Option<&dyn GeometryTextMetricsService> {
         Some(self)
     }
+
+    fn as_text_resize_metrics_service(&self) -> Option<&dyn ResizeTextMetricsService> {
+        Some(self)
+    }
 }
 
 impl GeometryTextMetricsService for DefaultTextMetricsService {
     fn measure(&self, request: &GeometryTextLayoutRequest<'_>) -> GeometryTextMetrics {
         let fallback = GeometryFallbackTextMetricsService;
+        fallback.measure(request)
+    }
+}
+
+impl ResizeTextMetricsService for DefaultTextMetricsService {
+    fn measure(
+        &self,
+        request: &crate::draw::services::text::text_metrics_service::TextLayoutRequest<'_>,
+    ) -> crate::draw::services::text::text_metrics_service::TextMetrics {
+        let fallback = ResizeFallbackTextMetricsService;
         fallback.measure(request)
     }
 }

@@ -7,6 +7,22 @@ use crate::draw::types::element_style::ArrowType;
 
 use super::arrow_types::NormalizedArrowFromGlobalPoints;
 
+pub type Heading = &'static str;
+
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct BoundsSize {
+    pub width: f64,
+    pub height: f64,
+}
+
+pub fn compute_bounds_from_points(points: &[DrawPoint]) -> BoundsSize {
+    let bounds = DrawRect::from_point_cloud(points.iter().copied());
+    BoundsSize {
+        width: bounds.width(),
+        height: bounds.height(),
+    }
+}
+
 pub fn normalize_arrow_from_global_points(
     global_points: &[DrawPoint],
     max_coordinate: f64,

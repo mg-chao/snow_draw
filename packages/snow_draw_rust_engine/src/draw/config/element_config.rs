@@ -252,7 +252,7 @@ impl ElementStyleConfig {
             start_arrowhead,
             end_arrowhead,
             font_size,
-            font_family: Self::normalize_font_family(font_family),
+            font_family,
             text_align,
             vertical_align,
             text_stroke_color,
@@ -385,5 +385,68 @@ impl fmt::Display for ElementStyleConfig {
             self.text_stroke_color,
             self.text_stroke_width
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ElementStyleConfig;
+
+    #[test]
+    fn constructor_preserves_non_null_blank_font_family() {
+        let config = ElementStyleConfig::new(
+            ElementStyleConfig::DEFAULT_OPACITY,
+            ElementStyleConfig::DEFAULT_Z_INDEX,
+            ElementStyleConfig::DEFAULT_SERIAL_NUMBER,
+            ElementStyleConfig::DEFAULT_STROKE_WIDTH,
+            ElementStyleConfig::DEFAULT_COLOR,
+            ElementStyleConfig::DEFAULT_FILL_COLOR,
+            ElementStyleConfig::DEFAULT_STROKE_STYLE,
+            ElementStyleConfig::DEFAULT_FILL_STYLE,
+            ElementStyleConfig::DEFAULT_HIGHLIGHT_SHAPE,
+            ElementStyleConfig::DEFAULT_FILTER_TYPE,
+            ElementStyleConfig::DEFAULT_FILTER_STRENGTH,
+            ElementStyleConfig::DEFAULT_CORNER_RADIUS,
+            ElementStyleConfig::DEFAULT_ARROW_TYPE,
+            ElementStyleConfig::DEFAULT_START_ARROWHEAD,
+            ElementStyleConfig::DEFAULT_END_ARROWHEAD,
+            ElementStyleConfig::DEFAULT_FONT_SIZE,
+            Some(String::new()),
+            ElementStyleConfig::DEFAULT_TEXT_ALIGN,
+            ElementStyleConfig::DEFAULT_VERTICAL_ALIGN,
+            ElementStyleConfig::DEFAULT_TEXT_STROKE_COLOR,
+            ElementStyleConfig::DEFAULT_TEXT_STROKE_WIDTH,
+        );
+
+        assert_eq!(config.font_family.as_deref(), Some(""));
+    }
+
+    #[test]
+    fn copy_with_normalizes_blank_font_family_to_none() {
+        let config = ElementStyleConfig::default().copy_with(
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(Some("  ".to_owned())),
+            None,
+            None,
+            None,
+            None,
+        );
+
+        assert_eq!(config.font_family, None);
     }
 }

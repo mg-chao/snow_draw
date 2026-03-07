@@ -9,12 +9,19 @@ use super::arrow_hit_test::{
     is_point_in_bindable, is_point_near_bindable_for_binding_hit, sort_bindables_by_z_index,
 };
 use super::arrow_types::{
-    canonicalize_bindable_shape, ArrowEndpointEdge, ArrowState, BindableState, FixedPointBinding,
+    canonicalize_bindable_shape, ArrowEndpointEdge, ArrowState, BindableState,
+    EndpointBindingStrategy, FixedPointBinding,
 };
 pub use crate::draw::elements::types::arrow::arrow_binding::*;
 pub use crate::draw::elements::types::arrow::arrow_binding_snapper::*;
 
 const DEDUP_THRESHOLD: f64 = 1.0;
+
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct EndpointBindingStrategies {
+    pub start: Option<EndpointBindingStrategy>,
+    pub end: Option<EndpointBindingStrategy>,
+}
 
 pub fn max_binding_distance_simple(zoom: f64) -> f64 {
     const SCREEN_DISTANCE: f64 = 24.0;

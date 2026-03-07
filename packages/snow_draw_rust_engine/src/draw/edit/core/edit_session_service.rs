@@ -285,7 +285,7 @@ impl EditSessionService {
         session_id: EditSessionId,
     ) -> EditingState {
         let created_context = operation.create_context(state, position, params);
-        let context = self.attach_text_metrics_service(created_context);
+        let context = self.attach_text_metrics_service(operation, created_context);
         let transform = operation.initial_transform(state, &context, position);
 
         EditingState::new(
@@ -297,8 +297,12 @@ impl EditSessionService {
         )
     }
 
-    fn attach_text_metrics_service(&self, context: EditContext) -> EditContext {
-        let _ = &self.text_metrics_service;
+    fn attach_text_metrics_service(
+        &self,
+        operation: &dyn EditOperation,
+        context: EditContext,
+    ) -> EditContext {
+        operation.attach_text_metrics_service(&context, self.text_metrics_service.clone());
         context
     }
 
