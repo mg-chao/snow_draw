@@ -1227,6 +1227,8 @@ fn build_arrow_context_from_target(
             context = context.with_released_state(
                 Some(released.local_points),
                 Some(released.fixed_segments.unwrap_or_default()),
+                released.start_binding,
+                released.end_binding,
             );
         }
     }
@@ -1271,10 +1273,8 @@ fn build_arrow_context_from_target(
             (focus_start_handle_position, focus_end_handle_position)
         }
     };
-    context = context.with_focus_handle_positions(
-        focus_start_handle_position,
-        focus_end_handle_position,
-    );
+    context =
+        context.with_focus_handle_positions(focus_start_handle_position, focus_end_handle_position);
 
     context
 }
@@ -1644,6 +1644,8 @@ fn finalize_elbow_endpoint_drag_on_finish(
     } else {
         Some(context.initial_fixed_segments.as_slice())
     };
+    let next_start_binding = updated.start_binding.clone();
+    let next_end_binding = updated.end_binding.clone();
     let bindings_changed =
         next_start_binding != transform.start_binding || next_end_binding != transform.end_binding;
     if !bindings_changed
@@ -1690,8 +1692,8 @@ fn finalize_elbow_endpoint_drag_on_finish(
 fn connector_source_data_from_payload(payload: &ArrowEditPayload) -> ConnectorSourceData {
     match payload {
         ArrowEditPayload::Arrow(data) => ConnectorSourceData::Arrow(data.clone()),
-        ArrowEditPayload::Line(data) => ConnectorSourceData::Line(
-            LineData::default().copy_with(LineDataPatch {
+        ArrowEditPayload::Line(data) => {
+            ConnectorSourceData::Line(LineData::default().copy_with(LineDataPatch {
                 points: Some(data.points.clone()),
                 color: Some(data.color),
                 fill_color: Some(data.fill_color),
@@ -1707,8 +1709,8 @@ fn connector_source_data_from_payload(payload: &ArrowEditPayload) -> ConnectorSo
                     None => ArrowLikeNullableField::Null,
                 },
                 ..LineDataPatch::default()
-            }),
-        ),
+            }))
+        }
     }
 }
 
@@ -1876,8 +1878,8 @@ fn compute_updated_arrow_element(
                     geometry.rect,
                     context.rotation,
                 );
-                let mut resolved_start_binding = transform.start_binding.clone();
-                let mut resolved_end_binding = transform.end_binding.clone();
+                let mut resolved_start_binding = updated.start_binding.clone();
+                let mut resolved_end_binding = updated.end_binding.clone();
                 if is_endpoint_turning_drag {
                     if active_index == Some(0) {
                         resolved_end_binding = transform.end_binding.clone();

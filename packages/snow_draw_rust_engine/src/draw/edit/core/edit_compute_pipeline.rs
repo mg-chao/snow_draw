@@ -385,6 +385,8 @@ impl ResolverArrowLikeData for ResolverDomainArrowData {
         &self,
         points: Vec<DrawPoint>,
         fixed_segments: Option<Vec<Self::FixedSegment>>,
+        start_binding: Option<ArrowBinding>,
+        end_binding: Option<ArrowBinding>,
         start_is_special: Option<bool>,
         end_is_special: Option<bool>,
     ) -> Self {
@@ -398,6 +400,16 @@ impl ResolverArrowLikeData for ResolverDomainArrowData {
                 });
                 Self::from_arrow(data.copy_with(ArrowDataPatch {
                     points: Some(points),
+                    start_binding:
+                        match start_binding.map(|binding| resolver_binding_to_domain(&binding)) {
+                            Some(value) => ArrowNullableField::Value(value),
+                            None => ArrowNullableField::Null,
+                        },
+                    end_binding:
+                        match end_binding.map(|binding| resolver_binding_to_domain(&binding)) {
+                            Some(value) => ArrowNullableField::Value(value),
+                            None => ArrowNullableField::Null,
+                        },
                     fixed_segments: match normalized_fixed_segments {
                         Some(value) => ArrowNullableField::Value(value),
                         None => ArrowNullableField::Null,
@@ -422,6 +434,14 @@ impl ResolverArrowLikeData for ResolverDomainArrowData {
                 });
                 Self::from_line(data.copy_with(LineDataPatch {
                     points: Some(points),
+                    start_binding: match start_binding {
+                        Some(value) => ArrowLikeNullableField::Value(value),
+                        None => ArrowLikeNullableField::Null,
+                    },
+                    end_binding: match end_binding {
+                        Some(value) => ArrowLikeNullableField::Value(value),
+                        None => ArrowLikeNullableField::Null,
+                    },
                     fixed_segments: match normalized_fixed_segments {
                         Some(value) => ArrowLikeNullableField::Value(value),
                         None => ArrowLikeNullableField::Null,
@@ -613,6 +633,12 @@ impl ArrowBindingResolverDelegate<ResolverElementState> for DomainArrowBindingRe
             fixed_segments: result
                 .fixed_segments
                 .map(|segments| segments.into_iter().map(arrow_fixed_to_resolver).collect()),
+            start_binding: result
+                .start_binding
+                .map(|binding| domain_binding_to_resolver(&binding)),
+            end_binding: result
+                .end_binding
+                .map(|binding| domain_binding_to_resolver(&binding)),
             start_is_special: result.start_is_special,
             end_is_special: result.end_is_special,
         })
@@ -678,10 +704,26 @@ fn domain_binding_to_resolver(binding: &DomainArrowBinding) -> ArrowBinding {
     )
 }
 
+fn resolver_binding_to_domain(binding: &ArrowBinding) -> DomainArrowBinding {
+    DomainArrowBinding::new(
+        binding.element_id.clone(),
+        binding.anchor,
+        resolver_binding_mode_to_domain(binding.mode),
+    )
+}
+
 fn domain_binding_mode_to_resolver(mode: DomainArrowBindingMode) -> ArrowBindingMode {
     match mode {
         DomainArrowBindingMode::Inside => ArrowBindingMode::Inside,
         DomainArrowBindingMode::Orbit => ArrowBindingMode::Orbit,
         DomainArrowBindingMode::Skip => ArrowBindingMode::Skip,
+    }
+}
+
+fn resolver_binding_mode_to_domain(mode: ArrowBindingMode) -> DomainArrowBindingMode {
+    match mode {
+        ArrowBindingMode::Inside => DomainArrowBindingMode::Inside,
+        ArrowBindingMode::Orbit => DomainArrowBindingMode::Orbit,
+        ArrowBindingMode::Skip => DomainArrowBindingMode::Skip,
     }
 }

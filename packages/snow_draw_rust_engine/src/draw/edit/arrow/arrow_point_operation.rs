@@ -50,6 +50,8 @@ pub struct ArrowPointEditContext {
     pub has_bindable_targets: bool,
     pub released_points: Option<Vec<DrawPoint>>,
     pub released_fixed_segments: Option<Vec<ElbowFixedSegment>>,
+    pub released_start_binding: Option<ArrowBinding>,
+    pub released_end_binding: Option<ArrowBinding>,
     focus_start_handle_position: Option<DrawPoint>,
     focus_end_handle_position: Option<DrawPoint>,
     element_space: Option<ElementSpace>,
@@ -105,6 +107,8 @@ impl ArrowPointEditContext {
             has_bindable_targets,
             released_points: None,
             released_fixed_segments: None,
+            released_start_binding: None,
+            released_end_binding: None,
             focus_start_handle_position: None,
             focus_end_handle_position: None,
             element_space,
@@ -115,9 +119,13 @@ impl ArrowPointEditContext {
         mut self,
         points: Option<Vec<DrawPoint>>,
         fixed_segments: Option<Vec<ElbowFixedSegment>>,
+        start_binding: Option<ArrowBinding>,
+        end_binding: Option<ArrowBinding>,
     ) -> Self {
         self.released_points = points;
         self.released_fixed_segments = fixed_segments;
+        self.released_start_binding = start_binding;
+        self.released_end_binding = end_binding;
         self
     }
 
@@ -283,8 +291,14 @@ impl ArrowPointOperation {
             current_position: start_position,
             points,
             fixed_segments,
-            start_binding: context.initial_start_binding.clone(),
-            end_binding: context.initial_end_binding.clone(),
+            start_binding: context
+                .released_start_binding
+                .clone()
+                .or_else(|| context.initial_start_binding.clone()),
+            end_binding: context
+                .released_end_binding
+                .clone()
+                .or_else(|| context.initial_end_binding.clone()),
             active_index: None,
             did_insert: false,
             should_delete: false,

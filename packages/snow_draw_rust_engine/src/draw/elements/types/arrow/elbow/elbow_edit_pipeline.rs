@@ -281,6 +281,8 @@ where
 pub struct ElbowEditResult {
     pub local_points: Vec<DrawPoint>,
     pub fixed_segments: Option<Vec<ElbowFixedSegment>>,
+    pub start_binding: Option<ArrowBinding>,
+    pub end_binding: Option<ArrowBinding>,
     pub start_is_special: Option<bool>,
     pub end_is_special: Option<bool>,
 }
@@ -436,7 +438,7 @@ where
             context.incoming_points[context.incoming_points.len() - 1],
         );
 
-        finalize_path(&context.data, routed.local_points, None)
+        finalize_path(&routed_data, routed.local_points, None)
     }
 
     fn handle_fixed_segment_release_flow(&self, context: &ElbowEditContext<E>) -> ElbowEditResult {
@@ -447,7 +449,8 @@ where
             &context.fixed_segments,
             false,
         );
-        finalize_path(&context.data, result.points, Some(result.fixed_segments))
+        let data = data_with_context_bindings(context);
+        finalize_path(&data, result.points, Some(result.fixed_segments))
     }
 
     fn handle_endpoint_drag_flow(&self, context: &ElbowEditContext<E>) -> ElbowEditResult {
@@ -467,7 +470,8 @@ where
             fixed = recovered.fixed_segments;
         }
 
-        finalize_path(&context.data, points, Some(fixed))
+        let data = data_with_context_bindings(context);
+        finalize_path(&data, points, Some(fixed))
     }
 
     fn release_fixed_segments(
@@ -510,11 +514,21 @@ where
             true,
         );
         finalize_path(
-            &context.data,
+            &data_with_context_bindings(context),
             simplified.points,
             Some(simplified.fixed_segments),
         )
     }
+}
+
+fn data_with_context_bindings<E>(context: &ElbowEditContext<E>) -> ArrowData
+where
+    E: ElbowPipelineElement + Clone,
+{
+    let mut data = context.data.clone();
+    data.start_binding = context.start_binding.clone();
+    data.end_binding = context.end_binding.clone();
+    data
 }
 
 /// Shared finalization: merge same-heading runs, reindex fixed segments,
@@ -537,6 +551,8 @@ pub fn finalize_path(
     ElbowEditResult {
         local_points: merged,
         fixed_segments: resolved_fixed,
+        start_binding: data.start_binding.clone(),
+        end_binding: data.end_binding.clone(),
         start_is_special: data.start_is_special,
         end_is_special: data.end_is_special,
     }

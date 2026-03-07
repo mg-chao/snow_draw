@@ -103,9 +103,6 @@ fn resolve_arrow_like_data(element: &ElementState) -> Option<BasicArrowLikeData>
     let payload = element.data.to_json_value();
     let json = payload.as_object()?;
     let points_len = json.get("points").and_then(Value::as_array)?.len();
-    if points_len < 2 {
-        return None;
-    }
 
     let arrow_type = if type_id == LineData::TYPE_ID_TOKEN {
         ArrowType::Curved
@@ -132,5 +129,42 @@ fn parse_arrow_type(raw: &str) -> Option<ArrowType> {
         "curved" => Some(ArrowType::Curved),
         "elbow" => Some(ArrowType::Elbow),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::collections::BTreeSet;
+    use std::sync::Arc;
+
+    use crate::draw::elements::types::arrow::arrow_data::{ArrowData, ArrowDataPatch};
+    use crate::draw::models::element_state::ElementState;
+    use crate::draw::types::draw_point::DrawPoint;
+    use crate::draw::types::draw_rect::DrawRect;
+
+    #[test]
+    fn degenerate_connector_selection_still_counts_as_arrow_selection() {
+        let element = ElementState::new(
+            "arrow-1",
+            DrawRect::new(0.0, 0.0, 100.0, 100.0),
+            0.0,
+            1.0,
+            0,
+            Arc::new(ArrowData::default().copy_with(ArrowDataPatch {
+                points: Some(vec![DrawPoint::new(0.5, 0.5)]),
+                ..ArrowDataPatch::default()
+            })),
+        );
+
+        let profile =
+            resolve_single_selection_profile(&BTreeSet::from([String::from("arrow-1")]), |id| {
+                (id == "arrow-1").then(|| element.clone())
+            });
+
+        assert!(profile.is_arrow());
+        assert!(!profile.is_two_point_arrow());
+        assert_eq!(profile.corner_handle_offset(), 8.0);
     }
 }

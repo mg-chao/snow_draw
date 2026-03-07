@@ -325,6 +325,30 @@ fn build_patch_from_result(
         patch.insert("endIsSpecial".to_string(), Value::Bool(value));
     }
 
+    let previous_start_binding = arrow.start_binding.as_ref().map(core_binding_to_domain);
+    if result.start_binding != previous_start_binding {
+        patch.insert(
+            "startBinding".to_string(),
+            result
+                .start_binding
+                .as_ref()
+                .map(domain_binding_to_value)
+                .unwrap_or(Value::Null),
+        );
+    }
+
+    let previous_end_binding = arrow.end_binding.as_ref().map(core_binding_to_domain);
+    if result.end_binding != previous_end_binding {
+        patch.insert(
+            "endBinding".to_string(),
+            result
+                .end_binding
+                .as_ref()
+                .map(domain_binding_to_value)
+                .unwrap_or(Value::Null),
+        );
+    }
+
     patch
 }
 
@@ -488,6 +512,19 @@ fn core_binding_to_domain(binding: &FixedPointBinding) -> DomainArrowBinding {
         binding.fixed_point,
         parse_binding_mode(Some(binding.mode.as_str())),
     )
+}
+
+fn domain_binding_to_value(binding: &DomainArrowBinding) -> Value {
+    binding_to_value(&FixedPointBinding::new(
+        binding.element_id.clone(),
+        binding.anchor,
+        match binding.mode {
+            ArrowBindingMode::Inside => "inside",
+            ArrowBindingMode::Orbit => "orbit",
+            ArrowBindingMode::Skip => "skip",
+        }
+        .to_string(),
+    ))
 }
 
 fn core_fixed_segment_to_domain(segment: &FixedSegment) -> ElbowFixedSegment {

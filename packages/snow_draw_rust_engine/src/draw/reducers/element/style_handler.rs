@@ -10,7 +10,11 @@ use crate::draw::elements::types::arrow::arrow_binding::ArrowBindingUtils;
 use crate::draw::elements::types::arrow::arrow_data::{ArrowData, ArrowDataPatch, NullableField};
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_layout::resolve_arrow_geometry_update;
+use crate::draw::elements::types::arrow::elbow::elbow_editing::{
+    compute_elbow_edit, transform_fixed_segments,
+};
 use crate::draw::elements::types::arrow::elbow::elbow_router::route_elbow_arrow_for_element;
+use crate::draw::elements::types::connector::connector_geometry::resolve_connector_geometry_update;
 use crate::draw::elements::types::filter::filter_data::FilterData;
 use crate::draw::elements::types::free_draw::free_draw_data::FreeDrawData;
 use crate::draw::elements::types::highlight::highlight_data::HighlightData;
@@ -27,6 +31,7 @@ use crate::draw::reducers::core::arrow_binding_sync::{
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::{ArrowType, ElementStyleUpdate};
+use crate::draw::utils::combined_element_lookup::CombinedElementLookup;
 
 /// Action payload for applying style and opacity updates to multiple elements.
 #[derive(Clone, Debug, Default, PartialEq)]
@@ -347,10 +352,29 @@ fn resolve_data_style_update(
             }
         }
         StyleUpdatedDataKind::Arrow { previous, updated }
-            if previous.arrow_type != updated.arrow_type
-                || should_recompute_elbow_after_style_change(&previous, &updated) =>
+            if previous.arrow_type != updated.arrow_type =>
         {
             let result = resolve_arrow_rect_and_data(&updated_element, &updated, elements_by_id);
+            if result.rect != updated_element.rect && track_geometry_change {
+                geometry_changed = true;
+            }
+            updated_element = updated_element.copy_with(
+                None,
+                Some(result.rect),
+                None,
+                None,
+                None,
+                Some(Arc::new(result.data)),
+            );
+        }
+        StyleUpdatedDataKind::Arrow { previous, updated }
+            if should_recompute_elbow_after_style_change(&previous, &updated) =>
+        {
+            let result = resolve_elbow_rect_and_data_after_style_change(
+                &updated_element,
+                &updated,
+                elements_by_id,
+            );
             if result.rect != updated_element.rect && track_geometry_change {
                 geometry_changed = true;
             }
@@ -635,6 +659,67 @@ fn resolve_arrow_rect_and_data(
 
     ArrowRectAndData {
         rect,
+        data: updated_data,
+    }
+}
+
+fn resolve_elbow_rect_and_data_after_style_change(
+    element: &ElementState,
+    data: &ArrowData,
+    elements_by_id: &HashMap<String, ElementState>,
+) -> ArrowRectAndData {
+    let overlay = HashMap::new();
+    let edited = compute_elbow_edit(
+        element,
+        data,
+        &CombinedElementLookup::new(elements_by_id, &overlay),
+        None,
+        None,
+        Default::default(),
+        Default::default(),
+        true,
+    );
+
+    let geometry = resolve_connector_geometry_update(
+        &edited.local_points,
+        element.rect,
+        element.rotation,
+        data.arrow_type,
+    );
+    let transformed_fixed_segments = transform_fixed_segments(
+        edited.fixed_segments.as_deref(),
+        element.rect,
+        geometry.rect,
+        element.rotation,
+    );
+
+    let updated_data = data.copy_with(ArrowDataPatch {
+        points: Some(geometry.normalized_points),
+        start_binding: match edited.start_binding {
+            Some(value) => NullableField::Value(value),
+            None => NullableField::Null,
+        },
+        end_binding: match edited.end_binding {
+            Some(value) => NullableField::Value(value),
+            None => NullableField::Null,
+        },
+        fixed_segments: match transformed_fixed_segments {
+            Some(value) => NullableField::Value(value),
+            None => NullableField::Null,
+        },
+        start_is_special: match edited.start_is_special {
+            Some(value) => NullableField::Value(value),
+            None => NullableField::Null,
+        },
+        end_is_special: match edited.end_is_special {
+            Some(value) => NullableField::Value(value),
+            None => NullableField::Null,
+        },
+        ..ArrowDataPatch::default()
+    });
+
+    ArrowRectAndData {
+        rect: geometry.rect,
         data: updated_data,
     }
 }

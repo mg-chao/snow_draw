@@ -19,6 +19,8 @@ use super::elbow_geometry::{ElbowGeometry, ElbowHeading};
 pub struct ElbowEditResult {
     pub local_points: Vec<DrawPoint>,
     pub fixed_segments: Option<Vec<ElbowFixedSegment>>,
+    pub start_binding: Option<ArrowBinding>,
+    pub end_binding: Option<ArrowBinding>,
     pub start_is_special: Option<bool>,
     pub end_is_special: Option<bool>,
 }
@@ -222,6 +224,8 @@ fn from_pipeline_result(result: super::elbow_edit_pipeline::ElbowEditResult) -> 
     ElbowEditResult {
         local_points: result.local_points,
         fixed_segments: result.fixed_segments,
+        start_binding: result.start_binding,
+        end_binding: result.end_binding,
         start_is_special: result.start_is_special,
         end_is_special: result.end_is_special,
     }

@@ -30,10 +30,18 @@ pub trait ArrowLikeData: Clone + PartialEq {
         &self,
         points: Vec<DrawPoint>,
         fixed_segments: Option<Vec<Self::FixedSegment>>,
+        start_binding: Option<ArrowBinding>,
+        end_binding: Option<ArrowBinding>,
         start_is_special: Option<bool>,
         end_is_special: Option<bool>,
     ) -> Self {
-        let _ = (fixed_segments, start_is_special, end_is_special);
+        let _ = (
+            fixed_segments,
+            start_binding,
+            end_binding,
+            start_is_special,
+            end_is_special,
+        );
         self.with_points(points)
     }
 }
@@ -61,6 +69,8 @@ pub struct ArrowGeometryUpdate {
 pub struct ElbowEditResult<S> {
     pub local_points: Vec<DrawPoint>,
     pub fixed_segments: Option<Vec<S>>,
+    pub start_binding: Option<ArrowBinding>,
+    pub end_binding: Option<ArrowBinding>,
     pub start_is_special: Option<bool>,
     pub end_is_special: Option<bool>,
 }
@@ -407,6 +417,8 @@ where
     let updated_data = data.with_elbow_edit(
         geometry.normalized_points,
         transformed_fixed_segments,
+        updated.start_binding,
+        updated.end_binding,
         updated.start_is_special,
         updated.end_is_special,
     );
@@ -544,6 +556,22 @@ mod tests {
         fn with_points(&self, points: Vec<DrawPoint>) -> Self {
             let mut next = self.clone();
             next.points = points;
+            next
+        }
+
+        fn with_elbow_edit(
+            &self,
+            points: Vec<DrawPoint>,
+            _fixed_segments: Option<Vec<Self::FixedSegment>>,
+            start_binding: Option<ArrowBinding>,
+            end_binding: Option<ArrowBinding>,
+            _start_is_special: Option<bool>,
+            _end_is_special: Option<bool>,
+        ) -> Self {
+            let mut next = self.clone();
+            next.points = points;
+            next.start_binding = start_binding;
+            next.end_binding = end_binding;
             next
         }
     }
@@ -730,6 +758,119 @@ mod tests {
 
         assert!(without_skip.contains_key(arrow.id.as_str()));
         assert!(!with_skip.contains_key(arrow.id.as_str()));
+    }
+
+    #[test]
+    fn elbow_recompute_applies_binding_updates_from_delegate_result() {
+        #[derive(Clone, Copy, Debug, Default)]
+        struct BindingRewriteDelegate;
+
+        impl ArrowBindingResolverDelegate<TestElement> for BindingRewriteDelegate {
+            fn resolve_world_points(
+                &self,
+                _rect: DrawRect,
+                normalized_points: &[DrawPoint],
+            ) -> Vec<DrawPoint> {
+                normalized_points.to_vec()
+            }
+
+            fn resolve_arrow_geometry_update(
+                &self,
+                local_points: &[DrawPoint],
+                _old_rect: DrawRect,
+                _rotation: f64,
+                _arrow_type: ArrowType,
+            ) -> ArrowGeometryUpdate {
+                ArrowGeometryUpdate {
+                    rect: DrawRect::from_point_cloud(local_points.iter().copied()),
+                    normalized_points: local_points.to_vec(),
+                }
+            }
+
+            fn resolve_bound_point(
+                &self,
+                binding: &ArrowBinding,
+                target: &TestElement,
+                _reference_point: Option<DrawPoint>,
+            ) -> Option<DrawPoint> {
+                Some(DrawPoint::new(
+                    target.rect.min_x + target.rect.width() * binding.anchor.x,
+                    target.rect.min_y + target.rect.height() * binding.anchor.y,
+                ))
+            }
+
+            fn resolve_elbow_bound_point(
+                &self,
+                binding: &ArrowBinding,
+                target: &TestElement,
+                _has_arrowhead: bool,
+            ) -> Option<DrawPoint> {
+                self.resolve_bound_point(binding, target, None)
+            }
+
+            fn compute_elbow_edit(
+                &self,
+                _element: &TestElement,
+                data: &TestArrowData,
+                _lookup: &CombinedElementLookup<'_, TestElement>,
+                local_points_override: &[DrawPoint],
+                _fixed_segments_override: Option<&[()]>,
+            ) -> Option<ElbowEditResult<()>> {
+                Some(ElbowEditResult {
+                    local_points: local_points_override.to_vec(),
+                    fixed_segments: None,
+                    start_binding: data.start_binding.clone(),
+                    end_binding: None,
+                    start_is_special: None,
+                    end_is_special: None,
+                })
+            }
+        }
+
+        let bindable = bindable_element("bindable-1", DrawRect::new(100.0, 100.0, 220.0, 220.0));
+        let arrow = TestElement {
+            id: "arrow-elbow".to_owned(),
+            rect: DrawRect::new(100.0, 100.0, 220.0, 220.0),
+            rotation: 0.0,
+            arrow_data: Some(TestArrowData {
+                points: vec![
+                    DrawPoint::new(100.0, 160.0),
+                    DrawPoint::new(160.0, 160.0),
+                    DrawPoint::new(220.0, 220.0),
+                ],
+                arrow_type: ArrowType::Elbow,
+                start_arrowhead: ArrowheadStyle::None,
+                end_arrowhead: ArrowheadStyle::None,
+                start_binding: Some(binding("bindable-1", 0.0, 0.5)),
+                end_binding: Some(binding("bindable-1", 1.0, 0.5)),
+            }),
+        };
+        let moved_bindable = TestElement {
+            rect: bindable.rect.translate(DrawPoint::new(20.0, 0.0)),
+            ..bindable.clone()
+        };
+
+        let base = HashMap::from([
+            (bindable.id.clone(), bindable.clone()),
+            (arrow.id.clone(), arrow.clone()),
+        ]);
+        let updated = HashMap::from([(bindable.id.clone(), moved_bindable)]);
+        let changed = HashSet::from([bindable.id.clone()]);
+
+        let resolution = ArrowBindingResolver::INSTANCE.resolve(
+            &base,
+            &updated,
+            &changed,
+            &BindingRewriteDelegate,
+        );
+
+        let updated_arrow = resolution.get("arrow-elbow").expect("updated elbow arrow");
+        let updated_data = updated_arrow
+            .arrow_data
+            .as_ref()
+            .expect("updated arrow data");
+        assert!(updated_data.start_binding.is_some());
+        assert_eq!(updated_data.end_binding, None);
     }
 
     fn bindable_element(id: &str, rect: DrawRect) -> TestElement {
