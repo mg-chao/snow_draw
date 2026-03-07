@@ -303,6 +303,7 @@ pub struct ValidationReport {
 pub struct FocusPointDescriptor {
     pub edge: ArrowEndpointEdge,
     pub point: Point,
+    pub binding: FixedPointBinding,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use crate::draw::elements::types::arrow::arrow_binding::{ArrowBinding, ArrowBindingMode};
-use crate::draw::elements::types::arrow::arrow_core::ArrowEndpointEdge;
 use crate::draw::elements::types::arrow::arrow_core_bridge::{
     apply_core_arrow_patch_to_element, collect_core_bindable_relations,
 };
@@ -15,7 +14,7 @@ use crate::draw::elements::types::arrow::core::arrow_engine::{
 };
 use crate::draw::elements::types::arrow::core::arrow_state_core::apply_engine_result;
 use crate::draw::elements::types::arrow::core::arrow_types::{
-    ApplyEngineResultInput, ArrowBindingState, BindablePatch,
+    ApplyEngineResultInput, ArrowBindingState, ArrowEndpointEdge, BindablePatch,
     BindableState as LifecycleBindableState, EngineContext as LifecycleEngineContext,
     FixedPointBinding,
 };
@@ -66,7 +65,6 @@ pub fn list_visible_arrow_focus_points(
     engine_context: Option<&LifecycleEngineContext>,
     ignore_overlap: bool,
 ) -> Vec<ArrowFocusPoint> {
-    let _ = ignore_overlap;
     if data.arrow_type == ArrowType::Elbow {
         return Vec::new();
     }
@@ -78,16 +76,28 @@ pub fn list_visible_arrow_focus_points(
         return Vec::new();
     }
     let arrow = to_arrow_state(element, data);
-    resolve_visible_focus_points(&arrow)
-        .into_iter()
-        .map(|descriptor| ArrowFocusPoint {
-            endpoint: match descriptor.edge {
-                ArrowEndpointEdge::Start => ArrowFocusEndpoint::Start,
-                ArrowEndpointEdge::End => ArrowFocusEndpoint::End,
-            },
-            point: descriptor.point,
-        })
-        .collect()
+    let lifecycle_arrow = to_lifecycle_arrow_state(&arrow);
+    let lifecycle_bindables = scene
+        .bindables()
+        .iter()
+        .map(to_lifecycle_bindable_state)
+        .collect::<Vec<_>>();
+    let lifecycle_context = to_lifecycle_context(&scene.context);
+    resolve_visible_focus_points(
+        &lifecycle_arrow,
+        &lifecycle_bindables,
+        lifecycle_context,
+        ignore_overlap,
+    )
+    .into_iter()
+    .map(|descriptor| ArrowFocusPoint {
+        endpoint: match descriptor.edge {
+            ArrowEndpointEdge::Start => ArrowFocusEndpoint::Start,
+            ArrowEndpointEdge::End => ArrowFocusEndpoint::End,
+        },
+        point: descriptor.point,
+    })
+    .collect()
 }
 
 pub fn pick_arrow_focus_point(
@@ -98,7 +108,6 @@ pub fn pick_arrow_focus_point(
     engine_context: Option<&LifecycleEngineContext>,
     ignore_overlap: bool,
 ) -> Option<ArrowFocusEndpoint> {
-    let _ = ignore_overlap;
     let scene = ArrowScene::from_elements(
         elements.iter().cloned(),
         engine_context.map(to_core_context),
@@ -107,14 +116,26 @@ pub fn pick_arrow_focus_point(
         return None;
     }
     let tolerance = 10.0 / scene.context.zoom.max(1e-6);
-    pick_arrow_focus_point_with_offset(element, data, pointer, tolerance).endpoint
+    pick_arrow_focus_point_with_offset(
+        element,
+        data,
+        scene.bindables(),
+        to_lifecycle_context(&scene.context),
+        pointer,
+        tolerance,
+        ignore_overlap,
+    )
+    .endpoint
 }
 
 pub fn pick_arrow_focus_point_with_offset(
     element: &ElementState,
     data: &ArrowData,
+    bindables: &[super::arrow_core::BindableState],
+    context: LifecycleEngineContext,
     pointer: DrawPoint,
     tolerance: f64,
+    ignore_overlap: bool,
 ) -> ArrowFocusHit {
     if data.arrow_type == ArrowType::Elbow {
         return ArrowFocusHit {
@@ -123,8 +144,20 @@ pub fn pick_arrow_focus_point_with_offset(
         };
     }
 
-    let hit =
-        resolve_focus_point_hit_with_offset(&to_arrow_state(element, data), pointer, tolerance);
+    let _ = tolerance;
+    let arrow = to_arrow_state(element, data);
+    let lifecycle_arrow = to_lifecycle_arrow_state(&arrow);
+    let lifecycle_bindables = bindables
+        .iter()
+        .map(to_lifecycle_bindable_state)
+        .collect::<Vec<_>>();
+    let hit = resolve_focus_point_hit_with_offset(
+        &lifecycle_arrow,
+        &lifecycle_bindables,
+        pointer,
+        context,
+        ignore_overlap,
+    );
     ArrowFocusHit {
         endpoint: hit.edge.map(|edge| match edge {
             ArrowEndpointEdge::Start => ArrowFocusEndpoint::Start,
@@ -554,6 +587,61 @@ mod tests {
             z_index,
             Arc::new(RectangleData::default()),
         )
+    }
+
+    fn rect_element_with_rect(id: &str, z_index: i64, rect: DrawRect) -> ElementState {
+        ElementState::new(
+            id,
+            rect,
+            0.0,
+            1.0,
+            z_index,
+            Arc::new(RectangleData::default()),
+        )
+    }
+
+    #[test]
+    fn list_visible_focus_points_uses_bound_anchor_point() {
+        let (arrow_element, mut arrow_data) = arrow_element();
+        arrow_data.start_binding = Some(SourceArrowBinding {
+            element_id: "rect-1".to_owned(),
+            anchor: DrawPoint::new(0.5, 0.5),
+            mode: SourceArrowBindingMode::Orbit,
+        });
+        let rect = rect_element("rect-1", 2);
+
+        let points = list_visible_arrow_focus_points(
+            &arrow_element,
+            &arrow_data,
+            &[arrow_element.clone(), rect],
+            None,
+            false,
+        );
+
+        assert_eq!(points.len(), 1);
+        assert_eq!(points[0].endpoint, ArrowFocusEndpoint::Start);
+        assert_eq!(points[0].point, DrawPoint::new(70.0, 70.0));
+    }
+
+    #[test]
+    fn list_visible_focus_points_hides_anchor_when_it_overlaps_endpoint() {
+        let (arrow_element, mut arrow_data) = arrow_element();
+        arrow_data.start_binding = Some(SourceArrowBinding {
+            element_id: "rect-1".to_owned(),
+            anchor: DrawPoint::new(0.0, 0.0),
+            mode: SourceArrowBindingMode::Orbit,
+        });
+        let rect = rect_element_with_rect("rect-1", 2, DrawRect::new(10.0, 10.0, 110.0, 110.0));
+
+        let points = list_visible_arrow_focus_points(
+            &arrow_element,
+            &arrow_data,
+            &[arrow_element.clone(), rect],
+            None,
+            false,
+        );
+
+        assert!(points.is_empty());
     }
 
     #[test]
