@@ -1,14 +1,15 @@
 import 'dart:math' as math;
 import 'dart:ui';
 
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
+import '../connector/connector_visual_cache.dart';
 import '../free_draw/free_draw_visual_cache.dart';
-import '../geometry/arrow_geometry.dart';
+import '../geometry/connector_geometry.dart';
 import '../patterns/stroke_pattern_utils.dart';
 import '../text/text_renderer.dart';
 
-/// Executes core-owned render tasks on Flutter canvas primitives.
+/// Executes engine-owned render tasks on Flutter canvas primitives.
 class FlutterRenderTaskExecutor {
   const FlutterRenderTaskExecutor();
 
@@ -130,7 +131,7 @@ class FlutterRenderTaskExecutor {
   void _renderLine({required Canvas canvas, required LineRenderTask task}) {
     final element = task.element;
     final data = task.data;
-    final points = FlutterArrowGeometry.resolveWorldPoints(
+    final points = FlutterConnectorGeometry.resolveWorldPoints(
       rect: element.rect,
       normalizedPoints: data.points,
     );
@@ -138,7 +139,7 @@ class FlutterRenderTaskExecutor {
       return;
     }
 
-    final path = FlutterArrowGeometry.buildShaftPathFromResolvedPoints(
+    final path = FlutterConnectorGeometry.buildShaftPathFromResolvedPoints(
       points: points,
       arrowType: data.arrowType,
     );
@@ -185,47 +186,10 @@ class FlutterRenderTaskExecutor {
   void _renderArrow({required Canvas canvas, required ArrowRenderTask task}) {
     final element = task.element;
     final data = task.data;
-    final descriptor = FlutterArrowGeometryDescriptor(
-      data: data,
-      rect: element.rect,
-    );
-    if (descriptor.insetPoints.length < 2) {
+    final cached = connectorVisualCache.resolve(element: element, data: data);
+    if (cached.geometry.localPoints.length < 2 ||
+        cached.geometry.insetPoints.length < 2) {
       return;
-    }
-
-    final worldInsetPoints = <Offset>[
-      for (final point in descriptor.insetPoints)
-        Offset(element.rect.minX + point.dx, element.rect.minY + point.dy),
-    ];
-    final shaftPath = FlutterArrowGeometry.buildShaftPathFromResolvedPoints(
-      points: worldInsetPoints,
-      arrowType: data.arrowType,
-    );
-
-    final arrowheadsPath = Path();
-    final startDirection = descriptor.startDirection;
-    if (startDirection != null && data.startArrowhead != ArrowheadStyle.none) {
-      arrowheadsPath.addPath(
-        FlutterArrowGeometry.buildArrowheadPath(
-          tip: worldInsetPoints.first,
-          direction: startDirection,
-          style: data.startArrowhead,
-          strokeWidth: data.strokeWidth,
-        ),
-        Offset.zero,
-      );
-    }
-    final endDirection = descriptor.endDirection;
-    if (endDirection != null && data.endArrowhead != ArrowheadStyle.none) {
-      arrowheadsPath.addPath(
-        FlutterArrowGeometry.buildArrowheadPath(
-          tip: worldInsetPoints.last,
-          direction: endDirection,
-          style: data.endArrowhead,
-          strokeWidth: data.strokeWidth,
-        ),
-        Offset.zero,
-      );
     }
 
     final strokeColor = _withOpacity(data.color, element.opacity);
@@ -236,10 +200,11 @@ class FlutterRenderTaskExecutor {
 
     canvas.save();
     _applyElementRotation(canvas, element);
+    canvas.translate(element.rect.minX, element.rect.minY);
 
     _drawPathStroke(
       canvas: canvas,
-      path: shaftPath,
+      path: cached.shaftPath,
       color: strokeColor,
       strokeWidth: data.strokeWidth,
       strokeStyle: data.strokeStyle,
@@ -247,13 +212,18 @@ class FlutterRenderTaskExecutor {
       strokeJoin: StrokeJoin.round,
     );
 
-    if (!arrowheadsPath.getBounds().isEmpty) {
+    if (!cached.arrowheadPaths.fillPath.getBounds().isEmpty) {
+      final fillPaint = _fillPaint..color = strokeColor;
+      canvas.drawPath(cached.arrowheadPaths.fillPath, fillPaint);
+    }
+
+    if (!cached.arrowheadPaths.strokePath.getBounds().isEmpty) {
       final paint = _strokePaint
         ..color = strokeColor
         ..strokeWidth = data.strokeWidth
         ..strokeCap = StrokeCap.round
         ..strokeJoin = StrokeJoin.round;
-      canvas.drawPath(arrowheadsPath, paint);
+      canvas.drawPath(cached.arrowheadPaths.strokePath, paint);
     }
 
     canvas.restore();

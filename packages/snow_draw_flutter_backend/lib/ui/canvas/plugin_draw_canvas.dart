@@ -4,11 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart' hide HitTestResult;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../../extensions/coordinate_service_offset_extensions.dart';
 import '../../extensions/draw_color_extensions.dart';
-import '../../render/geometry/arrow_geometry.dart';
+import '../../render/geometry/connector_geometry.dart';
 import '../../render/text/text_renderer.dart';
 import '../../services/text/flutter_text_layout.dart';
 import '../../services/text/flutter_text_rendering_cache_invalidation.dart';
@@ -184,7 +184,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   DrawPoint? _lastPointerPosition;
   String? _hoveredSelectionElementId;
   String? _hoveredBindingElementId;
-  ArrowPointHandle? _hoveredArrowHandle;
+  ConnectorPointHandle? _hoveredArrowHandle;
   final _activePointerIds = <int>{};
   final _eraserPointerIds = <int>{};
   final _pendingErasePreviewElementsById = <String, ElementState>{};
@@ -1447,7 +1447,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     final state = widget.store.state;
     final interaction = state.application.interaction;
 
-    // --- cursor early-outs that skip the hit test entirely ---
     if (_middlePanPointerId != null) {
       _updateCursorIfChanged(_draggingCursor);
       return _clearHoverState();
@@ -1474,7 +1473,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     // Shared arrow-handle lookup (used by both cursor and hover).
-    final arrowHandle = _resolveArrowPointHandleForPosition(
+    final arrowHandle = _resolveConnectorPointHandleForPosition(
       state: state,
       position: position,
     );
@@ -1501,7 +1500,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       filterTypeId: widget.currentToolTypeId,
     );
 
-    // --- derive cursor from shared hitResult ---
     MouseCursor nextCursor;
     if (_shouldForceDefaultCursor(
       state: state,
@@ -1524,7 +1522,6 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
     _updateCursorIfChanged(nextCursor);
 
-    // --- derive hover selection from shared hitResult ---
     String? hoverId;
     final canHover =
         _isPointerInside &&
@@ -1571,7 +1568,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
   bool _applyHoverState({
     required String? selectionId,
     required String? bindingId,
-    required ArrowPointHandle? arrowHandle,
+    required ConnectorPointHandle? arrowHandle,
   }) {
     if (_hoveredSelectionElementId == selectionId &&
         _hoveredBindingElementId == bindingId &&
@@ -1604,13 +1601,9 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     }
 
     final config = widget.store.config;
-    final snappingMode = resolveEffectiveSnappingModeForConfig(
-      config: config,
-      ctrlPressed: _currentModifiers.control,
-    );
     if (!shouldPreviewArrowBinding(
       snapConfig: config.snap,
-      snappingMode: snappingMode,
+      snapOverrideActive: _currentModifiers.control,
     )) {
       return null;
     }
@@ -1644,11 +1637,19 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
             targets: targets,
             snapDistance: bindingDistance,
             hasArrowhead: arrowStyle.startArrowhead != ArrowheadStyle.none,
+            coreEngineContext: buildCoreEngineContext(
+              zoom: zoom,
+              isBindingEnabled: config.snap.enableArrowBinding,
+            ),
           )
         : ArrowBindingUtils.resolveBindingCandidate(
             worldPoint: position,
             targets: targets,
             snapDistance: bindingDistance,
+            coreEngineContext: buildCoreEngineContext(
+              zoom: zoom,
+              isBindingEnabled: config.snap.enableArrowBinding,
+            ),
           );
     if (candidate == null) {
       return null;
@@ -1656,7 +1657,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
     return candidate.binding.elementId;
   }
 
-  ArrowPointHandle? _resolveArrowPointHandleForPosition({
+  ConnectorPointHandle? _resolveConnectorPointHandleForPosition({
     required DrawState state,
     required DrawPoint position,
   }) {
@@ -1676,42 +1677,47 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return null;
     }
     final element = state.domain.document.getElementById(selectedIds.first);
-    if (element == null || element.data is! ArrowLikeData) {
+    if (element == null || element.data is! ConnectorData) {
       return null;
     }
 
     final stateView = _buildStateView(state);
     final selectionConfig = _resolveSelectionConfigForInput(state);
+    final snapConfig = widget.store.config.snap;
     final hitRadius = selectionConfig.interaction.handleTolerance;
-    // Apply multiplier for arrow point handles to make them larger
+    // Apply the dedicated multiplier so connector point handles stay tappable.
     final handleSize =
         selectionConfig.render.controlPointSize *
         ConfigDefaults.arrowPointSizeMultiplier;
     final loopThreshold = hitRadius * 1.5;
-    return ArrowPointUtils.hitTest(
+    return ConnectorPointUtils.hitTest(
       element: stateView.effectiveElement(element),
       position: position,
       hitRadius: hitRadius,
       loopThreshold: loopThreshold,
       handleSize: handleSize,
+      elements: stateView.elements,
+      zoom: state.application.view.camera.zoom,
+      isBindingEnabled: snapConfig.enableArrowBinding,
     );
   }
 
-  ArrowPointHandle? _resolveActiveArrowHandle(DrawStateView stateView) {
+  ConnectorPointHandle? _resolveActiveArrowHandle(DrawStateView stateView) {
     final interaction = stateView.state.application.interaction;
     if (interaction is! EditingState) {
       return null;
     }
-    if (interaction.context is! ArrowPointEditContext) {
+    if (interaction.context is! ConnectorPointEditContext) {
       return null;
     }
-    final context = interaction.context as ArrowPointEditContext;
+    final context = interaction.context as ConnectorPointEditContext;
     var kind = context.pointKind;
     var index = context.pointIndex;
     final transform = interaction.currentTransform;
-    if (transform is ArrowPointTransform && kind == ArrowPointKind.addable) {
+    if (transform is ConnectorPointTransform &&
+        kind == ConnectorPointKind.addable) {
       if (transform.didInsert) {
-        kind = ArrowPointKind.turning;
+        kind = ConnectorPointKind.turning;
         index = context.pointIndex + 1;
       } else if (transform.activeIndex != null) {
         index = transform.activeIndex!;
@@ -1725,15 +1731,15 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
         ? null
         : stateView.effectiveElement(element);
     final data = effectiveElement?.data;
-    if (data is ArrowLikeData &&
+    if (data is ConnectorData &&
         data.arrowType == ArrowType.elbow &&
-        kind == ArrowPointKind.addable) {
+        kind == ConnectorPointKind.addable) {
       final segmentIndex = index + 1;
       isFixed =
           data.fixedSegments?.any((segment) => segment.index == segmentIndex) ??
           false;
     }
-    return ArrowPointHandle(
+    return ConnectorPointHandle(
       elementId: context.elementId,
       kind: kind,
       index: index,
@@ -1748,25 +1754,25 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return false;
     }
     final transform = interaction.currentTransform;
-    return transform is ArrowPointTransform && transform.shouldDelete;
+    return transform is ConnectorPointTransform && transform.shouldDelete;
   }
 
   MouseCursor? _resolveArrowHandleCursor({
     required DrawState state,
-    required ArrowPointHandle handle,
+    required ConnectorPointHandle handle,
   }) {
-    if (handle.kind != ArrowPointKind.addable) {
+    if (handle.kind != ConnectorPointKind.addable) {
       return null;
     }
     final element = state.domain.document.getElementById(handle.elementId);
-    if (element == null || element.data is! ArrowLikeData) {
+    if (element == null || element.data is! ConnectorData) {
       return null;
     }
-    final data = element.data as ArrowLikeData;
+    final data = element.data as ConnectorData;
     if (data.arrowType != ArrowType.elbow) {
       return null;
     }
-    final points = FlutterArrowGeometry.resolveWorldPoints(
+    final points = FlutterConnectorGeometry.resolveWorldPoints(
       rect: element.rect,
       normalizedPoints: data.points,
     );
@@ -2065,7 +2071,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
       return _idleCursorForCurrentTool;
     }
 
-    final arrowHandle = _resolveArrowPointHandleForPosition(
+    final arrowHandle = _resolveConnectorPointHandleForPosition(
       state: state,
       position: position,
     );
@@ -3159,7 +3165,7 @@ class _PluginDrawCanvasState extends State<PluginDrawCanvas> {
           state: state,
           position: position,
         );
-        _hoveredArrowHandle = _resolveArrowPointHandleForPosition(
+        _hoveredArrowHandle = _resolveConnectorPointHandleForPosition(
           state: state,
           position: position,
         );

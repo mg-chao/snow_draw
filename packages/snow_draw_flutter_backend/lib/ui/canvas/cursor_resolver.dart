@@ -3,7 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 const _rotatedHandleHints = <CursorHint>[
   CursorHint.resizeRight,
@@ -27,7 +27,7 @@ class CursorResolver {
       return switch (context) {
         ResizeEditContext(:final resizeMode, :final rotation) =>
           _cursorForResizeMode(resizeMode, rotation),
-        RotateEditContext() || ArrowPointEditContext() => grabbingCursor(),
+        RotateEditContext() || ConnectorPointEditContext() => grabbingCursor(),
         MoveEditContext() => SystemMouseCursors.move,
         _ => SystemMouseCursors.move,
       };

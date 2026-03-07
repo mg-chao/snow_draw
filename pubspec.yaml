@@ -8,7 +8,7 @@ environment:
   flutter: ">=1.17.0"
 workspace:
   - apps/snow_draw
-  - packages/snow_draw_core
+  - packages/snow_draw_engine
   - packages/snow_draw_flutter_backend
 dev_dependencies:
   lint_hard: ^7.1.0
@@ -18,25 +18,23 @@ melos:
   scripts:
     analyze:
       description: Run static analysis (read-only, suitable for CI).
-      run: dart run melos run analyze:core && dart run melos run analyze:backend && dart run melos run analyze:app
+      run: dart run melos run analyze:engine && dart run melos run analyze:backend && dart run melos run analyze:app
+
+    analyze:engine:
+      description: Run static analysis for the pure-Dart engine package.
+      run: dart run melos exec --scope snow_draw_engine -- dart analyze
 
     analyze:core:
-      description: Run static analysis for the pure-Dart core package.
-      packageFilters:
-        scope: snow_draw_core
-      exec: dart analyze
+      description: Legacy alias for analyze:engine.
+      run: dart run melos run analyze:engine
 
     analyze:backend:
       description: Run static analysis for the Flutter backend package.
-      packageFilters:
-        scope: snow_draw_flutter_backend
-      exec: flutter analyze
+      run: dart run melos exec --scope snow_draw_flutter_backend -- flutter analyze
 
     analyze:app:
       description: Run static analysis for the app package.
-      packageFilters:
-        scope: snow_draw
-      exec: flutter analyze
+      run: dart run melos exec --scope snow_draw -- flutter analyze
 
     format:check:
       description: Check formatting without modifying files.
@@ -49,25 +47,45 @@ melos:
         dart run melos exec -- dart format .
         dart run melos exec -- dart fix --apply
 
-    check:core-purity:
-      description: Block new Flutter/UI imports and Flutter dependencies in core.
+    check:engine-purity:
+      description: Block new Flutter/UI imports and Flutter dependencies in engine.
       run: dart run tools/check_core_import_purity.dart && dart run tools/check_core_pubspec_purity.dart && dart run tools/check_core_dependency_graph_purity.dart
 
-    check:core-draw-purity:
-      description: Enforce no Flutter/UI imports under core draw library.
+    check:core-purity:
+      description: Legacy alias for check:engine-purity.
+      run: dart run melos run check:engine-purity
+
+    check:engine-draw-purity:
+      description: Enforce no Flutter/UI imports under engine draw library.
       run: dart run tools/check_core_draw_import_purity.dart
 
-    check:core-ui-boundary:
-      description: Ensure UI/rendering Dart files do not re-enter core package.
+    check:core-draw-purity:
+      description: Legacy alias for check:engine-draw-purity.
+      run: dart run melos run check:engine-draw-purity
+
+    check:engine-ui-boundary:
+      description: Ensure UI/rendering Dart files do not re-enter engine package.
       run: dart run tools/check_core_ui_boundary.dart
 
-    check:core-entrypoint:
-      description: Ensure core package entrypoint exports the expected pure-Dart APIs.
+    check:core-ui-boundary:
+      description: Legacy alias for check:engine-ui-boundary.
+      run: dart run melos run check:engine-ui-boundary
+
+    check:engine-entrypoint:
+      description: Ensure engine package entrypoint exports the expected pure-Dart APIs.
       run: dart run tools/check_core_entrypoint_exports.dart
 
-    check:workspace-core-deep-import-boundary:
-      description: Block deep core draw imports outside the core package.
+    check:core-entrypoint:
+      description: Legacy alias for check:engine-entrypoint.
+      run: dart run melos run check:engine-entrypoint
+
+    check:workspace-engine-deep-import-boundary:
+      description: Block deep engine draw imports outside the engine package.
       run: dart run tools/check_workspace_core_deep_import_boundary.dart
+
+    check:workspace-core-deep-import-boundary:
+      description: Legacy alias for check:workspace-engine-deep-import-boundary.
+      run: dart run melos run check:workspace-engine-deep-import-boundary
 
     check:workspace-backend-deep-import-boundary:
       description: Block deep backend imports outside the backend package.
@@ -90,31 +108,43 @@ melos:
       run: dart run tools/check_backend_pubspec_boundary.dart
 
     check:backend-dependency-graph:
-      description: Validate backend dependency graph boundaries (core/flutter reachable, app unreachable).
+      description: Validate backend dependency graph boundaries (engine/flutter reachable, app unreachable).
       run: dart run tools/check_backend_dependency_graph_boundary.dart
 
-    check:backend-core-entrypoint-import-boundary:
-      description: Keep backend boundary files on core package entrypoint imports only.
+    check:backend-engine-entrypoint-import-boundary:
+      description: Keep backend boundary files on engine package entrypoint imports only.
       run: dart run tools/check_backend_core_entrypoint_import_boundary.dart
 
-    check:backend-test-core-entrypoint-import-boundary:
-      description: Keep backend test files on core package entrypoint imports only.
+    check:backend-core-entrypoint-import-boundary:
+      description: Legacy alias for check:backend-engine-entrypoint-import-boundary.
+      run: dart run melos run check:backend-engine-entrypoint-import-boundary
+
+    check:backend-test-engine-entrypoint-import-boundary:
+      description: Keep backend test files on engine package entrypoint imports only.
       run: dart run tools/check_backend_test_core_entrypoint_import_boundary.dart
+
+    check:backend-test-core-entrypoint-import-boundary:
+      description: Legacy alias for check:backend-test-engine-entrypoint-import-boundary.
+      run: dart run melos run check:backend-test-engine-entrypoint-import-boundary
 
     check:app-backend-import-boundary:
       description: Keep app imports on backend package entrypoint APIs only.
       run: dart run tools/check_app_backend_import_boundary.dart
 
-    check:app-core-import-boundary:
-      description: Keep app imports on core package entrypoint APIs only.
+    check:app-engine-import-boundary:
+      description: Keep app imports on engine package entrypoint APIs only.
       run: dart run tools/check_app_core_import_boundary.dart
 
+    check:app-core-import-boundary:
+      description: Legacy alias for check:app-engine-import-boundary.
+      run: dart run melos run check:app-engine-import-boundary
+
     check:app-pubspec-backend:
-      description: Ensure app pubspec keeps required core/backend dependencies.
+      description: Ensure app pubspec keeps required engine/backend dependencies.
       run: dart run tools/check_app_pubspec_backend_dependency.dart
 
     check:app-dependency-graph:
-      description: Validate app dependency graph reaches core/backend/flutter.
+      description: Validate app dependency graph reaches engine/backend/flutter.
       run: dart run tools/check_app_dependency_graph_boundary.dart
 
     check:backend-entrypoint:
@@ -125,9 +155,13 @@ melos:
       description: Ensure CI workflow executes required quality gates in order.
       run: dart run tools/check_ci_workflow_guards.dart
 
+    check:backend-compatibility-engine-import-boundary:
+      description: Keep backend compatibility tests on engine entrypoint imports only.
+      run: dart run tools/check_backend_compatibility_engine_import_boundary.dart
+
     check:backend-compatibility-core-import-boundary:
-      description: Keep backend compatibility tests on core entrypoint imports only.
-      run: dart run tools/check_backend_compatibility_core_import_boundary.dart
+      description: Legacy alias for check:backend-compatibility-engine-import-boundary.
+      run: dart run melos run check:backend-compatibility-engine-import-boundary
 
     check:backend-compatibility-backend-import-boundary:
       description: Keep backend compatibility tests on backend entrypoint imports only.
@@ -135,17 +169,21 @@ melos:
 
     check:architecture:
       description: Run architecture boundary and purity guards.
-      run: dart test packages/snow_draw_core/test/melos_architecture_script_wiring_test.dart && dart run melos run check:core-purity && dart run melos run check:core-draw-purity && dart run melos run check:core-ui-boundary && dart run melos run check:core-entrypoint && dart run melos run check:workspace-core-deep-import-boundary && dart run melos run check:workspace-backend-deep-import-boundary && dart run melos run check:backend-legacy && dart run melos run check:backend-app-import-boundary && dart run melos run check:backend-test-app-import-boundary && dart run melos run check:backend-pubspec-boundary && dart run melos run check:backend-dependency-graph && dart run melos run check:backend-core-entrypoint-import-boundary && dart run melos run check:backend-test-core-entrypoint-import-boundary && dart run melos run check:backend-entrypoint && dart run melos run check:ci-workflow && dart run melos run check:app-backend-import-boundary && dart run melos run check:app-core-import-boundary && dart run melos run check:app-pubspec-backend && dart run melos run check:app-dependency-graph
+      run: dart test packages/snow_draw_engine/test/melos_architecture_script_wiring_test.dart && dart run melos run check:engine-purity && dart run melos run check:engine-draw-purity && dart run melos run check:engine-ui-boundary && dart run melos run check:engine-entrypoint && dart run melos run check:workspace-engine-deep-import-boundary && dart run melos run check:workspace-backend-deep-import-boundary && dart run melos run check:backend-legacy && dart run melos run check:backend-app-import-boundary && dart run melos run check:backend-test-app-import-boundary && dart run melos run check:backend-pubspec-boundary && dart run melos run check:backend-dependency-graph && dart run melos run check:backend-engine-entrypoint-import-boundary && dart run melos run check:backend-test-engine-entrypoint-import-boundary && dart run melos run check:backend-entrypoint && dart run melos run check:ci-workflow && dart run melos run check:app-backend-import-boundary && dart run melos run check:app-engine-import-boundary && dart run melos run check:app-pubspec-backend && dart run melos run check:app-dependency-graph
 
     check:compatibility-contracts:
       description: Run focused compatibility tests for stable schema and type contracts.
-      run: dart test packages/snow_draw_core/test/melos_compatibility_script_wiring_test.dart && dart test packages/snow_draw_core/test/core_entrypoint_contract_test.dart && dart test packages/snow_draw_core/test/element_serialization_compatibility_test.dart && dart test packages/snow_draw_core/test/element_default_json_compatibility_test.dart && dart test packages/snow_draw_core/test/element_type_id_compatibility_test.dart && dart test packages/snow_draw_core/test/element_registry_characterization_test.dart && dart test packages/snow_draw_core/test/built_in_render_task_support_test.dart && dart test packages/snow_draw_core/test/draw_config_defaults_compatibility_test.dart && dart test packages/snow_draw_core/test/action_payload_immutability_test.dart && dart test packages/snow_draw_core/test/action_type_name_compatibility_test.dart && dart test packages/snow_draw_core/test/types/draw_color_test.dart && dart test packages/snow_draw_core/test/text_metrics_service_compatibility_test.dart && dart test packages/snow_draw_core/test/draw_context_text_metrics_compatibility_test.dart && dart run melos run check:backend-compatibility-core-import-boundary && dart run melos run check:backend-compatibility-backend-import-boundary && flutter test packages/snow_draw_flutter_backend/test/backend_entrypoint_contract_test.dart packages/snow_draw_flutter_backend/test/built_in_render_task_routing_test.dart packages/snow_draw_flutter_backend/test/coordinate_service_offset_extensions_test.dart
+      run: dart test packages/snow_draw_engine/test/melos_compatibility_script_wiring_test.dart && dart test packages/snow_draw_engine/test/engine_entrypoint_contract_test.dart && dart test packages/snow_draw_engine/test/element_serialization_compatibility_test.dart && dart test packages/snow_draw_engine/test/element_default_json_compatibility_test.dart && dart test packages/snow_draw_engine/test/element_type_id_compatibility_test.dart && dart test packages/snow_draw_engine/test/element_registry_characterization_test.dart && dart test packages/snow_draw_engine/test/built_in_render_task_support_test.dart && dart test packages/snow_draw_engine/test/draw_config_defaults_compatibility_test.dart && dart test packages/snow_draw_engine/test/action_payload_immutability_test.dart && dart test packages/snow_draw_engine/test/action_type_name_compatibility_test.dart && dart test packages/snow_draw_engine/test/types/draw_color_test.dart && dart test packages/snow_draw_engine/test/text_metrics_service_compatibility_test.dart && dart test packages/snow_draw_engine/test/draw_context_text_metrics_compatibility_test.dart && dart run melos run check:backend-compatibility-engine-import-boundary && dart run melos run check:backend-compatibility-backend-import-boundary && flutter test packages/snow_draw_flutter_backend/test/backend_entrypoint_contract_test.dart packages/snow_draw_flutter_backend/test/built_in_render_task_routing_test.dart packages/snow_draw_flutter_backend/test/coordinate_service_offset_extensions_test.dart
+
+    test:engine:
+      description: Run tests for the pure-Dart engine package.
+      packageFilters:
+        scope: snow_draw_engine
+      exec: dart test
 
     test:core:
-      description: Run tests for the pure-Dart core package.
-      packageFilters:
-        scope: snow_draw_core
-      exec: dart test
+      description: Legacy alias for test:engine.
+      run: dart run melos run test:engine
 
     test:backend:
       description: Run tests for the Flutter backend package.
@@ -161,7 +199,7 @@ melos:
 
     test:
       description: Run tests in all packages.
-      run: dart run melos run test:core && dart run melos run test:backend && dart run melos run test:app
+      run: dart run melos run test:engine && dart run melos run test:backend && dart run melos run test:app
 
     run:windows:
       description: Run the snow_draw app on Windows.

@@ -1,7 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../grid_toolbar_adapter.dart';
 import '../l10n/app_localizations.dart';

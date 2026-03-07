@@ -1,0 +1,1678 @@
+import 'package:meta/meta.dart';
+
+import '../../config/draw_config.dart';
+import '../../core/coordinates/element_space.dart';
+import '../../elements/types/arrow/arrow_binding.dart';
+import '../../elements/types/arrow/arrow_binding_policy.dart';
+import '../../elements/types/arrow/arrow_core.dart' as core;
+import '../../elements/types/arrow/arrow_core_bridge.dart';
+import '../../elements/types/arrow/arrow_core_endpoint_drag.dart';
+import '../../elements/types/arrow/arrow_core_geometry_adapter.dart';
+import '../../elements/types/arrow/arrow_core_ops.dart';
+import '../../elements/types/arrow/arrow_data.dart';
+import '../../elements/types/arrow/arrow_focus.dart';
+import '../../elements/types/arrow/arrow_scene.dart';
+import '../../elements/types/arrow/elbow/elbow_editing.dart';
+import '../../elements/types/arrow/elbow/elbow_fixed_segment.dart';
+import '../../elements/types/connector/connector_data.dart';
+import '../../elements/types/connector/connector_geometry.dart';
+import '../../elements/types/connector/connector_points.dart';
+import '../../elements/types/line/line_data.dart';
+import '../../history/history_metadata.dart';
+import '../../models/draw_state.dart';
+import '../../models/element_state.dart';
+import '../../models/selection_overlay_state.dart';
+import '../../services/grid_snap_service.dart';
+import '../../services/selection_data_computer.dart';
+import '../../types/draw_point.dart';
+import '../../types/draw_rect.dart';
+import '../../types/edit_context.dart';
+import '../../types/edit_operation_id.dart';
+import '../../types/edit_transform.dart';
+import '../../types/element_style.dart';
+import '../../utils/arrow_point_metrics.dart';
+import '../../utils/camera_zoom.dart';
+import '../../utils/combined_element_lookup.dart';
+import '../../utils/list_equality.dart';
+import '../../utils/snapping_mode.dart';
+import '../core/edit_computed_result.dart';
+import '../core/edit_errors.dart';
+import '../core/edit_modifiers.dart';
+import '../core/edit_operation.dart';
+import '../core/edit_operation_helpers.dart';
+import '../core/edit_operation_params.dart';
+import '../core/edit_result.dart';
+import '../core/standard_finish_mixin.dart';
+
+class ConnectorPointOperation extends EditOperation with StandardFinishMixin {
+  const ConnectorPointOperation();
+
+  @override
+  EditOperationId get id => EditOperationIds.connectorPoint;
+
+  @override
+  HistoryMetadata createHistoryMetadata({
+    required EditContext context,
+    required EditTransform transform,
+  }) {
+    final typedContext = requireContext<ConnectorPointEditContext>(
+      context,
+      operationName: 'ConnectorPointOperation.createHistoryMetadata',
+    );
+    return HistoryMetadata.forEdit(
+      operationType: 'Connector point',
+      elementIds: typedContext.selectedIdsAtStart,
+    );
+  }
+
+  @override
+  ConnectorPointEditContext createContext({
+    required DrawState state,
+    required DrawPoint position,
+    required EditOperationParams params,
+  }) {
+    final typedParams = requireParams<ConnectorPointOperationParams>(
+      params,
+      operationName: 'ConnectorPointOperation.createContext',
+    );
+    final element = state.domain.document.getElementById(typedParams.elementId);
+    if (element == null || element.data is! ConnectorData) {
+      throw const EditMissingDataError(
+        dataName: 'connector element',
+        operationName: 'ConnectorPointOperation.createContext',
+      );
+    }
+    final data = element.data as ConnectorData;
+    final resolved = resolveArrowWorldPoints(
+      rect: element.rect,
+      normalizedPoints: data.points,
+    );
+    final points = List<DrawPoint>.unmodifiable(resolved);
+    if (points.length < 2) {
+      throw const EditMissingDataError(
+        dataName: 'connector points',
+        operationName: 'ConnectorPointOperation.createContext',
+      );
+    }
+    final fixedSegments = data.fixedSegments ?? const [];
+    final shouldReleaseSegment =
+        typedParams.isDoubleClick &&
+        data.arrowType == ArrowType.elbow &&
+        typedParams.pointKind == ConnectorPointKind.addable &&
+        fixedSegments.any(
+          (segment) => segment.index == typedParams.pointIndex + 1,
+        );
+    final shouldDeletePoint =
+        typedParams.isDoubleClick &&
+        !shouldReleaseSegment &&
+        typedParams.pointKind == ConnectorPointKind.turning &&
+        typedParams.pointIndex > 0 &&
+        typedParams.pointIndex < points.length - 1;
+
+    final startBounds = requireSelectionBounds(
+      selectionData: SelectionDataComputer.compute(state),
+      initialSelectionBounds: typedParams.initialSelectionBounds,
+      operationName: 'ConnectorPointOperation.createContext',
+    );
+    final elementSpace = element.rotation == 0
+        ? null
+        : ElementSpace(rotation: element.rotation, origin: element.rect.center);
+
+    final localStartPosition = elementSpace?.fromWorld(position) ?? position;
+    final pointPosition = _resolvePointPosition(
+      state: state,
+      element: element,
+      data: data,
+      points: points,
+      kind: typedParams.pointKind,
+      index: typedParams.pointIndex,
+      arrowType: data.arrowType,
+    );
+    final dragOffset = pointPosition - localStartPosition;
+    final selectedIdsAtStart = {...state.domain.selection.selectedIds};
+
+    return ConnectorPointEditContext(
+      startPosition: localStartPosition,
+      startBounds: startBounds,
+      selectedIdsAtStart: selectedIdsAtStart,
+      selectionVersion: state.domain.selection.selectionVersion,
+      elementsVersion: state.domain.document.elementsVersion,
+      elementId: element.id,
+      elementRect: element.rect,
+      rotation: element.rotation,
+      initialPoints: List<DrawPoint>.unmodifiable(points),
+      initialFixedSegments: List<ElbowFixedSegment>.unmodifiable(fixedSegments),
+      arrowType: data.arrowType,
+      pointKind: typedParams.pointKind,
+      pointIndex: typedParams.pointIndex,
+      dragOffset: dragOffset,
+      baseElement: element,
+      elementSpace: elementSpace,
+      releaseFixedSegment: shouldReleaseSegment,
+      deletePointOnStart: shouldDeletePoint,
+      isLineElement: data is LineData,
+      startArrowhead: data.startArrowhead,
+      endArrowhead: data.endArrowhead,
+      initialStartBinding: data.startBinding,
+      initialEndBinding: data.endBinding,
+      hasBindableTargets: state.domain.document.hasArrowBindableElements,
+    );
+  }
+
+  @override
+  ConnectorPointTransform initialTransform({
+    required DrawState state,
+    required EditContext context,
+    required DrawPoint startPosition,
+  }) {
+    final typedContext = requireContext<ConnectorPointEditContext>(
+      context,
+      operationName: 'ConnectorPointOperation.initialTransform',
+    );
+    final baseElement = typedContext.baseElement;
+    final data = baseElement.data as ConnectorData;
+    var points = typedContext.initialPoints;
+    var fixedSegments = data.fixedSegments;
+    var startBinding = data.startBinding;
+    var endBinding = data.endBinding;
+    var hasChanges = false;
+    if (typedContext.deletePointOnStart) {
+      return ConnectorPointTransform(
+        currentPosition: startPosition,
+        points: points,
+        fixedSegments: fixedSegments,
+        startBinding: startBinding,
+        endBinding: endBinding,
+        activeIndex: typedContext.pointIndex,
+        shouldDelete: true,
+        hasChanges: true,
+      );
+    }
+    final arrowData = data is ArrowData ? data : null;
+    if (typedContext.releaseFixedSegment &&
+        arrowData != null &&
+        data.arrowType == ArrowType.elbow) {
+      final segmentIndex = typedContext.pointIndex + 1;
+      final currentArrow = toCoreArrowState(
+        element: baseElement,
+        data: data,
+        localPointsOverride: points,
+        fixedSegmentsOverride: fixedSegments,
+        startBindingOverride: data.startBinding,
+        endBindingOverride: data.endBinding,
+      );
+      final releasePatch = releaseCoreFixedSegment(
+        arrow: currentArrow,
+        segmentIndex: segmentIndex,
+      );
+      final releasedArrow = core.applyArrowPatch(currentArrow, releasePatch);
+      final updatedFixed = toLocalFixedSegmentsFromCoreArrow(
+        releasedArrow,
+        baseElement,
+      );
+      final updated = computeElbowEdit(
+        element: baseElement,
+        data: arrowData,
+        lookup: CombinedElementLookup(base: state.domain.document.elementMap),
+        // Excalidraw parity: fixed-segment release updates only fixed-segment
+        // metadata, then lets elbow recomputation route points from endpoints.
+        fixedSegmentsOverride: updatedFixed ?? const <ElbowFixedSegment>[],
+        engineContext: _coreContextForState(
+          state: state,
+          isBindingEnabled: true,
+        ),
+      );
+      points = updated.localPoints;
+      fixedSegments = updated.fixedSegments;
+      startBinding = updated.startBinding;
+      endBinding = updated.endBinding;
+      hasChanges = true;
+    }
+    return ConnectorPointTransform(
+      currentPosition: startPosition,
+      points: points,
+      fixedSegments: fixedSegments,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      hasChanges: hasChanges,
+    );
+  }
+
+  @override
+  EditUpdateResult<EditTransform> update({
+    required DrawState state,
+    required EditContext context,
+    required EditTransform transform,
+    required DrawPoint currentPosition,
+    required EditModifiers modifiers,
+    required DrawConfig config,
+  }) {
+    final typedContext = requireContext<ConnectorPointEditContext>(
+      context,
+      operationName: 'ConnectorPointOperation.update',
+    );
+    final typedTransform = requireTransform<ConnectorPointTransform>(
+      transform,
+      operationName: 'ConnectorPointOperation.update',
+    );
+    if (typedContext.releaseFixedSegment || typedContext.deletePointOnStart) {
+      return EditUpdateResult<EditTransform>(transform: typedTransform);
+    }
+
+    var localPosition = typedContext.toLocal(currentPosition);
+    final snapConfig = config.snap;
+    final gridConfig = config.grid;
+    final snappingMode = resolveEffectiveSnappingModeForConfig(
+      config: config,
+      ctrlPressed: modifiers.snapOverride,
+    );
+    final shouldGridSnap = snappingMode == SnappingMode.grid;
+    if (shouldGridSnap) {
+      final target = localPosition.translate(typedContext.dragOffset);
+      final snappedTarget = _snapTargetToGrid(
+        target: target,
+        context: typedContext,
+        gridSize: gridConfig.size,
+      );
+      localPosition = snappedTarget - typedContext.dragOffset;
+    }
+
+    final startBinding =
+        typedTransform.startBinding ?? typedContext.initialStartBinding;
+    final endBinding =
+        typedTransform.endBinding ?? typedContext.initialEndBinding;
+    final shouldLookupBindings =
+        _requiresBindingLookup(typedContext) &&
+        (typedContext.hasBindableTargets ||
+            startBinding != null ||
+            endBinding != null);
+    final allowNewBinding = shouldAttemptArrowBinding(
+      snapConfig: snapConfig,
+      snapOverrideActive: modifiers.snapOverride,
+    );
+    final bindingDistance = shouldLookupBindings
+        ? resolveCoreMaxBindingDistance(
+            zoom: state.application.view.camera.zoom,
+          )
+        : 0.0;
+    final coreEngineContext = _coreContextForState(
+      state: state,
+      isBindingEnabled: allowNewBinding,
+    );
+
+    final result = _compute(
+      state: state,
+      context: typedContext,
+      currentPosition: localPosition,
+      didInsert: typedTransform.didInsert,
+      modifiers: modifiers,
+      config: config,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      startArrowhead: typedContext.startArrowhead,
+      endArrowhead: typedContext.endArrowhead,
+      shouldLookupBindings: shouldLookupBindings,
+      bindingDistance: bindingDistance,
+      allowNewBinding: allowNewBinding,
+      coreEngineContext: coreEngineContext,
+      orderedElementIds: typedTransform.orderedElementIds,
+    );
+
+    if (_isNoOpArrowTransformUpdate(previous: typedTransform, next: result)) {
+      if (typedTransform.allowBindingOnFinalize == allowNewBinding) {
+        return EditUpdateResult<EditTransform>(transform: typedTransform);
+      }
+    }
+
+    final nextTransform = typedTransform.copyWith(
+      currentPosition: localPosition,
+      points: result.points,
+      fixedSegments: result.fixedSegments,
+      activeIndex: result.activeIndex,
+      didInsert: result.didInsert,
+      shouldDelete: result.shouldDelete,
+      hasChanges: result.hasChanges,
+      startBinding: result.startBinding,
+      endBinding: result.endBinding,
+      orderedElementIds: result.orderedElementIds,
+      allowBindingOnFinalize: allowNewBinding,
+    );
+
+    return EditUpdateResult<EditTransform>(transform: nextTransform);
+  }
+
+  @override
+  EditComputedResult? computeResult({
+    required DrawState state,
+    required EditContext context,
+    required EditTransform transform,
+  }) => _computeArrowResult(
+    state: state,
+    context: context,
+    transform: transform,
+    applyDeletion: false,
+  );
+
+  @override
+  EditComputedResult? computeFinishResult({
+    required DrawState state,
+    required EditContext context,
+    required EditTransform transform,
+  }) => _computeArrowResult(
+    state: state,
+    context: context,
+    transform: transform,
+    applyDeletion: true,
+  );
+
+  @override
+  SelectionOverlayState updateOverlay({
+    required SelectionOverlayState current,
+    required EditComputedResult result,
+    required EditContext context,
+  }) => current;
+
+  EditComputedResult? _computeArrowResult({
+    required DrawState state,
+    required EditContext context,
+    required EditTransform transform,
+    required bool applyDeletion,
+  }) {
+    final typedContext = requireContext<ConnectorPointEditContext>(
+      context,
+      operationName: 'ConnectorPointOperation.computeResult',
+    );
+    final typedTransform = requireTransform<ConnectorPointTransform>(
+      transform,
+      operationName: 'ConnectorPointOperation.computeResult',
+    );
+    if (!typedTransform.hasChanges) {
+      return null;
+    }
+
+    final localPoints = applyDeletion
+        ? _applyPointDeletion(typedTransform)
+        : typedTransform.points;
+    if (localPoints.length < 2) {
+      return null;
+    }
+
+    final finalizedEndpoint = applyDeletion
+        ? _finalizeCoreEndpointDragOnFinish(
+            state: state,
+            context: typedContext,
+            transform: typedTransform,
+            localPoints: localPoints,
+            coreEngineContext: _coreContextForState(
+              state: state,
+              isBindingEnabled: typedTransform.allowBindingOnFinalize,
+            ),
+          )
+        : null;
+    final effectiveLocalPoints = finalizedEndpoint?.points ?? localPoints;
+    final effectiveTransform = finalizedEndpoint == null
+        ? typedTransform
+        : typedTransform.copyWith(
+            points: effectiveLocalPoints,
+            startBinding: finalizedEndpoint.startBinding,
+            endBinding: finalizedEndpoint.endBinding,
+            fixedSegments: finalizedEndpoint.fixedSegments,
+            orderedElementIds:
+                finalizedEndpoint.orderedElementIds ??
+                typedTransform.orderedElementIds,
+            hasChanges: true,
+          );
+
+    final updatedElement = _buildUpdatedElement(
+      element: typedContext.baseElement,
+      context: typedContext,
+      transform: effectiveTransform,
+      elementMap: state.domain.document.elementMap,
+      localPoints: effectiveLocalPoints,
+      coreEngineContext: _coreContextForState(
+        state: state,
+        isBindingEnabled: effectiveTransform.allowBindingOnFinalize,
+      ),
+      finalize: applyDeletion,
+    );
+
+    return EditComputedResult(
+      updatedElements: {updatedElement.id: updatedElement},
+      orderedElementIds: effectiveTransform.orderedElementIds,
+    );
+  }
+}
+
+/// Removes the active point when [ConnectorPointTransform.shouldDelete] is set.
+///
+/// Returns the original points list when no deletion is needed.
+List<DrawPoint> _applyPointDeletion(ConnectorPointTransform transform) {
+  if (!transform.shouldDelete ||
+      transform.activeIndex == null ||
+      transform.activeIndex! <= 0 ||
+      transform.activeIndex! >= transform.points.length - 1) {
+    return transform.points;
+  }
+  return List<DrawPoint>.from(transform.points)
+    ..removeAt(transform.activeIndex!);
+}
+
+/// Builds the updated [ElementState] for both `finish` and `buildPreview`,
+/// eliminating the duplicated elbow-edit + rect/normalize pipeline.
+ElementState _buildUpdatedElement({
+  required ElementState element,
+  required ConnectorPointEditContext context,
+  required ConnectorPointTransform transform,
+  required Map<String, ElementState> elementMap,
+  required List<DrawPoint> localPoints,
+  required core.EngineContext coreEngineContext,
+  bool finalize = false,
+}) {
+  final data = element.data as ConnectorData;
+  final arrowData = data is ArrowData ? data : null;
+  final dataWithBindings = data.copyWith(
+    startBinding: transform.startBinding,
+    endBinding: transform.endBinding,
+  );
+  if (data.arrowType != ArrowType.elbow &&
+      context.rotation == 0 &&
+      localPoints.length == 2) {
+    final layout = computeArrowTwoPointLayout(
+      first: localPoints.first,
+      second: localPoints.last,
+    );
+    final updatedData = dataWithBindings.copyWith(
+      points: layout.normalizedPoints,
+    );
+    return element.copyWith(rect: layout.rect, data: updatedData);
+  }
+  if (data.arrowType == ArrowType.elbow && arrowData != null) {
+    final activeIndex = transform.activeIndex;
+    final isEndpointTurningDrag =
+        context.pointKind == ConnectorPointKind.turning &&
+        activeIndex != null &&
+        (activeIndex == 0 || activeIndex == localPoints.length - 1);
+    final isFixedSegmentEditing =
+        context.pointKind == ConnectorPointKind.addable;
+    final shouldReleaseFixedSegment =
+        isFixedSegmentEditing && context.releaseFixedSegment;
+    final elbowPointsOverride = shouldReleaseFixedSegment
+        ? null
+        : isEndpointTurningDrag
+        ? <DrawPoint>[localPoints.first, localPoints.last]
+        : localPoints;
+    final fixedSegmentsOverride = isFixedSegmentEditing
+        ? (shouldReleaseFixedSegment
+              // Excalidraw parity: releasing a fixed segment explicitly clears
+              // the removed lock when needed.
+              ? (transform.fixedSegments ?? const <ElbowFixedSegment>[])
+              // Midpoint dragging should only send fixed-segment updates when
+              // core produced them; null keeps the update unset.
+              : transform.fixedSegments)
+        : null;
+    final elbowData = arrowData.copyWith(
+      startBinding: transform.startBinding,
+      endBinding: transform.endBinding,
+    );
+    final updated = computeElbowEdit(
+      element: element,
+      data: elbowData,
+      lookup: CombinedElementLookup(base: elementMap),
+      localPointsOverride: elbowPointsOverride,
+      fixedSegmentsOverride: fixedSegmentsOverride,
+      engineContext: coreEngineContext,
+      finalize: finalize,
+    );
+    var resolvedStartBinding = updated.startBinding;
+    var resolvedEndBinding = updated.endBinding;
+    if (isEndpointTurningDrag) {
+      if (activeIndex == 0) {
+        resolvedEndBinding = transform.endBinding;
+      } else {
+        resolvedStartBinding = transform.startBinding;
+      }
+    }
+    final geometry = resolveConnectorGeometryUpdate(
+      localPoints: updated.localPoints,
+      oldRect: context.elementRect,
+      rotation: context.rotation,
+      arrowType: data.arrowType,
+    );
+    final transformedFixedSegments = transformFixedSegments(
+      segments: updated.fixedSegments,
+      oldRect: context.elementRect,
+      newRect: geometry.rect,
+      rotation: context.rotation,
+    );
+    final updatedData = dataWithBindings.copyWith(
+      points: geometry.normalizedPoints,
+      startBinding: resolvedStartBinding,
+      endBinding: resolvedEndBinding,
+      fixedSegments: transformedFixedSegments,
+      startIsSpecial: updated.startIsSpecial,
+      endIsSpecial: updated.endIsSpecial,
+    );
+    return element.copyWith(rect: geometry.rect, data: updatedData);
+  }
+
+  final geometry = resolveConnectorGeometryUpdate(
+    localPoints: localPoints,
+    oldRect: context.elementRect,
+    rotation: context.rotation,
+    arrowType: data.arrowType,
+  );
+  final updatedData = dataWithBindings.copyWith(
+    points: geometry.normalizedPoints,
+  );
+  return element.copyWith(rect: geometry.rect, data: updatedData);
+}
+
+@immutable
+final class ConnectorPointEditContext extends EditContext {
+  const ConnectorPointEditContext({
+    required super.startPosition,
+    required super.startBounds,
+    required super.selectedIdsAtStart,
+    required super.selectionVersion,
+    required super.elementsVersion,
+    required this.elementId,
+    required this.elementRect,
+    required this.rotation,
+    required this.initialPoints,
+    required this.initialFixedSegments,
+    required this.arrowType,
+    required this.pointKind,
+    required this.pointIndex,
+    required this.dragOffset,
+    required this.baseElement,
+    required ElementSpace? elementSpace,
+    required this.releaseFixedSegment,
+    required this.deletePointOnStart,
+    required this.startArrowhead,
+    required this.endArrowhead,
+    required this.initialStartBinding,
+    required this.initialEndBinding,
+    required this.hasBindableTargets,
+    this.isLineElement = false,
+  }) : _elementSpace = elementSpace;
+
+  final String elementId;
+  final DrawRect elementRect;
+  final double rotation;
+  final List<DrawPoint> initialPoints;
+  final List<ElbowFixedSegment> initialFixedSegments;
+  final ArrowType arrowType;
+  final ConnectorPointKind pointKind;
+  final int pointIndex;
+  final DrawPoint dragOffset;
+  final ElementState baseElement;
+  final bool releaseFixedSegment;
+  final bool deletePointOnStart;
+  final bool isLineElement;
+  final ArrowheadStyle startArrowhead;
+  final ArrowheadStyle endArrowhead;
+  final ArrowBinding? initialStartBinding;
+  final ArrowBinding? initialEndBinding;
+  final bool hasBindableTargets;
+  final ElementSpace? _elementSpace;
+
+  @override
+  bool get hasSnapshots => initialPoints.length >= 2;
+
+  DrawPoint toLocal(DrawPoint position) {
+    final space = _elementSpace;
+    return space == null ? position : space.fromWorld(position);
+  }
+
+  DrawPoint toWorld(DrawPoint position) {
+    final space = _elementSpace;
+    return space == null ? position : space.toWorld(position);
+  }
+}
+
+@immutable
+final class _ArrowPointComputation {
+  const _ArrowPointComputation({
+    required this.points,
+    required this.didInsert,
+    required this.shouldDelete,
+    required this.activeIndex,
+    required this.hasChanges,
+    required this.startBinding,
+    required this.endBinding,
+    required this.fixedSegments,
+    required this.orderedElementIds,
+  });
+
+  final List<DrawPoint> points;
+  final bool didInsert;
+  final bool shouldDelete;
+  final int? activeIndex;
+  final bool hasChanges;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
+  final List<ElbowFixedSegment>? fixedSegments;
+  final List<String>? orderedElementIds;
+}
+
+bool _isNoOpArrowTransformUpdate({
+  required ConnectorPointTransform previous,
+  required _ArrowPointComputation next,
+}) =>
+    previous.didInsert == next.didInsert &&
+    previous.shouldDelete == next.shouldDelete &&
+    previous.hasChanges == next.hasChanges &&
+    previous.activeIndex == next.activeIndex &&
+    previous.startBinding == next.startBinding &&
+    previous.endBinding == next.endBinding &&
+    nullableListEquals(previous.orderedElementIds, next.orderedElementIds) &&
+    pointListEquals(previous.points, next.points) &&
+    fixedSegmentStructureEquals(previous.fixedSegments, next.fixedSegments);
+
+_ArrowPointComputation _compute({
+  required DrawState state,
+  required ConnectorPointEditContext context,
+  required DrawPoint currentPosition,
+  required bool didInsert,
+  required EditModifiers modifiers,
+  required DrawConfig config,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required ArrowheadStyle startArrowhead,
+  required ArrowheadStyle endArrowhead,
+  required bool shouldLookupBindings,
+  required double bindingDistance,
+  required bool allowNewBinding,
+  required core.EngineContext coreEngineContext,
+  required List<String>? orderedElementIds,
+}) {
+  final basePoints = context.initialPoints;
+  final baseFixedSegments = context.initialFixedSegments;
+  final handleTolerance = resolveZoomAdjustedDistance(
+    distance: config.selection.interaction.handleTolerance,
+    zoom: state.application.view.camera.zoom,
+  );
+  final thresholdSquared = handleTolerance * handleTolerance;
+  final loopThreshold = resolveConnectorPointLoopThreshold(handleTolerance);
+  final baseFixedSegmentsResult = baseFixedSegments.isEmpty
+      ? null
+      : baseFixedSegments;
+
+  var target = currentPosition.translate(context.dragOffset);
+  var updatedPoints = basePoints;
+  var nextDidInsert = didInsert;
+  final nextStartBinding = startBinding;
+  final nextEndBinding = endBinding;
+  late final int activeIndex;
+
+  final focusEndpoint = _resolveFocusEndpoint(context.pointKind);
+  if (focusEndpoint != null) {
+    return _computeFocusComputation(
+      state: state,
+      context: context,
+      basePoints: basePoints,
+      baseFixedSegments: baseFixedSegmentsResult,
+      target: target,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      endpoint: focusEndpoint,
+      switchToInsideBinding: modifiers.fromCenter,
+      coreEngineContext: coreEngineContext,
+      orderedElementIds: orderedElementIds,
+    );
+  }
+
+  if (context.pointKind == ConnectorPointKind.addable) {
+    final hasValidPointIndex = _isValidAddablePointIndex(
+      index: context.pointIndex,
+      pointCount: basePoints.length,
+    );
+    if (!hasValidPointIndex) {
+      return _noOpComputation(
+        points: basePoints,
+        didInsert: false,
+        startBinding: startBinding,
+        endBinding: endBinding,
+        fixedSegments: baseFixedSegmentsResult,
+      );
+    }
+    if (context.arrowType == ArrowType.elbow) {
+      return _computeElbowAddableComputation(
+        state: state,
+        context: context,
+        target: target,
+        basePoints: basePoints,
+        baseFixedSegments: baseFixedSegments,
+        startBinding: nextStartBinding,
+        endBinding: nextEndBinding,
+        coreEngineContext: coreEngineContext,
+      );
+    }
+    if (!nextDidInsert) {
+      final distanceSq = currentPosition.distanceSquared(context.startPosition);
+      if (distanceSq >= thresholdSquared) {
+        nextDidInsert = true;
+      } else {
+        return _noOpComputation(
+          points: basePoints,
+          didInsert: false,
+          startBinding: startBinding,
+          endBinding: endBinding,
+          fixedSegments: baseFixedSegmentsResult,
+        );
+      }
+    }
+    activeIndex = context.pointIndex + 1;
+    updatedPoints = List<DrawPoint>.from(basePoints)
+      ..insert(activeIndex, target);
+  } else {
+    final index = _resolveDraggedPointIndex(
+      pointKind: context.pointKind,
+      pointIndex: context.pointIndex,
+      pointCount: basePoints.length,
+    );
+    if (index == null) {
+      return _noOpComputation(
+        points: basePoints,
+        didInsert: nextDidInsert,
+        startBinding: startBinding,
+        endBinding: endBinding,
+        fixedSegments: baseFixedSegmentsResult,
+      );
+    }
+    final isEndpoint = index == 0 || index == basePoints.length - 1;
+    if (isEndpoint) {
+      final oppositeIndex = index == 0 ? basePoints.length - 1 : 0;
+      if (target.distanceSquared(basePoints[oppositeIndex]) <=
+          loopThreshold * loopThreshold) {
+        target = basePoints[oppositeIndex];
+      }
+      final endpointComputation = _computeCoreEndpointDragComputation(
+        state: state,
+        context: context,
+        basePoints: basePoints,
+        baseFixedSegments: baseFixedSegmentsResult,
+        draggedIndex: index,
+        target: target,
+        startBinding: startBinding,
+        endBinding: endBinding,
+        shouldLookupBindings: shouldLookupBindings,
+        allowNewBinding: allowNewBinding,
+        bindingDistance: bindingDistance,
+        coreEngineContext: coreEngineContext,
+        angleLocked: modifiers.maintainAspectRatio,
+        altKey: modifiers.fromCenter,
+        orderedElementIds: orderedElementIds,
+      );
+      return endpointComputation;
+    }
+    updatedPoints = List<DrawPoint>.from(basePoints);
+    updatedPoints[index] = target;
+    activeIndex = index;
+  }
+
+  if (context.pointKind != ConnectorPointKind.addable &&
+      (activeIndex == 0 || activeIndex == updatedPoints.length - 1)) {
+    final start = updatedPoints.first;
+    final end = updatedPoints.last;
+    if (start.distanceSquared(end) <= loopThreshold * loopThreshold) {
+      if (activeIndex == 0) {
+        updatedPoints[0] = end;
+      } else {
+        updatedPoints[updatedPoints.length - 1] = start;
+      }
+    }
+  }
+
+  var shouldDelete = false;
+  if (activeIndex > 0 && activeIndex < updatedPoints.length - 1) {
+    final targetPoint = updatedPoints[activeIndex];
+    final prev = updatedPoints[activeIndex - 1];
+    final next = updatedPoints[activeIndex + 1];
+    if (targetPoint.distanceSquared(prev) <= thresholdSquared ||
+        targetPoint.distanceSquared(next) <= thresholdSquared) {
+      shouldDelete = true;
+    }
+  }
+
+  final hasChanges =
+      !pointListEquals(basePoints, updatedPoints) || nextDidInsert;
+  return _ArrowPointComputation(
+    points: List<DrawPoint>.unmodifiable(updatedPoints),
+    didInsert: nextDidInsert,
+    shouldDelete: shouldDelete,
+    activeIndex: activeIndex,
+    hasChanges: hasChanges,
+    startBinding: startBinding,
+    endBinding: endBinding,
+    fixedSegments: baseFixedSegmentsResult,
+    orderedElementIds: null,
+  );
+}
+
+_ArrowPointComputation _computeFocusComputation({
+  required DrawState state,
+  required ConnectorPointEditContext context,
+  required List<DrawPoint> basePoints,
+  required List<ElbowFixedSegment>? baseFixedSegments,
+  required DrawPoint target,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required ArrowFocusEndpoint endpoint,
+  required bool switchToInsideBinding,
+  required core.EngineContext coreEngineContext,
+  required List<String>? orderedElementIds,
+}) {
+  final data = context.baseElement.data as ConnectorData;
+  if (data.arrowType == ArrowType.elbow) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+
+  final dragSourceData = data.copyWith(
+    startBinding: startBinding,
+    endBinding: endBinding,
+  );
+  final dragSourceElement = context.baseElement.copyWith(data: dragSourceData);
+  final dragResult = dragArrowFocusPoint(
+    element: dragSourceElement,
+    data: dragSourceData,
+    elementsById: state.domain.document.elementMap,
+    draggedEndpoint: endpoint,
+    pointer: context.toWorld(target),
+    engineContext: coreEngineContext,
+    switchToInsideBinding: switchToInsideBinding,
+    orderedElementIds:
+        orderedElementIds ??
+        state.domain.document.elements
+            .map((element) => element.id)
+            .toList(growable: false),
+  );
+  final nextData = dragResult.element.data;
+  if (nextData is! ConnectorData) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+
+  final worldPoints = resolveArrowWorldPoints(
+    rect: dragResult.element.rect,
+    normalizedPoints: nextData.points,
+  );
+  if (worldPoints.length < 2) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+  final localPoints = worldToLocalPoints(context.baseElement, worldPoints);
+
+  final nextStartBinding = nextData.startBinding;
+  final nextEndBinding = nextData.endBinding;
+  final nextFixedSegments = nextData.fixedSegments;
+  final pointsChanged = !pointListEquals(basePoints, localPoints);
+  final bindingsChanged =
+      nextStartBinding != startBinding || nextEndBinding != endBinding;
+  final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
+    baseFixedSegments,
+    nextFixedSegments,
+  );
+  final activeIndex = endpoint == ArrowFocusEndpoint.start
+      ? 0
+      : localPoints.length - 1;
+
+  return _ArrowPointComputation(
+    points: List<DrawPoint>.unmodifiable(localPoints),
+    didInsert: false,
+    shouldDelete: false,
+    activeIndex: activeIndex,
+    hasChanges:
+        dragResult.hasChanges ||
+        pointsChanged ||
+        bindingsChanged ||
+        segmentsChanged,
+    startBinding: nextStartBinding,
+    endBinding: nextEndBinding,
+    fixedSegments: nextFixedSegments,
+    orderedElementIds: dragResult.orderedElementIds,
+  );
+}
+
+_ArrowPointComputation _computeCoreEndpointDragComputation({
+  required DrawState state,
+  required ConnectorPointEditContext context,
+  required List<DrawPoint> basePoints,
+  required List<ElbowFixedSegment>? baseFixedSegments,
+  required int draggedIndex,
+  required DrawPoint target,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required bool shouldLookupBindings,
+  required bool allowNewBinding,
+  required double bindingDistance,
+  required core.EngineContext coreEngineContext,
+  required bool angleLocked,
+  required bool altKey,
+  required List<String>? orderedElementIds,
+}) {
+  final data = context.baseElement.data as ConnectorData;
+  if (data.arrowType == ArrowType.elbow && data is ArrowData) {
+    return _computeElbowEndpointDragComputation(
+      state: state,
+      context: context,
+      data: data,
+      basePoints: basePoints,
+      baseFixedSegments: baseFixedSegments,
+      draggedIndex: draggedIndex,
+      target: target,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      shouldLookupBindings: shouldLookupBindings,
+      allowNewBinding: allowNewBinding,
+      bindingDistance: bindingDistance,
+      coreEngineContext: coreEngineContext,
+      angleLocked: angleLocked,
+      altKey: altKey,
+      orderedElementIds: orderedElementIds,
+    );
+  }
+  final worldTarget = context.toWorld(target);
+  final dragResult = computeArrowCoreEndpointDragResult(
+    state: state,
+    element: context.baseElement,
+    data: data,
+    localPoints: basePoints,
+    fixedSegments: baseFixedSegments,
+    draggedIndex: draggedIndex,
+    worldPointer: worldTarget,
+    startBinding: startBinding,
+    endBinding: endBinding,
+    excludedElementId: context.elementId,
+    shouldLookupBindings: shouldLookupBindings,
+    allowNewBinding: allowNewBinding,
+    bindingDistance: bindingDistance,
+    coreEngineContext: coreEngineContext,
+    orderedElementIds: orderedElementIds,
+    options: ArrowCoreEndpointBindingOptions(
+      angleLocked: angleLocked,
+      altKey: altKey,
+    ),
+  );
+  if (dragResult == null) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+
+  final localPoints = dragResult.localPoints;
+  final nextStartBinding = dragResult.startBinding;
+  final nextEndBinding = dragResult.endBinding;
+  final nextFixedSegments = dragResult.fixedSegments;
+
+  final pointsChanged = !pointListEquals(basePoints, localPoints);
+  final bindingsChanged =
+      nextStartBinding != startBinding || nextEndBinding != endBinding;
+  final segmentsChanged =
+      data.arrowType == ArrowType.elbow &&
+      !fixedSegmentStructureEqualsWithTolerance(
+        baseFixedSegments,
+        nextFixedSegments,
+      );
+  final activeIndex = draggedIndex < 0
+      ? 0
+      : draggedIndex >= localPoints.length
+      ? localPoints.length - 1
+      : draggedIndex;
+  final reorderedElementIds = dragResult.orderedElementIds;
+  final orderChanged = reorderedElementIds != null;
+
+  return _ArrowPointComputation(
+    points: List<DrawPoint>.unmodifiable(localPoints),
+    didInsert: false,
+    shouldDelete: false,
+    activeIndex: activeIndex,
+    hasChanges:
+        pointsChanged || bindingsChanged || segmentsChanged || orderChanged,
+    startBinding: nextStartBinding,
+    endBinding: nextEndBinding,
+    fixedSegments: nextFixedSegments,
+    orderedElementIds: reorderedElementIds,
+  );
+}
+
+_ArrowPointComputation _computeElbowEndpointDragComputation({
+  required DrawState state,
+  required ConnectorPointEditContext context,
+  required ArrowData data,
+  required List<DrawPoint> basePoints,
+  required List<ElbowFixedSegment>? baseFixedSegments,
+  required int draggedIndex,
+  required DrawPoint target,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required bool shouldLookupBindings,
+  required bool allowNewBinding,
+  required double bindingDistance,
+  required core.EngineContext coreEngineContext,
+  required bool angleLocked,
+  required bool altKey,
+  required List<String>? orderedElementIds,
+}) {
+  if (basePoints.length < 2) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+
+  final draggedStart = draggedIndex == 0;
+  final draggedEnd = draggedIndex == basePoints.length - 1;
+  if (!draggedStart && !draggedEnd) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+
+  var nextStartBinding = startBinding;
+  var nextEndBinding = endBinding;
+  final draggedEndpoint = target;
+  String? hoveredBindableId;
+
+  if (!allowNewBinding) {
+    if (draggedStart) {
+      nextStartBinding = null;
+    } else {
+      nextEndBinding = null;
+    }
+  } else if (shouldLookupBindings) {
+    final worldTarget = context.toWorld(target);
+    final activeBinding = draggedStart ? startBinding : endBinding;
+    final oppositeBinding = draggedStart ? endBinding : startBinding;
+    final candidates = resolveArrowBindableCandidatesForEndpointStrategy(
+      document: state.domain.document,
+      activeBinding: activeBinding,
+      oppositeBinding: oppositeBinding,
+      excludedElementId: context.elementId,
+      allowNewBinding: allowNewBinding,
+      orderedElementIds: orderedElementIds,
+    );
+    final nextEndpointPoints = List<DrawPoint>.of(basePoints, growable: false);
+    if (draggedStart) {
+      nextEndpointPoints[0] = target;
+    } else {
+      nextEndpointPoints[nextEndpointPoints.length - 1] = target;
+    }
+    final previewArrow = toCoreArrowState(
+      element: context.baseElement,
+      data: data,
+      localPointsOverride: nextEndpointPoints,
+      fixedSegmentsOverride: baseFixedSegments,
+      startBindingOverride: startBinding,
+      endBindingOverride: endBinding,
+    );
+    final dragContext = shouldLookupBindings && allowNewBinding
+        ? coreEngineContext
+        : buildCoreEngineContext(
+            zoom: coreEngineContext.zoom,
+            isBindingEnabled: false,
+            bindMode: coreEngineContext.bindMode,
+            maxCoordinate: coreEngineContext.maxCoordinate,
+          );
+    final strategies = resolveCoreEndpointBindingStrategy(
+      arrow: previewArrow,
+      draggedPoints: <int, core.Point>{
+        draggedIndex: <double>[
+          worldTarget.x - previewArrow.x,
+          worldTarget.y - previewArrow.y,
+        ],
+      },
+      pointer: toCorePoint(worldTarget),
+      bindables: candidates.bindables,
+      context: dragContext,
+      options: ArrowCoreEndpointBindingOptions(
+        angleLocked: angleLocked,
+        altKey: altKey,
+      ),
+    );
+    final draggedStrategy = draggedStart ? strategies.start : strategies.end;
+    final bindableIdFromStrategy = draggedStrategy?.bindableId;
+    hoveredBindableId =
+        (bindableIdFromStrategy != null && bindableIdFromStrategy.isNotEmpty)
+        ? bindableIdFromStrategy
+        : draggedStrategy?.element?.id;
+
+    final edge = draggedStart ? core.arrowEndpointStart : core.arrowEndpointEnd;
+    final strategyArrow = _applyCoreEndpointStrategyToArrow(
+      arrow: previewArrow,
+      edge: edge,
+      strategy: draggedStrategy,
+    );
+    nextStartBinding = fromCoreBinding(strategyArrow.startBinding);
+    nextEndBinding = fromCoreBinding(strategyArrow.endBinding);
+  }
+
+  if (draggedStart) {
+    // Excalidraw parity: dragging one elbow endpoint must not mutate the
+    // opposite endpoint binding.
+    nextEndBinding = endBinding;
+  } else {
+    nextStartBinding = startBinding;
+  }
+
+  // Re-route elbow arrows from endpoints only so stale intermediate bends
+  // cannot survive endpoint re-binding drags.
+  final startPoint = draggedStart ? draggedEndpoint : basePoints.first;
+  final endPoint = draggedEnd ? draggedEndpoint : basePoints.last;
+  final elbowResult = computeElbowEdit(
+    element: context.baseElement,
+    data: data.copyWith(
+      startBinding: nextStartBinding,
+      endBinding: nextEndBinding,
+    ),
+    lookup: CombinedElementLookup(base: state.domain.document.elementMap),
+    localPointsOverride: <DrawPoint>[startPoint, endPoint],
+    engineContext: coreEngineContext,
+  );
+  final localPoints = elbowResult.localPoints;
+  final nextFixedSegments = elbowResult.fixedSegments;
+  final pointsChanged = !pointListEquals(basePoints, localPoints);
+  final bindingsChanged =
+      nextStartBinding != startBinding || nextEndBinding != endBinding;
+  final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
+    baseFixedSegments,
+    nextFixedSegments,
+  );
+  final activeIndex = draggedStart ? 0 : localPoints.length - 1;
+
+  List<String>? reorderedElementIds;
+  if (hoveredBindableId != null) {
+    final currentOrderedElementIds =
+        orderedElementIds ?? state.domain.document.orderedElementIds;
+    final reorderResult = reorderCoreArrowAboveHoveredBindable(
+      orderedElementIds: currentOrderedElementIds,
+      arrowId: context.elementId,
+      hoveredBindableId: hoveredBindableId,
+      anchorElementIdsByBindableId:
+          state.domain.document.arrowAnchorElementIdsByBindableId,
+    );
+    reorderedElementIds = reorderedElementIdsFromCoreHoveredReorder(
+      reorderResult,
+    );
+  }
+  final orderChanged = reorderedElementIds != null;
+
+  return _ArrowPointComputation(
+    points: List<DrawPoint>.unmodifiable(localPoints),
+    didInsert: false,
+    shouldDelete: false,
+    activeIndex: activeIndex,
+    hasChanges:
+        pointsChanged || bindingsChanged || segmentsChanged || orderChanged,
+    startBinding: nextStartBinding,
+    endBinding: nextEndBinding,
+    fixedSegments: nextFixedSegments,
+    orderedElementIds: reorderedElementIds,
+  );
+}
+
+core.ArrowState _applyCoreEndpointStrategyToArrow({
+  required core.ArrowState arrow,
+  required core.ArrowEndpointEdge edge,
+  required core.EndpointBindingStrategy? strategy,
+}) {
+  if (strategy == null) {
+    return arrow;
+  }
+  if (strategy.mode == null) {
+    final mutation = unbindCoreArrowEndpoint(arrow: arrow, edge: edge);
+    return core.applyArrowPatch(arrow, mutation.arrowPatch);
+  }
+
+  final bindable = strategy.element;
+  final focusPoint = strategy.focusPoint;
+  if (bindable == null || focusPoint == null) {
+    return arrow;
+  }
+
+  final mutation = bindCoreArrowEndpoint(
+    arrow: arrow,
+    edge: edge,
+    bindable: bindable,
+    mode: strategy.mode,
+    focusPoint: focusPoint,
+  );
+  return core.applyArrowPatch(arrow, mutation.arrowPatch);
+}
+
+@immutable
+final class _FinalizeEndpointComputation {
+  const _FinalizeEndpointComputation({
+    required this.points,
+    required this.startBinding,
+    required this.endBinding,
+    required this.fixedSegments,
+    required this.orderedElementIds,
+  });
+
+  final List<DrawPoint> points;
+  final ArrowBinding? startBinding;
+  final ArrowBinding? endBinding;
+  final List<ElbowFixedSegment>? fixedSegments;
+  final List<String>? orderedElementIds;
+}
+
+_FinalizeEndpointComputation? _finalizeCoreEndpointDragOnFinish({
+  required DrawState state,
+  required ConnectorPointEditContext context,
+  required ConnectorPointTransform transform,
+  required List<DrawPoint> localPoints,
+  required core.EngineContext coreEngineContext,
+}) {
+  if (transform.shouldDelete) {
+    return null;
+  }
+  if (localPoints.length < 2) {
+    return null;
+  }
+  if (context.pointKind == ConnectorPointKind.addable ||
+      context.pointKind == ConnectorPointKind.focusStart ||
+      context.pointKind == ConnectorPointKind.focusEnd) {
+    return null;
+  }
+
+  final activeIndex = transform.activeIndex;
+  if (activeIndex == null ||
+      activeIndex < 0 ||
+      activeIndex >= localPoints.length) {
+    return null;
+  }
+  if (activeIndex != 0 && activeIndex != localPoints.length - 1) {
+    return null;
+  }
+
+  final data = context.baseElement.data as ConnectorData;
+  final startBinding = transform.startBinding;
+  final endBinding = transform.endBinding;
+  final releaseLocalPointer = transform.currentPosition.translate(
+    context.dragOffset,
+  );
+  if (data.arrowType == ArrowType.elbow && data is ArrowData) {
+    final elbowComputation = _computeElbowEndpointDragComputation(
+      state: state,
+      context: context,
+      data: data,
+      basePoints: context.initialPoints,
+      baseFixedSegments: context.initialFixedSegments,
+      draggedIndex: activeIndex,
+      target: releaseLocalPointer,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      shouldLookupBindings: true,
+      allowNewBinding: transform.allowBindingOnFinalize,
+      bindingDistance: 0,
+      coreEngineContext: coreEngineContext,
+      angleLocked: false,
+      altKey: false,
+      orderedElementIds: transform.orderedElementIds,
+    );
+    if (!elbowComputation.hasChanges) {
+      return null;
+    }
+    return _FinalizeEndpointComputation(
+      points: List<DrawPoint>.unmodifiable(elbowComputation.points),
+      startBinding: elbowComputation.startBinding,
+      endBinding: elbowComputation.endBinding,
+      fixedSegments: elbowComputation.fixedSegments,
+      orderedElementIds: elbowComputation.orderedElementIds,
+    );
+  }
+
+  final worldTarget = context.toWorld(releaseLocalPointer);
+  final dragResult = finalizeArrowCoreEndpointDragResult(
+    state: state,
+    element: context.baseElement,
+    data: data,
+    localPoints: localPoints,
+    fixedSegments: transform.fixedSegments,
+    draggedIndex: activeIndex,
+    worldPointer: worldTarget,
+    startBinding: startBinding,
+    endBinding: endBinding,
+    excludedElementId: context.elementId,
+    shouldLookupBindings: true,
+    // Excalidraw parity: pointer-up finalize still runs endpoint
+    // reconciliation, while respecting the active drag-time binding policy
+    // (for example snap-override disables rebinding).
+    allowNewBinding: transform.allowBindingOnFinalize,
+    bindingDistance: 0,
+    coreEngineContext: coreEngineContext,
+  );
+  if (dragResult == null) {
+    return null;
+  }
+
+  final nextPoints = dragResult.localPoints;
+  var nextStartBinding = dragResult.startBinding;
+  var nextEndBinding = dragResult.endBinding;
+  if (data.arrowType == ArrowType.elbow) {
+    if (activeIndex == 0) {
+      nextEndBinding = endBinding;
+    } else {
+      nextStartBinding = startBinding;
+    }
+  }
+  final nextFixedSegments = dragResult.fixedSegments;
+  final orderedElementIds = dragResult.orderedElementIds;
+
+  final pointsChanged = !pointListEquals(localPoints, nextPoints);
+  final bindingsChanged =
+      nextStartBinding != startBinding || nextEndBinding != endBinding;
+  final segmentsChanged =
+      data.arrowType == ArrowType.elbow &&
+      !fixedSegmentStructureEqualsWithTolerance(
+        transform.fixedSegments,
+        nextFixedSegments,
+      );
+  final orderChanged = orderedElementIds != null;
+  if (!pointsChanged && !bindingsChanged && !segmentsChanged && !orderChanged) {
+    return null;
+  }
+
+  return _FinalizeEndpointComputation(
+    points: List<DrawPoint>.unmodifiable(nextPoints),
+    startBinding: nextStartBinding,
+    endBinding: nextEndBinding,
+    fixedSegments: nextFixedSegments,
+    orderedElementIds: orderedElementIds,
+  );
+}
+
+_ArrowPointComputation _computeElbowAddableComputation({
+  required DrawState state,
+  required ConnectorPointEditContext context,
+  required DrawPoint target,
+  required List<DrawPoint> basePoints,
+  required List<ElbowFixedSegment> baseFixedSegments,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required core.EngineContext coreEngineContext,
+}) {
+  final data = context.baseElement.data;
+  if (data is! ArrowData) {
+    return _noOpComputation(
+      points: basePoints,
+      didInsert: false,
+      startBinding: startBinding,
+      endBinding: endBinding,
+      fixedSegments: baseFixedSegments,
+    );
+  }
+
+  final segmentIndex = context.pointIndex + 1;
+  final worldTarget = context.toWorld(target);
+  final arrowState = toCoreArrowState(
+    element: context.baseElement,
+    data: data,
+    localPointsOverride: basePoints,
+    fixedSegmentsOverride: baseFixedSegments,
+    startBindingOverride: startBinding,
+    endBindingOverride: endBinding,
+  );
+  final dragResult = moveCoreFixedSegmentToPoint(
+    arrow: arrowState,
+    segmentIndex: segmentIndex,
+    pointer: toCorePoint(worldTarget),
+  );
+  final movedArrow = core.applyArrowPatch(arrowState, dragResult.patch);
+  final movedFixedSegments = toLocalFixedSegmentsFromCoreArrow(
+    movedArrow,
+    context.baseElement,
+  );
+  final editData = data.copyWith(
+    startBinding: startBinding,
+    endBinding: endBinding,
+  );
+  final updated = computeElbowEdit(
+    element: context.baseElement,
+    data: editData,
+    lookup: CombinedElementLookup(base: state.domain.document.elementMap),
+    // Excalidraw parity: fixed-segment drag must go through the
+    // `fixedSegments`-only elbow update path so core can insert/release
+    // bridging free segments near endpoints when needed.
+    fixedSegmentsOverride: movedFixedSegments,
+    engineContext: coreEngineContext,
+  );
+
+  final pointsChanged = !pointListEquals(basePoints, updated.localPoints);
+  final nextStartBinding = updated.startBinding;
+  final nextEndBinding = updated.endBinding;
+  final bindingsChanged =
+      nextStartBinding != startBinding || nextEndBinding != endBinding;
+  final segmentsChanged = !fixedSegmentStructureEqualsWithTolerance(
+    baseFixedSegments,
+    updated.fixedSegments,
+  );
+
+  return _ArrowPointComputation(
+    points: List<DrawPoint>.unmodifiable(updated.localPoints),
+    didInsert: false,
+    shouldDelete: false,
+    activeIndex: _resolveElbowAddableActiveIndex(
+      context: context,
+      segmentIndex: dragResult.activeSegmentIndex ?? segmentIndex,
+      pointCount: updated.localPoints.length,
+    ),
+    hasChanges: pointsChanged || bindingsChanged || segmentsChanged,
+    startBinding: nextStartBinding,
+    endBinding: nextEndBinding,
+    fixedSegments: updated.fixedSegments,
+    orderedElementIds: null,
+  );
+}
+
+_ArrowPointComputation _noOpComputation({
+  required List<DrawPoint> points,
+  required bool didInsert,
+  required ArrowBinding? startBinding,
+  required ArrowBinding? endBinding,
+  required List<ElbowFixedSegment>? fixedSegments,
+}) => _ArrowPointComputation(
+  points: points,
+  didInsert: didInsert,
+  shouldDelete: false,
+  activeIndex: null,
+  hasChanges: false,
+  startBinding: startBinding,
+  endBinding: endBinding,
+  fixedSegments: fixedSegments,
+  orderedElementIds: null,
+);
+
+int? _resolveDraggedPointIndex({
+  required ConnectorPointKind pointKind,
+  required int pointIndex,
+  required int pointCount,
+}) {
+  final resolvedIndex = switch (pointKind) {
+    ConnectorPointKind.loopStart => 0,
+    ConnectorPointKind.loopEnd => pointCount - 1,
+    ConnectorPointKind.focusStart => 0,
+    ConnectorPointKind.focusEnd => pointCount - 1,
+    _ => pointIndex,
+  };
+  if (resolvedIndex < 0 || resolvedIndex >= pointCount) {
+    return null;
+  }
+  return resolvedIndex;
+}
+
+bool _isValidAddablePointIndex({required int index, required int pointCount}) =>
+    index >= 0 && index < pointCount - 1;
+
+bool _requiresBindingLookup(ConnectorPointEditContext context) =>
+    switch (context.pointKind) {
+      ConnectorPointKind.loopStart => true,
+      ConnectorPointKind.loopEnd => true,
+      ConnectorPointKind.focusStart => false,
+      ConnectorPointKind.focusEnd => false,
+      ConnectorPointKind.turning =>
+        context.pointIndex == 0 ||
+            context.pointIndex == context.initialPoints.length - 1,
+      ConnectorPointKind.addable => false,
+    };
+
+DrawPoint _resolvePointPosition({
+  required DrawState state,
+  required ElementState element,
+  required ConnectorData data,
+  required List<DrawPoint> points,
+  required ConnectorPointKind kind,
+  required int index,
+  required ArrowType arrowType,
+}) {
+  if (kind == ConnectorPointKind.addable) {
+    if (!_isValidAddablePointIndex(index: index, pointCount: points.length)) {
+      return points.first;
+    }
+
+    // For curved arrows with 3+ points, calculate point on the actual curve
+    if (arrowType == ArrowType.curved && points.length >= 3) {
+      final curvePoint = ConnectorGeometry.calculateCurveDrawPoint(
+        points: points,
+        segmentIndex: index,
+        t: 0.5,
+      );
+      if (curvePoint != null) {
+        return curvePoint;
+      }
+    }
+
+    // For straight arrows, use linear midpoint
+    final start = points[index];
+    final end = points[index + 1];
+    return DrawPoint(x: (start.x + end.x) / 2, y: (start.y + end.y) / 2);
+  }
+  final focusEndpoint = _resolveFocusEndpoint(kind);
+  if (focusEndpoint != null) {
+    return _resolveFocusPointPosition(
+      state: state,
+      element: element,
+      data: data,
+      fallbackPoints: points,
+      endpoint: focusEndpoint,
+    );
+  }
+  final resolvedIndex = switch (kind) {
+    ConnectorPointKind.loopStart => 0,
+    ConnectorPointKind.loopEnd => points.length - 1,
+    _ => index,
+  };
+  return points[resolvedIndex.clamp(0, points.length - 1)];
+}
+
+ArrowFocusEndpoint? _resolveFocusEndpoint(ConnectorPointKind kind) =>
+    switch (kind) {
+      ConnectorPointKind.focusStart => ArrowFocusEndpoint.start,
+      ConnectorPointKind.focusEnd => ArrowFocusEndpoint.end,
+      _ => null,
+    };
+
+DrawPoint _resolveFocusPointPosition({
+  required DrawState state,
+  required ElementState element,
+  required ConnectorData data,
+  required List<DrawPoint> fallbackPoints,
+  required ArrowFocusEndpoint endpoint,
+}) {
+  final focusPoints = listVisibleArrowFocusPoints(
+    element: element,
+    data: data,
+    elements: state.domain.document.elements,
+    engineContext: buildCoreEngineContext(
+      zoom: state.application.view.camera.zoom,
+    ),
+  );
+  for (final focusPoint in focusPoints) {
+    if (focusPoint.endpoint != endpoint) {
+      continue;
+    }
+    return element.rotation == 0
+        ? focusPoint.position
+        : ElementSpace(
+            rotation: element.rotation,
+            origin: element.rect.center,
+          ).fromWorld(focusPoint.position);
+  }
+
+  final fallbackIndex = endpoint == ArrowFocusEndpoint.start
+      ? 0
+      : fallbackPoints.length - 1;
+  return fallbackPoints[fallbackIndex.clamp(0, fallbackPoints.length - 1)];
+}
+
+DrawPoint _snapTargetToGrid({
+  required DrawPoint target,
+  required ConnectorPointEditContext context,
+  required double gridSize,
+}) {
+  if (gridSize <= 0) {
+    return target;
+  }
+  final worldTarget = context.toWorld(target);
+  final snappedWorld = gridSnapService.snapPoint(
+    point: worldTarget,
+    gridSize: gridSize,
+  );
+  return context.toLocal(snappedWorld);
+}
+
+int _resolveElbowAddableActiveIndex({
+  required ConnectorPointEditContext context,
+  required int segmentIndex,
+  required int pointCount,
+}) {
+  final active = segmentIndex == 1
+      ? context.pointIndex + 1
+      : context.pointIndex;
+  if (pointCount <= 0) {
+    return 0;
+  }
+  if (active < 0) {
+    return 0;
+  }
+  if (active >= pointCount) {
+    return pointCount - 1;
+  }
+  return active;
+}
+
+core.EngineContext _coreContextForState({
+  required DrawState state,
+  required bool isBindingEnabled,
+}) => buildCoreEngineContext(
+  zoom: state.application.view.camera.zoom,
+  isBindingEnabled: isBindingEnabled,
+);

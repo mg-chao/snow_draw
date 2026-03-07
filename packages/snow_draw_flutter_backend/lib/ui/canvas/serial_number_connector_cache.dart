@@ -1,7 +1,7 @@
 import 'dart:ui';
 
 import 'package:meta/meta.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../../extensions/draw_color_extensions.dart';
 import '../../services/text/flutter_serial_number_layout.dart';

@@ -1,4 +1,4 @@
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../../render/text/text_renderer.dart';
 import 'flutter_serial_number_layout.dart';
@@ -12,7 +12,7 @@ void _invalidateFlutterTextRenderingCaches() {
   TextRenderer.clearCaches();
 }
 
-/// Ensures Flutter-specific text rendering caches are wired into the core
+/// Ensures Flutter-specific text rendering caches are wired into the engine
 /// invalidation flow.
 void ensureFlutterTextRenderingCacheInvalidatorInstalled() {
   if (_isInstalled) {

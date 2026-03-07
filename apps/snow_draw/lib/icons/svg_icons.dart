@@ -179,12 +179,26 @@ const arrowheadStandardSvg =
     '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h16"></path><path d="M16 8l4 4l-4 4"></path></svg>''';
 const arrowheadTriangleSvg =
     '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h13"></path><path d="M17 8l4 4l-4 4z" fill="currentColor"></path></svg>''';
+const arrowheadTriangleOutlineSvg =
+    '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h13"></path><path d="M17 8l4 4l-4 4z" stroke="currentColor" fill="none"></path></svg>''';
 const arrowheadSquareSvg =
-    '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h12"></path><rect x="16" y="9" width="4" height="6" stroke="currentColor" fill="none"></rect></svg>''';
+    '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h12"></path><rect x="16" y="9" width="4" height="6" stroke="currentColor" fill="currentColor"></rect></svg>''';
+const arrowheadDotSvg =
+    '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h11"></path><circle cx="18" cy="12" r="3" stroke="currentColor" fill="currentColor"></circle></svg>''';
 const arrowheadCircleSvg =
+    '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h11"></path><circle cx="18" cy="12" r="3" stroke="currentColor" fill="currentColor"></circle></svg>''';
+const arrowheadCircleOutlineSvg =
     '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h11"></path><circle cx="18" cy="12" r="3" stroke="currentColor" fill="none"></circle></svg>''';
 const arrowheadDiamondSvg =
+    '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h11"></path><path d="M15 12l3 -3l3 3l-3 3z" stroke="currentColor" fill="currentColor"></path></svg>''';
+const arrowheadDiamondOutlineSvg =
     '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h11"></path><path d="M15 12l3 -3l3 3l-3 3z" stroke="currentColor" fill="none"></path></svg>''';
+const arrowheadCrowfootOneSvg =
+    '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h12"></path><path d="M16 9v6"></path></svg>''';
+const arrowheadCrowfootManySvg =
+    '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h12"></path><path d="M16 9l4 3"></path><path d="M16 15l4 -3"></path></svg>''';
+const arrowheadCrowfootOneOrManySvg =
+    '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h12"></path><path d="M16 9v6"></path><path d="M16 9l4 3"></path><path d="M16 15l4 -3"></path></svg>''';
 const arrowheadInvertedTriangleSvg =
     '''<svg aria-hidden="true" focusable="false" role="img" viewBox="0 0 24 24" class="" fill="none" stroke-width="2" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12h13"></path><path d="M17 12l4 -4l0 8z" fill="currentColor"></path></svg>''';
 const arrowheadVerticalLineSvg =
@@ -205,9 +219,19 @@ class ArrowheadTriangleIcon extends InlineSvgIcon {
     : super(svg: arrowheadTriangleSvg);
 }
 
+class ArrowheadTriangleOutlineIcon extends InlineSvgIcon {
+  const ArrowheadTriangleOutlineIcon({super.key, super.size = 18, super.color})
+    : super(svg: arrowheadTriangleOutlineSvg);
+}
+
 class ArrowheadSquareIcon extends InlineSvgIcon {
   const ArrowheadSquareIcon({super.key, super.size = 18, super.color})
     : super(svg: arrowheadSquareSvg);
+}
+
+class ArrowheadDotIcon extends InlineSvgIcon {
+  const ArrowheadDotIcon({super.key, super.size = 18, super.color})
+    : super(svg: arrowheadDotSvg);
 }
 
 class ArrowheadCircleIcon extends InlineSvgIcon {
@@ -215,9 +239,37 @@ class ArrowheadCircleIcon extends InlineSvgIcon {
     : super(svg: arrowheadCircleSvg);
 }
 
+class ArrowheadCircleOutlineIcon extends InlineSvgIcon {
+  const ArrowheadCircleOutlineIcon({super.key, super.size = 18, super.color})
+    : super(svg: arrowheadCircleOutlineSvg);
+}
+
 class ArrowheadDiamondIcon extends InlineSvgIcon {
   const ArrowheadDiamondIcon({super.key, super.size = 18, super.color})
     : super(svg: arrowheadDiamondSvg);
+}
+
+class ArrowheadDiamondOutlineIcon extends InlineSvgIcon {
+  const ArrowheadDiamondOutlineIcon({super.key, super.size = 18, super.color})
+    : super(svg: arrowheadDiamondOutlineSvg);
+}
+
+class ArrowheadCrowfootOneIcon extends InlineSvgIcon {
+  const ArrowheadCrowfootOneIcon({super.key, super.size = 18, super.color})
+    : super(svg: arrowheadCrowfootOneSvg);
+}
+
+class ArrowheadCrowfootManyIcon extends InlineSvgIcon {
+  const ArrowheadCrowfootManyIcon({super.key, super.size = 18, super.color})
+    : super(svg: arrowheadCrowfootManySvg);
+}
+
+class ArrowheadCrowfootOneOrManyIcon extends InlineSvgIcon {
+  const ArrowheadCrowfootOneOrManyIcon({
+    super.key,
+    super.size = 18,
+    super.color,
+  }) : super(svg: arrowheadCrowfootOneOrManySvg);
 }
 
 class ArrowheadInvertedTriangleIcon extends InlineSvgIcon {

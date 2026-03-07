@@ -4,6 +4,7 @@
 melos_snow_draw_workspace.iml
 build
 .worktrees/
+rust-canvas-engine/target
 
 # Agents
 .claude
@@ -15,3 +16,6 @@ AGENTS.md
 /docs/issues
 /docs/prds
 /docs/refactoring
+
+# rust
+/packages/snow_draw_rust_engine/target

@@ -1,12 +1,12 @@
-import 'package:snow_draw_core/draw/config/config_manager.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_engine/draw/config/config_manager.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../services/text/flutter_text_metrics_service.dart';
 
 /// Creates a [DrawContext] preconfigured for the Flutter backend.
 ///
 /// By default this registers built-in element definitions and wires the
-/// Flutter text metrics service so core reducers and scene encoders use
+/// Flutter text metrics service so engine reducers and scene encoders use
 /// consistent layout behavior with the backend renderer.
 ///
 /// Pass a custom [DefaultElementRegistry] when consumers need full control

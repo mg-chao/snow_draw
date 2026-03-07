@@ -6,7 +6,7 @@ predictable editing behavior, and backend-agnostic rendering architecture.
 ## About
 
 The workspace is organized so drawing domain logic is independent from
-Flutter rendering details. This keeps the core portable and allows adding
+Flutter rendering details. This keeps the engine portable and allows adding
 new rendering backends without rewriting reducers, element models, history,
 or input behavior.
 
@@ -16,7 +16,7 @@ or input behavior.
 
 ## Workspace Architecture
 
-- `packages/snow_draw_core`: pure Dart engine (state/actions/reducers,
+- `packages/snow_draw_engine`: pure Dart engine (state/actions/reducers,
   geometry, render-task planning, serialization).
 - `packages/snow_draw_flutter_backend`: Flutter backend (painters,
   render-task execution, text/shader caches, canvas widgets).
@@ -27,28 +27,33 @@ or input behavior.
 
 Rendering follows an explicit engine/backend split:
 
-1. Core compiles document state into backend-agnostic render tasks/frame
+1. Engine compiles document state into backend-agnostic render tasks/frame
    plans.
 2. Backend executes those tasks with platform APIs.
 3. App imports backend via package entrypoints only.
 
 This mirrors modern draw-list pipelines (similar in spirit to egui/iced):
-core owns intent and geometry, backend owns paint execution.
+engine owns intent and geometry, backend owns paint execution.
 
 ## Architecture Guards
 
 Boundary checks are enforced with Melos scripts:
 
-- `dart run melos run check:core-purity`
-- `dart run melos run check:core-draw-purity`
-- `dart run melos run check:core-ui-boundary`
+- `dart run melos run check:engine-purity`
+- `dart run melos run check:engine-draw-purity`
+- `dart run melos run check:engine-ui-boundary`
+- `dart run melos run check:engine-entrypoint`
+- `dart run melos run check:workspace-engine-deep-import-boundary`
 - `dart run melos run check:backend-legacy`
 - `dart run melos run check:backend-app-import-boundary`
 - `dart run melos run check:backend-pubspec-boundary`
 - `dart run melos run check:backend-dependency-graph`
 - `dart run melos run check:backend-entrypoint`
+- `dart run melos run check:backend-engine-entrypoint-import-boundary`
+- `dart run melos run check:backend-test-engine-entrypoint-import-boundary`
 - `dart run melos run check:ci-workflow`
 - `dart run melos run check:app-backend-import-boundary`
+- `dart run melos run check:app-engine-import-boundary`
 - `dart run melos run check:app-pubspec-backend`
 - `dart run melos run check:app-dependency-graph`
 - `dart run melos run check:architecture`

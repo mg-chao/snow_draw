@@ -2,22 +2,18 @@
 
 #include <flutter/runtime_effect.glsl>
 
-// Output color
 out vec4 fragColor;
 
-// Geometry uniforms
 uniform vec2 uResolution;       // Rectangle size in pixels (width, height)
 uniform vec2 uCenter;           // Rectangle center in screen coordinates
 uniform float uRotation;        // Rotation angle in radians
 uniform float uCornerRadius;    // Corner radius in pixels
 
-// Fill uniforms
 uniform float uFillStyle;       // 0=solid, 1=line, 2=crossLine
 uniform vec4 uFillColor;        // Fill color (premultiplied alpha)
 uniform float uFillLineWidth;   // Line width for pattern fills
 uniform float uFillLineSpacing; // Spacing between pattern lines
 
-// Stroke uniforms
 uniform float uStrokeStyle;     // 0=solid, 1=dashed, 2=dotted
 uniform vec4 uStrokeColor;      // Stroke color (premultiplied alpha)
 uniform float uStrokeWidth;     // Stroke width in pixels
@@ -26,15 +22,12 @@ uniform float uGapLength;       // Gap length for dashed stroke
 uniform float uDotSpacing;      // Dot spacing for dotted stroke
 uniform float uDotRadius;       // Dot radius for dotted stroke
 
-// Anti-aliasing
 uniform float uAAWidth;         // Anti-aliasing width (typically 1.0-1.5 pixels)
 
-// Constants
 const float PI = 3.14159265359;
 const float SQRT2 = 1.41421356237;
 const float HALF_PI = 1.57079632679;
 
-// Rotate point around origin
 vec2 rotate2D(vec2 p, float angle) {
     float c = cos(angle);
     float s = sin(angle);
@@ -44,7 +37,6 @@ vec2 rotate2D(vec2 p, float angle) {
 // Rounded rectangle SDF (signed distance field)
 // Returns negative inside, positive outside, zero on edge
 float sdRoundedRect(vec2 p, vec2 halfSize, float radius) {
-    // Clamp radius to valid range
     float r = min(radius, min(halfSize.x, halfSize.y));
     vec2 q = abs(p) - halfSize + r;
     return min(max(q.x, q.y), 0.0) + length(max(q, 0.0)) - r;
@@ -53,7 +45,6 @@ float sdRoundedRect(vec2 p, vec2 halfSize, float radius) {
 // Diagonal line pattern (-45 degrees)
 // Returns 0.0 on line, 1.0 in gap
 float linePattern(vec2 p, float lineWidth, float spacing) {
-    // Project onto diagonal direction (perpendicular to line direction)
     float d = (p.x + p.y) / SQRT2;
     float pattern = mod(d + spacing * 0.5, spacing);
     float distToLine = abs(pattern - spacing * 0.5);
@@ -65,17 +56,15 @@ float linePattern(vec2 p, float lineWidth, float spacing) {
 float crossLinePattern(vec2 p, float lineWidth, float spacing) {
     float line1 = linePattern(p, lineWidth, spacing);
     float line2 = linePattern(vec2(-p.x, p.y), lineWidth, spacing);
-    return min(line1, line2); // Union of both patterns (min = more coverage)
+    return min(line1, line2);
 }
 
 // Calculate approximate arc length along rounded rectangle perimeter
 // This is used for dashed/dotted stroke patterns
 float calcArcLength(vec2 p, vec2 halfSize, float radius) {
-    // Clamp radius
     float r = min(radius, min(halfSize.x, halfSize.y));
     vec2 cornerCenter = halfSize - r;
 
-    // Work in first quadrant (absolute coordinates)
     vec2 q = abs(p);
 
     // Total perimeter calculation for reference:
@@ -87,27 +76,18 @@ float calcArcLength(vec2 p, vec2 halfSize, float radius) {
     float straightY = cornerCenter.y * 2.0; // Half of vertical edges
     float cornerArc = HALF_PI * r;          // Quarter circle arc
 
-    // Determine which segment we're on and calculate arc length
-    // Starting from right edge center, going counter-clockwise
-
     if (q.x > cornerCenter.x && q.y > cornerCenter.y) {
-        // In corner region
         vec2 toCorner = q - cornerCenter;
         float angle = atan(toCorner.y, toCorner.x);
         return straightY * 0.5 + angle * r;
     } else if (q.x >= cornerCenter.x) {
-        // Right edge
         return q.y;
     } else if (q.y >= cornerCenter.y) {
-        // Top edge
         return straightY * 0.5 + cornerArc + (cornerCenter.x - q.x);
     } else {
-        // Determine by angle from center
         if (q.y * cornerCenter.x > q.x * cornerCenter.y) {
-            // Closer to top
             return straightY * 0.5 + cornerArc + (cornerCenter.x - q.x);
         } else {
-            // Closer to right
             return q.y;
         }
     }
@@ -120,28 +100,24 @@ float dashedPattern(float arcLength, float dashLen, float gapLen, float perpDist
     float period = dashLen + gapLen;
     float t = mod(arcLength, period);
 
-    // If we're in the gap region, return 0
     if (t > dashLen) {
         return 0.0;
     }
 
     float halfStroke = strokeWidth * 0.5;
 
-    // Check if we're near the start cap (t < halfStroke)
     if (t < halfStroke) {
         float distToCapCenter = halfStroke - t;
         float dist2D = sqrt(distToCapCenter * distToCapCenter + perpDist * perpDist);
         return 1.0 - smoothstep(halfStroke - 0.5, halfStroke + 0.5, dist2D);
     }
 
-    // Check if we're near the end cap (t > dashLen - halfStroke)
     if (t > dashLen - halfStroke) {
         float distToCapCenter = t - (dashLen - halfStroke);
         float dist2D = sqrt(distToCapCenter * distToCapCenter + perpDist * perpDist);
         return 1.0 - smoothstep(halfStroke - 0.5, halfStroke + 0.5, dist2D);
     }
 
-    // We're in the rectangular body - return 1.0 (inside the dash)
     return 1.0;
 }
 
@@ -149,32 +125,25 @@ float dashedPattern(float arcLength, float dashLen, float gapLen, float perpDist
 // Returns 1.0 for dot, 0.0 for gap
 // perpDist is the perpendicular distance from the stroke centerline
 float dottedPattern(float arcLength, float dotSpacing, float dotRadius, float perpDist) {
-    // Find nearest dot center along arc
     float dotIndex = floor(arcLength / dotSpacing + 0.5);
     float dotCenter = dotIndex * dotSpacing;
     float arcDist = arcLength - dotCenter;
 
-    // Calculate 2D distance from dot center (arc distance + perpendicular distance)
     float dist2D = sqrt(arcDist * arcDist + perpDist * perpDist);
 
-    // Create circular dot with sharper edges (reduced AA width)
     return 1.0 - smoothstep(dotRadius - 0.5, dotRadius + 0.5, dist2D);
 }
 
 void main() {
-    // Get fragment position in screen coordinates
     vec2 fragCoord = FlutterFragCoord().xy;
 
-    // Transform to rectangle-local coordinates (centered, rotated)
     vec2 localPos = fragCoord - uCenter;
     localPos = rotate2D(localPos, -uRotation);
 
     vec2 halfSize = uResolution * 0.5;
 
-    // Clamp corner radius to valid range
     float cornerRadius = min(uCornerRadius, min(halfSize.x, halfSize.y));
 
-    // Calculate signed distance to rectangle edge
     float dist = sdRoundedRect(localPos, halfSize, cornerRadius);
 
     // Early discard: skip pixels clearly outside the rectangle + stroke + AA
@@ -184,12 +153,9 @@ void main() {
         return;
     }
 
-    // Initialize output color
     vec4 color = vec4(0.0);
 
-    // === FILL ===
     if (uFillColor.a > 0.001) {
-        // Anti-aliased fill mask (1.0 inside, 0.0 outside)
         float fillMask = 1.0 - smoothstep(-uAAWidth, uAAWidth, dist);
 
         if (fillMask > 0.001) {
@@ -197,28 +163,21 @@ void main() {
 
             int fillStyle = int(uFillStyle + 0.5);
             if (fillStyle == 1) {
-                // Line pattern (-45 degrees)
                 patternMask = 1.0 - linePattern(localPos, uFillLineWidth, uFillLineSpacing);
             } else if (fillStyle == 2) {
-                // Cross-line pattern
                 patternMask = 1.0 - crossLinePattern(localPos, uFillLineWidth, uFillLineSpacing);
             }
-            // else: solid fill (patternMask = 1.0)
 
             color = uFillColor * fillMask * patternMask;
         }
     }
 
-    // === STROKE ===
     if (uStrokeColor.a > 0.001 && uStrokeWidth > 0.001) {
         float halfStroke = uStrokeWidth * 0.5;
 
-        // Stroke band: centered on the edge
-        // Inner edge at dist = -halfStroke, outer edge at dist = +halfStroke
         float strokeInner = dist + halfStroke;
         float strokeOuter = dist - halfStroke;
 
-        // Anti-aliased stroke mask
         // Center the AA transition on the stroke edges to match CPU rendering width
         float halfAA = uAAWidth * 0.5;
         float outerMask = smoothstep(halfAA, -halfAA, strokeOuter);
@@ -229,19 +188,15 @@ void main() {
             int strokeStyle = int(uStrokeStyle + 0.5);
 
             if (strokeStyle == 1) {
-                // Dashed stroke
                 float arcLen = calcArcLength(localPos, halfSize, cornerRadius);
                 float dashMask = dashedPattern(arcLen, uDashLength, uGapLength, abs(dist), uStrokeWidth);
                 strokeMask *= dashMask;
             } else if (strokeStyle == 2) {
-                // Dotted stroke
                 float arcLen = calcArcLength(localPos, halfSize, cornerRadius);
                 float dotMask = dottedPattern(arcLen, uDotSpacing, uDotRadius, dist);
                 strokeMask *= dotMask;
             }
-            // else: solid stroke (strokeMask unchanged)
 
-            // Blend stroke over fill (stroke on top)
             // Using premultiplied alpha blending: result = src + dst * (1 - src.a)
             vec4 strokeResult = uStrokeColor * strokeMask;
             color = strokeResult + color * (1.0 - strokeResult.a);

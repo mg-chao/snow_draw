@@ -1,0 +1,1050 @@
+#![allow(dead_code)]
+
+use crate::draw::elements::types::arrow::arrow_binding::{
+    ArrowBinding, ArrowBindingMode, ArrowBindingResult, ArrowBindingUtils,
+};
+use crate::draw::elements::types::arrow::arrow_core::EngineContext;
+use crate::draw::elements::types::arrow::arrow_core_bridge::{
+    core_arrow_world_points, to_core_arrow_state_from_source,
+    to_local_fixed_segments_from_core_arrow, world_to_local_points, ArrowCoreState,
+    ConnectorSourceData,
+};
+use crate::draw::elements::types::arrow::arrow_core_ops::{
+    calculate_core_fixed_point_for_binding, resolve_core_max_binding_distance,
+    ArrowCoreEndpointBindingOptions,
+};
+use crate::draw::elements::types::arrow::arrow_data::ArrowData;
+use crate::draw::elements::types::arrow::arrow_scene::{
+    project_arrow_bindable_candidates, resolve_arrow_bindable_candidates_for_endpoint_strategy,
+};
+use crate::draw::elements::types::arrow::core::arrow_order_core::{
+    reorder_arrow_above_hovered_bindable, reordered_element_ids_from_hovered_reorder,
+};
+use crate::draw::elements::types::arrow::core::arrow_types::ReorderArrowAboveHoveredBindableInput;
+use crate::draw::elements::types::arrow::elbow::elbow_fixed_segment::ElbowFixedSegment;
+use crate::draw::models::draw_state::{DomainElementState, DrawState};
+use crate::draw::models::element_state::ElementState;
+use crate::draw::types::draw_point::DrawPoint;
+use crate::draw::types::element_style::{ArrowType, ArrowheadStyle};
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ArrowCoreEndpointDragResult {
+    pub arrow: ArrowCoreState,
+    pub world_points: Vec<DrawPoint>,
+    pub local_points: Vec<DrawPoint>,
+    pub start_binding: Option<ArrowBinding>,
+    pub end_binding: Option<ArrowBinding>,
+    pub fixed_segments: Option<Vec<ElbowFixedSegment>>,
+    pub ordered_element_ids: Option<Vec<String>>,
+    pub suggested_bindable_id: Option<String>,
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compute_arrow_core_endpoint_drag_result(
+    state: &DrawState,
+    element: &ElementState,
+    data: &ArrowData,
+    local_points: &[DrawPoint],
+    dragged_index: usize,
+    world_pointer: DrawPoint,
+    start_binding: Option<&ArrowBinding>,
+    end_binding: Option<&ArrowBinding>,
+    excluded_element_id: &str,
+    should_lookup_bindings: bool,
+    allow_new_binding: bool,
+    binding_distance: f64,
+    core_engine_context: EngineContext,
+    fixed_segments: Option<&[ElbowFixedSegment]>,
+    ordered_element_ids: Option<&[String]>,
+    options: ArrowCoreEndpointBindingOptions,
+) -> Option<ArrowCoreEndpointDragResult> {
+    let connector_data = ConnectorSourceData::Arrow(data.clone());
+    compute_connector_core_endpoint_drag_result(
+        state,
+        element,
+        &connector_data,
+        local_points,
+        dragged_index,
+        world_pointer,
+        start_binding,
+        end_binding,
+        excluded_element_id,
+        should_lookup_bindings,
+        allow_new_binding,
+        binding_distance,
+        core_engine_context,
+        fixed_segments,
+        ordered_element_ids,
+        options,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn compute_connector_core_endpoint_drag_result(
+    state: &DrawState,
+    element: &ElementState,
+    data: &ConnectorSourceData,
+    local_points: &[DrawPoint],
+    dragged_index: usize,
+    world_pointer: DrawPoint,
+    start_binding: Option<&ArrowBinding>,
+    end_binding: Option<&ArrowBinding>,
+    excluded_element_id: &str,
+    should_lookup_bindings: bool,
+    allow_new_binding: bool,
+    binding_distance: f64,
+    core_engine_context: EngineContext,
+    fixed_segments: Option<&[ElbowFixedSegment]>,
+    ordered_element_ids: Option<&[String]>,
+    options: ArrowCoreEndpointBindingOptions,
+) -> Option<ArrowCoreEndpointDragResult> {
+    run_arrow_core_endpoint_drag_result(
+        state,
+        element,
+        data,
+        local_points,
+        dragged_index,
+        world_pointer,
+        start_binding,
+        end_binding,
+        excluded_element_id,
+        should_lookup_bindings,
+        allow_new_binding,
+        binding_distance,
+        core_engine_context,
+        fixed_segments,
+        ordered_element_ids,
+        options,
+        false,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn finalize_arrow_core_endpoint_drag_result(
+    state: &DrawState,
+    element: &ElementState,
+    data: &ArrowData,
+    local_points: &[DrawPoint],
+    dragged_index: usize,
+    world_pointer: DrawPoint,
+    start_binding: Option<&ArrowBinding>,
+    end_binding: Option<&ArrowBinding>,
+    excluded_element_id: &str,
+    should_lookup_bindings: bool,
+    allow_new_binding: bool,
+    binding_distance: f64,
+    core_engine_context: EngineContext,
+    fixed_segments: Option<&[ElbowFixedSegment]>,
+    ordered_element_ids: Option<&[String]>,
+    options: ArrowCoreEndpointBindingOptions,
+) -> Option<ArrowCoreEndpointDragResult> {
+    let connector_data = ConnectorSourceData::Arrow(data.clone());
+    finalize_connector_core_endpoint_drag_result(
+        state,
+        element,
+        &connector_data,
+        local_points,
+        dragged_index,
+        world_pointer,
+        start_binding,
+        end_binding,
+        excluded_element_id,
+        should_lookup_bindings,
+        allow_new_binding,
+        binding_distance,
+        core_engine_context,
+        fixed_segments,
+        ordered_element_ids,
+        options,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+pub fn finalize_connector_core_endpoint_drag_result(
+    state: &DrawState,
+    element: &ElementState,
+    data: &ConnectorSourceData,
+    local_points: &[DrawPoint],
+    dragged_index: usize,
+    world_pointer: DrawPoint,
+    start_binding: Option<&ArrowBinding>,
+    end_binding: Option<&ArrowBinding>,
+    excluded_element_id: &str,
+    should_lookup_bindings: bool,
+    allow_new_binding: bool,
+    binding_distance: f64,
+    core_engine_context: EngineContext,
+    fixed_segments: Option<&[ElbowFixedSegment]>,
+    ordered_element_ids: Option<&[String]>,
+    options: ArrowCoreEndpointBindingOptions,
+) -> Option<ArrowCoreEndpointDragResult> {
+    run_arrow_core_endpoint_drag_result(
+        state,
+        element,
+        data,
+        local_points,
+        dragged_index,
+        world_pointer,
+        start_binding,
+        end_binding,
+        excluded_element_id,
+        should_lookup_bindings,
+        allow_new_binding,
+        binding_distance,
+        core_engine_context,
+        fixed_segments,
+        ordered_element_ids,
+        options,
+        true,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
+fn run_arrow_core_endpoint_drag_result(
+    state: &DrawState,
+    element: &ElementState,
+    data: &ConnectorSourceData,
+    local_points: &[DrawPoint],
+    dragged_index: usize,
+    world_pointer: DrawPoint,
+    start_binding: Option<&ArrowBinding>,
+    end_binding: Option<&ArrowBinding>,
+    excluded_element_id: &str,
+    should_lookup_bindings: bool,
+    allow_new_binding: bool,
+    binding_distance: f64,
+    core_engine_context: EngineContext,
+    fixed_segments: Option<&[ElbowFixedSegment]>,
+    ordered_element_ids: Option<&[String]>,
+    options: ArrowCoreEndpointBindingOptions,
+    _finalize: bool,
+) -> Option<ArrowCoreEndpointDragResult> {
+    if binding_distance < 0.0 {
+        return None;
+    }
+    if local_points.len() < 2 || dragged_index >= local_points.len() {
+        return None;
+    }
+
+    let effective_distance = if binding_distance > 0.0 {
+        binding_distance
+    } else {
+        resolve_core_max_binding_distance(core_engine_context.zoom)
+    };
+    let mut next_local_points = local_points.to_vec();
+    let mut world_points = local_points
+        .iter()
+        .map(|point| DrawPoint::new(point.x + element.rect.min_x, point.y + element.rect.min_y))
+        .collect::<Vec<_>>();
+    let mut next_start_binding = start_binding.cloned();
+    let mut next_end_binding = end_binding.cloned();
+    let mut suggested_bindable_id = None;
+
+    let dragged_is_endpoint = dragged_index == 0 || dragged_index + 1 == local_points.len();
+    if dragged_is_endpoint {
+        let endpoint = if dragged_index == 0 {
+            Endpoint::Start
+        } else {
+            Endpoint::End
+        };
+        let existing_binding = match endpoint {
+            Endpoint::Start => next_start_binding.as_ref(),
+            Endpoint::End => next_end_binding.as_ref(),
+        };
+        let target_world = if !allow_new_binding {
+            match endpoint {
+                Endpoint::Start => next_start_binding = None,
+                Endpoint::End => next_end_binding = None,
+            };
+            world_pointer
+        } else if !should_lookup_bindings {
+            match endpoint {
+                Endpoint::Start => next_start_binding = None,
+                Endpoint::End => next_end_binding = None,
+            };
+            world_pointer
+        } else if let Some(ArrowBindingResult {
+            mut binding,
+            snap_point,
+            ..
+        }) = resolve_endpoint_binding_candidate_from_candidates(
+            resolve_arrow_bindable_candidates_for_endpoint_strategy(
+                &state.domain.document,
+                true,
+                existing_binding,
+                match endpoint {
+                    Endpoint::Start => next_end_binding.as_ref(),
+                    Endpoint::End => next_start_binding.as_ref(),
+                },
+                Some(excluded_element_id),
+                ordered_element_ids,
+            )
+            .elements
+            .as_slice(),
+            world_pointer,
+            data.arrow_type(),
+            endpoint_arrowhead_style(data, endpoint),
+            effective_distance,
+            existing_binding,
+            endpoint_reference_point(&world_points, endpoint),
+            true,
+        ) {
+            if options.new_arrow {
+                if let Some(target_element) = state
+                    .domain
+                    .document
+                    .get_element_by_id(binding.element_id.as_str())
+                {
+                    let projected = project_arrow_bindable_candidates(vec![target_element.clone()]);
+                    if let Some(bindable) = projected.bindable_for_id(binding.element_id.as_str()) {
+                        binding = ArrowBinding::new(
+                            binding.element_id.clone(),
+                            calculate_core_fixed_point_for_binding(bindable, world_pointer),
+                            binding.mode,
+                        );
+                    }
+                }
+            }
+
+            suggested_bindable_id = Some(binding.element_id.clone());
+            match endpoint {
+                Endpoint::Start => next_start_binding = Some(binding),
+                Endpoint::End => next_end_binding = Some(binding),
+            }
+            snap_point
+        } else {
+            match endpoint {
+                Endpoint::Start => next_start_binding = None,
+                Endpoint::End => next_end_binding = None,
+            }
+            world_pointer
+        };
+
+        world_points[dragged_index] = target_world;
+        next_local_points[dragged_index] = to_local_point(element, target_world);
+    } else {
+        world_points[dragged_index] = world_pointer;
+        next_local_points[dragged_index] = to_local_point(element, world_pointer);
+    }
+
+    if data.arrow_type() != ArrowType::Elbow && next_local_points.len() >= 2 && dragged_is_endpoint
+    {
+        let loop_threshold = effective_distance.max(1.0);
+        let start_index = 0;
+        let end_index = next_local_points.len() - 1;
+        if world_points[start_index].distance_squared(world_points[end_index])
+            <= loop_threshold * loop_threshold
+        {
+            if dragged_index == start_index {
+                world_points[start_index] = world_points[end_index];
+                next_local_points[start_index] = next_local_points[end_index];
+                next_start_binding = next_end_binding.clone();
+                suggested_bindable_id = suggested_bindable_id.or_else(|| {
+                    next_end_binding
+                        .as_ref()
+                        .map(|binding| binding.element_id.clone())
+                });
+            } else {
+                world_points[end_index] = world_points[start_index];
+                next_local_points[end_index] = next_local_points[start_index];
+                next_end_binding = next_start_binding.clone();
+                suggested_bindable_id = suggested_bindable_id.or_else(|| {
+                    next_start_binding
+                        .as_ref()
+                        .map(|binding| binding.element_id.clone())
+                });
+            }
+        }
+    }
+
+    normalize_same_target_bindings(
+        state,
+        element,
+        &mut world_points,
+        &mut next_local_points,
+        &mut next_start_binding,
+        &mut next_end_binding,
+        options.complex_bindings.unwrap_or(false),
+    );
+
+    let fixed_segments_for_core = if data.arrow_type() == ArrowType::Elbow {
+        fixed_segments
+    } else {
+        None
+    };
+    let next_arrow = to_core_arrow_state_from_source(
+        element,
+        data,
+        Some(&next_local_points),
+        fixed_segments_for_core,
+        Some(next_start_binding.as_ref()),
+        Some(next_end_binding.as_ref()),
+        core_engine_context.max_coordinate,
+    );
+    let next_world_points = core_arrow_world_points(&next_arrow);
+
+    let reordered_element_ids = ordered_element_ids.and_then(|ids| {
+        let hovered_bindable_id = suggested_bindable_id.clone()?;
+        let reorder =
+            reorder_arrow_above_hovered_bindable(&ReorderArrowAboveHoveredBindableInput {
+                ordered_element_ids: ids.to_vec(),
+                arrow_id: excluded_element_id.to_owned(),
+                hovered_bindable_id: Some(hovered_bindable_id),
+                point: None,
+                bindables: None,
+                tolerance: None,
+                anchor_element_ids_by_bindable_id: None,
+            });
+        reordered_element_ids_from_hovered_reorder(&reorder)
+    });
+
+    Some(ArrowCoreEndpointDragResult {
+        arrow: next_arrow.clone(),
+        world_points: next_world_points.clone(),
+        local_points: world_to_local_points(element, &next_world_points),
+        start_binding: next_arrow.start_binding.clone(),
+        end_binding: next_arrow.end_binding.clone(),
+        fixed_segments: if data.arrow_type() == ArrowType::Elbow {
+            to_local_fixed_segments_from_core_arrow(&next_arrow, element)
+        } else {
+            fixed_segments.map(|segments| segments.to_vec())
+        },
+        ordered_element_ids: reordered_element_ids,
+        suggested_bindable_id,
+    })
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Endpoint {
+    Start,
+    End,
+}
+
+fn normalize_same_target_bindings(
+    state: &DrawState,
+    element: &ElementState,
+    world_points: &mut [DrawPoint],
+    local_points: &mut [DrawPoint],
+    start_binding: &mut Option<ArrowBinding>,
+    end_binding: &mut Option<ArrowBinding>,
+    complex_bindings: bool,
+) {
+    if complex_bindings || world_points.len() < 2 || local_points.len() < 2 {
+        return;
+    }
+
+    let (Some(current_start), Some(current_end)) = (start_binding.clone(), end_binding.clone())
+    else {
+        return;
+    };
+    if current_start.element_id != current_end.element_id {
+        return;
+    }
+
+    let Some(target) = state
+        .domain
+        .document
+        .get_element_by_id(current_start.element_id.as_str())
+    else {
+        return;
+    };
+
+    let normalized_start = current_start.copy_with(None, None, Some(ArrowBindingMode::Inside));
+    let normalized_end = current_end.copy_with(None, None, Some(ArrowBindingMode::Inside));
+
+    if let Some(point) = ArrowBindingUtils::resolve_bound_point(
+        &normalized_start,
+        target,
+        world_points.get(1).copied(),
+    ) {
+        world_points[0] = point;
+        local_points[0] = to_local_point(element, point);
+    }
+    if let Some(point) = ArrowBindingUtils::resolve_bound_point(
+        &normalized_end,
+        target,
+        world_points
+            .get(world_points.len().saturating_sub(2))
+            .copied(),
+    ) {
+        let end_index = world_points.len() - 1;
+        world_points[end_index] = point;
+        local_points[end_index] = to_local_point(element, point);
+    }
+
+    *start_binding = Some(normalized_start);
+    *end_binding = Some(normalized_end);
+}
+
+fn endpoint_arrowhead_style(data: &ConnectorSourceData, endpoint: Endpoint) -> ArrowheadStyle {
+    match endpoint {
+        Endpoint::Start => data.start_arrowhead(),
+        Endpoint::End => data.end_arrowhead(),
+    }
+}
+
+fn endpoint_reference_point(world_points: &[DrawPoint], endpoint: Endpoint) -> Option<DrawPoint> {
+    if world_points.len() < 2 {
+        return None;
+    }
+    match endpoint {
+        Endpoint::Start => world_points.get(1).copied(),
+        Endpoint::End => world_points
+            .get(world_points.len().saturating_sub(2))
+            .copied(),
+    }
+}
+
+fn to_local_point(element: &ElementState, world_point: DrawPoint) -> DrawPoint {
+    DrawPoint::new(
+        world_point.x - element.rect.min_x,
+        world_point.y - element.rect.min_y,
+    )
+}
+
+fn resolve_endpoint_binding_candidate_from_candidates(
+    targets: &[DomainElementState],
+    world_point: DrawPoint,
+    arrow_type: ArrowType,
+    arrowhead_style: ArrowheadStyle,
+    snap_distance: f64,
+    preferred_binding: Option<&ArrowBinding>,
+    reference_point: Option<DrawPoint>,
+    allow_new_binding: bool,
+) -> Option<ArrowBindingResult> {
+    if arrow_type == ArrowType::Elbow {
+        return ArrowBindingUtils::resolve_elbow_binding_candidate(
+            world_point,
+            targets.iter(),
+            snap_distance,
+            arrowhead_style != ArrowheadStyle::None,
+            preferred_binding,
+            allow_new_binding,
+        );
+    }
+
+    ArrowBindingUtils::resolve_binding_candidate(
+        world_point,
+        targets.iter(),
+        snap_distance,
+        preferred_binding,
+        allow_new_binding,
+        reference_point,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::{
+        compute_arrow_core_endpoint_drag_result, finalize_arrow_core_endpoint_drag_result,
+    };
+    use crate::draw::elements::types::arrow::arrow_binding::{ArrowBinding, ArrowBindingMode};
+    use crate::draw::elements::types::arrow::arrow_core::EngineContext;
+    use crate::draw::elements::types::arrow::arrow_core_ops::ArrowCoreEndpointBindingOptions;
+    use crate::draw::elements::types::arrow::arrow_data::{
+        ArrowBinding as DataArrowBinding, ArrowBindingMode as DataArrowBindingMode, ArrowData,
+        ArrowDataPatch,
+    };
+    use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
+    use crate::draw::models::application_state::ApplicationState;
+    use crate::draw::models::draw_state::{DomainDocumentState, DomainState, DrawState};
+    use crate::draw::models::element_state::ElementState;
+    use crate::draw::types::draw_point::DrawPoint;
+    use crate::draw::types::draw_rect::DrawRect;
+    use crate::draw::types::element_style::ArrowType;
+
+    fn binding(id: &str) -> ArrowBinding {
+        ArrowBinding::new(
+            id.to_owned(),
+            DrawPoint::new(0.5, 0.5),
+            ArrowBindingMode::Orbit,
+        )
+    }
+
+    fn binding_with_anchor_mode(
+        id: &str,
+        anchor: DrawPoint,
+        mode: ArrowBindingMode,
+    ) -> ArrowBinding {
+        ArrowBinding::new(id.to_owned(), anchor, mode)
+    }
+
+    fn to_data_binding(binding: ArrowBinding) -> DataArrowBinding {
+        DataArrowBinding::new(
+            binding.element_id,
+            binding.anchor,
+            match binding.mode {
+                ArrowBindingMode::Inside => DataArrowBindingMode::Inside,
+                ArrowBindingMode::Orbit => DataArrowBindingMode::Orbit,
+                ArrowBindingMode::Skip => DataArrowBindingMode::Skip,
+            },
+        )
+    }
+
+    fn arrow_data_with(
+        start_binding: Option<ArrowBinding>,
+        end_binding: Option<ArrowBinding>,
+    ) -> ArrowData {
+        ArrowData::default().copy_with(ArrowDataPatch {
+            start_binding: match start_binding {
+                Some(value) => {
+                    crate::draw::elements::types::arrow::arrow_data::NullableField::Value(
+                        to_data_binding(value),
+                    )
+                }
+                None => crate::draw::elements::types::arrow::arrow_data::NullableField::Null,
+            },
+            end_binding: match end_binding {
+                Some(value) => {
+                    crate::draw::elements::types::arrow::arrow_data::NullableField::Value(
+                        to_data_binding(value),
+                    )
+                }
+                None => crate::draw::elements::types::arrow::arrow_data::NullableField::Null,
+            },
+            ..Default::default()
+        })
+    }
+
+    fn arrow_element(id: &str, rect: DrawRect, data: ArrowData) -> ElementState {
+        ElementState::new(id.to_owned(), rect, 0.0, 1.0, 10, Arc::new(data))
+    }
+
+    fn rectangle_element(id: &str, rect: DrawRect) -> ElementState {
+        ElementState::new(
+            id.to_owned(),
+            rect,
+            0.0,
+            1.0,
+            1,
+            Arc::new(RectangleData::default()),
+        )
+    }
+
+    fn draw_state(elements: Vec<ElementState>) -> DrawState {
+        let domain = DomainState::new(
+            DomainDocumentState::new(elements, 1, Default::default()),
+            Default::default(),
+        );
+        DrawState::new(Some(domain), Some(ApplicationState::initial(None)))
+    }
+
+    #[test]
+    fn compute_endpoint_drag_snaps_and_reports_suggested_binding() {
+        let data = ArrowData::default();
+        let arrow = arrow_element("arrow", DrawRect::new(0.0, 0.0, 20.0, 20.0), data.clone());
+        let target = rectangle_element("box", DrawRect::new(90.0, 90.0, 130.0, 130.0));
+        let state = draw_state(vec![target.clone(), arrow.clone()]);
+
+        let result = compute_arrow_core_endpoint_drag_result(
+            &state,
+            &arrow,
+            &data,
+            &[DrawPoint::new(0.0, 10.0), DrawPoint::new(20.0, 10.0)],
+            1,
+            DrawPoint::new(110.0, 110.0),
+            None,
+            None,
+            "arrow",
+            true,
+            true,
+            40.0,
+            EngineContext::new(1.0, true, "orbit", 1e6),
+            None,
+            None,
+            ArrowCoreEndpointBindingOptions::default(),
+        )
+        .expect("endpoint drag result");
+
+        assert_eq!(result.suggested_bindable_id.as_deref(), Some("box"));
+        assert_eq!(
+            result
+                .end_binding
+                .as_ref()
+                .map(|value| value.element_id.as_str()),
+            Some("box")
+        );
+        assert_eq!(result.start_binding, None);
+    }
+
+    #[test]
+    fn compute_endpoint_drag_reorders_arrow_above_suggested_bindable() {
+        let data = ArrowData::default();
+        let arrow = arrow_element("arrow", DrawRect::new(0.0, 0.0, 20.0, 20.0), data.clone());
+        let target = rectangle_element("box", DrawRect::new(90.0, 90.0, 130.0, 130.0));
+        let state = draw_state(vec![arrow.clone(), target.clone()]);
+
+        let result = compute_arrow_core_endpoint_drag_result(
+            &state,
+            &arrow,
+            &data,
+            &[DrawPoint::new(0.0, 10.0), DrawPoint::new(20.0, 10.0)],
+            1,
+            DrawPoint::new(110.0, 110.0),
+            None,
+            None,
+            "arrow",
+            true,
+            true,
+            40.0,
+            EngineContext::new(1.0, true, "orbit", 1e6),
+            None,
+            Some(&["arrow".to_owned(), "box".to_owned()]),
+            ArrowCoreEndpointBindingOptions::default(),
+        )
+        .expect("endpoint drag result");
+
+        assert_eq!(
+            result.ordered_element_ids,
+            Some(vec!["box".to_owned(), "arrow".to_owned()])
+        );
+        assert_eq!(result.suggested_bindable_id.as_deref(), Some("box"));
+    }
+
+    #[test]
+    fn compute_endpoint_drag_clears_dragged_binding_when_lookup_is_disabled() {
+        let existing_start = binding("box");
+        let data = arrow_data_with(Some(existing_start.clone()), None);
+        let arrow = arrow_element("arrow", DrawRect::new(0.0, 0.0, 20.0, 20.0), data.clone());
+        let target = rectangle_element("box", DrawRect::new(90.0, 90.0, 130.0, 130.0));
+        let state = draw_state(vec![target, arrow.clone()]);
+
+        let result = compute_arrow_core_endpoint_drag_result(
+            &state,
+            &arrow,
+            &data,
+            &[DrawPoint::new(0.0, 10.0), DrawPoint::new(20.0, 10.0)],
+            0,
+            DrawPoint::new(30.0, 30.0),
+            Some(&existing_start),
+            None,
+            "arrow",
+            false,
+            true,
+            20.0,
+            EngineContext::new(1.0, true, "orbit", 1e6),
+            None,
+            None,
+            ArrowCoreEndpointBindingOptions::default(),
+        )
+        .expect("endpoint drag result");
+
+        assert_eq!(result.start_binding, None);
+        assert_eq!(result.suggested_bindable_id, None);
+    }
+
+    #[test]
+    fn compute_endpoint_drag_disables_existing_binding_when_new_bindings_are_disallowed() {
+        let existing_end = binding("box");
+        let data = arrow_data_with(None, Some(existing_end.clone()));
+        let arrow = arrow_element(
+            "arrow",
+            DrawRect::new(60.0, 60.0, 220.0, 60.0),
+            data.clone(),
+        );
+        let target = rectangle_element("box", DrawRect::new(220.0, 20.0, 320.0, 120.0));
+        let state = draw_state(vec![arrow.clone(), target]);
+
+        let result = compute_arrow_core_endpoint_drag_result(
+            &state,
+            &arrow,
+            &data,
+            &[DrawPoint::new(60.0, 60.0), DrawPoint::new(220.0, 60.0)],
+            1,
+            DrawPoint::new(220.0, 60.0),
+            None,
+            Some(&existing_end),
+            "arrow",
+            true,
+            false,
+            80.0,
+            EngineContext::new(1.0, true, "orbit", 1e6),
+            None,
+            None,
+            ArrowCoreEndpointBindingOptions::default(),
+        )
+        .expect("endpoint drag result");
+
+        assert_eq!(result.end_binding, None);
+    }
+
+    #[test]
+    fn compute_endpoint_drag_keeps_opposite_binding_when_new_bindings_are_disallowed() {
+        let existing_start = binding_with_anchor_mode(
+            "rect-start",
+            DrawPoint::new(0.5001, 0.5001),
+            ArrowBindingMode::Orbit,
+        );
+        let existing_end = binding_with_anchor_mode(
+            "rect-end",
+            DrawPoint::new(0.5001, 0.5001),
+            ArrowBindingMode::Orbit,
+        );
+        let data = arrow_data_with(Some(existing_start.clone()), Some(existing_end.clone()));
+        let arrow = arrow_element(
+            "arrow",
+            DrawRect::new(70.0, 70.0, 270.0, 70.0),
+            data.clone(),
+        );
+        let start_target = rectangle_element("rect-start", DrawRect::new(20.0, 20.0, 120.0, 120.0));
+        let end_target = rectangle_element("rect-end", DrawRect::new(220.0, 20.0, 320.0, 120.0));
+        let state = draw_state(vec![arrow.clone(), start_target, end_target]);
+
+        let result = compute_arrow_core_endpoint_drag_result(
+            &state,
+            &arrow,
+            &data,
+            &[DrawPoint::new(70.0, 70.0), DrawPoint::new(270.0, 70.0)],
+            1,
+            DrawPoint::new(420.0, 300.0),
+            Some(&existing_start),
+            Some(&existing_end),
+            "arrow",
+            true,
+            false,
+            80.0,
+            EngineContext::new(1.0, true, "orbit", 1e6),
+            None,
+            None,
+            ArrowCoreEndpointBindingOptions::default(),
+        )
+        .expect("endpoint drag result");
+
+        assert_eq!(result.start_binding, Some(existing_start));
+        assert_eq!(result.end_binding, None);
+    }
+
+    #[test]
+    fn new_arrow_drag_keeps_dragged_endpoint_anchor_at_pointer_focus() {
+        let data = ArrowData::default();
+        let arrow = arrow_element("arrow", DrawRect::new(0.0, 0.0, 200.0, 0.0), data.clone());
+        let target = rectangle_element("rect-target", DrawRect::new(300.0, 100.0, 500.0, 200.0));
+        let state = draw_state(vec![target.clone(), arrow.clone()]);
+
+        let result = compute_arrow_core_endpoint_drag_result(
+            &state,
+            &arrow,
+            &data,
+            &[DrawPoint::new(0.0, 0.0), DrawPoint::new(200.0, 0.0)],
+            1,
+            DrawPoint::new(350.0, 120.0),
+            None,
+            None,
+            "arrow",
+            true,
+            true,
+            80.0,
+            EngineContext::new(1.0, true, "orbit", 1e6),
+            None,
+            None,
+            ArrowCoreEndpointBindingOptions {
+                new_arrow: true,
+                ..Default::default()
+            },
+        )
+        .expect("endpoint drag result");
+
+        let binding = result.end_binding.expect("end binding");
+        assert_eq!(binding.element_id, target.id);
+        assert!((binding.anchor.x - 0.25).abs() <= 1e-6);
+        assert!((binding.anchor.y - 0.2).abs() <= 1e-6);
+    }
+
+    #[test]
+    fn strategy_reorder_suggestion_ignores_opposite_endpoint_binding_strategy() {
+        let existing_start = binding_with_anchor_mode(
+            "rect-start",
+            DrawPoint::new(0.5001, 0.5001),
+            ArrowBindingMode::Inside,
+        );
+        let data = arrow_data_with(Some(existing_start.clone()), None);
+        let arrow = arrow_element(
+            "arrow",
+            DrawRect::new(40.0, 40.0, 220.0, 40.0),
+            data.clone(),
+        );
+        let start_target = rectangle_element("rect-start", DrawRect::new(0.0, 0.0, 120.0, 120.0));
+        let state = draw_state(vec![arrow.clone(), start_target]);
+
+        let result = compute_arrow_core_endpoint_drag_result(
+            &state,
+            &arrow,
+            &data,
+            &[DrawPoint::new(40.0, 40.0), DrawPoint::new(220.0, 40.0)],
+            1,
+            DrawPoint::new(420.0, 220.0),
+            Some(&existing_start),
+            None,
+            "arrow",
+            true,
+            true,
+            80.0,
+            EngineContext::new(1.0, true, "orbit", 1e6),
+            None,
+            Some(&["arrow".to_owned(), "rect-start".to_owned()]),
+            ArrowCoreEndpointBindingOptions {
+                new_arrow: true,
+                preserve_opposite_inside_binding: true,
+                ..Default::default()
+            },
+        )
+        .expect("endpoint drag result");
+
+        assert_eq!(result.ordered_element_ids, None);
+    }
+
+    #[test]
+    fn compute_endpoint_drag_keeps_opposite_elbow_endpoint_binding() {
+        let existing_start = binding_with_anchor_mode(
+            "rect-start",
+            DrawPoint::new(0.5001, 0.5001),
+            ArrowBindingMode::Orbit,
+        );
+        let elbow_data =
+            arrow_data_with(Some(existing_start.clone()), None).copy_with(ArrowDataPatch {
+                arrow_type: Some(ArrowType::Elbow),
+                ..Default::default()
+            });
+        let arrow = arrow_element(
+            "arrow",
+            DrawRect::new(70.0, 70.0, 220.0, 70.0),
+            elbow_data.clone(),
+        );
+        let start_target = rectangle_element("rect-start", DrawRect::new(20.0, 20.0, 120.0, 120.0));
+        let end_target = rectangle_element("rect-end", DrawRect::new(260.0, 20.0, 360.0, 120.0));
+        let state = draw_state(vec![arrow.clone(), start_target, end_target.clone()]);
+
+        let result = compute_arrow_core_endpoint_drag_result(
+            &state,
+            &arrow,
+            &elbow_data,
+            &[DrawPoint::new(70.0, 70.0), DrawPoint::new(220.0, 70.0)],
+            1,
+            DrawPoint::new(280.0, 70.0),
+            Some(&existing_start),
+            None,
+            "arrow",
+            true,
+            true,
+            80.0,
+            EngineContext::new(1.0, true, "orbit", 1e6),
+            None,
+            Some(&[
+                "arrow".to_owned(),
+                "rect-start".to_owned(),
+                "rect-end".to_owned(),
+            ]),
+            ArrowCoreEndpointBindingOptions::default(),
+        )
+        .expect("endpoint drag result");
+
+        assert_eq!(result.start_binding, Some(existing_start));
+        assert_eq!(
+            result
+                .end_binding
+                .as_ref()
+                .map(|binding| binding.element_id.as_str()),
+            Some("rect-end")
+        );
+    }
+
+    #[test]
+    fn compute_endpoint_drag_unbinds_dragged_elbow_endpoint_when_no_hovered_bindable() {
+        let existing_start = binding_with_anchor_mode(
+            "rect-start",
+            DrawPoint::new(0.5001, 0.5001),
+            ArrowBindingMode::Orbit,
+        );
+        let existing_end = binding_with_anchor_mode(
+            "rect-end",
+            DrawPoint::new(0.5001, 0.5001),
+            ArrowBindingMode::Orbit,
+        );
+        let elbow_data = arrow_data_with(Some(existing_start.clone()), Some(existing_end))
+            .copy_with(ArrowDataPatch {
+                arrow_type: Some(ArrowType::Elbow),
+                ..Default::default()
+            });
+        let arrow = arrow_element(
+            "arrow",
+            DrawRect::new(70.0, 70.0, 280.0, 70.0),
+            elbow_data.clone(),
+        );
+        let start_target = rectangle_element("rect-start", DrawRect::new(20.0, 20.0, 120.0, 120.0));
+        let end_target = rectangle_element("rect-end", DrawRect::new(260.0, 20.0, 360.0, 120.0));
+        let state = draw_state(vec![arrow.clone(), start_target, end_target]);
+
+        let result = compute_arrow_core_endpoint_drag_result(
+            &state,
+            &arrow,
+            &elbow_data,
+            &[DrawPoint::new(70.0, 70.0), DrawPoint::new(280.0, 70.0)],
+            1,
+            DrawPoint::new(520.0, 340.0),
+            Some(&existing_start),
+            elbow_data
+                .end_binding
+                .as_ref()
+                .map(|binding| {
+                    ArrowBinding::new(
+                        binding.element_id.clone(),
+                        binding.anchor,
+                        ArrowBindingMode::Orbit,
+                    )
+                })
+                .as_ref(),
+            "arrow",
+            true,
+            true,
+            40.0,
+            EngineContext::new(1.0, true, "orbit", 1e6),
+            None,
+            None,
+            ArrowCoreEndpointBindingOptions::default(),
+        )
+        .expect("endpoint drag result");
+
+        assert_eq!(result.start_binding, Some(existing_start));
+        assert_eq!(result.end_binding, None);
+    }
+
+    #[test]
+    fn finalize_endpoint_drag_closes_loop_and_reuses_opposite_binding() {
+        let end_binding = binding("box");
+        let data = arrow_data_with(None, Some(end_binding.clone())).copy_with(ArrowDataPatch {
+            arrow_type: Some(ArrowType::Straight),
+            ..Default::default()
+        });
+        let arrow = arrow_element("arrow", DrawRect::new(0.0, 0.0, 20.0, 20.0), data.clone());
+        let target = rectangle_element("box", DrawRect::new(90.0, 90.0, 130.0, 130.0));
+        let state = draw_state(vec![target, arrow.clone()]);
+
+        let result = finalize_arrow_core_endpoint_drag_result(
+            &state,
+            &arrow,
+            &data,
+            &[DrawPoint::new(0.0, 10.0), DrawPoint::new(20.0, 10.0)],
+            0,
+            DrawPoint::new(20.0, 10.0),
+            None,
+            Some(&end_binding),
+            "arrow",
+            false,
+            true,
+            24.0,
+            EngineContext::new(1.0, true, "orbit", 1e6),
+            None,
+            None,
+            ArrowCoreEndpointBindingOptions::default(),
+        )
+        .expect("finalize drag result");
+
+        assert_eq!(
+            result.start_binding,
+            Some(end_binding.copy_with(None, None, Some(ArrowBindingMode::Inside)))
+        );
+        assert_eq!(result.world_points.first(), result.world_points.last());
+    }
+}

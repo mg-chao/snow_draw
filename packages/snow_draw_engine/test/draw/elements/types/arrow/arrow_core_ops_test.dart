@@ -1,0 +1,398 @@
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core.dart'
+    as core;
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_bridge.dart';
+import 'package:snow_draw_engine/draw/elements/types/arrow/arrow_core_ops.dart';
+import 'package:test/test.dart';
+
+void main() {
+  group('arrow_core_ops wrappers', () {
+    test('resolveCoreMaxBindingDistance mirrors core maxBindingDistance', () {
+      expect(
+        resolveCoreMaxBindingDistance(zoom: 0.5),
+        closeTo(core.maxBindingDistance(0.5), 1e-9),
+      );
+      expect(
+        resolveCoreMaxBindingDistance(zoom: 1),
+        closeTo(core.maxBindingDistance(1), 1e-9),
+      );
+      expect(
+        resolveCoreMaxBindingDistance(zoom: 2),
+        closeTo(core.maxBindingDistance(2), 1e-9),
+      );
+    });
+
+    test(
+      'resolveCoreEndpointBindingStrategy mirrors core complex-binding options',
+      () {
+        final arrow = _arrowState(
+          startBinding: const core.FixedPointBinding(
+            elementId: 'bindable-1',
+            fixedPoint: <double>[0.75, 0.5],
+            mode: core.bindModeOrbit,
+          ),
+        );
+        final bindable = _bindableState();
+        final payload = <String, dynamic>{
+          'arrow': arrow,
+          'draggedPoints': const <int, core.Point>{
+            1: <double>[60, 0],
+          },
+          'pointer': const <double>[60, 0],
+          'bindables': <core.BindableState>[bindable],
+          'context': buildCoreEngineContext(),
+          'options': const <String, dynamic>{'complexBindings': true},
+        };
+
+        final expected = core.getEndpointBindingStrategy(payload);
+        final actual = resolveCoreEndpointBindingStrategy(
+          arrow: arrow,
+          draggedPoints: const <int, core.Point>{
+            1: <double>[60, 0],
+          },
+          pointer: const <double>[60, 0],
+          bindables: <core.BindableState>[bindable],
+          context: buildCoreEngineContext(),
+          options: const ArrowCoreEndpointBindingOptions(complexBindings: true),
+        );
+
+        final expectedStart = expected.start;
+        final actualStart = actual.start;
+        expect(actualStart?.bindableId, expectedStart?.bindableId);
+        expect(actualStart?.mode, expectedStart?.mode);
+        expect(actualStart?.focusPoint, expectedStart?.focusPoint);
+
+        final expectedEnd = expected.end;
+        final actualEnd = actual.end;
+        expect(actualEnd?.bindableId, expectedEnd?.bindableId);
+        expect(actualEnd?.mode, expectedEnd?.mode);
+        expect(actualEnd?.focusPoint, expectedEnd?.focusPoint);
+      },
+    );
+
+    test(
+      'resolveCoreEndpointBindingStrategy allows overriding complex bindings',
+      () {
+        final arrow = _arrowState(
+          startBinding: const core.FixedPointBinding(
+            elementId: 'bindable-1',
+            fixedPoint: <double>[0.75, 0.5],
+            mode: core.bindModeOrbit,
+          ),
+        );
+        final bindable = _bindableState();
+        final payload = <String, dynamic>{
+          'arrow': arrow,
+          'draggedPoints': const <int, core.Point>{
+            1: <double>[60, 0],
+          },
+          'pointer': const <double>[60, 0],
+          'bindables': <core.BindableState>[bindable],
+          'context': buildCoreEngineContext(),
+          'options': const <String, dynamic>{'complexBindings': false},
+        };
+
+        final expected = core.getEndpointBindingStrategy(payload);
+        final actual = resolveCoreEndpointBindingStrategy(
+          arrow: arrow,
+          draggedPoints: const <int, core.Point>{
+            1: <double>[60, 0],
+          },
+          pointer: const <double>[60, 0],
+          bindables: <core.BindableState>[bindable],
+          context: buildCoreEngineContext(),
+          options: const ArrowCoreEndpointBindingOptions(
+            complexBindings: false,
+          ),
+        );
+
+        final expectedStart = expected.start;
+        final actualStart = actual.start;
+        expect(actualStart?.bindableId, expectedStart?.bindableId);
+        expect(actualStart?.mode, expectedStart?.mode);
+        expect(actualStart?.focusPoint, expectedStart?.focusPoint);
+
+        final expectedEnd = expected.end;
+        final actualEnd = actual.end;
+        expect(actualEnd?.bindableId, expectedEnd?.bindableId);
+        expect(actualEnd?.mode, expectedEnd?.mode);
+        expect(actualEnd?.focusPoint, expectedEnd?.focusPoint);
+      },
+    );
+
+    test('resolveCoreEndpointBindingStrategy mirrors core default options', () {
+      final arrow = _arrowState(
+        endBinding: const core.FixedPointBinding(
+          elementId: 'bindable-1',
+          fixedPoint: <double>[0.5, 0.5],
+          mode: core.bindModeOrbit,
+        ),
+      );
+      final bindable = _bindableState();
+      final payload = <String, dynamic>{
+        'arrow': arrow,
+        'draggedPoints': const <int, core.Point>{
+          0: <double>[60, 0],
+        },
+        'pointer': const <double>[60, 0],
+        'bindables': <core.BindableState>[bindable],
+        'context': buildCoreEngineContext(),
+      };
+
+      final expectedDefault = core.getEndpointBindingStrategy(payload);
+      final expectedComplex = core.getEndpointBindingStrategy(<String, dynamic>{
+        ...payload,
+        'options': const <String, dynamic>{'complexBindings': true},
+      });
+      final actual = resolveCoreEndpointBindingStrategy(
+        arrow: arrow,
+        draggedPoints: const <int, core.Point>{
+          0: <double>[60, 0],
+        },
+        pointer: const <double>[60, 0],
+        bindables: <core.BindableState>[bindable],
+        context: buildCoreEngineContext(),
+      );
+
+      final defaultStart = expectedDefault.start;
+      final actualStart = actual.start;
+      expect(actualStart?.bindableId, defaultStart?.bindableId);
+      expect(actualStart?.mode, defaultStart?.mode);
+      expect(actualStart?.focusPoint, defaultStart?.focusPoint);
+
+      final defaultEnd = expectedDefault.end;
+      final actualEnd = actual.end;
+      expect(actualEnd?.bindableId, defaultEnd?.bindableId);
+      expect(actualEnd?.mode, defaultEnd?.mode);
+      expect(actualEnd?.focusPoint, defaultEnd?.focusPoint);
+
+      expect(
+        expectedComplex.start?.mode == expectedDefault.start?.mode &&
+            expectedComplex.end?.mode == expectedDefault.end?.mode,
+        isFalse,
+      );
+    });
+
+    test(
+      'computeCoreSimpleBindingPatch mirrors core complex-binding options',
+      () {
+        final arrow = _arrowState(
+          startBinding: const core.FixedPointBinding(
+            elementId: 'bindable-1',
+            fixedPoint: <double>[0.75, 0.5],
+            mode: core.bindModeOrbit,
+          ),
+        );
+        final bindable = _bindableState();
+        final payload = <String, dynamic>{
+          'arrow': arrow,
+          'draggedPoints': const <int, core.Point>{
+            1: <double>[60, 0],
+          },
+          'pointer': const <double>[60, 0],
+          'bindables': <core.BindableState>[bindable],
+          'context': buildCoreEngineContext(),
+          'options': const <String, dynamic>{'complexBindings': true},
+        };
+        final expected = core.computeSimpleBindingPatch(payload);
+        final actual = computeCoreSimpleBindingPatch(
+          arrow: arrow,
+          draggedPoints: const <int, core.Point>{
+            1: <double>[60, 0],
+          },
+          pointer: const <double>[60, 0],
+          bindables: <core.BindableState>[bindable],
+          context: buildCoreEngineContext(),
+          options: const ArrowCoreEndpointBindingOptions(complexBindings: true),
+        );
+
+        final expectedStart =
+            expected.arrowPatch['startBinding'] as core.FixedPointBinding?;
+        final actualStart =
+            actual.arrowPatch['startBinding'] as core.FixedPointBinding?;
+        expect(actualStart?.elementId, expectedStart?.elementId);
+        expect(actualStart?.mode, expectedStart?.mode);
+        expect(actualStart?.fixedPoint, expectedStart?.fixedPoint);
+
+        final expectedEnd =
+            expected.arrowPatch['endBinding'] as core.FixedPointBinding?;
+        final actualEnd =
+            actual.arrowPatch['endBinding'] as core.FixedPointBinding?;
+        expect(actualEnd?.elementId, expectedEnd?.elementId);
+        expect(actualEnd?.mode, expectedEnd?.mode);
+        expect(actualEnd?.fixedPoint, expectedEnd?.fixedPoint);
+      },
+    );
+
+    test('bind/unbind relation wrappers preserve relation patches', () {
+      final arrow = _arrowState();
+      final bindable = _bindableState();
+      final relations = <core.BindableRelationState>[
+        const core.BindableRelationState(
+          id: 'bindable-1',
+          boundArrowIds: <String>[],
+        ),
+      ];
+
+      final bindMutation = bindCoreArrowEndpointWithRelations(
+        arrow: arrow,
+        edge: core.arrowEndpointStart,
+        bindable: bindable,
+        relations: relations,
+        mode: core.bindModeInside,
+        focusPoint: const <double>[60, 0],
+      );
+      expect(bindMutation.arrowPatch, isNotEmpty);
+      expect(bindMutation.relationPatches, hasLength(1));
+      expect(
+        bindMutation.relationPatches.first.boundArrowIds,
+        contains('arrow-1'),
+      );
+
+      final boundArrow = core.applyArrowPatch(arrow, bindMutation.arrowPatch);
+      final unbindMutation = unbindCoreArrowEndpointWithRelations(
+        arrow: boundArrow,
+        edge: core.arrowEndpointStart,
+        relations: <core.BindableRelationState>[
+          const core.BindableRelationState(
+            id: 'bindable-1',
+            boundArrowIds: <String>['arrow-1'],
+          ),
+        ],
+      );
+      expect(unbindMutation.arrowPatch, isNotEmpty);
+      expect(unbindMutation.relationPatches, hasLength(1));
+      expect(unbindMutation.relationPatches.first.boundArrowIds, isEmpty);
+    });
+
+    test('updateCoreBoundPoint resolves inside-binding endpoint position', () {
+      final arrow = _arrowState(startBinding: _insideBinding());
+      final bindable = _bindableState();
+      final point = updateCoreBoundPoint(
+        arrow: arrow,
+        edge: 'startBinding',
+        binding: _insideBinding(),
+        bindable: bindable,
+        bindablesById: <core.BindableState>[bindable],
+      );
+
+      expect(point, isNotNull);
+      expect(point![0], closeTo(60.004, 1e-6));
+      expect(point[1], closeTo(0.004, 1e-6));
+    });
+
+    test(
+      'updateCoreElbowArrowPatch handles endpoint drags when incoming points grow',
+      () {
+        final arrow = _elbowArrowState();
+        const updatedPoints = <core.Point>[
+          <double>[0, 10],
+          <double>[20, 0],
+          <double>[20, 20],
+          <double>[40, 20],
+          <double>[40, 40],
+          <double>[60, 40],
+          <double>[60, 60],
+          <double>[80, 60],
+          <double>[80, 90],
+        ];
+
+        final patch = updateCoreElbowArrowPatch(
+          arrow: arrow,
+          updates: const <String, dynamic>{'points': updatedPoints},
+          bindables: const <core.BindableState>[],
+          context: buildCoreEngineContext(),
+          options: const <String, dynamic>{'isDragging': true},
+        );
+        final patched = core.applyArrowPatch(arrow, patch);
+        final globalStart = <double>[
+          patched.x + patched.points.first[0],
+          patched.y + patched.points.first[1],
+        ];
+        final globalEnd = <double>[
+          patched.x + patched.points.last[0],
+          patched.y + patched.points.last[1],
+        ];
+
+        expect(patched.points, hasLength(updatedPoints.length));
+        expect(core.validateElbowInvariant(patched), isEmpty);
+        expect(globalStart[0], closeTo(updatedPoints.first[0], 1e-9));
+        expect(globalStart[1], closeTo(updatedPoints.first[1], 1e-9));
+        expect(globalEnd[0], closeTo(updatedPoints.last[0], 1e-9));
+        expect(globalEnd[1], closeTo(updatedPoints.last[1], 1e-9));
+      },
+    );
+  });
+}
+
+core.ArrowState _arrowState({
+  core.FixedPointBinding? startBinding,
+  core.FixedPointBinding? endBinding,
+}) => core.ArrowState(
+  id: 'arrow-1',
+  x: 0,
+  y: 0,
+  width: 100,
+  height: 0,
+  points: const <core.Point>[
+    <double>[0, 0],
+    <double>[100, 0],
+  ],
+  startBinding: startBinding,
+  endBinding: endBinding,
+  startArrowhead: null,
+  endArrowhead: 'arrow',
+  elbowed: false,
+  fixedSegments: null,
+  startIsSpecial: null,
+  endIsSpecial: null,
+);
+
+core.BindableState _bindableState() => const core.BindableState(
+  id: 'bindable-1',
+  shape: 'rectangle',
+  x: 40,
+  y: -20,
+  width: 40,
+  height: 40,
+  angle: 0,
+  strokeWidth: 2,
+  zIndex: 1,
+  backgroundOpaque: true,
+  bindingEnabled: true,
+  interiorHitEnabled: true,
+);
+
+core.FixedPointBinding _insideBinding() => const core.FixedPointBinding(
+  elementId: 'bindable-1',
+  fixedPoint: <double>[0.5, 0.5],
+  mode: core.bindModeInside,
+);
+
+core.ArrowState _elbowArrowState() => core.ArrowState(
+  id: 'elbow-arrow-1',
+  x: 0,
+  y: 0,
+  width: 80,
+  height: 60,
+  points: const <core.Point>[
+    <double>[0, 0],
+    <double>[20, 0],
+    <double>[20, 20],
+    <double>[40, 20],
+    <double>[40, 40],
+    <double>[60, 40],
+    <double>[60, 60],
+    <double>[80, 60],
+  ],
+  startBinding: null,
+  endBinding: null,
+  startArrowhead: null,
+  endArrowhead: 'arrow',
+  elbowed: true,
+  fixedSegments: const <core.FixedSegment>[
+    core.FixedSegment(index: 2, start: <double>[20, 0], end: <double>[20, 20]),
+    core.FixedSegment(index: 4, start: <double>[40, 20], end: <double>[40, 40]),
+  ],
+  startIsSpecial: null,
+  endIsSpecial: null,
+);

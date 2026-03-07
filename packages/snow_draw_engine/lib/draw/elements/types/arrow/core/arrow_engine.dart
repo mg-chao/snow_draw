@@ -1,0 +1,571 @@
+import 'arrow_binding_core.dart';
+import 'arrow_elbow_core.dart';
+import 'arrow_focus_core.dart';
+import 'arrow_geom.dart';
+import 'arrow_state_core.dart';
+import 'arrow_types.dart';
+
+EngineResult _emptyEngineResult() => const EngineResult(
+  arrowPatch: <String, dynamic>{},
+  bindablePatches: <BindablePatch>[],
+  suggestedBinding: null,
+  events: <ArrowEngineEvent>[],
+);
+
+Map<String, dynamic>? _asStringDynamicMap(Object? value) {
+  if (value is Map<String, dynamic>) {
+    return value;
+  }
+  if (value is Map) {
+    final out = <String, dynamic>{};
+    value.forEach((key, entryValue) {
+      if (key is String) {
+        out[key] = entryValue;
+      }
+    });
+    return out;
+  }
+  return null;
+}
+
+ArrowState? _readArrow(Object? value) => value is ArrowState ? value : null;
+
+ArrowBindingState? _readArrowBindingState(Object? value) {
+  if (value is ArrowBindingState) {
+    return value;
+  }
+  if (value is ArrowState) {
+    return ArrowBindingState(
+      id: value.id,
+      startBinding: value.startBinding,
+      endBinding: value.endBinding,
+    );
+  }
+  if (value is Map) {
+    final id = value['id'];
+    final startBinding = _readFixedPointBinding(value['startBinding']);
+    final endBinding = _readFixedPointBinding(value['endBinding']);
+    if (id is String) {
+      return ArrowBindingState(
+        id: id,
+        startBinding: startBinding,
+        endBinding: endBinding,
+      );
+    }
+  }
+  return null;
+}
+
+double? _readFiniteDouble(Object? value) {
+  if (value is num && value.isFinite) {
+    return value.toDouble();
+  }
+  return null;
+}
+
+Bounds? _readBounds(Object? value) {
+  if (value is! List || value.length != 4) {
+    return null;
+  }
+  final first = _readFiniteDouble(value[0]);
+  final second = _readFiniteDouble(value[1]);
+  final third = _readFiniteDouble(value[2]);
+  final fourth = _readFiniteDouble(value[3]);
+  if (first == null || second == null || third == null || fourth == null) {
+    return null;
+  }
+  return <double>[first, second, third, fourth];
+}
+
+BindableRoundness? _readBindableRoundness(Object? value) {
+  if (value is BindableRoundness) {
+    return value;
+  }
+  if (value is! Map) {
+    return null;
+  }
+
+  final type = value['type'];
+  if (type is! String && type is! num) {
+    return null;
+  }
+
+  final roundnessValue = _readFiniteDouble(value['value']);
+  return BindableRoundness(
+    type: type as BindableRoundnessType,
+    value: roundnessValue,
+  );
+}
+
+BindableState? _readBindable(Object? value) {
+  if (value is BindableState) {
+    return value;
+  }
+  if (value is! Map) {
+    return null;
+  }
+
+  final id = value['id'];
+  final shape = value['shape'];
+  final x = _readFiniteDouble(value['x']);
+  final y = _readFiniteDouble(value['y']);
+  final width = _readFiniteDouble(value['width']);
+  final height = _readFiniteDouble(value['height']);
+  final angle = _readFiniteDouble(value['angle']);
+  final strokeWidth = _readFiniteDouble(value['strokeWidth']);
+  if (id is! String ||
+      shape is! String ||
+      x == null ||
+      y == null ||
+      width == null ||
+      height == null ||
+      angle == null ||
+      strokeWidth == null) {
+    return null;
+  }
+
+  final zIndex = _readFiniteDouble(value['zIndex']);
+  final backgroundOpaque = value['backgroundOpaque'] is bool
+      ? value['backgroundOpaque'] as bool
+      : null;
+  final bindingEnabled = value['bindingEnabled'] is bool
+      ? value['bindingEnabled'] as bool
+      : null;
+  final interiorHitEnabled = value['interiorHitEnabled'] is bool
+      ? value['interiorHitEnabled'] as bool
+      : null;
+
+  return BindableState(
+    id: id,
+    shape: shape,
+    x: x,
+    y: y,
+    width: width,
+    height: height,
+    angle: angle,
+    strokeWidth: strokeWidth,
+    roundness: _readBindableRoundness(value['roundness']),
+    zIndex: zIndex,
+    backgroundOpaque: backgroundOpaque,
+    bindingEnabled: bindingEnabled,
+    interiorHitEnabled: interiorHitEnabled,
+    visibilityBounds: _readBounds(value['visibilityBounds']),
+  );
+}
+
+List<ArrowState> _readArrows(Object? value) {
+  if (value is List<ArrowState>) {
+    return value;
+  }
+  if (value is List) {
+    return value.whereType<ArrowState>().toList(growable: false);
+  }
+  return const <ArrowState>[];
+}
+
+List<BindableState> _readBindables(Object? value) {
+  if (value is List<BindableState>) {
+    return value;
+  }
+  if (value is List) {
+    final bindables = <BindableState>[];
+    for (final entry in value) {
+      final bindable = _readBindable(entry);
+      if (bindable != null) {
+        bindables.add(bindable);
+      }
+    }
+    return bindables;
+  }
+  return const <BindableState>[];
+}
+
+List<BindableRelationState> _readRelations(Object? value) {
+  if (value is List<BindableRelationState>) {
+    return value;
+  }
+  if (value is List) {
+    return value.whereType<BindableRelationState>().toList(growable: false);
+  }
+  return const <BindableRelationState>[];
+}
+
+List<String>? _readStringList(Object? value) {
+  if (value == null) {
+    return null;
+  }
+  if (value is List<String>) {
+    return value;
+  }
+  if (value is List) {
+    return value.whereType<String>().toList(growable: false);
+  }
+  return null;
+}
+
+Point? _readPoint(Object? value) {
+  if (value is! List || value.length < 2) {
+    return null;
+  }
+  final x = value[0];
+  final y = value[1];
+  if (x is! num || y is! num || !x.isFinite || !y.isFinite) {
+    return null;
+  }
+  return <double>[x.toDouble(), y.toDouble()];
+}
+
+List<Point>? _readPoints(Object? value) {
+  if (value is List<Point>) {
+    return value;
+  }
+  if (value is! List) {
+    return null;
+  }
+  final points = <Point>[];
+  for (final entry in value) {
+    final point = _readPoint(entry);
+    if (point != null) {
+      points.add(point);
+    }
+  }
+  return points;
+}
+
+List<FixedSegment>? _readFixedSegments(Object? value) {
+  if (value is List<FixedSegment>) {
+    return value;
+  }
+  if (value is List) {
+    return value.whereType<FixedSegment>().toList(growable: false);
+  }
+  return null;
+}
+
+FixedPointBinding? _readFixedPointBinding(Object? value) {
+  if (value is FixedPointBinding) {
+    return value;
+  }
+  if (value is Map) {
+    final elementId = value['elementId'];
+    final fixedPoint = _readPoint(value['fixedPoint']);
+    final modeValue = value['mode'];
+    final mode = modeValue is String ? modeValue : '';
+    if (elementId is String && fixedPoint != null) {
+      return FixedPointBinding(
+        elementId: elementId,
+        fixedPoint: fixedPoint,
+        mode: mode,
+      );
+    }
+  }
+  return null;
+}
+
+EngineContext _readContext(Object? value) {
+  if (value is EngineContext) {
+    return value;
+  }
+  return normalizeEngineContext(_asStringDynamicMap(value));
+}
+
+ArrowState _applyPatchToArrow(ArrowState arrow, ArrowPatch patch) {
+  final hasStartBinding = patch.containsKey('startBinding');
+  final hasEndBinding = patch.containsKey('endBinding');
+  final hasFixedSegments = patch.containsKey('fixedSegments');
+  final hasStartIsSpecial = patch.containsKey('startIsSpecial');
+  final hasEndIsSpecial = patch.containsKey('endIsSpecial');
+
+  return arrow.copyWith(
+    x: patch['x'] is num ? (patch['x'] as num).toDouble() : null,
+    y: patch['y'] is num ? (patch['y'] as num).toDouble() : null,
+    width: patch['width'] is num ? (patch['width'] as num).toDouble() : null,
+    height: patch['height'] is num ? (patch['height'] as num).toDouble() : null,
+    points: _readPoints(patch['points']),
+    startBinding: hasStartBinding
+        ? patch['startBinding'] as FixedPointBinding?
+        : null,
+    setStartBinding: hasStartBinding,
+    endBinding: hasEndBinding
+        ? patch['endBinding'] as FixedPointBinding?
+        : null,
+    setEndBinding: hasEndBinding,
+    fixedSegments: _readFixedSegments(patch['fixedSegments']),
+    setFixedSegments: hasFixedSegments,
+    startIsSpecial: hasStartIsSpecial ? patch['startIsSpecial'] as bool? : null,
+    setStartIsSpecial: hasStartIsSpecial,
+    endIsSpecial: hasEndIsSpecial ? patch['endIsSpecial'] as bool? : null,
+    setEndIsSpecial: hasEndIsSpecial,
+  );
+}
+
+bool _hasPatchChanges(ArrowPatch patch) => patch.isNotEmpty;
+
+bool _isArrowAffectedByChangedBindables(
+  ArrowState arrow,
+  Set<String>? changedBindableIds,
+) {
+  if (changedBindableIds == null || changedBindableIds.isEmpty) {
+    return true;
+  }
+  return (arrow.startBinding != null &&
+          changedBindableIds.contains(arrow.startBinding!.elementId)) ||
+      (arrow.endBinding != null &&
+          changedBindableIds.contains(arrow.endBinding!.elementId));
+}
+
+Set<String> _collectBoundBindableIds(ArrowBindingState arrow) {
+  final ids = <String>{};
+  if (arrow.startBinding != null) {
+    ids.add(arrow.startBinding!.elementId);
+  }
+  if (arrow.endBinding != null) {
+    ids.add(arrow.endBinding!.elementId);
+  }
+  return ids;
+}
+
+List<BindablePatch> _reconcileBindablePatchesForArrow(
+  ArrowBindingState arrow,
+  List<BindableRelationState> bindables,
+) {
+  final boundBindableIds = _collectBoundBindableIds(arrow);
+  final patches = <BindablePatch>[];
+  final seenBindableIds = <String>{};
+
+  for (final bindable in bindables) {
+    seenBindableIds.add(bindable.id);
+    final hasArrow = bindable.boundArrowIds.contains(arrow.id);
+    final shouldContainArrow = boundBindableIds.contains(bindable.id);
+
+    if (hasArrow && !shouldContainArrow) {
+      patches.add(BindablePatch(id: bindable.id, removeBoundArrowId: arrow.id));
+      continue;
+    }
+    if (!hasArrow && shouldContainArrow) {
+      patches.add(BindablePatch(id: bindable.id, addBoundArrowId: arrow.id));
+    }
+  }
+
+  for (final bindableId in boundBindableIds) {
+    if (seenBindableIds.contains(bindableId)) {
+      continue;
+    }
+    patches.add(BindablePatch(id: bindableId, addBoundArrowId: arrow.id));
+  }
+
+  return patches;
+}
+
+EngineResult computeEndpointDrag(ComputeEndpointDragInput input) {
+  final bindingResult = computeSimpleBindingPatch(input);
+  final arrow = _readArrow(input['arrow']);
+  if (arrow == null) {
+    return bindingResult;
+  }
+
+  final nextArrow = _applyPatchToArrow(arrow, bindingResult.arrowPatch);
+  if (!nextArrow.elbowed) {
+    return EngineResult(
+      arrowPatch: bindingResult.arrowPatch,
+      bindablePatches: bindingResult.bindablePatches,
+      suggestedBinding: bindingResult.suggestedBinding,
+      events: bindingResult.events,
+    );
+  }
+
+  final elbowPatch = recomputeElbowPatch(<String, dynamic>{
+    'arrow': nextArrow,
+    'bindables': _readBindables(input['bindables']),
+    'context': _readContext(input['context']),
+  });
+
+  final bindingPatch = bindingResult.arrowPatch;
+  return EngineResult(
+    arrowPatch: <String, dynamic>{
+      ...bindingPatch,
+      ...elbowPatch,
+      if (!bindingPatch.containsKey('startBinding'))
+        'startBinding': nextArrow.startBinding,
+      if (!bindingPatch.containsKey('endBinding'))
+        'endBinding': nextArrow.endBinding,
+    },
+    bindablePatches: bindingResult.bindablePatches,
+    suggestedBinding: bindingResult.suggestedBinding,
+    events: bindingResult.events,
+  );
+}
+
+EngineResult finalizeEndpointDrag(ComputeEndpointDragInput input) {
+  final nextInput = <String, dynamic>{...input};
+  final options = _asStringDynamicMap(input['options']) ?? <String, dynamic>{};
+  nextInput['options'] = <String, dynamic>{...options, 'finalize': true};
+  return computeEndpointDrag(nextInput);
+}
+
+EngineResult recomputeAfterBindableChange(
+  RecomputeAfterBindableChangeInput input,
+) {
+  final arrow = _readArrow(input['arrow']);
+  if (arrow == null) {
+    return _emptyEngineResult();
+  }
+
+  final bindables = _readBindables(input['bindables']);
+  final context = _readContext(input['context']);
+  final changedBindableIds = _readStringList(input['changedBindableIds']);
+  final options = _asStringDynamicMap(input['options']);
+
+  final base = recomputeBindingsAfterBindableChange(
+    arrow,
+    bindables,
+    context,
+    changedBindableIds,
+    options,
+  );
+
+  final arrowWithBase = _applyPatchToArrow(arrow, base.arrowPatch);
+  if (!arrowWithBase.elbowed) {
+    return base;
+  }
+
+  final elbowPatch = recomputeElbowPatch(<String, dynamic>{
+    'arrow': arrowWithBase,
+    'bindables': bindables,
+    'context': context,
+  });
+
+  final basePatch = base.arrowPatch;
+  return EngineResult(
+    arrowPatch: <String, dynamic>{
+      ...basePatch,
+      ...elbowPatch,
+      if (!basePatch.containsKey('startBinding'))
+        'startBinding': arrowWithBase.startBinding,
+      if (!basePatch.containsKey('endBinding'))
+        'endBinding': arrowWithBase.endBinding,
+    },
+    bindablePatches: base.bindablePatches,
+    suggestedBinding: base.suggestedBinding,
+    events: base.events,
+  );
+}
+
+RecomputeBindingsForChangedBindablesResult recomputeBindingsForChangedBindables(
+  RecomputeBindingsForChangedBindablesInput input,
+) {
+  final changedBindableIds = _readStringList(input['changedBindableIds']);
+  final changedSet = changedBindableIds != null && changedBindableIds.isNotEmpty
+      ? changedBindableIds.toSet()
+      : null;
+
+  final arrowsInput = _readArrows(input['arrows']);
+  final bindablesInput = _readBindables(input['bindables']);
+  final relationsInput = _readRelations(input['relations']);
+  final context = _readContext(input['context']);
+  final options = _asStringDynamicMap(input['options']);
+
+  final arrows = <ArrowState>[];
+  final arrowPatches = <ArrowStatePatchWithId>[];
+  final bindablePatches = <BindablePatch>[];
+  final events = <ArrowEngineEvent>[];
+
+  for (final arrow in arrowsInput) {
+    if (!_isArrowAffectedByChangedBindables(arrow, changedSet)) {
+      arrows.add(arrow);
+      continue;
+    }
+
+    final result = recomputeAfterBindableChange(<String, dynamic>{
+      'arrow': arrow,
+      'bindables': bindablesInput,
+      'changedBindableIds': changedBindableIds,
+      'context': context,
+      'options': options,
+    });
+
+    final patch = result.arrowPatch;
+    if (_hasPatchChanges(patch)) {
+      arrows.add(_applyPatchToArrow(arrow, patch));
+      arrowPatches.add(ArrowStatePatchWithId(id: arrow.id, patch: patch));
+    } else {
+      arrows.add(arrow);
+    }
+
+    if (result.bindablePatches.isNotEmpty) {
+      bindablePatches.addAll(result.bindablePatches);
+    }
+    if (result.events.isNotEmpty) {
+      events.addAll(result.events);
+    }
+  }
+
+  final relationPatches = reduceBindablePatchesToRelationPatches(
+    relationsInput,
+    bindablePatches,
+  );
+  final bindables = applyBindableRelationPatches(
+    relationsInput,
+    relationPatches,
+  );
+
+  return RecomputeBindingsForChangedBindablesResult(
+    arrows: arrows,
+    bindables: bindables,
+    arrowPatches: arrowPatches,
+    relationPatches: relationPatches,
+    events: events,
+  );
+}
+
+ArrowPatch recomputeElbow(RecomputeElbowInput input) =>
+    recomputeElbowPatch(input);
+
+EngineResult computeFocusDrag(ComputeFocusPointDragInput input) =>
+    computeFocusPointDrag(input);
+
+EngineResult finalizeFocusDrag(FinalizeFocusPointDragInput input) {
+  final arrow = _readArrowBindingState(input['arrow']);
+  final bindables = _readRelations(input['bindables']);
+  return EngineResult(
+    arrowPatch: const <String, dynamic>{},
+    bindablePatches: arrow == null
+        ? const <BindablePatch>[]
+        : _reconcileBindablePatchesForArrow(arrow, bindables),
+    suggestedBinding: null,
+    events: const <ArrowEngineEvent>[],
+  );
+}
+
+List<FocusPointDescriptor> resolveVisibleFocusPoints(
+  ListVisibleFocusPointsInput input,
+) => listVisibleFocusPoints(input);
+
+ArrowEndpointEdge? resolveFocusPointHit(PickFocusPointInput input) =>
+    pickFocusPoint(input);
+
+FocusPointHit resolveFocusPointHitWithOffset(
+  PickFocusPointWithOffsetInput input,
+) => pickFocusPointWithOffset(input);
+
+ValidationReport validateArrowInvariant(ArrowState arrow) {
+  final violations = <String>[];
+
+  if (arrow.points.length < 2) {
+    violations.add('arrow must contain at least two points');
+  }
+
+  final firstPoint = arrow.points.isEmpty ? null : arrow.points.first;
+  if (firstPoint != null && !pointsEqual(firstPoint, <double>[0, 0])) {
+    violations.add('arrow points must be normalized with [0,0] as first point');
+  }
+
+  if (arrow.elbowed) {
+    if (!validateElbowPoints(arrow.points)) {
+      violations.add('elbow arrow must keep orthogonal segments');
+    }
+    violations.addAll(validateElbowInvariant(arrow));
+  }
+
+  return ValidationReport(valid: violations.isEmpty, violations: violations);
+}

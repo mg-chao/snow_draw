@@ -1,6 +1,6 @@
 import 'dart:ui';
 
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 /// Converts normalized (0..1) points to local pixel-space offsets.
 List<Offset> resolveFreeDrawLocalPoints({

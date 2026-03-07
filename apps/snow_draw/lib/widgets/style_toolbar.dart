@@ -5,7 +5,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../icons/svg_icons.dart';
 import '../l10n/app_localizations.dart';
@@ -1088,12 +1088,26 @@ class _StyleToolbarState extends State<StyleToolbar> {
         icon = ArrowheadStandardIcon(size: size);
       case ArrowheadStyle.triangle:
         icon = ArrowheadTriangleIcon(size: size);
+      case ArrowheadStyle.triangleOutline:
+        icon = ArrowheadTriangleOutlineIcon(size: size);
       case ArrowheadStyle.square:
         icon = ArrowheadSquareIcon(size: size);
+      case ArrowheadStyle.dot:
+        icon = ArrowheadDotIcon(size: size);
       case ArrowheadStyle.circle:
         icon = ArrowheadCircleIcon(size: size);
+      case ArrowheadStyle.circleOutline:
+        icon = ArrowheadCircleOutlineIcon(size: size);
       case ArrowheadStyle.diamond:
         icon = ArrowheadDiamondIcon(size: size);
+      case ArrowheadStyle.diamondOutline:
+        icon = ArrowheadDiamondOutlineIcon(size: size);
+      case ArrowheadStyle.crowfootOne:
+        icon = ArrowheadCrowfootOneIcon(size: size);
+      case ArrowheadStyle.crowfootMany:
+        icon = ArrowheadCrowfootManyIcon(size: size);
+      case ArrowheadStyle.crowfootOneOrMany:
+        icon = ArrowheadCrowfootOneOrManyIcon(size: size);
       case ArrowheadStyle.invertedTriangle:
         icon = ArrowheadInvertedTriangleIcon(size: size);
       case ArrowheadStyle.verticalLine:
@@ -1115,12 +1129,26 @@ class _StyleToolbarState extends State<StyleToolbar> {
         return widget.strings.arrowheadStandard;
       case ArrowheadStyle.triangle:
         return widget.strings.arrowheadTriangle;
+      case ArrowheadStyle.triangleOutline:
+        return widget.strings.arrowheadTriangleOutline;
       case ArrowheadStyle.square:
         return widget.strings.arrowheadSquare;
+      case ArrowheadStyle.dot:
+        return widget.strings.arrowheadDot;
       case ArrowheadStyle.circle:
         return widget.strings.arrowheadCircle;
+      case ArrowheadStyle.circleOutline:
+        return widget.strings.arrowheadCircleOutline;
       case ArrowheadStyle.diamond:
         return widget.strings.arrowheadDiamond;
+      case ArrowheadStyle.diamondOutline:
+        return widget.strings.arrowheadDiamondOutline;
+      case ArrowheadStyle.crowfootOne:
+        return widget.strings.arrowheadCrowfootOne;
+      case ArrowheadStyle.crowfootMany:
+        return widget.strings.arrowheadCrowfootMany;
+      case ArrowheadStyle.crowfootOneOrMany:
+        return widget.strings.arrowheadCrowfootOneOrMany;
       case ArrowheadStyle.invertedTriangle:
         return widget.strings.arrowheadInvertedTriangle;
       case ArrowheadStyle.verticalLine:

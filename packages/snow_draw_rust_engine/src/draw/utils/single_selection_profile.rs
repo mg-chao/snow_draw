@@ -1,0 +1,173 @@
+#![allow(dead_code)]
+
+use crate::draw::elements::types::connector::connector_type_utils::read_connector_summary;
+use crate::draw::elements::types::text::text_data::TextData;
+use crate::draw::models::element_state::ElementState;
+use crate::draw::types::element_style::ArrowType;
+use std::collections::BTreeSet;
+
+/// Read-only arrow profile extracted from an element payload.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct BasicArrowLikeData {
+    pub points_len: usize,
+    pub arrow_type: ArrowType,
+}
+
+/// Effective single-selection classification used by render/hit-test layers.
+#[derive(Clone, Debug, PartialEq)]
+pub struct SingleSelectionProfile {
+    pub element: Option<ElementState>,
+    pub arrow_data: Option<BasicArrowLikeData>,
+    pub is_text: bool,
+}
+
+impl SingleSelectionProfile {
+    pub fn none() -> Self {
+        Self {
+            element: None,
+            arrow_data: None,
+            is_text: false,
+        }
+    }
+
+    pub fn is_arrow(&self) -> bool {
+        self.arrow_data.is_some()
+    }
+
+    pub fn is_two_point_arrow(&self) -> bool {
+        self.arrow_data
+            .as_ref()
+            .is_some_and(|arrow| arrow.points_len == 2)
+    }
+
+    pub fn is_elbow_arrow(&self) -> bool {
+        self.arrow_data
+            .as_ref()
+            .is_some_and(|arrow| arrow.arrow_type == ArrowType::Elbow)
+    }
+
+    pub fn corner_handle_offset(&self) -> f64 {
+        if self.is_arrow() {
+            8.0
+        } else {
+            0.0
+        }
+    }
+
+    pub fn from_element(element: Option<ElementState>) -> Self {
+        let Some(element) = element else {
+            return Self::none();
+        };
+
+        let arrow_data = resolve_arrow_like_data(&element);
+        let is_text = arrow_data.is_none() && is_text_element(&element);
+
+        Self {
+            element: Some(element),
+            arrow_data,
+            is_text,
+        }
+    }
+}
+
+/// Resolves normalized single-selection profile for the currently selected ids.
+pub fn resolve_single_selection_profile<F>(
+    selected_ids: &BTreeSet<String>,
+    mut resolve_element_by_id: F,
+) -> SingleSelectionProfile
+where
+    F: FnMut(&str) -> Option<ElementState>,
+{
+    if selected_ids.len() != 1 {
+        return SingleSelectionProfile::none();
+    }
+
+    let Some(selected_id) = selected_ids.iter().next() else {
+        return SingleSelectionProfile::none();
+    };
+
+    SingleSelectionProfile::from_element(resolve_element_by_id(selected_id))
+}
+
+fn resolve_arrow_like_data(element: &ElementState) -> Option<BasicArrowLikeData> {
+    let connector = read_connector_summary(element.data.as_ref())?;
+
+    Some(BasicArrowLikeData {
+        points_len: connector.points_len,
+        arrow_type: connector.arrow_type,
+    })
+}
+
+fn is_text_element(element: &ElementState) -> bool {
+    element.data.type_id().as_str() == TextData::TYPE_ID_TOKEN
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::collections::BTreeSet;
+    use std::sync::Arc;
+
+    use crate::draw::elements::types::arrow::arrow_binding::ArrowBinding;
+    use crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode;
+    use crate::draw::elements::types::arrow::arrow_data::{ArrowData, ArrowDataPatch};
+    use crate::draw::elements::types::arrow::arrow_like_data::NullableField;
+    use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
+    use crate::draw::models::element_state::ElementState;
+    use crate::draw::types::draw_point::DrawPoint;
+    use crate::draw::types::draw_rect::DrawRect;
+
+    #[test]
+    fn degenerate_connector_selection_still_counts_as_arrow_selection() {
+        let element = ElementState::new(
+            "arrow-1",
+            DrawRect::new(0.0, 0.0, 100.0, 100.0),
+            0.0,
+            1.0,
+            0,
+            Arc::new(ArrowData::default().copy_with(ArrowDataPatch {
+                points: Some(vec![DrawPoint::new(0.5, 0.5)]),
+                ..ArrowDataPatch::default()
+            })),
+        );
+
+        let profile =
+            resolve_single_selection_profile(&BTreeSet::from([String::from("arrow-1")]), |id| {
+                (id == "arrow-1").then(|| element.clone())
+            });
+
+        assert!(profile.is_arrow());
+        assert!(!profile.is_two_point_arrow());
+        assert_eq!(profile.corner_handle_offset(), 8.0);
+    }
+
+    #[test]
+    fn line_selection_uses_shared_connector_profile_data() {
+        let element = ElementState::new(
+            "line-1",
+            DrawRect::new(0.0, 0.0, 120.0, 40.0),
+            0.0,
+            1.0,
+            0,
+            Arc::new(LineData::default().copy_with(LineDataPatch {
+                start_binding: NullableField::Value(ArrowBinding::new(
+                    "rect-start",
+                    DrawPoint::new(0.0, 0.5),
+                    ArrowBindingMode::Orbit,
+                )),
+                ..LineDataPatch::default()
+            })),
+        );
+
+        let profile =
+            resolve_single_selection_profile(&BTreeSet::from([String::from("line-1")]), |id| {
+                (id == "line-1").then(|| element.clone())
+            });
+
+        assert!(profile.is_arrow());
+        assert!(profile.is_two_point_arrow());
+        assert!(!profile.is_elbow_arrow());
+        assert_eq!(profile.corner_handle_offset(), 8.0);
+    }
+}

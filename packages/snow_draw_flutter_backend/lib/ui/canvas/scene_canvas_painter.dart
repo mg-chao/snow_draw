@@ -3,10 +3,10 @@ import 'dart:typed_data';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 
 import '../../extensions/draw_color_extensions.dart';
-import '../../render/arrow/arrow_visual_cache.dart';
+import '../../render/connector/connector_visual_cache.dart';
 import '../../render/element_renderer.dart';
 import '../../render/free_draw/free_draw_visual_cache.dart';
 import '../../render/patterns/stroke_pattern_utils.dart';
@@ -234,9 +234,9 @@ class SceneCanvasPainter extends CustomPainter {
     }
 
     final plannedArrowOverlayTask =
-        _firstPlannedTask<ArrowPointOverlayRenderTask>();
+        _firstPlannedTask<ConnectorPointOverlayRenderTask>();
     if (plannedArrowOverlayTask != null) {
-      _drawArrowPointOverlayTask(
+      _drawConnectorPointOverlayTask(
         canvas: canvas,
         task: plannedArrowOverlayTask,
         scale: scale,
@@ -1157,7 +1157,7 @@ class SceneCanvasPainter extends CustomPainter {
   }) {
     final element = task.element;
     final config = task.config;
-    if (element.data is ArrowLikeData) {
+    if (element.data is ConnectorData) {
       _drawArrowHoverOutline(
         canvas: canvas,
         element: element,
@@ -1242,9 +1242,9 @@ class SceneCanvasPainter extends CustomPainter {
     );
   }
 
-  void _drawArrowPointOverlayTask({
+  void _drawConnectorPointOverlayTask({
     required Canvas canvas,
-    required ArrowPointOverlayRenderTask task,
+    required ConnectorPointOverlayRenderTask task,
     required double scale,
   }) {
     if (task.handles.isEmpty) {
@@ -1265,11 +1265,11 @@ class SceneCanvasPainter extends CustomPainter {
       }
       effectiveElement = stateView.effectiveElement(documentElement);
     }
-    if (effectiveElement.data is! ArrowLikeData) {
+    if (effectiveElement.data is! ConnectorData) {
       return;
     }
 
-    final handles = <ArrowPointHandle>[
+    final handles = <ConnectorPointHandle>[
       for (final handle in task.handles)
         if (handle.elementId == elementId) handle,
     ];
@@ -1277,7 +1277,7 @@ class SceneCanvasPainter extends CustomPainter {
       return;
     }
 
-    _drawArrowPointHandles(
+    _drawConnectorPointHandles(
       canvas: canvas,
       element: effectiveElement,
       handles: handles,
@@ -1289,27 +1289,29 @@ class SceneCanvasPainter extends CustomPainter {
     );
   }
 
-  void _drawArrowPointHandles({
+  void _drawConnectorPointHandles({
     required Canvas canvas,
     required ElementState element,
-    required List<ArrowPointHandle> handles,
+    required List<ConnectorPointHandle> handles,
     required SelectionConfig selectionConfig,
-    required ArrowPointHandle? activeHandle,
-    required ArrowPointHandle? hoveredHandle,
+    required ConnectorPointHandle? activeHandle,
+    required ConnectorPointHandle? hoveredHandle,
     required bool deleteIndicatorVisible,
     required double scale,
   }) {
-    final addablePoints = <ArrowPointHandle>[];
-    final turningPoints = <ArrowPointHandle>[];
-    final loopPoints = <ArrowPointHandle>[];
+    final addablePoints = <ConnectorPointHandle>[];
+    final turningPoints = <ConnectorPointHandle>[];
+    final loopPoints = <ConnectorPointHandle>[];
     for (final handle in handles) {
       switch (handle.kind) {
-        case ArrowPointKind.turning:
+        case ConnectorPointKind.turning:
+        case ConnectorPointKind.focusStart:
+        case ConnectorPointKind.focusEnd:
           turningPoints.add(handle);
-        case ArrowPointKind.addable:
+        case ConnectorPointKind.addable:
           addablePoints.add(handle);
-        case ArrowPointKind.loopStart:
-        case ArrowPointKind.loopEnd:
+        case ConnectorPointKind.loopStart:
+        case ConnectorPointKind.loopEnd:
           loopPoints.add(handle);
       }
     }
@@ -1397,10 +1399,10 @@ class SceneCanvasPainter extends CustomPainter {
       if (isHighlighted) {
         canvas.drawCircle(center, hoverOuterRadius, paints.hoverOuterFill);
       }
-      final radius = handle.kind == ArrowPointKind.loopEnd
+      final radius = handle.kind == ConnectorPointKind.loopEnd
           ? loopOuterRadius
           : loopInnerRadius;
-      if (handle.kind == ArrowPointKind.loopStart) {
+      if (handle.kind == ConnectorPointKind.loopStart) {
         canvas.drawCircle(center, radius, paints.turningFill);
       }
       canvas.drawCircle(
@@ -1425,7 +1427,7 @@ class SceneCanvasPainter extends CustomPainter {
     required double scale,
   }) {
     final data = element.data;
-    if (data is! ArrowLikeData) {
+    if (data is! ConnectorData) {
       return;
     }
     if (_drawLineHoverOutlineFastPath(
@@ -1439,7 +1441,7 @@ class SceneCanvasPainter extends CustomPainter {
     }
 
     final rect = element.rect;
-    final cached = arrowVisualCache.resolve(element: element, data: data);
+    final cached = connectorVisualCache.resolve(element: element, data: data);
     if (cached.geometry.localPoints.length < 2) {
       return;
     }
@@ -1465,8 +1467,8 @@ class SceneCanvasPainter extends CustomPainter {
     // Draw shaft (always solid for hover outline)
     canvas.drawPath(cached.shaftPath, strokePaint);
 
-    for (final arrowheadPath in cached.arrowheadPaths) {
-      canvas.drawPath(arrowheadPath, strokePaint);
+    if (!cached.arrowheadPaths.strokePath.getBounds().isEmpty) {
+      canvas.drawPath(cached.arrowheadPaths.strokePath, strokePaint);
     }
 
     canvas.restore();
@@ -1475,7 +1477,7 @@ class SceneCanvasPainter extends CustomPainter {
   bool _drawLineHoverOutlineFastPath({
     required Canvas canvas,
     required ElementState element,
-    required ArrowLikeData data,
+    required ConnectorData data,
     required SelectionConfig config,
     required double scale,
   }) {
@@ -1701,8 +1703,8 @@ class SceneCanvasPainter extends CustomPainter {
   }
 
   DrawPoint? _resolveHandlePositionFromHandles(
-    List<ArrowPointHandle> handles,
-    ArrowPointHandle handle,
+    List<ConnectorPointHandle> handles,
+    ConnectorPointHandle handle,
   ) {
     for (final candidate in handles) {
       if (candidate == handle) {

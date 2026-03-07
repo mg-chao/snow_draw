@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:snow_draw_core/snow_draw_core.dart';
+import 'package:snow_draw_engine/snow_draw_engine.dart';
 import 'property_descriptor.dart';
 import 'property_ids.dart';
 import 'property_utils.dart';
