@@ -7,13 +7,13 @@ use std::{
 };
 
 use crate::draw::elements::core::element_hit_tester::{ElementHitTester, ElementState};
-use crate::draw::elements::types::arrow::arrow_hit_tester::ArrowLikeData;
 use crate::draw::elements::types::connector::connector_hit_tester::{
-    ConnectorHitTestElement, ConnectorHitTester,
+    ConnectorHitTestData, ConnectorHitTestElement, ConnectorHitTester,
 };
+use crate::draw::elements::types::connector::connector_geometry::ConnectorGeometryData;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
-use crate::draw::types::element_style::{ArrowType, ArrowheadStyle};
+use crate::draw::types::element_style::{ArrowType, ArrowheadStyle, StrokeStyle};
 use crate::draw::utils::lru_cache::LruCache;
 
 use super::line_data::LineData;
@@ -225,12 +225,24 @@ impl LineLikeData for LineData {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Copy, Debug)]
 struct LineAsArrowData<'a, D: LineLikeData + ?Sized> {
     inner: &'a D,
 }
 
-impl<D: LineLikeData + ?Sized> ArrowLikeData for LineAsArrowData<'_, D> {
+impl<D: LineLikeData + ?Sized> ConnectorHitTestData for LineAsArrowData<'_, D> {
+    fn stroke_style(&self) -> StrokeStyle {
+        StrokeStyle::Solid
+    }
+}
+
+impl<D: LineLikeData + ?Sized> Clone for LineAsArrowData<'_, D> {
+    fn clone(&self) -> Self {
+        Self { inner: self.inner }
+    }
+}
+
+impl<D: LineLikeData + ?Sized> ConnectorGeometryData for LineAsArrowData<'_, D> {
     fn points(&self) -> &[DrawPoint] {
         self.inner.points()
     }

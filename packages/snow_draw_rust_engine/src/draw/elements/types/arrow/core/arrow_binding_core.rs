@@ -4,11 +4,13 @@ use crate::draw::core::coordinates::element_space::ElementSpace;
 use crate::draw::types::draw_point::DrawPoint;
 
 use super::arrow_hit_test::{
-    distance_to_bindable_outline, is_bindable_background_opaque, is_bindable_binding_enabled,
-    is_bindable_interior_hit_enabled, is_bindable_visible_at_point, is_point_in_bindable,
-    is_point_near_bindable_for_binding_hit, sort_bindables_by_z_index,
+    distance_to_bindable_outline, get_bindables_over_point, is_bindable_background_opaque,
+    is_bindable_binding_enabled, is_bindable_interior_hit_enabled, is_bindable_visible_at_point,
+    is_point_in_bindable, is_point_near_bindable_for_binding_hit, sort_bindables_by_z_index,
 };
-use super::arrow_types::{ArrowEndpointEdge, ArrowState, BindableState, FixedPointBinding};
+use super::arrow_types::{
+    canonicalize_bindable_shape, ArrowEndpointEdge, ArrowState, BindableState, FixedPointBinding,
+};
 pub use crate::draw::elements::types::arrow::arrow_binding::*;
 pub use crate::draw::elements::types::arrow::arrow_binding_snapper::*;
 
@@ -79,7 +81,7 @@ pub fn pick_overlapping_bindables(
     bindables: &[BindableState],
     tolerance: f64,
 ) -> Vec<BindableState> {
-    list_hovered_bindables(point, bindables, tolerance, false)
+    get_bindables_over_point(point, bindables, tolerance)
 }
 
 pub fn pick_hovered_bindable_for_focus(
@@ -269,28 +271,54 @@ fn snap_outline_mid_point_candidates(bindable: &BindableState) -> Vec<DrawPoint>
     let rect = bindable.rect();
     let center = rect.center();
 
-    if bindable.shape == "diamond" {
-        let top = rotate_point(
-            DrawPoint::new(rect.center().x, rect.min_y),
-            center,
-            bindable.angle,
-        );
-        let right = rotate_point(
-            DrawPoint::new(rect.max_x, rect.center().y),
-            center,
-            bindable.angle,
-        );
-        let bottom = rotate_point(
-            DrawPoint::new(rect.center().x, rect.max_y),
-            center,
-            bindable.angle,
-        );
-        let left = rotate_point(
-            DrawPoint::new(rect.min_x, rect.center().y),
-            center,
-            bindable.angle,
-        );
-        return vec![right, bottom, left, top];
+    if canonicalize_bindable_shape(&bindable.shape) == "diamond" {
+        let top_x = (bindable.width / 2.0).floor() + 1.0;
+        let top_y = 0.0;
+        let right_x = bindable.width;
+        let right_y = (bindable.height / 2.0).floor() + 1.0;
+        let bottom_x = top_x;
+        let bottom_y = bindable.height;
+        let left_x = 0.0;
+        let left_y = right_y;
+        let vertical_radius = (top_x - left_x) * 0.01;
+        let horizontal_radius = (right_y - top_y) * 0.01;
+
+        let top = DrawPoint::new(bindable.x + top_x, bindable.y + top_y);
+        let right = DrawPoint::new(bindable.x + right_x, bindable.y + right_y);
+        let bottom = DrawPoint::new(bindable.x + bottom_x, bindable.y + bottom_y);
+        let left = DrawPoint::new(bindable.x + left_x, bindable.y + left_y);
+
+        let corners = [
+            bezier_at_half(
+                DrawPoint::new(right.x - vertical_radius, right.y - horizontal_radius),
+                right,
+                right,
+                DrawPoint::new(right.x - vertical_radius, right.y + horizontal_radius),
+            ),
+            bezier_at_half(
+                DrawPoint::new(bottom.x + vertical_radius, bottom.y - horizontal_radius),
+                bottom,
+                bottom,
+                DrawPoint::new(bottom.x - vertical_radius, bottom.y - horizontal_radius),
+            ),
+            bezier_at_half(
+                DrawPoint::new(left.x + vertical_radius, left.y + horizontal_radius),
+                left,
+                left,
+                DrawPoint::new(left.x + vertical_radius, left.y - horizontal_radius),
+            ),
+            bezier_at_half(
+                DrawPoint::new(top.x - vertical_radius, top.y + horizontal_radius),
+                top,
+                top,
+                DrawPoint::new(top.x + vertical_radius, top.y + horizontal_radius),
+            ),
+        ];
+
+        return corners
+            .into_iter()
+            .map(|point| rotate_point(point, center, bindable.angle))
+            .collect();
     }
 
     let right = rotate_point(
@@ -314,6 +342,24 @@ fn snap_outline_mid_point_candidates(bindable: &BindableState) -> Vec<DrawPoint>
         bindable.angle,
     );
     vec![right, bottom, left, top]
+}
+
+fn bezier_at_half(
+    first: DrawPoint,
+    second: DrawPoint,
+    third: DrawPoint,
+    fourth: DrawPoint,
+) -> DrawPoint {
+    let t: f64 = 0.5;
+    let one_minus_t: f64 = 1.0 - t;
+    let b0 = one_minus_t.powi(3);
+    let b1 = 3.0 * t * one_minus_t.powi(2);
+    let b2 = 3.0 * t.powi(2) * one_minus_t;
+    let b3 = t.powi(3);
+    DrawPoint::new(
+        b0 * first.x + b1 * second.x + b2 * third.x + b3 * fourth.x,
+        b0 * first.y + b1 * second.y + b2 * third.y + b3 * fourth.y,
+    )
 }
 
 fn diagonal_guide_segments(bindable: &BindableState) -> [[DrawPoint; 2]; 2] {

@@ -15,6 +15,7 @@ use crate::draw::elements::types::serial_number::serial_number_layout::resolve_s
 use crate::draw::elements::types::text::text_data::TextData;
 use crate::draw::models::element_state::ElementState;
 use crate::draw::types::draw_point::DrawPoint;
+use crate::draw::types::draw_rect::DrawRect;
 use serde_json::Value;
 
 use super::arrow_binding::{ArrowBinding, ArrowBindingMode};
@@ -52,6 +53,32 @@ pub const fn to_core_binding_mode(mode: ArrowBindingMode) -> &'static str {
     }
 }
 
+/// Converts a core point into the shared draw-point value.
+pub const fn to_draw_point(point: crate::draw::elements::types::arrow::core::arrow_types::Point) -> DrawPoint {
+    point
+}
+
+/// Converts a collection of core points into draw-point values.
+pub fn to_draw_points<I>(points: I) -> Vec<DrawPoint>
+where
+    I: IntoIterator<Item = crate::draw::elements::types::arrow::core::arrow_types::Point>,
+{
+    points.into_iter().map(to_draw_point).collect()
+}
+
+/// Converts a draw point into the shared arrow-core point value.
+pub const fn to_core_point(point: DrawPoint) -> crate::draw::elements::types::arrow::core::arrow_types::Point {
+    point
+}
+
+/// Converts a collection of draw points into arrow-core point values.
+pub fn to_core_points<I>(points: I) -> Vec<crate::draw::elements::types::arrow::core::arrow_types::Point>
+where
+    I: IntoIterator<Item = DrawPoint>,
+{
+    points.into_iter().map(to_core_point).collect()
+}
+
 /// Converts an arrow-core binding mode string back to the local enum.
 pub fn from_core_binding_mode(mode: &str) -> ArrowBindingMode {
     match mode {
@@ -68,6 +95,25 @@ pub fn build_core_engine_context(
     max_coordinate: f64,
 ) -> EngineContext {
     EngineContext::new(zoom, is_binding_enabled, bind_mode, max_coordinate)
+}
+
+/// Resolves local-space arrow points from normalized element-local points.
+pub fn resolve_arrow_local_points(
+    rect: DrawRect,
+    normalized_points: &[DrawPoint],
+) -> Vec<DrawPoint> {
+    crate::draw::elements::types::connector::connector_geometry::resolve_connector_local_points(
+        rect,
+        normalized_points,
+    )
+}
+
+/// Resolves world-space arrow points from normalized element-local points.
+pub fn resolve_arrow_world_points(
+    rect: DrawRect,
+    normalized_points: &[DrawPoint],
+) -> Vec<DrawPoint> {
+    resolve_connector_world_points(rect, normalized_points)
 }
 
 pub fn is_arrow_bindable_element(element: &ElementState) -> bool {
@@ -472,6 +518,36 @@ pub fn world_to_local_points(element: &ElementState, world_points: &[DrawPoint])
         .iter()
         .map(|point| space.from_world(*point))
         .collect()
+}
+
+#[cfg(test)]
+mod adapter_tests {
+    use super::*;
+
+    #[test]
+    fn point_conversion_wrappers_round_trip() {
+        let points = vec![DrawPoint::new(1.0, 2.0), DrawPoint::new(3.0, 4.0)];
+
+        assert_eq!(to_core_point(points[0]), points[0]);
+        assert_eq!(to_draw_point(points[1]), points[1]);
+        assert_eq!(to_core_points(points.clone()), points);
+        assert_eq!(to_draw_points(points.clone()), points);
+    }
+
+    #[test]
+    fn arrow_point_resolvers_delegate_to_connector_geometry() {
+        let rect = DrawRect::new(10.0, 20.0, 110.0, 220.0);
+        let normalized = vec![DrawPoint::ZERO, DrawPoint::new(1.0, 1.0)];
+
+        assert_eq!(
+            resolve_arrow_local_points(rect, &normalized),
+            vec![DrawPoint::ZERO, DrawPoint::new(100.0, 200.0)]
+        );
+        assert_eq!(
+            resolve_arrow_world_points(rect, &normalized),
+            vec![DrawPoint::new(10.0, 20.0), DrawPoint::new(110.0, 220.0)]
+        );
+    }
 }
 
 pub fn to_local_fixed_segments_from_core_arrow(

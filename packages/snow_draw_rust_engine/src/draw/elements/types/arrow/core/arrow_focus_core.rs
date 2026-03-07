@@ -16,21 +16,40 @@ pub struct FocusPointHit {
     pub pointer_offset: DrawPoint,
 }
 
+pub fn is_focus_point_visible(arrow: &ArrowState, edge: ArrowEndpointEdge) -> bool {
+    if arrow.elbowed {
+        return false;
+    }
+
+    match edge {
+        ArrowEndpointEdge::Start => arrow.start_binding.is_some(),
+        ArrowEndpointEdge::End => arrow.end_binding.is_some(),
+    }
+}
+
 pub fn resolve_visible_focus_points(arrow: &ArrowState) -> Vec<FocusPointDescriptor> {
     let mut points = Vec::new();
-    if let Some(start) = arrow.points.first().copied() {
-        points.push(FocusPointDescriptor {
-            edge: ArrowEndpointEdge::Start,
-            point: DrawPoint::new(arrow.x + start.x, arrow.y + start.y),
-        });
+    if is_focus_point_visible(arrow, ArrowEndpointEdge::Start) {
+        if let Some(start) = arrow.points.first().copied() {
+            points.push(FocusPointDescriptor {
+                edge: ArrowEndpointEdge::Start,
+                point: DrawPoint::new(arrow.x + start.x, arrow.y + start.y),
+            });
+        }
     }
-    if let Some(end) = arrow.points.last().copied() {
-        points.push(FocusPointDescriptor {
-            edge: ArrowEndpointEdge::End,
-            point: DrawPoint::new(arrow.x + end.x, arrow.y + end.y),
-        });
+    if is_focus_point_visible(arrow, ArrowEndpointEdge::End) {
+        if let Some(end) = arrow.points.last().copied() {
+            points.push(FocusPointDescriptor {
+                edge: ArrowEndpointEdge::End,
+                point: DrawPoint::new(arrow.x + end.x, arrow.y + end.y),
+            });
+        }
     }
     points
+}
+
+pub fn list_visible_focus_points(arrow: &ArrowState) -> Vec<FocusPointDescriptor> {
+    resolve_visible_focus_points(arrow)
 }
 
 pub fn resolve_focus_point_hit(
@@ -39,6 +58,14 @@ pub fn resolve_focus_point_hit(
     tolerance: f64,
 ) -> Option<ArrowEndpointEdge> {
     resolve_focus_point_hit_with_offset(arrow, pointer, tolerance).edge
+}
+
+pub fn pick_focus_point(
+    arrow: &ArrowState,
+    pointer: DrawPoint,
+    tolerance: f64,
+) -> Option<ArrowEndpointEdge> {
+    resolve_focus_point_hit(arrow, pointer, tolerance)
 }
 
 pub fn resolve_focus_point_hit_with_offset(
@@ -68,4 +95,12 @@ pub fn resolve_focus_point_hit_with_offset(
         edge: None,
         pointer_offset: DrawPoint::ZERO,
     })
+}
+
+pub fn pick_focus_point_with_offset(
+    arrow: &ArrowState,
+    pointer: DrawPoint,
+    tolerance: f64,
+) -> FocusPointHit {
+    resolve_focus_point_hit_with_offset(arrow, pointer, tolerance)
 }

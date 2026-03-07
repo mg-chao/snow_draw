@@ -62,8 +62,19 @@ pub struct ArrowFocusFinalizeResult {
 pub fn list_visible_arrow_focus_points(
     element: &ElementState,
     data: &ArrowData,
+    elements: &[ElementState],
+    engine_context: Option<&LifecycleEngineContext>,
+    ignore_overlap: bool,
 ) -> Vec<ArrowFocusPoint> {
+    let _ = ignore_overlap;
     if data.arrow_type == ArrowType::Elbow {
+        return Vec::new();
+    }
+    let scene = ArrowScene::from_elements(
+        elements.iter().cloned(),
+        engine_context.map(to_core_context),
+    );
+    if scene.bindables().is_empty() {
         return Vec::new();
     }
     let arrow = to_arrow_state(element, data);
@@ -77,6 +88,26 @@ pub fn list_visible_arrow_focus_points(
             point: descriptor.point,
         })
         .collect()
+}
+
+pub fn pick_arrow_focus_point(
+    element: &ElementState,
+    data: &ArrowData,
+    elements: &[ElementState],
+    pointer: DrawPoint,
+    engine_context: Option<&LifecycleEngineContext>,
+    ignore_overlap: bool,
+) -> Option<ArrowFocusEndpoint> {
+    let _ = ignore_overlap;
+    let scene = ArrowScene::from_elements(
+        elements.iter().cloned(),
+        engine_context.map(to_core_context),
+    );
+    if scene.bindables().is_empty() {
+        return None;
+    }
+    let tolerance = 10.0 / scene.context.zoom.max(1e-6);
+    pick_arrow_focus_point_with_offset(element, data, pointer, tolerance).endpoint
 }
 
 pub fn pick_arrow_focus_point_with_offset(
@@ -360,6 +391,15 @@ fn to_lifecycle_context(context: &super::arrow_core::EngineContext) -> Lifecycle
     }
 }
 
+fn to_core_context(context: &LifecycleEngineContext) -> super::arrow_core::EngineContext {
+    super::arrow_core::EngineContext {
+        zoom: context.zoom,
+        is_binding_enabled: context.is_binding_enabled,
+        bind_mode: context.bind_mode,
+        max_coordinate: context.max_coordinate,
+    }
+}
+
 fn lifecycle_arrow_to_patch(
     arrow: &crate::draw::elements::types::arrow::core::arrow_types::ArrowState,
 ) -> serde_json::Map<String, serde_json::Value> {
@@ -563,5 +603,21 @@ mod tests {
             result.bindable_patches[0].add_bound_arrow_id.as_deref(),
             Some("arrow-1")
         );
+    }
+
+    #[test]
+    fn pick_focus_point_requires_bindable_scene() {
+        let (arrow_element, arrow_data) = arrow_element();
+
+        let endpoint = pick_arrow_focus_point(
+            &arrow_element,
+            &arrow_data,
+            std::slice::from_ref(&arrow_element),
+            DrawPoint::new(10.0, 10.0),
+            None,
+            false,
+        );
+
+        assert_eq!(endpoint, None);
     }
 }

@@ -54,6 +54,7 @@ use crate::draw::elements::types::arrow::elbow::elbow_editing::{
     compute_elbow_edit, transform_fixed_segments, BindingOverride as ElbowBindingOverride,
 };
 use crate::draw::elements::types::arrow::elbow::elbow_fixed_segment::ElbowFixedSegment as CompatElbowFixedSegment;
+use crate::draw::elements::types::connector::connector_points::ConnectorPointUtils;
 use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
 use crate::draw::history::history_metadata::HistoryMetadata;
 use crate::draw::models::draw_state::DrawState;
@@ -1205,18 +1206,50 @@ fn build_arrow_context_from_target(
         }
     }
 
-    if let ArrowEditPayload::Arrow(arrow_data) = &target.payload {
-        let mut focus_start_handle_position = None;
-        let mut focus_end_handle_position = None;
-        for handle in list_visible_arrow_focus_points(&target.element, arrow_data) {
-            match handle.endpoint {
-                ArrowFocusEndpoint::Start => focus_start_handle_position = Some(handle.point),
-                ArrowFocusEndpoint::End => focus_end_handle_position = Some(handle.point),
+    let (focus_start_handle_position, focus_end_handle_position) = match &target.payload {
+        ArrowEditPayload::Arrow(arrow_data) => {
+            let mut focus_start_handle_position = None;
+            let mut focus_end_handle_position = None;
+            for handle in list_visible_arrow_focus_points(
+                &target.element,
+                arrow_data,
+                state.domain.document.elements.as_slice(),
+                None,
+                false,
+            ) {
+                match handle.endpoint {
+                    ArrowFocusEndpoint::Start => focus_start_handle_position = Some(handle.point),
+                    ArrowFocusEndpoint::End => focus_end_handle_position = Some(handle.point),
+                }
             }
+            (focus_start_handle_position, focus_end_handle_position)
         }
-        context = context
-            .with_focus_handle_positions(focus_start_handle_position, focus_end_handle_position);
-    }
+        ArrowEditPayload::Line(_) => {
+            let mut focus_start_handle_position = None;
+            let mut focus_end_handle_position = None;
+            for handle in ConnectorPointUtils::list_visible_focus_points(
+                &target.element,
+                state.domain.document.elements.as_slice(),
+                state.application.view.camera.zoom,
+                true,
+            ) {
+                match handle.kind {
+                    crate::draw::elements::types::connector::connector_points::ConnectorPointKind::FocusStart => {
+                        focus_start_handle_position = Some(handle.position);
+                    }
+                    crate::draw::elements::types::connector::connector_points::ConnectorPointKind::FocusEnd => {
+                        focus_end_handle_position = Some(handle.position);
+                    }
+                    _ => {}
+                }
+            }
+            (focus_start_handle_position, focus_end_handle_position)
+        }
+    };
+    context = context.with_focus_handle_positions(
+        focus_start_handle_position,
+        focus_end_handle_position,
+    );
 
     context
 }

@@ -31,6 +31,43 @@ pub enum ConnectorPathCommand {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct ConnectorGeometry;
 
+/// Minimal connector payload surface required by geometry helpers.
+///
+/// This keeps [`ConnectorGeometryDescriptor`] usable with both full
+/// connector payloads and lightweight adapter wrappers used by hit testing.
+pub trait ConnectorGeometryData {
+    fn points(&self) -> &[DrawPoint];
+    fn stroke_width(&self) -> f64;
+    fn arrow_type(&self) -> ArrowType;
+    fn start_arrowhead(&self) -> ArrowheadStyle;
+    fn end_arrowhead(&self) -> ArrowheadStyle;
+}
+
+impl<T> ConnectorGeometryData for T
+where
+    T: ConnectorData,
+{
+    fn points(&self) -> &[DrawPoint] {
+        ConnectorData::points(self)
+    }
+
+    fn stroke_width(&self) -> f64 {
+        ConnectorData::stroke_width(self)
+    }
+
+    fn arrow_type(&self) -> ArrowType {
+        ConnectorData::arrow_type(self)
+    }
+
+    fn start_arrowhead(&self) -> ArrowheadStyle {
+        ConnectorData::start_arrowhead(self)
+    }
+
+    fn end_arrowhead(&self) -> ArrowheadStyle {
+        ConnectorData::end_arrowhead(self)
+    }
+}
+
 impl ConnectorGeometry {
     pub const fn new() -> Self {
         Self
@@ -161,7 +198,7 @@ impl ConnectorGeometry {
 #[derive(Clone, Debug)]
 pub struct ConnectorGeometryDescriptor<D>
 where
-    D: ConnectorData,
+    D: ConnectorGeometryData,
 {
     pub data: D,
     pub rect: DrawRect,
@@ -177,7 +214,7 @@ where
 
 impl<D> ConnectorGeometryDescriptor<D>
 where
-    D: ConnectorData,
+    D: ConnectorGeometryData,
 {
     pub fn new(data: D, rect: DrawRect) -> Self {
         Self {

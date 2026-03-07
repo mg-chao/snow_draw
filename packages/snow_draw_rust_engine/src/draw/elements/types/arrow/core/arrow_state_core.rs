@@ -29,6 +29,34 @@ pub fn apply_arrow_binding_state_patch(
     next
 }
 
+pub fn apply_arrow_binding_state_patches(
+    arrows: &[ArrowBindingState],
+    patches: &[ArrowBindingStatePatch],
+) -> Vec<ArrowBindingState> {
+    if patches.is_empty() || arrows.is_empty() {
+        return arrows.to_vec();
+    }
+
+    let patch_by_id = patches
+        .iter()
+        .filter_map(|patch| {
+            patch.get("id")
+                .and_then(Value::as_str)
+                .map(|id| (id.to_owned(), patch))
+        })
+        .collect::<HashMap<_, _>>();
+
+    arrows
+        .iter()
+        .map(|arrow| {
+            patch_by_id
+                .get(&arrow.id)
+                .map(|patch| apply_arrow_binding_state_patch(arrow, patch))
+                .unwrap_or_else(|| arrow.clone())
+        })
+        .collect()
+}
+
 pub fn apply_bindable_relation_patch(
     bindable: &BindableRelationState,
     patch: &BindableRelationPatch,
@@ -118,15 +146,15 @@ pub fn reduce_arrow_engine_events_to_order(
     let mut reorder_operations = Vec::new();
     let mut binding_broken_events = Vec::new();
     let mut ordered_element_ids = input.ordered_element_ids.clone();
+    let anchor_lookup = input
+        .anchor_element_ids_by_bindable_id
+        .clone()
+        .unwrap_or_default();
 
     for event in &input.events {
         match event {
             ArrowEngineEvent::BindingBroken(event) => binding_broken_events.push(event.clone()),
             ArrowEngineEvent::ReorderArrow(event) => {
-                let anchor_lookup = input
-                    .anchor_element_ids_by_bindable_id
-                    .clone()
-                    .unwrap_or_default();
                 let anchor_element_ids = anchor_lookup
                     .get(&event.bindable_id)
                     .cloned()
@@ -136,16 +164,17 @@ pub fn reduce_arrow_engine_events_to_order(
                     arrow_id: event.arrow_id.clone(),
                     anchor_element_ids,
                 });
-                ordered_element_ids = reorder.ordered_element_ids.clone();
-                reorder_operations.push(reorder);
+                if reorder.moved {
+                    ordered_element_ids = reorder.ordered_element_ids.clone();
+                    reorder_operations.push(reorder);
+                }
             }
         }
     }
 
-    let moved = reorder_operations.iter().any(|result| result.moved);
     ReduceArrowEngineEventsToOrderResult {
         ordered_element_ids,
-        moved,
+        moved: !reorder_operations.is_empty(),
         reorder_operations,
         binding_broken_events,
     }
@@ -158,20 +187,13 @@ pub fn apply_engine_result(input: &ApplyEngineResultInput) -> ApplyEngineResultV
         &input.result.bindable_patches,
     );
     let bindables = apply_bindable_relation_patches(&input.bindables, &relation_patches);
-    let order = input
-        .ordered_element_ids
-        .as_ref()
-        .and_then(|ordered_element_ids| {
-            let reduced =
-                reduce_arrow_engine_events_to_order(&ReduceArrowEngineEventsToOrderInput {
-                    ordered_element_ids: ordered_element_ids.clone(),
-                    events: input.result.events.clone(),
-                    anchor_element_ids_by_bindable_id: input
-                        .anchor_element_ids_by_bindable_id
-                        .clone(),
-                });
-            reduced.moved.then_some(reduced)
-        });
+    let order = input.ordered_element_ids.as_ref().map(|ordered_element_ids| {
+        reduce_arrow_engine_events_to_order(&ReduceArrowEngineEventsToOrderInput {
+            ordered_element_ids: ordered_element_ids.clone(),
+            events: input.result.events.clone(),
+            anchor_element_ids_by_bindable_id: input.anchor_element_ids_by_bindable_id.clone(),
+        })
+    });
 
     ApplyEngineResultValue {
         arrow,
@@ -185,6 +207,122 @@ pub fn apply_engine_result(input: &ApplyEngineResultInput) -> ApplyEngineResultV
         binding_broken_events: order
             .as_ref()
             .map(|value| value.binding_broken_events.clone()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::draw::elements::types::arrow::core::arrow_types::{
+        ArrowEndpointEdge, ArrowPatch, ArrowState, EngineResult, FixedPointBinding,
+    };
+    use crate::draw::types::draw_point::DrawPoint;
+
+    fn arrow_state(id: &str) -> ArrowState {
+        ArrowState {
+            id: id.to_owned(),
+            x: 0.0,
+            y: 0.0,
+            width: 10.0,
+            height: 10.0,
+            points: vec![DrawPoint::ZERO, DrawPoint::new(10.0, 10.0)],
+            start_binding: None,
+            end_binding: None,
+            start_arrowhead: Some("none".to_owned()),
+            end_arrowhead: Some("none".to_owned()),
+            elbowed: false,
+            fixed_segments: None,
+            start_is_special: None,
+            end_is_special: None,
+        }
+    }
+
+    #[test]
+    fn apply_arrow_binding_state_patches_updates_matching_arrows() {
+        let arrows = vec![
+            ArrowBindingState {
+                id: "arrow-1".to_owned(),
+                start_binding: None,
+                end_binding: None,
+            },
+            ArrowBindingState {
+                id: "arrow-2".to_owned(),
+                start_binding: None,
+                end_binding: None,
+            },
+        ];
+        let mut patch = ArrowBindingStatePatch::new();
+        patch.insert("id".to_owned(), Value::from("arrow-2"));
+        patch.insert(
+            "startBinding".to_owned(),
+            Value::Object(serde_json::Map::from_iter([
+                ("elementId".to_owned(), Value::from("rect-1")),
+                (
+                    "fixedPoint".to_owned(),
+                    Value::Array(vec![Value::from(0.25), Value::from(0.75)]),
+                ),
+                ("mode".to_owned(), Value::from("orbit")),
+            ])),
+        );
+
+        let updated = apply_arrow_binding_state_patches(&arrows, &[patch]);
+
+        assert_eq!(updated[0], arrows[0]);
+        assert_eq!(
+            updated[1].start_binding,
+            Some(FixedPointBinding {
+                element_id: "rect-1".to_owned(),
+                fixed_point: DrawPoint::new(0.25, 0.75),
+                mode: "orbit".to_owned(),
+            })
+        );
+    }
+
+    #[test]
+    fn reduce_arrow_engine_events_to_order_skips_noop_reorders() {
+        let result = reduce_arrow_engine_events_to_order(&ReduceArrowEngineEventsToOrderInput {
+            ordered_element_ids: vec!["rect-1".to_owned(), "arrow-1".to_owned()],
+            events: vec![ArrowEngineEvent::ReorderArrow(super::super::arrow_types::ReorderArrowEvent {
+                arrow_id: "arrow-1".to_owned(),
+                bindable_id: "rect-1".to_owned(),
+            })],
+            anchor_element_ids_by_bindable_id: None,
+        });
+
+        assert!(!result.moved);
+        assert!(result.reorder_operations.is_empty());
+        assert_eq!(
+            result.ordered_element_ids,
+            vec!["rect-1".to_owned(), "arrow-1".to_owned()]
+        );
+    }
+
+    #[test]
+    fn apply_engine_result_preserves_order_metadata_without_reorder_move() {
+        let broken = BindingBrokenEvent {
+            arrow_id: "arrow-1".to_owned(),
+            edge: ArrowEndpointEdge::Start,
+        };
+        let result = apply_engine_result(&ApplyEngineResultInput {
+            arrow: arrow_state("arrow-1"),
+            bindables: Vec::new(),
+            result: EngineResult {
+                arrow_patch: ArrowPatch::new(),
+                bindable_patches: Vec::new(),
+                suggested_binding: None,
+                events: vec![ArrowEngineEvent::BindingBroken(broken.clone())],
+            },
+            ordered_element_ids: Some(vec!["rect-1".to_owned(), "arrow-1".to_owned()]),
+            anchor_element_ids_by_bindable_id: None,
+        });
+
+        assert_eq!(
+            result.ordered_element_ids,
+            Some(vec!["rect-1".to_owned(), "arrow-1".to_owned()])
+        );
+        assert_eq!(result.order_changed, Some(false));
+        assert_eq!(result.reorder_operations, Some(Vec::new()));
+        assert_eq!(result.binding_broken_events, Some(vec![broken]));
     }
 }
 

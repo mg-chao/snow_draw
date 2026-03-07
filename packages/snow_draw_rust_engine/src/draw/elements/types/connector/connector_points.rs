@@ -32,6 +32,19 @@ struct ParsedConnectorData {
 pub struct ConnectorPointUtils;
 
 impl ConnectorPointUtils {
+    pub fn list_visible_focus_points(
+        element: &ElementState,
+        elements: &[ElementState],
+        zoom: f64,
+        is_binding_enabled: bool,
+    ) -> Vec<ConnectorPointHandle> {
+        let Some(data) = resolve_connector_data(element) else {
+            return Vec::new();
+        };
+
+        build_focus_points(element, &data, elements, zoom, is_binding_enabled)
+    }
+
     pub fn build_overlay(
         element: &ElementState,
         loop_threshold: f64,
