@@ -8,6 +8,8 @@ use crate::draw::elements::core::creation_strategy::{
     ElementData, PointCreationStrategy,
 };
 use crate::draw::elements::types::arrow::arrow_creation_strategy::ArrowCreationStrategy as SharedConnectorCreationStrategy;
+use crate::draw::elements::types::arrow::arrow_data::ArrowData as DomainArrowData;
+use crate::draw::elements::types::line::line_data::LineData as DomainLineData;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::edit_context::TextMetricsService;
 use crate::draw::utils::snapping_mode::SnappingMode;
@@ -160,6 +162,15 @@ impl CreationStrategy for ArrowCreationStrategy {
         snap_override_active: bool,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> CreationUpdateResult {
+        assert!(
+            creating_state
+                .element_data_ref()
+                .as_ref()
+                .as_any()
+                .downcast_ref::<DomainArrowData>()
+                .is_some(),
+            "ArrowCreationStrategy.update only supports ArrowData"
+        );
         ConnectorCreationStrategy::new().update(
             state,
             config,
@@ -218,6 +229,15 @@ impl CreationStrategy for LineCreationStrategy {
         snap_override_active: bool,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> CreationUpdateResult {
+        assert!(
+            creating_state
+                .element_data_ref()
+                .as_ref()
+                .as_any()
+                .downcast_ref::<DomainLineData>()
+                .is_some(),
+            "LineCreationStrategy.update only supports LineData"
+        );
         ConnectorCreationStrategy::new().update(
             state,
             config,
@@ -266,6 +286,30 @@ impl CreationStrategy for LineCreationStrategy {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::draw::elements::core::creation_strategy::{
+        CreatingState, CreationMode, ElementState,
+    };
+    use crate::draw::elements::types::line::line_data::LineData;
+    use crate::draw::types::draw_rect::DrawRect;
+    use crate::draw::utils::snapping_mode::SnappingMode;
+
+    fn creating_state_with_data(data: Arc<dyn ElementData>, type_id_value: &str) -> CreatingState {
+        CreatingState {
+            element: ElementState {
+                id: "element-1".to_owned(),
+                type_id_value: type_id_value.to_owned(),
+                rect: DrawRect::new(0.0, 0.0, 10.0, 10.0),
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index: 0,
+                data,
+            },
+            start_position: DrawPoint::new(0.0, 0.0),
+            current_rect: DrawRect::new(0.0, 0.0, 10.0, 10.0),
+            snap_guides: Vec::new(),
+            creation_mode: CreationMode::default(),
+        }
+    }
 
     #[test]
     fn connector_strategies_are_distinct_public_types() {
@@ -276,5 +320,47 @@ mod tests {
         assert_eq!(format!("{:?}", connector), "ConnectorCreationStrategy");
         assert_eq!(format!("{:?}", arrow), "ArrowCreationStrategy");
         assert_eq!(format!("{:?}", line), "LineCreationStrategy");
+    }
+
+    #[test]
+    #[should_panic(expected = "ArrowCreationStrategy.update only supports ArrowData")]
+    fn arrow_strategy_update_rejects_line_data() {
+        let strategy = ArrowCreationStrategy::new();
+        let creating_state =
+            creating_state_with_data(Arc::new(LineData::default()), LineData::TYPE_ID_TOKEN);
+
+        let _ = strategy.update(
+            &DrawState::default(),
+            &DrawConfig::default(),
+            &creating_state,
+            DrawPoint::new(10.0, 10.0),
+            false,
+            false,
+            SnappingMode::None,
+            false,
+            None,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "LineCreationStrategy.update only supports LineData")]
+    fn line_strategy_update_rejects_arrow_data() {
+        let strategy = LineCreationStrategy::new();
+        let creating_state = creating_state_with_data(
+            Arc::new(DomainArrowData::default()),
+            DomainArrowData::TYPE_ID_TOKEN,
+        );
+
+        let _ = strategy.update(
+            &DrawState::default(),
+            &DrawConfig::default(),
+            &creating_state,
+            DrawPoint::new(10.0, 10.0),
+            false,
+            false,
+            SnappingMode::None,
+            false,
+            None,
+        );
     }
 }

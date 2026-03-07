@@ -86,22 +86,15 @@ where
     }
 }
 
-pub fn resolve_arrow_bindable_candidates<I>(
-    elements: I,
+pub fn resolve_arrow_bindable_candidates(
+    document: &DomainDocumentState,
     world_point: DrawPoint,
     distance: f64,
     preferred_binding: Option<&ArrowBinding>,
     opposite_binding: Option<&ArrowBinding>,
     excluded_element_id: Option<&str>,
-) -> ArrowBindableCandidates
-where
-    I: IntoIterator<Item = ElementState>,
-{
-    let all = project_arrow_bindable_candidates(elements);
-    if all.is_empty() {
-        return ArrowBindableCandidates::empty();
-    }
-
+    include_nearby: bool,
+) -> ArrowBindableCandidates {
     let mut candidate_ids = HashSet::<String>::new();
     if let Some(binding) = preferred_binding {
         candidate_ids.insert(binding.element_id.clone());
@@ -110,12 +103,15 @@ where
         candidate_ids.insert(binding.element_id.clone());
     }
 
-    for bindable in &all.bindables {
-        if excluded_element_id.is_some_and(|excluded| bindable.id == excluded) {
-            continue;
-        }
-        if is_point_near_bindable_for_binding_hit(world_point, bindable, distance) {
-            candidate_ids.insert(bindable.id.clone());
+    if include_nearby && distance > 0.0 {
+        for element in query_arrow_bindable_elements_at_point_top_down(
+            document,
+            world_point,
+            distance,
+            excluded_element_id,
+            true,
+        ) {
+            candidate_ids.insert(element.id);
         }
     }
 
@@ -124,10 +120,54 @@ where
     }
 
     project_arrow_bindable_candidates(
-        all.elements
+        document
+            .elements
+            .iter()
+            .cloned()
             .into_iter()
             .filter(|element| candidate_ids.contains(element.id.as_str())),
     )
+}
+
+fn query_arrow_bindable_elements_at_point_top_down(
+    document: &DomainDocumentState,
+    point: DrawPoint,
+    tolerance: f64,
+    excluded_element_id: Option<&str>,
+    stop_at_opaque: bool,
+) -> Vec<ElementState> {
+    let mut result = Vec::<ElementState>::new();
+
+    for element in document.elements.iter().rev() {
+        if element.opacity <= 0.0 {
+            continue;
+        }
+        if excluded_element_id.is_some_and(|excluded| excluded == element.id.as_str()) {
+            continue;
+        }
+
+        let Some(bindable) = to_core_bindable_state(
+            element,
+            Some(element.z_index as usize),
+            true,
+            true,
+            Some(element.rect),
+        ) else {
+            continue;
+        };
+
+        if !is_point_near_bindable_for_binding_hit(point, &bindable, tolerance) {
+            continue;
+        }
+
+        let stop_on_element = stop_at_opaque && bindable.background_opaque.unwrap_or(true);
+        result.push(element.clone());
+        if stop_on_element {
+            break;
+        }
+    }
+
+    result
 }
 
 pub fn resolve_arrow_bindable_candidates_for_endpoint_strategy(
@@ -368,28 +408,130 @@ fn to_order_core_bindable_state(bindable: &BindableState) -> CoreBindableState {
 mod tests {
     use std::sync::Arc;
 
-    use super::resolve_arrow_bindable_candidates_for_endpoint_strategy;
+    use super::{
+        resolve_arrow_bindable_candidates, resolve_arrow_bindable_candidates_for_endpoint_strategy,
+    };
     use crate::draw::elements::types::arrow::arrow_binding::{ArrowBinding, ArrowBindingMode};
-    use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
+    use crate::draw::elements::types::rectangle::rectangle_data::{
+        RectangleData, RectangleDataPatch,
+    };
     use crate::draw::models::draw_state::DomainDocumentState;
     use crate::draw::models::element_state::ElementState;
     use crate::draw::models::global_elements_state::GlobalElementsState;
+    use crate::draw::types::draw_color::DrawColor;
     use crate::draw::types::draw_point::DrawPoint;
     use crate::draw::types::draw_rect::DrawRect;
 
     fn bindable(id: &str, z_index: i64) -> ElementState {
+        let data = RectangleData::default().copy_with(RectangleDataPatch {
+            fill_color: Some(DrawColor::new(0xFF12_3456)),
+            ..RectangleDataPatch::default()
+        });
         ElementState::new(
             id,
             DrawRect::new(0.0, 0.0, 20.0, 20.0),
             0.0,
             1.0,
             z_index,
-            Arc::new(RectangleData::default()),
+            Arc::new(data),
         )
     }
 
     fn binding(id: &str) -> ArrowBinding {
         ArrowBinding::new(id, DrawPoint::new(0.5, 0.5), ArrowBindingMode::Orbit)
+    }
+
+    fn transparent_bindable(id: &str, z_index: i64) -> ElementState {
+        let data = RectangleData::default().copy_with(RectangleDataPatch {
+            fill_color: Some(DrawColor::new(0x0012_3456)),
+            ..RectangleDataPatch::default()
+        });
+        ElementState::new(
+            id,
+            DrawRect::new(0.0, 0.0, 20.0, 20.0),
+            0.0,
+            1.0,
+            z_index,
+            Arc::new(data),
+        )
+    }
+
+    #[test]
+    fn resolve_candidates_stops_at_first_opaque_nearby_hit() {
+        let document = DomainDocumentState::new(
+            vec![bindable("bottom", 0), bindable("top", 1)],
+            0,
+            GlobalElementsState::default(),
+        );
+
+        let candidates = resolve_arrow_bindable_candidates(
+            &document,
+            DrawPoint::new(1.0, 10.0),
+            2.0,
+            None,
+            None,
+            None,
+            true,
+        );
+        let ids = candidates
+            .elements
+            .iter()
+            .map(|element| element.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(ids, vec!["top"]);
+    }
+
+    #[test]
+    fn resolve_candidates_merge_bound_targets_with_nearby_hits_in_document_order() {
+        let document = DomainDocumentState::new(
+            vec![bindable("bottom", 0), transparent_bindable("top", 1)],
+            0,
+            GlobalElementsState::default(),
+        );
+
+        let candidates = resolve_arrow_bindable_candidates(
+            &document,
+            DrawPoint::new(1.0, 10.0),
+            2.0,
+            Some(&binding("bottom")),
+            None,
+            None,
+            true,
+        );
+        let ids = candidates
+            .elements
+            .iter()
+            .map(|element| element.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(ids, vec!["bottom", "top"]);
+    }
+
+    #[test]
+    fn resolve_candidates_can_skip_nearby_bindables() {
+        let document = DomainDocumentState::new(
+            vec![bindable("bottom", 0), bindable("top", 1)],
+            0,
+            GlobalElementsState::default(),
+        );
+
+        let candidates = resolve_arrow_bindable_candidates(
+            &document,
+            DrawPoint::new(1.0, 10.0),
+            2.0,
+            Some(&binding("bottom")),
+            None,
+            None,
+            false,
+        );
+        let ids = candidates
+            .elements
+            .iter()
+            .map(|element| element.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert_eq!(ids, vec!["bottom"]);
     }
 
     #[test]

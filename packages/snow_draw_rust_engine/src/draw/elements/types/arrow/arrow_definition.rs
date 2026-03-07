@@ -2,9 +2,9 @@ use std::sync::LazyLock;
 
 use crate::draw::elements::core::element_data::ElementTypeId;
 use crate::draw::elements::core::element_definition::ElementDefinition;
+use crate::draw::elements::types::connector::connector_creation_strategy::ArrowCreationStrategy;
 use crate::draw::elements::types::connector::connector_hit_tester::ConnectorHitTester;
 
-use super::arrow_creation_strategy::ArrowCreationStrategy;
 use super::arrow_data::ArrowData;
 use super::arrow_task_encoder::ArrowTaskEncoder;
 
