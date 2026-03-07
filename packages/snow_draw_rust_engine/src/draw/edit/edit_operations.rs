@@ -2057,6 +2057,14 @@ fn internal_fixed_segment_to_compat(
 mod tests {
     use super::*;
 
+    use std::collections::BTreeSet;
+
+    use crate::draw::config::draw_config::DrawConfig;
+    use crate::draw::elements::core::creation_strategy::{
+        CreatingState, CreationStrategy, ElementState as CreatingElementState,
+    };
+    use crate::draw::elements::types::arrow::arrow_creation_strategy::ArrowCreationStrategy;
+    use crate::draw::elements::types::connector::connector_points::ConnectorPointKind as EditConnectorPointKind;
     use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
     use crate::draw::elements::types::serial_number::serial_number_data::{
         SerialNumberData, SerialNumberDataPatch,
@@ -2065,6 +2073,7 @@ mod tests {
     use crate::draw::history::history_metadata::HistoryRecordType;
     use crate::draw::models::application_state::ApplicationState;
     use crate::draw::models::draw_state::{DomainDocumentState, DomainState, DrawState};
+    use crate::draw::models::selection_state::SelectionState;
 
     fn arrow_element(
         id: &str,
@@ -2116,6 +2125,195 @@ mod tests {
             Default::default(),
         );
         DrawState::new(Some(domain), Some(ApplicationState::initial(None)))
+    }
+
+    fn draw_state_with_selection(
+        elements: Vec<DomainElementState>,
+        selected_ids: &[&str],
+    ) -> DrawState {
+        let selected_ids = selected_ids
+            .iter()
+            .map(|id| (*id).to_owned())
+            .collect::<BTreeSet<_>>();
+        let domain = DomainState::new(
+            DomainDocumentState::new(elements, 1, Default::default()),
+            SelectionState::new(selected_ids, 1),
+        );
+        DrawState::new(Some(domain), Some(ApplicationState::initial(None)))
+    }
+
+    fn elbow_arrow_element(
+        id: &str,
+        points: &[DrawPoint],
+        z_index: i64,
+        fixed_segments: Option<Vec<ArrowDataElbowFixedSegment>>,
+        start_binding: Option<ArrowDataBinding>,
+        end_binding: Option<ArrowDataBinding>,
+    ) -> DomainElementState {
+        let rect = DrawRect::from_point_cloud(points.iter().copied());
+        let normalized_points = ArrowGeometry::normalize_points(points, rect);
+        let data = ArrowData::default().copy_with(ArrowDataPatch {
+            points: Some(normalized_points),
+            arrow_type: Some(ArrowType::Elbow),
+            start_binding: match start_binding {
+                Some(binding) => ArrowDataNullableField::Value(binding),
+                None => ArrowDataNullableField::Null,
+            },
+            end_binding: match end_binding {
+                Some(binding) => ArrowDataNullableField::Value(binding),
+                None => ArrowDataNullableField::Null,
+            },
+            fixed_segments: match fixed_segments {
+                Some(segments) => ArrowDataNullableField::Value(segments),
+                None => ArrowDataNullableField::Unset,
+            },
+            ..ArrowDataPatch::default()
+        });
+        arrow_element(id, rect, data, z_index)
+    }
+
+    fn drag_arrow_handle_session(
+        state: &DrawState,
+        element_id: &str,
+        point_kind: EditConnectorPointKind,
+        point_index: usize,
+        start_position: DrawPoint,
+        current_position: DrawPoint,
+    ) -> (
+        ArrowPointEditOperationAdapter,
+        EditContext,
+        ArrowPointTransform,
+    ) {
+        let operation = ArrowPointEditOperationAdapter::new();
+        let context = operation.create_context(
+            state,
+            start_position,
+            &EditOperationParams::from(TypedArrowPointOperationParams::new(
+                element_id,
+                point_kind,
+                point_index,
+            )),
+        );
+        let initial = operation.initial_transform(state, &context, start_position);
+        let update = operation.update(
+            state,
+            &context,
+            &initial,
+            current_position,
+            EditModifiers::default(),
+            DrawConfig::default_config(),
+        );
+        let EditTransform::ArrowPoint(transform) = update.transform else {
+            panic!("expected arrow-point transform");
+        };
+
+        (operation, context, transform)
+    }
+
+    fn create_elbow_arrow_via_creation(
+        state: &DrawState,
+        id: &str,
+        start_position: DrawPoint,
+        mid_position: DrawPoint,
+        end_position: DrawPoint,
+        z_index: i64,
+    ) -> DomainElementState {
+        let strategy = ArrowCreationStrategy::new();
+        let start = strategy.start(
+            Arc::new(ArrowData::default().copy_with(ArrowDataPatch {
+                arrow_type: Some(ArrowType::Elbow),
+                ..ArrowDataPatch::default()
+            })),
+            start_position,
+            None,
+        );
+
+        let mut creating = CreatingState {
+            element: CreatingElementState {
+                id: format!("draft-{id}"),
+                type_id_value: ArrowData::TYPE_ID_TOKEN.to_owned(),
+                rect: start.rect,
+                rotation: 0.0,
+                opacity: 1.0,
+                z_index,
+                data: start.data,
+            },
+            start_position,
+            current_rect: start.rect,
+            snap_guides: Vec::new(),
+            creation_mode: start.creation_mode,
+        };
+
+        let first_update = strategy.update(
+            state,
+            DrawConfig::default_config(),
+            &creating,
+            mid_position,
+            false,
+            false,
+            SnappingMode::None,
+            false,
+            None,
+        );
+        creating = creating.copy_with(
+            Some(creating.element.copy_with(
+                None,
+                Some(first_update.rect),
+                None,
+                None,
+                None,
+                Some(first_update.data),
+            )),
+            None,
+            Some(first_update.rect),
+            Some(first_update.snap_guides),
+            Some(first_update.creation_mode),
+        );
+
+        let second_update = strategy.update(
+            state,
+            DrawConfig::default_config(),
+            &creating,
+            end_position,
+            false,
+            false,
+            SnappingMode::None,
+            false,
+            None,
+        );
+        creating = creating.copy_with(
+            Some(creating.element.copy_with(
+                None,
+                Some(second_update.rect),
+                None,
+                None,
+                None,
+                Some(second_update.data),
+            )),
+            None,
+            Some(second_update.rect),
+            Some(second_update.snap_guides),
+            Some(second_update.creation_mode),
+        );
+
+        let finish = strategy.finish(state, DrawConfig::default_config(), &creating, None);
+        assert!(finish.should_commit, "expected elbow creation to commit");
+        let data = finish
+            .data
+            .as_ref()
+            .as_any()
+            .downcast_ref::<ArrowData>()
+            .expect("created elbow arrow data")
+            .clone();
+
+        DomainElementState::new(
+            id.to_owned(),
+            finish.rect,
+            0.0,
+            1.0,
+            z_index,
+            Arc::new(data),
+        )
     }
 
     #[test]
@@ -2398,6 +2596,189 @@ mod tests {
                 "serial".to_owned(),
             ])
         );
+    }
+
+    #[test]
+    fn dragging_elbow_end_endpoint_keeps_existing_start_binding_element() {
+        let start_target = rectangle_element(
+            "elbow-start-target",
+            DrawRect::new(40.0, 40.0, 140.0, 140.0),
+            1,
+        );
+        let end_target = rectangle_element(
+            "elbow-end-target",
+            DrawRect::new(320.0, 40.0, 420.0, 140.0),
+            2,
+        );
+        let arrow = elbow_arrow_element(
+            "elbow-bound-end-drag",
+            &[DrawPoint::new(130.0, 60.0), DrawPoint::new(260.0, 90.0)],
+            3,
+            None,
+            Some(ArrowDataBinding::new(
+                "elbow-start-target",
+                DrawPoint::new(0.9, 0.2),
+                ArrowDataBindingMode::Orbit,
+            )),
+            None,
+        );
+        let state = draw_state_with_selection(
+            vec![start_target.clone(), end_target.clone(), arrow.clone()],
+            &[arrow.id.as_str()],
+        );
+
+        let (operation, context, transform) = drag_arrow_handle_session(
+            &state,
+            &arrow.id,
+            EditConnectorPointKind::Turning,
+            1,
+            DrawPoint::new(260.0, 90.0),
+            DrawPoint::new(330.0, 90.0),
+        );
+        let next = operation.finish(&state, &context, &EditTransform::ArrowPoint(transform));
+        let updated_arrow = next
+            .domain
+            .document
+            .get_element_by_id(&arrow.id)
+            .expect("updated arrow")
+            .clone();
+        let updated_target = resolve_arrow_target_for_element(updated_arrow).expect("arrow target");
+        let updated_data = match updated_target.payload {
+            ArrowEditPayload::Arrow(data) => data,
+            ArrowEditPayload::Line(_) => panic!("expected arrow payload"),
+        };
+
+        let start_binding = updated_data.start_binding.as_ref().expect("start binding");
+        let end_binding = updated_data.end_binding.as_ref().expect("end binding");
+        assert_eq!(start_binding.element_id, start_target.id);
+        assert!((start_binding.anchor.x - 0.9).abs() < 1e-6);
+        assert!((start_binding.anchor.y - 0.2).abs() < 1e-6);
+        assert_eq!(end_binding.element_id, end_target.id);
+    }
+
+    #[test]
+    fn rebinding_endpoint_after_dual_bound_elbow_creation_avoids_zig_zag_route() {
+        let start_target = rectangle_element(
+            "rebind-start-target",
+            DrawRect::new(100.0, 100.0, 240.0, 220.0),
+            1,
+        );
+        let current_end_target = rectangle_element(
+            "rebind-current-end-target",
+            DrawRect::new(420.0, 120.0, 560.0, 260.0),
+            2,
+        );
+        let next_end_target = rectangle_element(
+            "rebind-next-end-target",
+            DrawRect::new(700.0, 80.0, 860.0, 240.0),
+            3,
+        );
+        let creation_state = draw_state(vec![
+            start_target.clone(),
+            current_end_target.clone(),
+            next_end_target.clone(),
+        ]);
+        let created_arrow = create_elbow_arrow_via_creation(
+            &creation_state,
+            "elbow-created-rebind",
+            DrawPoint::new(240.0, 160.0),
+            DrawPoint::new(320.0, 160.0),
+            DrawPoint::new(420.0, 190.0),
+            4,
+        );
+        let created_target =
+            resolve_arrow_target_for_element(created_arrow.clone()).expect("created arrow target");
+        let created_data = match created_target.payload {
+            ArrowEditPayload::Arrow(data) => data,
+            ArrowEditPayload::Line(_) => panic!("expected arrow payload"),
+        };
+        let created_points =
+            ArrowGeometry::resolve_world_points(created_target.element.rect, &created_data.points);
+        let rebinding_state = draw_state_with_selection(
+            vec![
+                start_target.clone(),
+                current_end_target.clone(),
+                next_end_target.clone(),
+                created_arrow.clone(),
+            ],
+            &[created_arrow.id.as_str()],
+        );
+
+        let (operation, context, transform) = drag_arrow_handle_session(
+            &rebinding_state,
+            &created_arrow.id,
+            EditConnectorPointKind::Turning,
+            created_points.len() - 1,
+            *created_points.last().expect("created end point"),
+            DrawPoint::new(700.0, 160.0),
+        );
+        let next = operation.finish(
+            &rebinding_state,
+            &context,
+            &EditTransform::ArrowPoint(transform),
+        );
+        let updated_arrow = next
+            .domain
+            .document
+            .get_element_by_id(&created_arrow.id)
+            .expect("updated rebound arrow")
+            .clone();
+        let updated_target =
+            resolve_arrow_target_for_element(updated_arrow).expect("updated arrow target");
+        let updated_data = match updated_target.payload {
+            ArrowEditPayload::Arrow(data) => data,
+            ArrowEditPayload::Line(_) => panic!("expected arrow payload"),
+        };
+        let updated_points =
+            ArrowGeometry::resolve_world_points(updated_target.element.rect, &updated_data.points);
+
+        assert_eq!(
+            updated_data
+                .start_binding
+                .as_ref()
+                .map(|binding| binding.element_id.as_str()),
+            Some(start_target.id.as_str())
+        );
+        assert_eq!(
+            updated_data
+                .end_binding
+                .as_ref()
+                .map(|binding| binding.element_id.as_str()),
+            Some(next_end_target.id.as_str())
+        );
+
+        for index in 1..updated_points.len() {
+            let dx = (updated_points[index].x - updated_points[index - 1].x).abs();
+            let dy = (updated_points[index].y - updated_points[index - 1].y).abs();
+            assert!(
+                dx <= 1e-6 || dy <= 1e-6,
+                "segment {index} must stay orthogonal"
+            );
+        }
+
+        for index in 2..updated_points.len() {
+            let prev_dx = updated_points[index - 1].x - updated_points[index - 2].x;
+            let prev_dy = updated_points[index - 1].y - updated_points[index - 2].y;
+            let next_dx = updated_points[index].x - updated_points[index - 1].x;
+            let next_dy = updated_points[index].y - updated_points[index - 1].y;
+            let prev_vertical = prev_dx.abs() <= 1e-6 && prev_dy.abs() > 1e-6;
+            let next_vertical = next_dx.abs() <= 1e-6 && next_dy.abs() > 1e-6;
+            let prev_horizontal = prev_dy.abs() <= 1e-6 && prev_dx.abs() > 1e-6;
+            let next_horizontal = next_dy.abs() <= 1e-6 && next_dx.abs() > 1e-6;
+
+            if prev_vertical && next_vertical {
+                assert!(
+                    prev_dy * next_dy >= 0.0,
+                    "vertical segments must not zig-zag"
+                );
+            }
+            if prev_horizontal && next_horizontal {
+                assert!(
+                    prev_dx * next_dx >= 0.0,
+                    "horizontal segments must not zig-zag"
+                );
+            }
+        }
     }
 
     #[test]

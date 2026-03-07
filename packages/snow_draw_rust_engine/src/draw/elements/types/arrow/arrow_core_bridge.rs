@@ -82,7 +82,9 @@ pub const fn to_core_binding_mode(mode: ArrowBindingMode) -> &'static str {
 }
 
 /// Converts a core point into the shared draw-point value.
-pub const fn to_draw_point(point: crate::draw::elements::types::arrow::core::arrow_types::Point) -> DrawPoint {
+pub const fn to_draw_point(
+    point: crate::draw::elements::types::arrow::core::arrow_types::Point,
+) -> DrawPoint {
     point
 }
 
@@ -95,12 +97,16 @@ where
 }
 
 /// Converts a draw point into the shared arrow-core point value.
-pub const fn to_core_point(point: DrawPoint) -> crate::draw::elements::types::arrow::core::arrow_types::Point {
+pub const fn to_core_point(
+    point: DrawPoint,
+) -> crate::draw::elements::types::arrow::core::arrow_types::Point {
     point
 }
 
 /// Converts a collection of draw points into arrow-core point values.
-pub fn to_core_points<I>(points: I) -> Vec<crate::draw::elements::types::arrow::core::arrow_types::Point>
+pub fn to_core_points<I>(
+    points: I,
+) -> Vec<crate::draw::elements::types::arrow::core::arrow_types::Point>
 where
     I: IntoIterator<Item = DrawPoint>,
 {
@@ -734,7 +740,9 @@ fn connector_source_has_bindings(data: &ConnectorSourceData) -> bool {
         ConnectorSourceData::Arrow(data) => {
             data.start_binding.is_some() || data.end_binding.is_some()
         }
-        ConnectorSourceData::Line(data) => data.start_binding.is_some() || data.end_binding.is_some(),
+        ConnectorSourceData::Line(data) => {
+            data.start_binding.is_some() || data.end_binding.is_some()
+        }
     }
 }
 
@@ -1269,11 +1277,11 @@ mod tests {
         transform_arrow_local_fixed_segments, ArrowCoreState, ConnectorSourceData,
     };
     use crate::draw::elements::types::arrow::arrow_binding::{ArrowBinding, ArrowBindingMode};
-    use crate::draw::elements::types::arrow::core::arrow_types::ArrowStatePatchWithId;
     use crate::draw::elements::types::arrow::arrow_data::{
         ArrowBinding as DataArrowBinding, ArrowBindingMode as DataArrowBindingMode, ArrowData,
         ElbowFixedSegment,
     };
+    use crate::draw::elements::types::arrow::core::arrow_types::ArrowStatePatchWithId;
     use crate::draw::elements::types::line::line_data::LineData;
     use crate::draw::models::element_state::ElementState;
     use crate::draw::types::draw_point::DrawPoint;
@@ -1378,7 +1386,10 @@ mod tests {
         let (states, sources) = collect_core_arrow_states_with_sources(&[arrow, line], false);
 
         assert_eq!(states.len(), 2);
-        assert!(matches!(sources.get("line"), Some((_, ConnectorSourceData::Line(_)))));
+        assert!(matches!(
+            sources.get("line"),
+            Some((_, ConnectorSourceData::Line(_)))
+        ));
     }
 
     #[test]

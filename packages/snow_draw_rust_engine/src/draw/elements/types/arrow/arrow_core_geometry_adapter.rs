@@ -67,8 +67,14 @@ mod tests {
         let fast_layout = compute_arrow_two_point_layout(world_points[0], world_points[1]);
 
         assert_eq!(resolved_world, world_points);
-        assert_eq!(resolved_local, vec![DrawPoint::ZERO, DrawPoint::new(100.0, 200.0)]);
-        assert_eq!(calculate_arrow_path_bounds_via_core(&world_points, ArrowType::Straight), rect);
+        assert_eq!(
+            resolved_local,
+            vec![DrawPoint::ZERO, DrawPoint::new(100.0, 200.0)]
+        );
+        assert_eq!(
+            calculate_arrow_path_bounds_via_core(&world_points, ArrowType::Straight),
+            rect
+        );
         assert_eq!(fast_layout.rect, rect);
         assert_eq!(fast_layout.normalized_points, normalized);
     }

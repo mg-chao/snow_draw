@@ -40,7 +40,8 @@ pub fn apply_arrow_binding_state_patches(
     let patch_by_id = patches
         .iter()
         .filter_map(|patch| {
-            patch.get("id")
+            patch
+                .get("id")
                 .and_then(Value::as_str)
                 .map(|id| (id.to_owned(), patch))
         })
@@ -187,13 +188,16 @@ pub fn apply_engine_result(input: &ApplyEngineResultInput) -> ApplyEngineResultV
         &input.result.bindable_patches,
     );
     let bindables = apply_bindable_relation_patches(&input.bindables, &relation_patches);
-    let order = input.ordered_element_ids.as_ref().map(|ordered_element_ids| {
-        reduce_arrow_engine_events_to_order(&ReduceArrowEngineEventsToOrderInput {
-            ordered_element_ids: ordered_element_ids.clone(),
-            events: input.result.events.clone(),
-            anchor_element_ids_by_bindable_id: input.anchor_element_ids_by_bindable_id.clone(),
-        })
-    });
+    let order = input
+        .ordered_element_ids
+        .as_ref()
+        .map(|ordered_element_ids| {
+            reduce_arrow_engine_events_to_order(&ReduceArrowEngineEventsToOrderInput {
+                ordered_element_ids: ordered_element_ids.clone(),
+                events: input.result.events.clone(),
+                anchor_element_ids_by_bindable_id: input.anchor_element_ids_by_bindable_id.clone(),
+            })
+        });
 
     ApplyEngineResultValue {
         arrow,
@@ -282,10 +286,12 @@ mod tests {
     fn reduce_arrow_engine_events_to_order_skips_noop_reorders() {
         let result = reduce_arrow_engine_events_to_order(&ReduceArrowEngineEventsToOrderInput {
             ordered_element_ids: vec!["rect-1".to_owned(), "arrow-1".to_owned()],
-            events: vec![ArrowEngineEvent::ReorderArrow(super::super::arrow_types::ReorderArrowEvent {
-                arrow_id: "arrow-1".to_owned(),
-                bindable_id: "rect-1".to_owned(),
-            })],
+            events: vec![ArrowEngineEvent::ReorderArrow(
+                super::super::arrow_types::ReorderArrowEvent {
+                    arrow_id: "arrow-1".to_owned(),
+                    bindable_id: "rect-1".to_owned(),
+                },
+            )],
             anchor_element_ids_by_bindable_id: None,
         });
 

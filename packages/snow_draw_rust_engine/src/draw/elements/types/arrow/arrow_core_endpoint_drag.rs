@@ -3,7 +3,6 @@
 use crate::draw::elements::types::arrow::arrow_binding::{
     ArrowBinding, ArrowBindingResult, ArrowBindingUtils,
 };
-use crate::draw::elements::types::arrow::arrow_data::ArrowData;
 use crate::draw::elements::types::arrow::arrow_core::EngineContext;
 use crate::draw::elements::types::arrow::arrow_core_bridge::{
     core_arrow_world_points, to_core_arrow_state_from_source,
@@ -14,6 +13,7 @@ use crate::draw::elements::types::arrow::arrow_core_ops::{
     calculate_core_fixed_point_for_binding, resolve_core_max_binding_distance,
     ArrowCoreEndpointBindingOptions,
 };
+use crate::draw::elements::types::arrow::arrow_data::ArrowData;
 use crate::draw::elements::types::arrow::arrow_scene::{
     project_arrow_bindable_candidates, resolve_arrow_bindable_candidates_for_endpoint_strategy,
 };
@@ -327,7 +327,8 @@ fn run_arrow_core_endpoint_drag_result(
         next_local_points[dragged_index] = to_local_point(element, world_pointer);
     }
 
-    if data.arrow_type() != ArrowType::Elbow && next_local_points.len() >= 2 && dragged_is_endpoint {
+    if data.arrow_type() != ArrowType::Elbow && next_local_points.len() >= 2 && dragged_is_endpoint
+    {
         let loop_threshold = effective_distance.max(1.0);
         let start_index = 0;
         let end_index = next_local_points.len() - 1;

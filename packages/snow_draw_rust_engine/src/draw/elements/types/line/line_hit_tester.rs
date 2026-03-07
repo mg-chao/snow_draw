@@ -7,10 +7,10 @@ use std::{
 };
 
 use crate::draw::elements::core::element_hit_tester::{ElementHitTester, ElementState};
+use crate::draw::elements::types::connector::connector_geometry::ConnectorGeometryData;
 use crate::draw::elements::types::connector::connector_hit_tester::{
     ConnectorHitTestData, ConnectorHitTestElement, ConnectorHitTester,
 };
-use crate::draw::elements::types::connector::connector_geometry::ConnectorGeometryData;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::{ArrowType, ArrowheadStyle, StrokeStyle};

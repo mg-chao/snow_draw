@@ -84,10 +84,8 @@ impl ConnectorHitTester {
         }
 
         let cache = resolve_cache(element);
-        let test_point = DrawPoint::new(
-            local_position.x - rect.min_x,
-            local_position.y - rect.min_y,
-        );
+        let test_point =
+            DrawPoint::new(local_position.x - rect.min_x, local_position.y - rect.min_y);
 
         let radius_sq = radius * radius;
         if hit_test_segments(&cache.shaft_points, test_point, radius_sq) {
@@ -321,7 +319,11 @@ impl ArrowheadHitTarget {
                     return true;
                 }
                 *fill_mode == ArrowheadPrimitiveFillMode::Stroke
-                    && is_point_inside_polygon(position, vertices, ConnectorHitTester::POLYGON_EPSILON)
+                    && is_point_inside_polygon(
+                        position,
+                        vertices,
+                        ConnectorHitTester::POLYGON_EPSILON,
+                    )
             }
             Self::Circle {
                 center,
@@ -472,11 +474,7 @@ mod tests {
             data: &data,
         };
 
-        assert!(!tester.hit_test_connector(
-            &element,
-            DrawPoint::new(200.0, 200.0),
-            1.0,
-        ));
+        assert!(!tester.hit_test_connector(&element, DrawPoint::new(200.0, 200.0), 1.0,));
     }
 
     #[test]

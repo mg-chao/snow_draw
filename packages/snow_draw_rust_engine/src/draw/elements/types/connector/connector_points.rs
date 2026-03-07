@@ -318,10 +318,10 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
-    use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
     use crate::draw::elements::types::arrow::arrow_data::{
         ArrowBinding as DataArrowBinding, ArrowBindingMode as DataArrowBindingMode, ArrowData,
     };
+    use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
     use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
     use crate::draw::types::draw_rect::DrawRect;
 

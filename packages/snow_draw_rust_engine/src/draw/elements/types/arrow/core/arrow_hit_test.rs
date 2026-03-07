@@ -48,7 +48,12 @@ pub fn sort_bindables_by_z_index(bindables: &[BindableState]) -> Vec<BindableSta
         left.z_index
             .filter(|value| value.is_finite())
             .unwrap_or(0.0)
-            .partial_cmp(&right.z_index.filter(|value| value.is_finite()).unwrap_or(0.0))
+            .partial_cmp(
+                &right
+                    .z_index
+                    .filter(|value| value.is_finite())
+                    .unwrap_or(0.0),
+            )
             .unwrap_or(std::cmp::Ordering::Equal)
     });
     sorted
@@ -114,7 +119,8 @@ pub fn is_point_near_bindable_for_binding_hit(
         return distance_to_bindable_outline(point, bindable) <= threshold;
     }
 
-    is_point_in_bindable(point, bindable) || distance_to_bindable_outline(point, bindable) <= threshold
+    is_point_in_bindable(point, bindable)
+        || distance_to_bindable_outline(point, bindable) <= threshold
 }
 
 pub fn get_hovered_bindable(
@@ -389,11 +395,17 @@ fn rectangle_side_mid_point(
     ];
     let right = [
         DrawPoint::new(bindable.x + bindable.width, bindable.y + radius),
-        DrawPoint::new(bindable.x + bindable.width, bindable.y + bindable.height - radius),
+        DrawPoint::new(
+            bindable.x + bindable.width,
+            bindable.y + bindable.height - radius,
+        ),
     ];
     let bottom = [
         DrawPoint::new(bindable.x + radius, bindable.y + bindable.height),
-        DrawPoint::new(bindable.x + bindable.width - radius, bindable.y + bindable.height),
+        DrawPoint::new(
+            bindable.x + bindable.width - radius,
+            bindable.y + bindable.height,
+        ),
     ];
     let left = [
         DrawPoint::new(bindable.x, bindable.y + bindable.height - radius),
@@ -405,9 +417,15 @@ fn rectangle_side_mid_point(
         "right" => midpoint(right[0], right[1]) + DrawPoint::new(offset, 0.0),
         "bottom" => midpoint(bottom[0], bottom[1]) + DrawPoint::new(0.0, offset),
         "left" => midpoint(left[0], left[1]) + DrawPoint::new(-offset, 0.0),
-        "top-left" => midpoint(left[1], top[0]) + DrawPoint::new(-offset_diagonal, -offset_diagonal),
-        "top-right" => midpoint(top[1], right[0]) + DrawPoint::new(offset_diagonal, -offset_diagonal),
-        "bottom-right" => midpoint(right[1], bottom[1]) + DrawPoint::new(offset_diagonal, offset_diagonal),
+        "top-left" => {
+            midpoint(left[1], top[0]) + DrawPoint::new(-offset_diagonal, -offset_diagonal)
+        }
+        "top-right" => {
+            midpoint(top[1], right[0]) + DrawPoint::new(offset_diagonal, -offset_diagonal)
+        }
+        "bottom-right" => {
+            midpoint(right[1], bottom[1]) + DrawPoint::new(offset_diagonal, offset_diagonal)
+        }
         _ => midpoint(bottom[0], left[0]) + DrawPoint::new(-offset_diagonal, offset_diagonal),
     }
 }
@@ -465,8 +483,14 @@ fn diamond_side_mid_point(
     offset_diagonal: f64,
 ) -> DrawPoint {
     let top = DrawPoint::new(bindable.x + bindable.width / 2.0, bindable.y);
-    let right = DrawPoint::new(bindable.x + bindable.width, bindable.y + bindable.height / 2.0);
-    let bottom = DrawPoint::new(bindable.x + bindable.width / 2.0, bindable.y + bindable.height);
+    let right = DrawPoint::new(
+        bindable.x + bindable.width,
+        bindable.y + bindable.height / 2.0,
+    );
+    let bottom = DrawPoint::new(
+        bindable.x + bindable.width / 2.0,
+        bindable.y + bindable.height,
+    );
     let left = DrawPoint::new(bindable.x, bindable.y + bindable.height / 2.0);
 
     match side {
@@ -475,7 +499,9 @@ fn diamond_side_mid_point(
         "bottom" => bottom + DrawPoint::new(0.0, offset),
         "left" => left + DrawPoint::new(-offset, 0.0),
         "top-right" => midpoint(top, right) + DrawPoint::new(offset_diagonal, -offset_diagonal),
-        "bottom-right" => midpoint(right, bottom) + DrawPoint::new(offset_diagonal, offset_diagonal),
+        "bottom-right" => {
+            midpoint(right, bottom) + DrawPoint::new(offset_diagonal, offset_diagonal)
+        }
         "bottom-left" => midpoint(bottom, left) + DrawPoint::new(-offset_diagonal, offset_diagonal),
         _ => midpoint(left, top) + DrawPoint::new(-offset_diagonal, -offset_diagonal),
     }
@@ -527,34 +553,130 @@ struct Sector {
 }
 
 const RECTANGLE_SECTORS: [Sector; 8] = [
-    Sector { center: 0.0, width: 75.0, side: "right" },
-    Sector { center: 45.0, width: 15.0, side: "bottom-right" },
-    Sector { center: 90.0, width: 75.0, side: "bottom" },
-    Sector { center: 135.0, width: 15.0, side: "bottom-left" },
-    Sector { center: 180.0, width: 75.0, side: "left" },
-    Sector { center: 225.0, width: 15.0, side: "top-left" },
-    Sector { center: 270.0, width: 75.0, side: "top" },
-    Sector { center: 315.0, width: 15.0, side: "top-right" },
+    Sector {
+        center: 0.0,
+        width: 75.0,
+        side: "right",
+    },
+    Sector {
+        center: 45.0,
+        width: 15.0,
+        side: "bottom-right",
+    },
+    Sector {
+        center: 90.0,
+        width: 75.0,
+        side: "bottom",
+    },
+    Sector {
+        center: 135.0,
+        width: 15.0,
+        side: "bottom-left",
+    },
+    Sector {
+        center: 180.0,
+        width: 75.0,
+        side: "left",
+    },
+    Sector {
+        center: 225.0,
+        width: 15.0,
+        side: "top-left",
+    },
+    Sector {
+        center: 270.0,
+        width: 75.0,
+        side: "top",
+    },
+    Sector {
+        center: 315.0,
+        width: 15.0,
+        side: "top-right",
+    },
 ];
 
 const DIAMOND_SECTORS: [Sector; 8] = [
-    Sector { center: 0.0, width: 15.0, side: "right" },
-    Sector { center: 45.0, width: 75.0, side: "bottom-right" },
-    Sector { center: 90.0, width: 15.0, side: "bottom" },
-    Sector { center: 135.0, width: 75.0, side: "bottom-left" },
-    Sector { center: 180.0, width: 15.0, side: "left" },
-    Sector { center: 225.0, width: 75.0, side: "top-left" },
-    Sector { center: 270.0, width: 15.0, side: "top" },
-    Sector { center: 315.0, width: 75.0, side: "top-right" },
+    Sector {
+        center: 0.0,
+        width: 15.0,
+        side: "right",
+    },
+    Sector {
+        center: 45.0,
+        width: 75.0,
+        side: "bottom-right",
+    },
+    Sector {
+        center: 90.0,
+        width: 15.0,
+        side: "bottom",
+    },
+    Sector {
+        center: 135.0,
+        width: 75.0,
+        side: "bottom-left",
+    },
+    Sector {
+        center: 180.0,
+        width: 15.0,
+        side: "left",
+    },
+    Sector {
+        center: 225.0,
+        width: 75.0,
+        side: "top-left",
+    },
+    Sector {
+        center: 270.0,
+        width: 15.0,
+        side: "top",
+    },
+    Sector {
+        center: 315.0,
+        width: 75.0,
+        side: "top-right",
+    },
 ];
 
 const ELLIPSE_SECTORS: [Sector; 8] = [
-    Sector { center: 0.0, width: 15.0, side: "right" },
-    Sector { center: 45.0, width: 75.0, side: "bottom-right" },
-    Sector { center: 90.0, width: 15.0, side: "bottom" },
-    Sector { center: 135.0, width: 75.0, side: "bottom-left" },
-    Sector { center: 180.0, width: 15.0, side: "left" },
-    Sector { center: 225.0, width: 75.0, side: "top-left" },
-    Sector { center: 270.0, width: 15.0, side: "top" },
-    Sector { center: 315.0, width: 75.0, side: "top-right" },
+    Sector {
+        center: 0.0,
+        width: 15.0,
+        side: "right",
+    },
+    Sector {
+        center: 45.0,
+        width: 75.0,
+        side: "bottom-right",
+    },
+    Sector {
+        center: 90.0,
+        width: 15.0,
+        side: "bottom",
+    },
+    Sector {
+        center: 135.0,
+        width: 75.0,
+        side: "bottom-left",
+    },
+    Sector {
+        center: 180.0,
+        width: 15.0,
+        side: "left",
+    },
+    Sector {
+        center: 225.0,
+        width: 75.0,
+        side: "top-left",
+    },
+    Sector {
+        center: 270.0,
+        width: 15.0,
+        side: "top",
+    },
+    Sector {
+        center: 315.0,
+        width: 75.0,
+        side: "top-right",
+    },
 ];
