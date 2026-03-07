@@ -80,7 +80,12 @@ where
     let fallback_end_binding = end_binding;
     let pipeline_elements_by_id = elements_by_id
         .iter()
-        .filter_map(|(id, element)| element.model_element().cloned().map(|value| (id.clone(), value)))
+        .filter_map(|(id, element)| {
+            element
+                .model_element()
+                .cloned()
+                .map(|value| (id.clone(), value))
+        })
         .collect::<HashMap<_, _>>();
     let start_binding = start_binding.map(to_pipeline_binding);
     let end_binding = end_binding.map(to_pipeline_binding);

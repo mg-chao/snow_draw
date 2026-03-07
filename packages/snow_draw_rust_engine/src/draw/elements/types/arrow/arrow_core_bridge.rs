@@ -21,11 +21,11 @@ use super::arrow_binding::{ArrowBinding, ArrowBindingMode};
 use super::arrow_core::{
     ArrowState, BindableState, EngineContext, BIND_MODE_INSIDE, BIND_MODE_ORBIT, BIND_MODE_SKIP,
 };
-use super::core::arrow_types::{ArrowPatch, ArrowStatePatchWithId, BindableRelationState};
 use super::arrow_data::{
     ArrowBinding as SourceArrowBinding, ArrowBindingMode as SourceArrowBindingMode, ArrowData,
     ElbowFixedSegment,
 };
+use super::core::arrow_types::{ArrowPatch, ArrowStatePatchWithId, BindableRelationState};
 use crate::draw::types::element_style::ArrowType;
 use crate::draw::types::element_style::ArrowheadStyle;
 
@@ -222,16 +222,32 @@ pub fn collect_core_bindable_relations(elements: &[ElementState]) -> Vec<Bindabl
 
         if type_id == ArrowData::TYPE_ID_TOKEN {
             if let Ok(data) = ArrowData::from_json(&element.data.to_json()) {
-                add_arrow_binding(data.start_binding.as_ref().map(|value| value.element_id.as_str()));
-                add_arrow_binding(data.end_binding.as_ref().map(|value| value.element_id.as_str()));
+                add_arrow_binding(
+                    data.start_binding
+                        .as_ref()
+                        .map(|value| value.element_id.as_str()),
+                );
+                add_arrow_binding(
+                    data.end_binding
+                        .as_ref()
+                        .map(|value| value.element_id.as_str()),
+                );
             }
             continue;
         }
 
         if type_id == LineData::TYPE_ID_TOKEN {
             if let Ok(data) = LineData::from_json(&element.data.to_json()) {
-                add_arrow_binding(data.start_binding.as_ref().map(|value| value.element_id.as_str()));
-                add_arrow_binding(data.end_binding.as_ref().map(|value| value.element_id.as_str()));
+                add_arrow_binding(
+                    data.start_binding
+                        .as_ref()
+                        .map(|value| value.element_id.as_str()),
+                );
+                add_arrow_binding(
+                    data.end_binding
+                        .as_ref()
+                        .map(|value| value.element_id.as_str()),
+                );
             }
         }
     }
@@ -287,7 +303,10 @@ pub fn collect_core_anchor_element_ids_by_bindable_id(
 pub fn collect_core_arrow_states_with_sources(
     elements: &[ElementState],
     only_bound_arrows: bool,
-) -> (Vec<ArrowCoreState>, HashMap<String, (ElementState, ConnectorSourceData)>) {
+) -> (
+    Vec<ArrowCoreState>,
+    HashMap<String, (ElementState, ConnectorSourceData)>,
+) {
     let mut arrows = Vec::<ArrowCoreState>::new();
     let mut sources = HashMap::<String, (ElementState, ConnectorSourceData)>::new();
 
@@ -449,7 +468,10 @@ pub fn world_to_local_points(element: &ElementState, world_points: &[DrawPoint])
         return world_points.to_vec();
     }
     let space = ElementSpace::new(element.rotation, element.rect.center());
-    world_points.iter().map(|point| space.from_world(*point)).collect()
+    world_points
+        .iter()
+        .map(|point| space.from_world(*point))
+        .collect()
 }
 
 pub fn to_local_fixed_segments_from_core_arrow(
@@ -465,7 +487,8 @@ pub fn to_local_fixed_segments_from_core_arrow(
         segments
             .iter()
             .map(|segment| {
-                let world_start = DrawPoint::new(arrow.x + segment.start.x, arrow.y + segment.start.y);
+                let world_start =
+                    DrawPoint::new(arrow.x + segment.start.x, arrow.y + segment.start.y);
                 let world_end = DrawPoint::new(arrow.x + segment.end.x, arrow.y + segment.end.y);
                 ElbowFixedSegment {
                     index: segment.index,
@@ -725,14 +748,18 @@ fn apply_non_geometry_patch(
     data.copy_with(super::arrow_data::ArrowDataPatch {
         start_binding: match patch.contains_key("startBinding") {
             true => match start_binding {
-                Some(binding) => super::arrow_data::NullableField::Value(to_source_binding(&binding)),
+                Some(binding) => {
+                    super::arrow_data::NullableField::Value(to_source_binding(&binding))
+                }
                 None => super::arrow_data::NullableField::Null,
             },
             false => super::arrow_data::NullableField::Unset,
         },
         end_binding: match patch.contains_key("endBinding") {
             true => match end_binding {
-                Some(binding) => super::arrow_data::NullableField::Value(to_source_binding(&binding)),
+                Some(binding) => {
+                    super::arrow_data::NullableField::Value(to_source_binding(&binding))
+                }
                 None => super::arrow_data::NullableField::Null,
             },
             false => super::arrow_data::NullableField::Unset,
@@ -870,7 +897,10 @@ fn fixed_segment_to_value(segment: &ElbowFixedSegment) -> Value {
     json.insert("index".to_string(), Value::from(segment.index as u64));
     json.insert(
         "start".to_string(),
-        Value::Array(vec![Value::from(segment.start.x), Value::from(segment.start.y)]),
+        Value::Array(vec![
+            Value::from(segment.start.x),
+            Value::from(segment.start.y),
+        ]),
     );
     json.insert(
         "end".to_string(),

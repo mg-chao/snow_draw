@@ -11,8 +11,7 @@ use crate::draw::elements::types::arrow::arrow_data::{
 };
 use crate::draw::elements::types::arrow::arrow_scene::ArrowScene;
 use crate::draw::elements::types::arrow::core::arrow_engine::{
-    compute_focus_drag as compute_core_focus_drag,
-    finalize_focus_drag as finalize_core_focus_drag,
+    compute_focus_drag as compute_core_focus_drag, finalize_focus_drag as finalize_core_focus_drag,
 };
 use crate::draw::elements::types::arrow::core::arrow_state_core::apply_engine_result;
 use crate::draw::elements::types::arrow::core::arrow_types::{
@@ -161,7 +160,9 @@ pub fn drag_arrow_focus_point(
         bindables: collect_core_bindable_relations(elements),
         result,
         ordered_element_ids: ordered_element_ids.map(|ids| ids.to_vec()),
-        anchor_element_ids_by_bindable_id: Some(session.anchor_element_ids_by_bindable_id().clone()),
+        anchor_element_ids_by_bindable_id: Some(
+            session.anchor_element_ids_by_bindable_id().clone(),
+        ),
     });
     let fallback_order = if applied.order_changed.unwrap_or(false) {
         None
@@ -206,8 +207,14 @@ pub fn finalize_arrow_focus_point_drag(
     let result = finalize_core_focus_drag(
         &ArrowBindingState {
             id: element.id.clone(),
-            start_binding: data.start_binding.as_ref().map(to_lifecycle_binding_from_source),
-            end_binding: data.end_binding.as_ref().map(to_lifecycle_binding_from_source),
+            start_binding: data
+                .start_binding
+                .as_ref()
+                .map(to_lifecycle_binding_from_source),
+            end_binding: data
+                .end_binding
+                .as_ref()
+                .map(to_lifecycle_binding_from_source),
         },
         &collect_core_bindable_relations(elements),
     );
@@ -289,10 +296,12 @@ fn to_lifecycle_arrow_state(
             segments
                 .iter()
                 .copied()
-                .map(|segment| crate::draw::elements::types::arrow::core::arrow_types::FixedSegment {
-                    start: segment.start,
-                    end: segment.end,
-                    index: segment.index,
+                .map(|segment| {
+                    crate::draw::elements::types::arrow::core::arrow_types::FixedSegment {
+                        start: segment.start,
+                        end: segment.end,
+                        index: segment.index,
+                    }
                 })
                 .collect()
         }),
@@ -321,7 +330,9 @@ fn to_lifecycle_binding_from_source(binding: &SourceArrowBinding) -> FixedPointB
     )
 }
 
-fn to_lifecycle_bindable_state(bindable: &super::arrow_core::BindableState) -> LifecycleBindableState {
+fn to_lifecycle_bindable_state(
+    bindable: &super::arrow_core::BindableState,
+) -> LifecycleBindableState {
     LifecycleBindableState {
         id: bindable.id.clone(),
         shape: bindable.shape.as_str().to_string(),
@@ -340,9 +351,7 @@ fn to_lifecycle_bindable_state(bindable: &super::arrow_core::BindableState) -> L
     }
 }
 
-fn to_lifecycle_context(
-    context: &super::arrow_core::EngineContext,
-) -> LifecycleEngineContext {
+fn to_lifecycle_context(context: &super::arrow_core::EngineContext) -> LifecycleEngineContext {
     LifecycleEngineContext {
         zoom: context.zoom,
         is_binding_enabled: context.is_binding_enabled,
@@ -364,7 +373,8 @@ fn lifecycle_arrow_to_patch(
     patch.insert(
         "points".to_owned(),
         Value::Array(
-            arrow.points
+            arrow
+                .points
                 .iter()
                 .map(|point| Value::Array(vec![Value::from(point.x), Value::from(point.y)]))
                 .collect(),
@@ -389,11 +399,17 @@ fn lifecycle_arrow_to_patch(
                         value.insert("index".to_owned(), Value::from(segment.index));
                         value.insert(
                             "start".to_owned(),
-                            Value::Array(vec![Value::from(segment.start.x), Value::from(segment.start.y)]),
+                            Value::Array(vec![
+                                Value::from(segment.start.x),
+                                Value::from(segment.start.y),
+                            ]),
                         );
                         value.insert(
                             "end".to_owned(),
-                            Value::Array(vec![Value::from(segment.end.x), Value::from(segment.end.y)]),
+                            Value::Array(vec![
+                                Value::from(segment.end.x),
+                                Value::from(segment.end.y),
+                            ]),
                         );
                         Value::Object(value)
                     })
@@ -418,7 +434,10 @@ fn lifecycle_binding_to_value(binding: Option<&FixedPointBinding>) -> serde_json
     };
 
     let mut value = serde_json::Map::new();
-    value.insert("elementId".to_owned(), Value::String(binding.element_id.clone()));
+    value.insert(
+        "elementId".to_owned(),
+        Value::String(binding.element_id.clone()),
+    );
     value.insert(
         "fixedPoint".to_owned(),
         Value::Array(vec![

@@ -12,14 +12,14 @@ use crate::draw::actions::draw_actions::{
 use crate::draw::config::draw_config::{DrawConfig, SelectionConfig};
 use crate::draw::core::draw_context::DrawContext;
 use crate::draw::edit::core::edit_intent_to_operation_mapper::{
-    ArrowPointOperationParams as MapperArrowPointOperationParams,
+    ConnectorPointOperationParams as MapperConnectorPointOperationParams,
     EditOperationParams as MapperEditOperationParams,
     MoveOperationParams as MapperMoveOperationParams,
     ResizeOperationParams as MapperResizeOperationParams,
     RotateOperationParams as MapperRotateOperationParams, StartEdit as MapperStartEdit,
 };
 use crate::draw::edit::core::edit_operation_params::{
-    ArrowPointOperationParams, EditOperationParams, MoveOperationParams, ResizeOperationParams,
+    ConnectorPointOperationParams, EditOperationParams, MoveOperationParams, ResizeOperationParams,
     RotateOperationParams,
 };
 use crate::draw::elements::core::element_data::{DynElementData, ElementTypeId};
@@ -29,6 +29,7 @@ use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_points::{
     ArrowPointHandle, ArrowPointKind as DomainArrowPointKind,
 };
+use crate::draw::elements::types::connector::connector_points::ConnectorPointUtils;
 use crate::draw::elements::types::line::line_data::LineData;
 use crate::draw::elements::types::serial_number::serial_number_data::SerialNumberData;
 use crate::draw::elements::types::text::text_data::TextData;
@@ -50,14 +51,18 @@ use crate::draw::services::element_hit_test_service::hit_test_element;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::ArrowType;
+use crate::draw::utils::arrow_point_metrics::{
+    resolve_connector_point_handle_size, resolve_connector_point_loop_threshold,
+};
 use crate::draw::utils::edit_intent_detector::{
-    ArrowLikeData as DetectorArrowLikeData, ArrowPointKind as DetectorArrowPointKind,
-    ClearSelectionIntent, DocumentState as DetectorDocumentState,
+    ArrowLikeData as DetectorArrowLikeData, ClearSelectionIntent,
+    ConnectorPointHandle as DetectorConnectorPointHandle,
+    ConnectorPointKind as DetectorConnectorPointKind, DocumentState as DetectorDocumentState,
     DomainState as DetectorDomainState, DrawState as DetectorDrawState,
     DrawStateView as DetectorDrawStateView, EditIntent, ElementData as DetectorElementData,
     ElementState as DetectorElementState, HandleType as DetectorHandleType, HitTestRequest,
     HitTestResult as DetectorHitTestResult, HitTestService, HitTestTarget as DetectorHitTestTarget,
-    SelectionState as DetectorSelectionState, StartArrowPointIntent, StartMoveIntent,
+    SelectionState as DetectorSelectionState, StartConnectorPointIntent, StartMoveIntent,
     EDIT_INTENT_DETECTOR,
 };
 
@@ -81,6 +86,7 @@ pub struct ArrowLikeDataSnapshot {
     pub points: Vec<DrawPoint>,
     pub arrow_type: ArrowType,
     pub fixed_segment_indexes: BTreeSet<usize>,
+    pub focus_points: Vec<DetectorConnectorPointHandle>,
 }
 
 impl ArrowLikeDataSnapshot {
@@ -352,7 +358,7 @@ impl SelectPlugin {
             return Ok(self.base.unhandled(None));
         };
 
-        if let EditIntent::StartArrowPoint(start_intent) = &intent {
+        if let EditIntent::StartConnectorPoint(start_intent) = &intent {
             let now = Instant::now();
             if let Some(data) = snapshot
                 .elements_by_id
@@ -374,7 +380,7 @@ impl SelectPlugin {
                     let mut double_click_intent = start_intent.clone();
                     double_click_intent.is_double_click = true;
                     self.execute_intent(
-                        &EditIntent::StartArrowPoint(double_click_intent),
+                        &EditIntent::StartConnectorPoint(double_click_intent),
                         position,
                         snapshot,
                     )?;
@@ -1104,12 +1110,12 @@ impl SelectPlugin {
 
     fn resolve_arrow_handle_for_intent(
         &self,
-        intent: &StartArrowPointIntent,
+        intent: &StartConnectorPointIntent,
         position: DrawPoint,
         data: &ArrowLikeDataSnapshot,
     ) -> ArrowPointHandle {
         let is_fixed = data.arrow_type == ArrowType::Elbow
-            && intent.point_kind == DetectorArrowPointKind::Addable
+            && intent.point_kind == DetectorConnectorPointKind::Addable
             && data.is_fixed_segment(intent.point_index + 1);
 
         ArrowPointHandle::with_fixed(
@@ -1313,6 +1319,7 @@ fn arrow_data_snapshot_for_element(
             points,
             arrow_type: data.arrow_type,
             fixed_segment_indexes,
+            focus_points: Vec::new(),
         });
     }
 
@@ -1331,6 +1338,7 @@ fn arrow_data_snapshot_for_element(
             points,
             arrow_type: data.arrow_type,
             fixed_segment_indexes,
+            focus_points: Vec::new(),
         });
     }
 
@@ -1368,12 +1376,36 @@ fn build_detector_state_view(
         .iter()
         .map(|element| state_view.effective_element(element))
         .collect::<Vec<_>>();
+    let handle_size =
+        resolve_connector_point_handle_size(snapshot.selection_config.render.control_point_size);
+    let loop_threshold = resolve_connector_point_loop_threshold(
+        snapshot.selection_config.interaction.handle_tolerance,
+    );
+    let zoom = snapshot.draw_state.application.view.camera.zoom;
     let elements = effective_elements
         .iter()
         .map(|element| {
             let data = if let Some(arrow_data) = arrow_data_snapshot_for_element(element) {
+                let overlay = ConnectorPointUtils::build_overlay_with_options(
+                    element,
+                    loop_threshold,
+                    Some(handle_size),
+                    &effective_elements,
+                    zoom,
+                    true,
+                );
                 DetectorElementData::ArrowLike(DetectorArrowLikeData {
                     points: arrow_data.points,
+                    focus_points: overlay
+                        .focus_points
+                        .into_iter()
+                        .map(|handle| DetectorConnectorPointHandle {
+                            element_id: handle.element_id,
+                            kind: map_domain_arrow_point_kind_to_detector(handle.kind),
+                            index: handle.index,
+                            position: handle.position,
+                        })
+                        .collect(),
                 })
             } else {
                 DetectorElementData::Other
@@ -1399,37 +1431,50 @@ fn build_detector_state_view(
     })
 }
 
-fn map_detector_arrow_point_kind(kind: DetectorArrowPointKind) -> DomainArrowPointKind {
+fn map_detector_arrow_point_kind(kind: DetectorConnectorPointKind) -> DomainArrowPointKind {
     match kind {
-        DetectorArrowPointKind::Turning => DomainArrowPointKind::Turning,
-        DetectorArrowPointKind::Addable => DomainArrowPointKind::Addable,
-        DetectorArrowPointKind::LoopStart => DomainArrowPointKind::LoopStart,
-        DetectorArrowPointKind::LoopEnd => DomainArrowPointKind::LoopEnd,
-        DetectorArrowPointKind::FocusStart => DomainArrowPointKind::FocusStart,
-        DetectorArrowPointKind::FocusEnd => DomainArrowPointKind::FocusEnd,
+        DetectorConnectorPointKind::Turning => DomainArrowPointKind::Turning,
+        DetectorConnectorPointKind::Addable => DomainArrowPointKind::Addable,
+        DetectorConnectorPointKind::LoopStart => DomainArrowPointKind::LoopStart,
+        DetectorConnectorPointKind::LoopEnd => DomainArrowPointKind::LoopEnd,
+        DetectorConnectorPointKind::FocusStart => DomainArrowPointKind::FocusStart,
+        DetectorConnectorPointKind::FocusEnd => DomainArrowPointKind::FocusEnd,
+    }
+}
+
+fn map_domain_arrow_point_kind_to_detector(
+    kind: DomainArrowPointKind,
+) -> DetectorConnectorPointKind {
+    match kind {
+        DomainArrowPointKind::Turning => DetectorConnectorPointKind::Turning,
+        DomainArrowPointKind::Addable => DetectorConnectorPointKind::Addable,
+        DomainArrowPointKind::LoopStart => DetectorConnectorPointKind::LoopStart,
+        DomainArrowPointKind::LoopEnd => DetectorConnectorPointKind::LoopEnd,
+        DomainArrowPointKind::FocusStart => DetectorConnectorPointKind::FocusStart,
+        DomainArrowPointKind::FocusEnd => DetectorConnectorPointKind::FocusEnd,
     }
 }
 
 fn map_detector_arrow_point_kind_to_operation(
-    kind: DetectorArrowPointKind,
+    kind: DetectorConnectorPointKind,
 ) -> crate::draw::elements::types::arrow::arrow_points::ArrowPointKind {
     match kind {
-        DetectorArrowPointKind::Turning => {
+        DetectorConnectorPointKind::Turning => {
             crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::Turning
         }
-        DetectorArrowPointKind::Addable => {
+        DetectorConnectorPointKind::Addable => {
             crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::Addable
         }
-        DetectorArrowPointKind::LoopStart => {
+        DetectorConnectorPointKind::LoopStart => {
             crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::LoopStart
         }
-        DetectorArrowPointKind::LoopEnd => {
+        DetectorConnectorPointKind::LoopEnd => {
             crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::LoopEnd
         }
-        DetectorArrowPointKind::FocusStart => {
+        DetectorConnectorPointKind::FocusStart => {
             crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::FocusStart
         }
-        DetectorArrowPointKind::FocusEnd => {
+        DetectorConnectorPointKind::FocusEnd => {
             crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::FocusEnd
         }
     }
@@ -1468,13 +1513,13 @@ fn convert_mapper_params(params: MapperEditOperationParams) -> EditOperationPara
             rotation_snap_angle,
             initial_selection_bounds,
         )),
-        MapperEditOperationParams::ArrowPoint(MapperArrowPointOperationParams {
+        MapperEditOperationParams::ConnectorPoint(MapperConnectorPointOperationParams {
             element_id,
             point_kind,
             point_index,
             is_double_click,
             initial_selection_bounds,
-        }) => EditOperationParams::ArrowPoint(ArrowPointOperationParams::with_options(
+        }) => EditOperationParams::ConnectorPoint(ConnectorPointOperationParams::with_options(
             element_id,
             map_detector_arrow_point_kind_to_operation(point_kind),
             point_index,
@@ -1518,6 +1563,7 @@ mod tests {
             points,
             arrow_type,
             fixed_segment_indexes: BTreeSet::new(),
+            focus_points: Vec::new(),
         }
     }
 

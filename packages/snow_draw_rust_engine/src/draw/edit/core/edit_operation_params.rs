@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::draw::config::draw_config::ConfigDefaults;
-use crate::draw::elements::types::arrow::arrow_points::ArrowPointKind;
+use crate::draw::elements::types::connector::connector_points::ConnectorPointKind;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::resize_mode::ResizeMode;
@@ -15,7 +15,7 @@ pub enum EditOperationParams {
     Move(MoveOperationParams),
     Resize(ResizeOperationParams),
     Rotate(RotateOperationParams),
-    ArrowPoint(ArrowPointOperationParams),
+    ConnectorPoint(ConnectorPointOperationParams),
 }
 
 impl EditOperationParams {
@@ -25,7 +25,7 @@ impl EditOperationParams {
             Self::Move(params) => params.initial_selection_bounds,
             Self::Resize(params) => params.initial_selection_bounds,
             Self::Rotate(params) => params.initial_selection_bounds,
-            Self::ArrowPoint(params) => params.initial_selection_bounds,
+            Self::ConnectorPoint(params) => params.initial_selection_bounds,
         }
     }
 
@@ -55,7 +55,7 @@ impl EditOperationParams {
 
     /// Returns arrow-point params when this is an arrow-point operation.
     pub fn as_arrow_point(&self) -> Option<&ArrowPointOperationParams> {
-        let Self::ArrowPoint(value) = self else {
+        let Self::ConnectorPoint(value) = self else {
             return None;
         };
         Some(value)
@@ -85,9 +85,9 @@ impl From<RotateOperationParams> for EditOperationParams {
     }
 }
 
-impl From<ArrowPointOperationParams> for EditOperationParams {
-    fn from(value: ArrowPointOperationParams) -> Self {
-        Self::ArrowPoint(value)
+impl From<ConnectorPointOperationParams> for EditOperationParams {
+    fn from(value: ConnectorPointOperationParams) -> Self {
+        Self::ConnectorPoint(value)
     }
 }
 
@@ -180,23 +180,23 @@ impl Default for RotateOperationParams {
     }
 }
 
-/// Parameters for arrow point edit operations.
+/// Parameters for connector-point edit operations.
 #[derive(Clone, Debug, PartialEq)]
-pub struct ArrowPointOperationParams {
+pub struct ConnectorPointOperationParams {
     pub element_id: String,
-    pub point_kind: ArrowPointKind,
+    pub point_kind: ConnectorPointKind,
     pub point_index: usize,
     pub is_double_click: bool,
     pub initial_selection_bounds: Option<DrawRect>,
 }
 
-pub type ConnectorPointOperationParams = ArrowPointOperationParams;
+pub type ArrowPointOperationParams = ConnectorPointOperationParams;
 
-impl ArrowPointOperationParams {
+impl ConnectorPointOperationParams {
     /// Creates params with Dart-equivalent defaults.
     pub fn new(
         element_id: impl Into<String>,
-        point_kind: ArrowPointKind,
+        point_kind: ConnectorPointKind,
         point_index: usize,
     ) -> Self {
         Self::with_options(element_id, point_kind, point_index, false, None)
@@ -205,7 +205,7 @@ impl ArrowPointOperationParams {
     /// Creates params with explicit optional values.
     pub fn with_options(
         element_id: impl Into<String>,
-        point_kind: ArrowPointKind,
+        point_kind: ConnectorPointKind,
         point_index: usize,
         is_double_click: bool,
         initial_selection_bounds: Option<DrawRect>,

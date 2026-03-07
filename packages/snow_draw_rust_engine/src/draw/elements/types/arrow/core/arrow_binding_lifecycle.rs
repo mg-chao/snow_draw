@@ -834,14 +834,16 @@ fn arrow_state_to_value(arrow: &ArrowState) -> Value {
     );
     object.insert(
         "startArrowhead".to_string(),
-        arrow.start_arrowhead
+        arrow
+            .start_arrowhead
             .as_ref()
             .map(|value| Value::String(value.clone()))
             .unwrap_or(Value::Null),
     );
     object.insert(
         "endArrowhead".to_string(),
-        arrow.end_arrowhead
+        arrow
+            .end_arrowhead
             .as_ref()
             .map(|value| Value::String(value.clone()))
             .unwrap_or(Value::Null),
@@ -849,13 +851,19 @@ fn arrow_state_to_value(arrow: &ArrowState) -> Value {
     object.insert("elbowed".to_string(), Value::Bool(arrow.elbowed));
     object.insert(
         "fixedSegments".to_string(),
-        arrow.fixed_segments.as_ref().map_or(Value::Null, |segments| {
-            Value::Array(segments.iter().map(fixed_segment_to_value).collect())
-        }),
+        arrow
+            .fixed_segments
+            .as_ref()
+            .map_or(Value::Null, |segments| {
+                Value::Array(segments.iter().map(fixed_segment_to_value).collect())
+            }),
     );
     object.insert(
         "startIsSpecial".to_string(),
-        arrow.start_is_special.map(Value::Bool).unwrap_or(Value::Null),
+        arrow
+            .start_is_special
+            .map(Value::Bool)
+            .unwrap_or(Value::Null),
     );
     object.insert(
         "endIsSpecial".to_string(),
@@ -873,7 +881,10 @@ fn bindable_state_to_value(bindable: &BindableState) -> Value {
     object.insert("width".to_string(), Value::from(bindable.width));
     object.insert("height".to_string(), Value::from(bindable.height));
     object.insert("angle".to_string(), Value::from(bindable.angle));
-    object.insert("strokeWidth".to_string(), Value::from(bindable.stroke_width));
+    object.insert(
+        "strokeWidth".to_string(),
+        Value::from(bindable.stroke_width),
+    );
     Value::Object(object)
 }
 

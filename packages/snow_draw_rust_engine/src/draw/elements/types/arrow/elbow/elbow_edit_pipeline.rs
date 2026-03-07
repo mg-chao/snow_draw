@@ -601,7 +601,12 @@ where
         end_override,
         &elements_by_id
             .iter()
-            .filter_map(|(id, element)| element.model_element().cloned().map(|value| (id.clone(), value)))
+            .filter_map(|(id, element)| {
+                element
+                    .model_element()
+                    .cloned()
+                    .map(|value| (id.clone(), value))
+            })
             .collect::<HashMap<_, _>>(),
         data.start_binding.as_ref(),
         data.end_binding.as_ref(),
@@ -663,10 +668,15 @@ where
     let elements_by_id = context
         .elements_by_id
         .iter()
-        .filter_map(|(id, element)| element.model_element().cloned().map(|value| (id.clone(), value)))
+        .filter_map(|(id, element)| {
+            element
+                .model_element()
+                .cloned()
+                .map(|value| (id.clone(), value))
+        })
         .collect::<HashMap<_, _>>();
-    let translated = endpoint_drag::apply_endpoint_drag_with_fixed_segments(
-        &endpoint_drag::ElbowEditContext {
+    let translated =
+        endpoint_drag::apply_endpoint_drag_with_fixed_segments(&endpoint_drag::ElbowEditContext {
             element,
             elements_by_id,
             base_points: context.base_points.clone(),
@@ -682,8 +692,7 @@ where
             end_was_bound: context.end_was_bound(),
             start_binding_removed: context.start_binding_removed(),
             end_binding_removed: context.end_binding_removed(),
-        },
-    );
+        });
     Some(FixedSegmentPathResult::new(
         translated.points,
         translated.fixed_segments,

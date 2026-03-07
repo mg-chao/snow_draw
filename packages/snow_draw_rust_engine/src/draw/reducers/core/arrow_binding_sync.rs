@@ -86,12 +86,11 @@ pub fn resolve_arrow_bindings_for_changed_bindables(
         }
     }
 
-    let reordered_element_ids =
-        resolve_reordered_element_ids_for_changed_bindables(
-            &session,
-            &ordered_element_ids,
-            changed_bindable_ids,
-        );
+    let reordered_element_ids = resolve_reordered_element_ids_for_changed_bindables(
+        &session,
+        &ordered_element_ids,
+        changed_bindable_ids,
+    );
 
     ArrowBindingResolutionUpdate {
         updated_elements,
@@ -115,8 +114,14 @@ fn resolve_reordered_element_ids_for_changed_bindables(
         .collect::<HashMap<_, _>>();
     let mut sorted_changed_bindable_ids = changed_bindable_ids.iter().cloned().collect::<Vec<_>>();
     sorted_changed_bindable_ids.sort_by(|left, right| {
-        let left_index = order_index_by_id.get(left.as_str()).copied().unwrap_or(usize::MAX);
-        let right_index = order_index_by_id.get(right.as_str()).copied().unwrap_or(usize::MAX);
+        let left_index = order_index_by_id
+            .get(left.as_str())
+            .copied()
+            .unwrap_or(usize::MAX);
+        let right_index = order_index_by_id
+            .get(right.as_str())
+            .copied()
+            .unwrap_or(usize::MAX);
         left_index.cmp(&right_index).then_with(|| left.cmp(right))
     });
 

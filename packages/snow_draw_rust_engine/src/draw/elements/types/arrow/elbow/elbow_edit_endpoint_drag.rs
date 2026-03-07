@@ -6,8 +6,7 @@ use std::collections::{HashMap, HashSet};
 
 use crate::draw::core::coordinates::element_space::ElementSpace;
 use crate::draw::elements::types::arrow::arrow_binding::{
-    ArrowBinding as PerpendicularArrowBinding,
-    ArrowBindingMode as PerpendicularArrowBindingMode,
+    ArrowBinding as PerpendicularArrowBinding, ArrowBindingMode as PerpendicularArrowBindingMode,
 };
 use crate::draw::elements::types::arrow::arrow_data::{ArrowBinding, ElbowFixedSegment};
 use crate::draw::elements::types::arrow::elbow::elbow_constants::ElbowConstants;

@@ -7,7 +7,7 @@ use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_operation_id::{EditOperationId, EditOperationIds};
 use crate::draw::types::resize_mode::ResizeMode;
-use crate::draw::utils::edit_intent_detector::{ArrowPointKind, EditIntent};
+use crate::draw::utils::edit_intent_detector::{ConnectorPointKind, EditIntent};
 
 /// Parameters carried by a start-edit action.
 ///
@@ -19,7 +19,7 @@ pub enum EditOperationParams {
     Move(MoveOperationParams),
     Resize(ResizeOperationParams),
     Rotate(RotateOperationParams),
-    ArrowPoint(ArrowPointOperationParams),
+    ConnectorPoint(ConnectorPointOperationParams),
 }
 
 impl From<MoveOperationParams> for EditOperationParams {
@@ -40,9 +40,9 @@ impl From<RotateOperationParams> for EditOperationParams {
     }
 }
 
-impl From<ArrowPointOperationParams> for EditOperationParams {
-    fn from(value: ArrowPointOperationParams) -> Self {
-        Self::ArrowPoint(value)
+impl From<ConnectorPointOperationParams> for EditOperationParams {
+    fn from(value: ConnectorPointOperationParams) -> Self {
+        Self::ConnectorPoint(value)
     }
 }
 
@@ -125,20 +125,22 @@ impl RotateOperationParams {
     }
 }
 
-/// Parameters for arrow-point editing.
+/// Parameters for connector-point editing.
 #[derive(Clone, Debug, PartialEq)]
-pub struct ArrowPointOperationParams {
+pub struct ConnectorPointOperationParams {
     pub element_id: String,
-    pub point_kind: ArrowPointKind,
+    pub point_kind: ConnectorPointKind,
     pub point_index: usize,
     pub is_double_click: bool,
     pub initial_selection_bounds: Option<DrawRect>,
 }
 
-impl ArrowPointOperationParams {
+pub type ArrowPointOperationParams = ConnectorPointOperationParams;
+
+impl ConnectorPointOperationParams {
     pub fn new(
         element_id: impl Into<String>,
-        point_kind: ArrowPointKind,
+        point_kind: ConnectorPointKind,
         point_index: usize,
         is_double_click: bool,
         initial_selection_bounds: Option<DrawRect>,
@@ -249,9 +251,9 @@ pub fn resolve_default_intent(
     config: &DrawConfig,
 ) -> Option<EditIntentResolution> {
     match intent {
-        EditIntent::StartArrowPoint(start) => Some(EditIntentResolution {
+        EditIntent::StartConnectorPoint(start) => Some(EditIntentResolution {
             operation_id: EditOperationIds::CONNECTOR_POINT,
-            params: ArrowPointOperationParams::new(
+            params: ConnectorPointOperationParams::new(
                 start.element_id.clone(),
                 start.point_kind,
                 start.point_index,
@@ -282,7 +284,7 @@ pub fn resolve_default_intent(
 mod tests {
     use super::*;
     use crate::draw::utils::edit_intent_detector::{
-        StartArrowPointIntent, StartMoveIntent, StartResizeIntent, StartRotateIntent,
+        StartConnectorPointIntent, StartMoveIntent, StartResizeIntent, StartRotateIntent,
     };
 
     #[test]
@@ -344,11 +346,11 @@ mod tests {
     }
 
     #[test]
-    fn default_mapper_maps_arrow_point_intent() {
+    fn default_mapper_maps_connector_point_intent() {
         let mapper = EditIntentToOperationMapper::with_defaults();
-        let intent = EditIntent::StartArrowPoint(StartArrowPointIntent {
+        let intent = EditIntent::StartConnectorPoint(StartConnectorPointIntent {
             element_id: "arrow-1".to_owned(),
-            point_kind: ArrowPointKind::Turning,
+            point_kind: ConnectorPointKind::Turning,
             point_index: 2,
             is_double_click: true,
         });
@@ -360,9 +362,9 @@ mod tests {
         assert_eq!(start.operation_id, EditOperationIds::CONNECTOR_POINT);
         assert_eq!(
             start.params,
-            EditOperationParams::ArrowPoint(ArrowPointOperationParams::new(
+            EditOperationParams::ConnectorPoint(ConnectorPointOperationParams::new(
                 "arrow-1",
-                ArrowPointKind::Turning,
+                ConnectorPointKind::Turning,
                 2,
                 true,
                 None,

@@ -202,7 +202,9 @@ pub fn did_core_engine_result_reorder(value: &ApplyEngineResultValue) -> bool {
 pub fn reordered_element_ids_from_core_result(
     value: &ApplyEngineResultValue,
 ) -> Option<Vec<String>> {
-    did_core_engine_result_reorder(value).then(|| value.ordered_element_ids.clone()).flatten()
+    did_core_engine_result_reorder(value)
+        .then(|| value.ordered_element_ids.clone())
+        .flatten()
 }
 
 #[cfg(test)]
@@ -215,16 +217,8 @@ mod tests {
 
     #[test]
     fn compute_core_elbow_resize_patch_mirrors_binding_points() {
-        let start_binding = FixedPointBinding::new(
-            "start",
-            DrawPoint::new(0.25, 0.75),
-            "orbit",
-        );
-        let end_binding = FixedPointBinding::new(
-            "end",
-            DrawPoint::new(0.75, 0.25),
-            "inside",
-        );
+        let start_binding = FixedPointBinding::new("start", DrawPoint::new(0.25, 0.75), "orbit");
+        let end_binding = FixedPointBinding::new("end", DrawPoint::new(0.75, 0.25), "inside");
 
         let patch = compute_core_elbow_resize_patch(
             Some(&start_binding),

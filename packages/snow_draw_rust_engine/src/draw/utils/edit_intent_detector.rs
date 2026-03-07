@@ -11,14 +11,40 @@ use crate::draw::elements::core::element_registry::DefaultElementRegistry;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::resize_mode::ResizeMode;
 use crate::draw::utils::arrow_point_metrics::{
-    resolve_arrow_point_handle_size, resolve_arrow_point_loop_threshold,
+    resolve_connector_point_handle_size, resolve_connector_point_loop_threshold,
 };
 
-/// Simplified arrow-like payload used by this module.
+/// Connector control-point kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ConnectorPointKind {
+    Turning,
+    Addable,
+    LoopStart,
+    LoopEnd,
+    FocusStart,
+    FocusEnd,
+}
+
+pub type ArrowPointKind = ConnectorPointKind;
+
+/// Connector control-point hit result.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ConnectorPointHandle {
+    pub element_id: String,
+    pub kind: ConnectorPointKind,
+    pub index: usize,
+    pub position: DrawPoint,
+}
+
+pub type ArrowPointHandle = ConnectorPointHandle;
+
+/// Simplified connector-like payload used by this module.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ArrowLikeData {
-    /// World-space control points for arrow editing.
+    /// World-space control points for connector editing.
     pub points: Vec<DrawPoint>,
+    /// Precomputed focus handles from the full connector overlay pipeline.
+    pub focus_points: Vec<ConnectorPointHandle>,
 }
 
 /// Element payload variants required for edit-intent decisions.
@@ -187,28 +213,6 @@ pub trait HitTestService {
     fn test(&self, request: HitTestRequest<'_>) -> HitTestResult;
 }
 
-/// Arrow control-point kind.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum ArrowPointKind {
-    Turning,
-    Addable,
-    LoopStart,
-    LoopEnd,
-    FocusStart,
-    FocusEnd,
-}
-
-pub type ConnectorPointKind = ArrowPointKind;
-
-/// Arrow control-point hit result.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ArrowPointHandle {
-    pub element_id: String,
-    pub kind: ArrowPointKind,
-    pub index: usize,
-    pub position: DrawPoint,
-}
-
 /// Arrow-point hit-test utilities used by edit-intent detection.
 pub struct ArrowPointUtils;
 
@@ -235,6 +239,26 @@ impl ArrowPointUtils {
         };
 
         let turning_hit_radius = (hit_radius * 1.11).max(visual_radius);
+        let turning_hit_radius_sq = turning_hit_radius * turning_hit_radius;
+
+        if !data.focus_points.is_empty() {
+            let mut nearest_focus: Option<(f64, ConnectorPointHandle)> = None;
+            for handle in &data.focus_points {
+                let distance_sq = position.distance_squared(handle.position);
+                if distance_sq > turning_hit_radius_sq {
+                    continue;
+                }
+
+                match &nearest_focus {
+                    Some((best_sq, _)) if *best_sq <= distance_sq => {}
+                    _ => nearest_focus = Some((distance_sq, handle.clone())),
+                }
+            }
+
+            if let Some((_, handle)) = nearest_focus {
+                return Some(handle);
+            }
+        }
 
         if Self::is_loop_active(&data.points, loop_threshold) {
             let start = data.points[0];
@@ -244,9 +268,9 @@ impl ArrowPointUtils {
 
             let loop_inner_radius = (hit_radius * 0.69).max(visual_radius);
             if distance_sq <= loop_inner_radius * loop_inner_radius {
-                return Some(ArrowPointHandle {
+                return Some(ConnectorPointHandle {
                     element_id: element.id.clone(),
-                    kind: ArrowPointKind::LoopStart,
+                    kind: ConnectorPointKind::LoopStart,
                     index: 0,
                     position: start,
                 });
@@ -259,18 +283,30 @@ impl ArrowPointUtils {
             };
             let loop_outer_radius = (hit_radius * 1.18).max(loop_outer_visual);
             if distance_sq <= loop_outer_radius * loop_outer_radius {
-                return Some(ArrowPointHandle {
+                return Some(ConnectorPointHandle {
                     element_id: element.id.clone(),
-                    kind: ArrowPointKind::LoopEnd,
+                    kind: ConnectorPointKind::LoopEnd,
                     index: data.points.len() - 1,
                     position: end,
                 });
             }
         }
 
-        let turning_hit_radius_sq = turning_hit_radius * turning_hit_radius;
+        let has_start_focus = data
+            .focus_points
+            .iter()
+            .any(|handle| handle.kind == ConnectorPointKind::FocusStart);
+        let has_end_focus = data
+            .focus_points
+            .iter()
+            .any(|handle| handle.kind == ConnectorPointKind::FocusEnd);
         let mut nearest_turning: Option<(usize, f64)> = None;
         for (index, point) in data.points.iter().copied().enumerate() {
+            if (has_start_focus && index == 0) || (has_end_focus && index + 1 == data.points.len())
+            {
+                continue;
+            }
+
             let distance_sq = position.distance_squared(point);
             if distance_sq > turning_hit_radius_sq {
                 continue;
@@ -285,9 +321,9 @@ impl ArrowPointUtils {
         }
 
         if let Some((index, _)) = nearest_turning {
-            return Some(ArrowPointHandle {
+            return Some(ConnectorPointHandle {
                 element_id: element.id.clone(),
-                kind: ArrowPointKind::Turning,
+                kind: ConnectorPointKind::Turning,
                 index,
                 position: data.points[index],
             });
@@ -299,9 +335,9 @@ impl ArrowPointUtils {
         for index in 0..(data.points.len() - 1) {
             let midpoint = Self::midpoint(data.points[index], data.points[index + 1]);
             if position.distance_squared(midpoint) <= addable_hit_radius_sq {
-                return Some(ArrowPointHandle {
+                return Some(ConnectorPointHandle {
                     element_id: element.id.clone(),
-                    kind: ArrowPointKind::Addable,
+                    kind: ConnectorPointKind::Addable,
                     index,
                     position: midpoint,
                 });
@@ -332,7 +368,7 @@ pub enum EditIntent {
     StartMove(StartMoveIntent),
     StartResize(StartResizeIntent),
     StartRotate(StartRotateIntent),
-    StartArrowPoint(StartArrowPointIntent),
+    StartConnectorPoint(StartConnectorPointIntent),
     BoxSelect(BoxSelectIntent),
     ClearSelection(ClearSelectionIntent),
 }
@@ -363,16 +399,16 @@ pub struct StartResizeIntent {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct StartRotateIntent;
 
-/// Start arrow-point editing.
+/// Start connector-point editing.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub struct StartArrowPointIntent {
+pub struct StartConnectorPointIntent {
     pub element_id: String,
-    pub point_kind: ArrowPointKind,
+    pub point_kind: ConnectorPointKind,
     pub point_index: usize,
     pub is_double_click: bool,
 }
 
-pub type StartConnectorPointIntent = StartArrowPointIntent;
+pub type StartArrowPointIntent = StartConnectorPointIntent;
 
 /// Start box-selection interaction.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -391,7 +427,7 @@ impl fmt::Display for EditIntent {
             Self::StartMove(intent) => write!(f, "{}", intent),
             Self::StartResize(intent) => write!(f, "{}", intent),
             Self::StartRotate(intent) => write!(f, "{}", intent),
-            Self::StartArrowPoint(intent) => write!(f, "{}", intent),
+            Self::StartConnectorPoint(intent) => write!(f, "{}", intent),
             Self::BoxSelect(intent) => write!(f, "{}", intent),
             Self::ClearSelection(intent) => write!(f, "{}", intent),
         }
@@ -434,11 +470,11 @@ impl fmt::Display for StartRotateIntent {
     }
 }
 
-impl fmt::Display for StartArrowPointIntent {
+impl fmt::Display for StartConnectorPointIntent {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "StartArrowPointIntent(id: {}, kind: {:?}, index: {}, doubleClick: {})",
+            "StartConnectorPointIntent(id: {}, kind: {:?}, index: {}, doubleClick: {})",
             self.element_id, self.point_kind, self.point_index, self.is_double_click
         )
     }
@@ -501,7 +537,7 @@ impl EditIntentDetector {
         filter_type_id: Option<&CoreElementTypeId<DynElementData>>,
         hit_tester: &dyn HitTestService,
     ) -> Option<EditIntent> {
-        if let Some(intent) = self.detect_arrow_point_intent(state_view, position, config) {
+        if let Some(intent) = self.detect_connector_point_intent(state_view, position, config) {
             return Some(intent);
         }
 
@@ -625,7 +661,7 @@ impl EditIntentDetector {
         }
     }
 
-    fn detect_arrow_point_intent(
+    fn detect_connector_point_intent(
         &self,
         state_view: &DrawStateView,
         position: DrawPoint,
@@ -648,8 +684,8 @@ impl EditIntentDetector {
         }
 
         let hit_radius = config.interaction.handle_tolerance;
-        let handle_size = resolve_arrow_point_handle_size(config.render.control_point_size);
-        let loop_threshold = resolve_arrow_point_loop_threshold(hit_radius);
+        let handle_size = resolve_connector_point_handle_size(config.render.control_point_size);
+        let loop_threshold = resolve_connector_point_loop_threshold(hit_radius);
         let effective_element = state_view.effective_element(element);
 
         let handle = ArrowPointUtils::hit_test(
@@ -660,7 +696,7 @@ impl EditIntentDetector {
             handle_size,
         )?;
 
-        Some(EditIntent::StartArrowPoint(StartArrowPointIntent {
+        Some(EditIntent::StartConnectorPoint(StartConnectorPointIntent {
             element_id: handle.element_id,
             point_kind: handle.kind,
             point_index: handle.index,
@@ -799,12 +835,13 @@ mod tests {
     }
 
     #[test]
-    fn prioritizes_arrow_point_intent_for_single_selected_arrow() {
+    fn prioritizes_connector_point_intent_for_single_selected_connector() {
         let detector = EditIntentDetector::new();
         let arrow = ElementState::new(
             "arrow-1",
             ElementData::ArrowLike(ArrowLikeData {
                 points: vec![DrawPoint::new(0.0, 0.0), DrawPoint::new(10.0, 0.0)],
+                focus_points: Vec::new(),
             }),
         );
         let state_view = test_state(vec![arrow], &["arrow-1"]);
@@ -825,9 +862,51 @@ mod tests {
 
         assert_eq!(
             intent,
-            Some(EditIntent::StartArrowPoint(StartArrowPointIntent {
+            Some(EditIntent::StartConnectorPoint(StartConnectorPointIntent {
                 element_id: "arrow-1".to_string(),
-                point_kind: ArrowPointKind::Turning,
+                point_kind: ConnectorPointKind::Turning,
+                point_index: 0,
+                is_double_click: false,
+            }))
+        );
+    }
+
+    #[test]
+    fn prioritizes_connector_focus_handle_when_present() {
+        let detector = EditIntentDetector::new();
+        let arrow = ElementState::new(
+            "arrow-1",
+            ElementData::ArrowLike(ArrowLikeData {
+                points: vec![DrawPoint::new(0.0, 0.0), DrawPoint::new(10.0, 0.0)],
+                focus_points: vec![ConnectorPointHandle {
+                    element_id: "arrow-1".to_string(),
+                    kind: ConnectorPointKind::FocusStart,
+                    index: 0,
+                    position: DrawPoint::new(2.0, 2.0),
+                }],
+            }),
+        );
+        let state_view = test_state(vec![arrow], &["arrow-1"]);
+        let registry = DefaultElementRegistry::default();
+        let hit_tester = StaticHitTestService {
+            result: HitTestResult::none(),
+        };
+
+        let intent = detector.detect_intent_with_hit_test(
+            &state_view,
+            DrawPoint::new(2.0, 2.0),
+            false,
+            &SelectionConfig::default(),
+            &registry,
+            None,
+            &hit_tester,
+        );
+
+        assert_eq!(
+            intent,
+            Some(EditIntent::StartConnectorPoint(StartConnectorPointIntent {
+                element_id: "arrow-1".to_string(),
+                point_kind: ConnectorPointKind::FocusStart,
                 point_index: 0,
                 is_double_click: false,
             }))

@@ -40,8 +40,7 @@ use super::super::rect_intersection::rects_intersect;
 use super::frame_render_plan::FrameRenderPlan;
 use super::render_tasks::{
     ArrowBindingHighlightRenderTask, BackgroundRenderTask, BoxSelectionRenderTask,
-    ConnectorPointOverlayRenderTask,
-    FrameRenderTask, GridRenderTask, HighlightMaskRenderTask,
+    ConnectorPointOverlayRenderTask, FrameRenderTask, GridRenderTask, HighlightMaskRenderTask,
     HoverOutlineRenderTask, SelectionControlsRenderTask, SelectionOutlineRenderTask,
     SnapGuidesRenderTask, WatermarkRenderTask,
 };
@@ -451,11 +450,7 @@ impl FrameRenderPlanBuilder {
         current_transform: &EditTransform,
     ) -> Option<crate::draw::elements::types::arrow::arrow_data::ArrowBinding> {
         let context = self.synthetic_connector_point_context(element, transform)?;
-        resolve_connector_point_edit_highlight_binding(
-            &context,
-            bindings,
-            Some(current_transform),
-        )
+        resolve_connector_point_edit_highlight_binding(&context, bindings, Some(current_transform))
     }
 
     fn synthetic_connector_point_context(
@@ -499,7 +494,9 @@ impl FrameRenderPlanBuilder {
 mod tests {
     use super::*;
     use crate::draw::config::draw_config::SelectionConfig;
-    use crate::draw::elements::types::arrow::arrow_data::{ArrowBinding, ArrowBindingMode, ArrowData};
+    use crate::draw::elements::types::arrow::arrow_data::{
+        ArrowBinding, ArrowBindingMode, ArrowData,
+    };
     use crate::draw::models::application_state::{ApplicationState, EditingState};
     use crate::draw::models::draw_state::{DomainDocumentState, DomainState, DrawState};
     use crate::draw::models::edit_session_id::EditSessionId;
@@ -547,7 +544,8 @@ mod tests {
         );
 
         let selection = SelectionState::default().with_selected(unrelated_selected_id.clone());
-        let document = DomainDocumentState::new(vec![target, connector, unrelated], 1, Default::default());
+        let document =
+            DomainDocumentState::new(vec![target, connector, unrelated], 1, Default::default());
         let base_context = crate::draw::types::edit_context::EditContext::new(
             DrawPoint::ZERO,
             DrawRect::new(0.0, 0.0, 100.0, 20.0),
@@ -584,7 +582,10 @@ mod tests {
             interaction,
             Default::default(),
         );
-        let state = DrawState::new(Some(DomainState::new(document, selection)), Some(application));
+        let state = DrawState::new(
+            Some(DomainState::new(document, selection)),
+            Some(application),
+        );
         let view = DrawStateView::from_state(state);
         let transient = FrameRenderTransientState {
             selection_config: Some(SelectionConfig::default()),

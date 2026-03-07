@@ -180,12 +180,7 @@ impl CreationStrategy for ArrowCreationStrategy {
         creating_state: &CreatingState,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> CreationFinishResult {
-        ConnectorCreationStrategy::new().finish(
-            state,
-            config,
-            creating_state,
-            text_metrics_service,
-        )
+        ConnectorCreationStrategy::new().finish(state, config, creating_state, text_metrics_service)
     }
 }
 
@@ -264,12 +259,7 @@ impl CreationStrategy for LineCreationStrategy {
         creating_state: &CreatingState,
         text_metrics_service: Option<Arc<dyn TextMetricsService>>,
     ) -> CreationFinishResult {
-        ConnectorCreationStrategy::new().finish(
-            state,
-            config,
-            creating_state,
-            text_metrics_service,
-        )
+        ConnectorCreationStrategy::new().finish(state, config, creating_state, text_metrics_service)
     }
 }
 
