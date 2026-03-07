@@ -6,6 +6,12 @@ use crate::draw::elements::types::arrow::arrow_core::{
     normalize_arrow_from_global_points, EngineContext, BIND_MODE_ORBIT, DEFAULT_MAX_COORDINATE,
 };
 use crate::draw::elements::types::arrow::arrow_core_bridge::{ArrowBindableState, ArrowCoreState};
+use crate::draw::elements::types::arrow::core::arrow_elbow_core::compute_elbow_resize_patch;
+use crate::draw::elements::types::arrow::core::arrow_order_core::reordered_element_ids_from_hovered_reorder;
+use crate::draw::elements::types::arrow::core::arrow_types::{
+    ApplyEngineResultValue, ArrowPatch, FixedPointBinding, FixedSegment,
+    ReorderArrowAboveHoveredBindableResult,
+};
 use crate::draw::types::draw_point::DrawPoint;
 
 const UNSET_ENDPOINT_BINDING_OPTION: u8 = 0;
@@ -159,4 +165,157 @@ pub fn resolve_arrow_binding_mode(is_binding_enabled: bool) -> ArrowBindingMode 
 /// Creates a default bridge-layer engine context.
 pub fn default_engine_context() -> EngineContext {
     EngineContext::new(1.0, true, BIND_MODE_ORBIT, DEFAULT_MAX_COORDINATE)
+}
+
+/// Typed wrapper around resize-time elbow binding normalization.
+pub fn compute_core_elbow_resize_patch(
+    start_binding: Option<&FixedPointBinding>,
+    end_binding: Option<&FixedPointBinding>,
+    fixed_segments: Option<&[FixedSegment]>,
+    points: &[DrawPoint],
+    flip_x: bool,
+    flip_y: bool,
+) -> ArrowPatch {
+    compute_elbow_resize_patch(
+        start_binding,
+        end_binding,
+        fixed_segments,
+        Some(points),
+        flip_x,
+        flip_y,
+    )
+}
+
+/// Returns reordered ids only when hovered-bindable reordering moved the arrow.
+pub fn reordered_element_ids_from_core_hovered_reorder(
+    result: &ReorderArrowAboveHoveredBindableResult,
+) -> Option<Vec<String>> {
+    reordered_element_ids_from_hovered_reorder(result)
+}
+
+/// Returns `true` when applying an engine result changed element order.
+pub fn did_core_engine_result_reorder(value: &ApplyEngineResultValue) -> bool {
+    value.order_changed.unwrap_or(false)
+}
+
+/// Returns reordered ids only when the engine explicitly moved elements.
+pub fn reordered_element_ids_from_core_result(
+    value: &ApplyEngineResultValue,
+) -> Option<Vec<String>> {
+    did_core_engine_result_reorder(value).then(|| value.ordered_element_ids.clone()).flatten()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::draw::elements::types::arrow::core::arrow_types::{
+        ArrowState, BindableRelationState,
+    };
+    use serde_json::{Map, Value};
+
+    #[test]
+    fn compute_core_elbow_resize_patch_mirrors_binding_points() {
+        let start_binding = FixedPointBinding::new(
+            "start",
+            DrawPoint::new(0.25, 0.75),
+            "orbit",
+        );
+        let end_binding = FixedPointBinding::new(
+            "end",
+            DrawPoint::new(0.75, 0.25),
+            "inside",
+        );
+
+        let patch = compute_core_elbow_resize_patch(
+            Some(&start_binding),
+            Some(&end_binding),
+            None,
+            &[DrawPoint::ZERO, DrawPoint::new(100.0, 0.0)],
+            true,
+            false,
+        );
+
+        let mirrored_start = patch
+            .get("startBinding")
+            .and_then(Value::as_object)
+            .and_then(|binding: &Map<String, Value>| binding.get("fixedPoint"))
+            .and_then(Value::as_array)
+            .expect("mirrored start binding");
+        let mirrored_end = patch
+            .get("endBinding")
+            .and_then(Value::as_object)
+            .and_then(|binding: &Map<String, Value>| binding.get("fixedPoint"))
+            .and_then(Value::as_array)
+            .expect("mirrored end binding");
+
+        assert_eq!(mirrored_start[0].as_f64(), Some(0.75));
+        assert_eq!(mirrored_start[1].as_f64(), Some(0.75));
+        assert_eq!(mirrored_end[0].as_f64(), Some(0.25));
+        assert_eq!(mirrored_end[1].as_f64(), Some(0.25));
+    }
+
+    #[test]
+    fn did_core_engine_result_reorder_reads_optional_flag() {
+        let value = ApplyEngineResultValue {
+            arrow: ArrowState {
+                id: "arrow".to_owned(),
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+                points: vec![DrawPoint::ZERO, DrawPoint::new(10.0, 0.0)],
+                start_binding: None,
+                end_binding: None,
+                start_arrowhead: None,
+                end_arrowhead: None,
+                elbowed: false,
+                fixed_segments: None,
+                start_is_special: None,
+                end_is_special: None,
+            },
+            bindables: Vec::<BindableRelationState>::new(),
+            relation_patches: Vec::new(),
+            ordered_element_ids: Some(vec!["a".to_owned(), "b".to_owned()]),
+            order_changed: Some(true),
+            reorder_operations: None,
+            binding_broken_events: None,
+        };
+
+        assert!(did_core_engine_result_reorder(&value));
+        assert_eq!(
+            reordered_element_ids_from_core_result(&value),
+            Some(vec!["a".to_owned(), "b".to_owned()])
+        );
+    }
+
+    #[test]
+    fn reordered_element_ids_from_core_result_ignores_unchanged_order() {
+        let value = ApplyEngineResultValue {
+            arrow: ArrowState {
+                id: "arrow".to_owned(),
+                x: 0.0,
+                y: 0.0,
+                width: 0.0,
+                height: 0.0,
+                points: vec![DrawPoint::ZERO, DrawPoint::new(10.0, 0.0)],
+                start_binding: None,
+                end_binding: None,
+                start_arrowhead: None,
+                end_arrowhead: None,
+                elbowed: false,
+                fixed_segments: None,
+                start_is_special: None,
+                end_is_special: None,
+            },
+            bindables: Vec::<BindableRelationState>::new(),
+            relation_patches: Vec::new(),
+            ordered_element_ids: Some(vec!["a".to_owned(), "b".to_owned()]),
+            order_changed: Some(false),
+            reorder_operations: None,
+            binding_broken_events: None,
+        };
+
+        assert!(!did_core_engine_result_reorder(&value));
+        assert_eq!(reordered_element_ids_from_core_result(&value), None);
+    }
 }

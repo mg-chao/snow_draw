@@ -54,6 +54,26 @@ pub fn resolve_arrow_bindings_for_changed_bindables(
         elements_by_id.insert(id.clone(), element.clone());
     }
 
+    let ordered_element_ids = elements
+        .iter()
+        .map(|element| element.id.clone())
+        .collect::<Vec<_>>();
+    let merged_elements = elements
+        .iter()
+        .map(|element| {
+            overlay_updates
+                .get(&element.id)
+                .cloned()
+                .unwrap_or_else(|| element.clone())
+        })
+        .collect::<Vec<_>>();
+    let session = ArrowScene::from_elements_with_options(
+        merged_elements,
+        true,
+        Some(&ordered_element_ids),
+        None,
+    );
+
     let mut updated_elements = HashMap::<String, ElementState>::new();
     for element in elements {
         let candidate = overlay_updates.get(&element.id).unwrap_or(element);
@@ -66,10 +86,69 @@ pub fn resolve_arrow_bindings_for_changed_bindables(
         }
     }
 
+    let reordered_element_ids =
+        resolve_reordered_element_ids_for_changed_bindables(
+            &session,
+            &ordered_element_ids,
+            changed_bindable_ids,
+        );
+
     ArrowBindingResolutionUpdate {
         updated_elements,
-        ordered_element_ids: None,
+        ordered_element_ids: reordered_element_ids,
     }
+}
+
+fn resolve_reordered_element_ids_for_changed_bindables(
+    session: &ArrowScene,
+    ordered_element_ids: &[String],
+    changed_bindable_ids: &HashSet<String>,
+) -> Option<Vec<String>> {
+    if session.arrows().is_empty() || changed_bindable_ids.is_empty() {
+        return None;
+    }
+
+    let order_index_by_id = ordered_element_ids
+        .iter()
+        .enumerate()
+        .map(|(index, id)| (id.as_str(), index))
+        .collect::<HashMap<_, _>>();
+    let mut sorted_changed_bindable_ids = changed_bindable_ids.iter().cloned().collect::<Vec<_>>();
+    sorted_changed_bindable_ids.sort_by(|left, right| {
+        let left_index = order_index_by_id.get(left.as_str()).copied().unwrap_or(usize::MAX);
+        let right_index = order_index_by_id.get(right.as_str()).copied().unwrap_or(usize::MAX);
+        left_index.cmp(&right_index).then_with(|| left.cmp(right))
+    });
+
+    let mut next_order: Option<Vec<String>> = None;
+    for arrow in session.arrows() {
+        for bindable_id in &sorted_changed_bindable_ids {
+            let affected = arrow
+                .start_binding
+                .as_ref()
+                .is_some_and(|binding| binding.element_id == *bindable_id)
+                || arrow
+                    .end_binding
+                    .as_ref()
+                    .is_some_and(|binding| binding.element_id == *bindable_id);
+            if !affected {
+                continue;
+            }
+
+            let current_order = next_order.as_deref().unwrap_or(ordered_element_ids);
+            if let Some(reordered) = session.reorder_arrow_above_hovered_bindable(
+                &arrow.id,
+                Some(bindable_id.as_str()),
+                None,
+                Some(current_order),
+                None,
+            ) {
+                next_order = Some(reordered);
+            }
+        }
+    }
+
+    next_order.filter(|ids| ids.as_slice() != ordered_element_ids)
 }
 
 /// Applies replacements and optional ordering to an element list.
