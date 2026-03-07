@@ -89,9 +89,7 @@ impl ArrowBindingPreviewElement for ElementState {
     fn is_bindable_background_opaque(&self) -> bool {
         matches!(
             &self.data,
-            ElementData::Rectangle
-                | ElementData::SerialNumber(_)
-                | ElementData::Highlight(_)
+            ElementData::Rectangle | ElementData::SerialNumber(_) | ElementData::Highlight(_)
         )
     }
 }

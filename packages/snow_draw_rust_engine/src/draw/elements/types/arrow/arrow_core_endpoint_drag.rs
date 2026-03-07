@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use crate::draw::elements::types::arrow::arrow_binding::{
-    ArrowBinding, ArrowBindingResult, ArrowBindingUtils,
+    ArrowBinding, ArrowBindingMode, ArrowBindingResult, ArrowBindingUtils,
 };
 use crate::draw::elements::types::arrow::arrow_core::EngineContext;
 use crate::draw::elements::types::arrow::arrow_core_bridge::{
@@ -357,6 +357,16 @@ fn run_arrow_core_endpoint_drag_result(
         }
     }
 
+    normalize_same_target_bindings(
+        state,
+        element,
+        &mut world_points,
+        &mut next_local_points,
+        &mut next_start_binding,
+        &mut next_end_binding,
+        options.complex_bindings.unwrap_or(false),
+    );
+
     let fixed_segments_for_core = if data.arrow_type() == ArrowType::Elbow {
         fixed_segments
     } else {
@@ -408,6 +418,62 @@ fn run_arrow_core_endpoint_drag_result(
 enum Endpoint {
     Start,
     End,
+}
+
+fn normalize_same_target_bindings(
+    state: &DrawState,
+    element: &ElementState,
+    world_points: &mut [DrawPoint],
+    local_points: &mut [DrawPoint],
+    start_binding: &mut Option<ArrowBinding>,
+    end_binding: &mut Option<ArrowBinding>,
+    complex_bindings: bool,
+) {
+    if complex_bindings || world_points.len() < 2 || local_points.len() < 2 {
+        return;
+    }
+
+    let (Some(current_start), Some(current_end)) = (start_binding.clone(), end_binding.clone())
+    else {
+        return;
+    };
+    if current_start.element_id != current_end.element_id {
+        return;
+    }
+
+    let Some(target) = state
+        .domain
+        .document
+        .get_element_by_id(current_start.element_id.as_str())
+    else {
+        return;
+    };
+
+    let normalized_start = current_start.copy_with(None, None, Some(ArrowBindingMode::Inside));
+    let normalized_end = current_end.copy_with(None, None, Some(ArrowBindingMode::Inside));
+
+    if let Some(point) = ArrowBindingUtils::resolve_bound_point(
+        &normalized_start,
+        target,
+        world_points.get(1).copied(),
+    ) {
+        world_points[0] = point;
+        local_points[0] = to_local_point(element, point);
+    }
+    if let Some(point) = ArrowBindingUtils::resolve_bound_point(
+        &normalized_end,
+        target,
+        world_points
+            .get(world_points.len().saturating_sub(2))
+            .copied(),
+    ) {
+        let end_index = world_points.len() - 1;
+        world_points[end_index] = point;
+        local_points[end_index] = to_local_point(element, point);
+    }
+
+    *start_binding = Some(normalized_start);
+    *end_binding = Some(normalized_end);
 }
 
 fn endpoint_arrowhead_style(data: &ConnectorSourceData, endpoint: Endpoint) -> ArrowheadStyle {
@@ -975,7 +1041,10 @@ mod tests {
         )
         .expect("finalize drag result");
 
-        assert_eq!(result.start_binding, Some(end_binding));
+        assert_eq!(
+            result.start_binding,
+            Some(end_binding.copy_with(None, None, Some(ArrowBindingMode::Inside)))
+        );
         assert_eq!(result.world_points.first(), result.world_points.last());
     }
 }

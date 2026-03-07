@@ -2184,6 +2184,30 @@ mod tests {
         EditContext,
         ArrowPointTransform,
     ) {
+        drag_arrow_handle_session_with_modifiers(
+            state,
+            element_id,
+            point_kind,
+            point_index,
+            start_position,
+            current_position,
+            EditModifiers::default(),
+        )
+    }
+
+    fn drag_arrow_handle_session_with_modifiers(
+        state: &DrawState,
+        element_id: &str,
+        point_kind: EditConnectorPointKind,
+        point_index: usize,
+        start_position: DrawPoint,
+        current_position: DrawPoint,
+        modifiers: EditModifiers,
+    ) -> (
+        ArrowPointEditOperationAdapter,
+        EditContext,
+        ArrowPointTransform,
+    ) {
         let operation = ArrowPointEditOperationAdapter::new();
         let context = operation.create_context(
             state,
@@ -2200,7 +2224,7 @@ mod tests {
             &context,
             &initial,
             current_position,
-            EditModifiers::default(),
+            modifiers,
             DrawConfig::default_config(),
         );
         let EditTransform::ArrowPoint(transform) = update.transform else {
@@ -2654,6 +2678,226 @@ mod tests {
         assert!((start_binding.anchor.x - 0.9).abs() < 1e-6);
         assert!((start_binding.anchor.y - 0.2).abs() < 1e-6);
         assert_eq!(end_binding.element_id, end_target.id);
+    }
+
+    #[test]
+    fn finish_keeps_endpoint_unbound_when_snap_override_is_active() {
+        let initial_target = rectangle_element(
+            "rect-initial-finish",
+            DrawRect::new(180.0, 0.0, 260.0, 120.0),
+            1,
+        );
+        let next_target = rectangle_element(
+            "rect-next-finish",
+            DrawRect::new(340.0, 0.0, 440.0, 120.0),
+            2,
+        );
+        let arrow_data = ArrowData::default().copy_with(ArrowDataPatch {
+            points: Some(ArrowGeometry::normalize_points(
+                &[DrawPoint::new(80.0, 60.0), DrawPoint::new(220.0, 60.0)],
+                DrawRect::new(80.0, 60.0, 220.0, 60.0),
+            )),
+            end_binding: ArrowDataNullableField::Value(ArrowDataBinding::new(
+                "rect-initial-finish",
+                DrawPoint::new(0.0, 0.5),
+                ArrowDataBindingMode::Orbit,
+            )),
+            ..ArrowDataPatch::default()
+        });
+        let arrow = arrow_element(
+            "arrow-snap-finish",
+            DrawRect::new(80.0, 60.0, 220.0, 60.0),
+            arrow_data,
+            3,
+        );
+        let state = draw_state_with_selection(
+            vec![initial_target, next_target, arrow.clone()],
+            &[arrow.id.as_str()],
+        );
+
+        let (operation, context, transform) = drag_arrow_handle_session_with_modifiers(
+            &state,
+            &arrow.id,
+            EditConnectorPointKind::Turning,
+            1,
+            DrawPoint::new(220.0, 60.0),
+            DrawPoint::new(360.0, 60.0),
+            EditModifiers {
+                snap_override: true,
+                ..EditModifiers::default()
+            },
+        );
+        let next = operation.finish(&state, &context, &EditTransform::ArrowPoint(transform));
+        let updated_arrow = next
+            .domain
+            .document
+            .get_element_by_id(&arrow.id)
+            .expect("updated arrow")
+            .clone();
+        let updated_target = resolve_arrow_target_for_element(updated_arrow).expect("arrow target");
+        let updated_data = match updated_target.payload {
+            ArrowEditPayload::Arrow(data) => data,
+            ArrowEditPayload::Line(_) => panic!("expected arrow payload"),
+        };
+
+        assert_eq!(updated_data.end_binding, None);
+    }
+
+    #[test]
+    fn snap_override_prevents_reorder_fallback_while_dragging_endpoint() {
+        let bind_target = rectangle_element(
+            "rect-snap-reorder",
+            DrawRect::new(220.0, 0.0, 320.0, 120.0),
+            1,
+        );
+        let arrow_data = ArrowData::default().copy_with(ArrowDataPatch {
+            points: Some(ArrowGeometry::normalize_points(
+                &[DrawPoint::new(60.0, 60.0), DrawPoint::new(160.0, 60.0)],
+                DrawRect::new(60.0, 60.0, 160.0, 60.0),
+            )),
+            ..ArrowDataPatch::default()
+        });
+        let arrow = arrow_element(
+            "arrow-snap-reorder",
+            DrawRect::new(60.0, 60.0, 160.0, 60.0),
+            arrow_data,
+            0,
+        );
+        let state =
+            draw_state_with_selection(vec![arrow.clone(), bind_target], &[arrow.id.as_str()]);
+
+        let (operation, context, transform) = drag_arrow_handle_session_with_modifiers(
+            &state,
+            &arrow.id,
+            EditConnectorPointKind::Turning,
+            1,
+            DrawPoint::new(160.0, 60.0),
+            DrawPoint::new(240.0, 60.0),
+            EditModifiers {
+                snap_override: true,
+                ..EditModifiers::default()
+            },
+        );
+        assert_eq!(transform.end_binding, None);
+        assert_eq!(transform.ordered_element_ids, None);
+
+        let next = operation.finish(&state, &context, &EditTransform::ArrowPoint(transform));
+        let ordered_ids = next
+            .domain
+            .document
+            .elements
+            .iter()
+            .map(|element| element.id.clone())
+            .collect::<Vec<_>>();
+
+        assert_eq!(
+            ordered_ids,
+            vec![arrow.id.clone(), "rect-snap-reorder".to_owned()]
+        );
+    }
+
+    #[test]
+    fn finish_finalizes_endpoint_drag_with_core_default_same_target_behavior() {
+        let bind_target =
+            rectangle_element("rect-shared", DrawRect::new(0.0, 0.0, 120.0, 120.0), 1);
+        let arrow_data = ArrowData::default().copy_with(ArrowDataPatch {
+            points: Some(ArrowGeometry::normalize_points(
+                &[DrawPoint::new(100.0, 60.0), DrawPoint::new(80.0, 60.0)],
+                DrawRect::new(80.0, 60.0, 100.0, 60.0),
+            )),
+            start_binding: ArrowDataNullableField::Value(ArrowDataBinding::new(
+                "rect-shared",
+                DrawPoint::new(1.0, 0.5),
+                ArrowDataBindingMode::Orbit,
+            )),
+            end_binding: ArrowDataNullableField::Value(ArrowDataBinding::new(
+                "rect-shared",
+                DrawPoint::new(0.8, 0.5),
+                ArrowDataBindingMode::Orbit,
+            )),
+            ..ArrowDataPatch::default()
+        });
+        let arrow = arrow_element(
+            "arrow-shared",
+            DrawRect::new(80.0, 60.0, 100.0, 60.0),
+            arrow_data,
+            2,
+        );
+        let state = draw_state_with_selection(
+            vec![bind_target.clone(), arrow.clone()],
+            &[arrow.id.as_str()],
+        );
+
+        let (operation, context, transform) = drag_arrow_handle_session(
+            &state,
+            &arrow.id,
+            EditConnectorPointKind::Turning,
+            0,
+            DrawPoint::new(100.0, 60.0),
+            DrawPoint::new(92.0, 60.0),
+        );
+        assert!(transform.start_binding.is_some());
+        assert!(transform.end_binding.is_some());
+
+        let next = operation.finish(&state, &context, &EditTransform::ArrowPoint(transform));
+        let updated_arrow = next
+            .domain
+            .document
+            .get_element_by_id(&arrow.id)
+            .expect("updated arrow")
+            .clone();
+        let updated_target = resolve_arrow_target_for_element(updated_arrow).expect("arrow target");
+        let updated_data = match updated_target.payload {
+            ArrowEditPayload::Arrow(data) => data,
+            ArrowEditPayload::Line(_) => panic!("expected arrow payload"),
+        };
+
+        let start_binding = updated_data.start_binding.as_ref().expect("start binding");
+        let end_binding = updated_data.end_binding.as_ref().expect("end binding");
+        assert_eq!(start_binding.element_id, bind_target.id);
+        assert_eq!(start_binding.mode, ArrowDataBindingMode::Inside);
+        assert_eq!(end_binding.element_id, bind_target.id);
+        assert_eq!(end_binding.mode, ArrowDataBindingMode::Inside);
+    }
+
+    #[test]
+    fn dragging_endpoint_with_from_center_requests_inside_binding_mode() {
+        let bind_target =
+            rectangle_element("rect-target", DrawRect::new(220.0, 0.0, 320.0, 120.0), 1);
+        let arrow_data = ArrowData::default().copy_with(ArrowDataPatch {
+            points: Some(ArrowGeometry::normalize_points(
+                &[DrawPoint::new(60.0, 60.0), DrawPoint::new(160.0, 60.0)],
+                DrawRect::new(60.0, 60.0, 160.0, 60.0),
+            )),
+            ..ArrowDataPatch::default()
+        });
+        let arrow = arrow_element(
+            "arrow-inside",
+            DrawRect::new(60.0, 60.0, 160.0, 60.0),
+            arrow_data,
+            2,
+        );
+        let state = draw_state_with_selection(
+            vec![bind_target.clone(), arrow.clone()],
+            &[arrow.id.as_str()],
+        );
+
+        let (_operation, _context, transform) = drag_arrow_handle_session_with_modifiers(
+            &state,
+            &arrow.id,
+            EditConnectorPointKind::Turning,
+            1,
+            DrawPoint::new(160.0, 60.0),
+            DrawPoint::new(240.0, 60.0),
+            EditModifiers {
+                from_center: true,
+                ..EditModifiers::default()
+            },
+        );
+
+        let end_binding = transform.end_binding.expect("end binding");
+        assert_eq!(end_binding.element_id, bind_target.id);
+        assert_eq!(end_binding.mode, ArrowDataBindingMode::Inside);
     }
 
     #[test]
