@@ -15,3 +15,8 @@ pub mod arrow_render_core;
 pub mod arrow_resize_core;
 pub mod arrow_state_core;
 pub mod arrow_types;
+/// Mirrors the Dart `index.dart` barrel exports for arrow-core helpers.
+///
+/// Consumers can import `core::index::*` to access the flattened arrow-core
+/// API surface instead of referencing each helper module individually.
+pub mod index;
