@@ -34,6 +34,7 @@ pub enum FrameRenderTask {
     Grid(GridRenderTask),
     SelectionOutline(SelectionOutlineRenderTask),
     SelectionControls(SelectionControlsRenderTask),
+    ConnectorPointOverlay(ConnectorPointOverlayRenderTask),
     ArrowPointOverlay(ArrowPointOverlayRenderTask),
     ArrowBindingHighlight(ArrowBindingHighlightRenderTask),
     HoverOutline(HoverOutlineRenderTask),
@@ -134,9 +135,9 @@ pub struct SelectionControlsRenderTask {
     pub show_rotation_handle: bool,
 }
 
-/// Arrow-point overlay task.
+/// Connector-point overlay task.
 #[derive(Clone, Debug, PartialEq)]
-pub struct ArrowPointOverlayRenderTask {
+pub struct ConnectorPointOverlayRenderTask {
     pub handles: Vec<ConnectorPointHandle>,
     pub selection_config: SelectionConfig,
     pub active_handle: Option<ConnectorPointHandle>,
@@ -144,7 +145,7 @@ pub struct ArrowPointOverlayRenderTask {
     pub delete_indicator_visible: bool,
 }
 
-pub type ConnectorPointOverlayRenderTask = ArrowPointOverlayRenderTask;
+pub type ArrowPointOverlayRenderTask = ConnectorPointOverlayRenderTask;
 
 /// Arrow-binding highlight task.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -188,4 +189,40 @@ pub struct HighlightMaskRenderTask {
 #[derive(Clone, Debug, PartialEq)]
 pub struct WatermarkRenderTask {
     pub config: WatermarkConfig,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::draw::config::draw_config::SelectionConfig;
+
+    #[test]
+    fn connector_overlay_variant_preserves_payload() {
+        let task = ConnectorPointOverlayRenderTask {
+            handles: Vec::new(),
+            selection_config: SelectionConfig::default(),
+            active_handle: None,
+            hovered_handle: None,
+            delete_indicator_visible: true,
+        };
+
+        let frame_task = FrameRenderTask::ConnectorPointOverlay(task.clone());
+
+        assert_eq!(frame_task, FrameRenderTask::ConnectorPointOverlay(task));
+    }
+
+    #[test]
+    fn legacy_arrow_overlay_alias_still_builds_variant() {
+        let task = ArrowPointOverlayRenderTask {
+            handles: Vec::new(),
+            selection_config: SelectionConfig::default(),
+            active_handle: None,
+            hovered_handle: None,
+            delete_indicator_visible: false,
+        };
+
+        let frame_task = FrameRenderTask::ArrowPointOverlay(task.clone());
+
+        assert_eq!(frame_task, FrameRenderTask::ArrowPointOverlay(task));
+    }
 }

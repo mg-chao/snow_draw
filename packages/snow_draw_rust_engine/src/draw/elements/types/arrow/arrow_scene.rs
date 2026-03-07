@@ -1,18 +1,26 @@
 #![allow(dead_code)]
 
-use crate::draw::elements::types::highlight::highlight_data::HighlightData;
-use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
-use crate::draw::elements::types::serial_number::serial_number_data::SerialNumberData;
-use crate::draw::elements::types::serial_number::serial_number_layout::resolve_serial_number_stroke_width;
-use crate::draw::elements::types::text::text_data::TextData;
-use crate::draw::models::element_state::ElementState;
-use crate::draw::types::draw_point::DrawPoint;
 use std::collections::{HashMap, HashSet};
 
+use crate::draw::models::element_state::ElementState;
+use crate::draw::types::draw_point::DrawPoint;
+
 use super::arrow_binding::ArrowBinding;
-use super::arrow_core::{BindableShape, BindableState, EngineContext};
+use super::arrow_core::{ArrowState, BindableState, EngineContext};
+use super::arrow_core_bridge::{
+    apply_core_arrow_patches_to_sources, project_core_document, to_core_bindable_state,
+    ArrowCoreDocumentProjection,
+};
 use super::core::arrow_hit_test::is_point_near_bindable_for_binding_hit as is_point_near_core_bindable_for_binding_hit;
-use super::core::arrow_types::BindableState as CoreBindableState;
+use super::core::arrow_order_core::{
+    reorder_arrow_above_hovered_bindable, reordered_element_ids_from_hovered_reorder,
+};
+use super::core::arrow_state_core::reduce_arrow_engine_events_to_order;
+use super::core::arrow_types::{
+    ArrowEngineEvent, ArrowStatePatchWithId, BindableRelationState,
+    BindableState as CoreBindableState, ReduceArrowEngineEventsToOrderInput,
+    ReorderArrowAboveHoveredBindableInput,
+};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct ArrowBindableCandidates {
@@ -54,7 +62,7 @@ where
         if !seen_ids.insert(element.id.clone()) {
             continue;
         }
-        let Some(bindable) = to_core_bindable_state(&element) else {
+        let Some(bindable) = to_core_bindable_state(&element, Some(element.z_index as usize), true, true, Some(element.rect)) else {
             continue;
         };
         element_by_id.insert(element.id.clone(), element.clone());
@@ -115,7 +123,7 @@ where
     )
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug, Default, PartialEq)]
 pub struct ArrowAppliedResult {
     pub ordered_element_ids: Option<Vec<String>>,
 }
@@ -123,6 +131,7 @@ pub struct ArrowAppliedResult {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ArrowScene {
     pub candidates: ArrowBindableCandidates,
+    pub projection: ArrowCoreDocumentProjection,
     pub context: EngineContext,
 }
 
@@ -131,8 +140,25 @@ impl ArrowScene {
     where
         I: IntoIterator<Item = ElementState>,
     {
+        Self::from_elements_with_options(elements, false, None, context)
+    }
+
+    pub fn from_elements_with_options<I>(
+        elements: I,
+        only_bound_arrows: bool,
+        ordered_element_ids: Option<&[String]>,
+        context: Option<EngineContext>,
+    ) -> Self
+    where
+        I: IntoIterator<Item = ElementState>,
+    {
+        let materialized = elements.into_iter().collect::<Vec<_>>();
+        let projection = project_core_document(&materialized, only_bound_arrows, ordered_element_ids);
+        let candidates = project_arrow_bindable_candidates(materialized);
+
         Self {
-            candidates: project_arrow_bindable_candidates(elements),
+            candidates,
+            projection,
             context: context.unwrap_or_else(|| {
                 EngineContext::new(1.0, true, super::arrow_core::BIND_MODE_ORBIT, 1e6)
             }),
@@ -140,85 +166,102 @@ impl ArrowScene {
     }
 
     pub fn bindables(&self) -> &[BindableState] {
-        &self.candidates.bindables
+        &self.projection.bindables
+    }
+
+    pub fn bindable_relations(&self) -> &[BindableRelationState] {
+        &self.projection.bindable_relations
+    }
+
+    pub fn arrows(&self) -> &[ArrowState] {
+        &self.projection.arrows
+    }
+
+    pub fn arrow_sources(
+        &self,
+    ) -> &HashMap<String, (ElementState, super::arrow_core_bridge::ConnectorSourceData)> {
+        &self.projection.arrow_sources
+    }
+
+    pub fn ordered_element_ids(&self) -> &[String] {
+        &self.projection.ordered_element_ids
+    }
+
+    pub fn anchor_element_ids_by_bindable_id(&self) -> &HashMap<String, Vec<String>> {
+        &self.projection.anchor_element_ids_by_bindable_id
+    }
+
+    pub fn has_arrows(&self) -> bool {
+        !self.projection.arrows.is_empty()
+    }
+
+    pub fn apply_arrow_patches(
+        &self,
+        patches: &[ArrowStatePatchWithId],
+    ) -> HashMap<String, ElementState> {
+        apply_core_arrow_patches_to_sources(patches, &self.projection.arrow_sources)
+    }
+
+    pub fn reduce_events_to_ordered_element_ids(
+        &self,
+        events: &[ArrowEngineEvent],
+    ) -> Option<Vec<String>> {
+        reduce_arrow_events_to_ordered_ids(
+            &self.projection.ordered_element_ids,
+            events,
+            Some(&self.projection.anchor_element_ids_by_bindable_id),
+        )
+    }
+
+    pub fn reorder_arrow_above_hovered_bindable(
+        &self,
+        arrow_id: &str,
+        hovered_bindable_id: Option<&str>,
+        point: Option<DrawPoint>,
+        ordered_element_ids: Option<&[String]>,
+        tolerance: Option<f64>,
+    ) -> Option<Vec<String>> {
+        let reorder = reorder_arrow_above_hovered_bindable(&ReorderArrowAboveHoveredBindableInput {
+            ordered_element_ids: ordered_element_ids
+                .map(|value| value.to_vec())
+                .unwrap_or_else(|| self.projection.ordered_element_ids.clone()),
+            arrow_id: arrow_id.to_string(),
+            hovered_bindable_id: hovered_bindable_id.map(str::to_string),
+            point,
+            bindables: Some(
+                self.projection
+                    .bindables
+                    .iter()
+                    .map(to_order_core_bindable_state)
+                    .collect(),
+            ),
+            tolerance,
+            anchor_element_ids_by_bindable_id: Some(
+                self.projection.anchor_element_ids_by_bindable_id.clone(),
+            ),
+        });
+        reordered_element_ids_from_hovered_reorder(&reorder)
     }
 }
 
-fn to_core_bindable_state(element: &ElementState) -> Option<BindableState> {
-    let json = element.data.to_json();
-    if element.data.type_id().as_str() == RectangleData::TYPE_ID_TOKEN {
-        let data = RectangleData::from_json(&json).ok()?;
-        return Some(BindableState {
-            id: element.id.clone(),
-            shape: BindableShape::Rectangle,
-            x: element.rect.min_x,
-            y: element.rect.min_y,
-            width: element.rect.width(),
-            height: element.rect.height(),
-            angle: element.rotation,
-            stroke_width: data.stroke_width,
-            z_index: Some(element.z_index as f64),
-            background_opaque: Some(true),
-            binding_enabled: Some(true),
-            interior_hit_enabled: Some(true),
-            visibility_bounds: Some(element.rect),
-        });
+pub fn reduce_arrow_events_to_ordered_ids(
+    ordered_element_ids: &[String],
+    events: &[ArrowEngineEvent],
+    anchor_element_ids_by_bindable_id: Option<&HashMap<String, Vec<String>>>,
+) -> Option<Vec<String>> {
+    if ordered_element_ids.is_empty() || events.is_empty() {
+        return None;
     }
-    if element.data.type_id().as_str() == TextData::TYPE_ID_TOKEN {
-        let data = TextData::from_json(&json).ok()?;
-        return Some(BindableState {
-            id: element.id.clone(),
-            shape: BindableShape::Rectangle,
-            x: element.rect.min_x,
-            y: element.rect.min_y,
-            width: element.rect.width(),
-            height: element.rect.height(),
-            angle: element.rotation,
-            stroke_width: data.stroke_width,
-            z_index: Some(element.z_index as f64),
-            background_opaque: Some(true),
-            binding_enabled: Some(true),
-            interior_hit_enabled: Some(true),
-            visibility_bounds: Some(element.rect),
-        });
+
+    let result = reduce_arrow_engine_events_to_order(&ReduceArrowEngineEventsToOrderInput {
+        ordered_element_ids: ordered_element_ids.to_vec(),
+        events: events.to_vec(),
+        anchor_element_ids_by_bindable_id: anchor_element_ids_by_bindable_id.cloned(),
+    });
+    if !result.moved || result.ordered_element_ids == ordered_element_ids {
+        return None;
     }
-    if element.data.type_id().as_str() == SerialNumberData::TYPE_ID_TOKEN {
-        let data = SerialNumberData::from_json(&json).ok()?;
-        return Some(BindableState {
-            id: element.id.clone(),
-            shape: BindableShape::Ellipse,
-            x: element.rect.min_x,
-            y: element.rect.min_y,
-            width: element.rect.width(),
-            height: element.rect.height(),
-            angle: element.rotation,
-            stroke_width: resolve_serial_number_stroke_width(&data, 0.0),
-            z_index: Some(element.z_index as f64),
-            background_opaque: Some(true),
-            binding_enabled: Some(true),
-            interior_hit_enabled: Some(true),
-            visibility_bounds: Some(element.rect),
-        });
-    }
-    if element.data.type_id().as_str() == HighlightData::TYPE_ID_TOKEN {
-        let data = HighlightData::from_json(&json).ok()?;
-        return Some(BindableState {
-            id: element.id.clone(),
-            shape: BindableShape::Rectangle,
-            x: element.rect.min_x,
-            y: element.rect.min_y,
-            width: element.rect.width(),
-            height: element.rect.height(),
-            angle: element.rotation,
-            stroke_width: data.stroke_width,
-            z_index: Some(element.z_index as f64),
-            background_opaque: Some(true),
-            binding_enabled: Some(true),
-            interior_hit_enabled: Some(true),
-            visibility_bounds: Some(element.rect),
-        });
-    }
-    None
+    Some(result.ordered_element_ids)
 }
 
 fn is_point_near_bindable_for_binding_hit(
@@ -226,7 +269,12 @@ fn is_point_near_bindable_for_binding_hit(
     bindable: &BindableState,
     tolerance: f64,
 ) -> bool {
-    let core_bindable = CoreBindableState {
+    let core_bindable = to_order_core_bindable_state(bindable);
+    is_point_near_core_bindable_for_binding_hit(point, &core_bindable, tolerance)
+}
+
+fn to_order_core_bindable_state(bindable: &BindableState) -> CoreBindableState {
+    CoreBindableState {
         id: bindable.id.clone(),
         shape: bindable.shape.as_str().to_string(),
         x: bindable.x,
@@ -241,6 +289,5 @@ fn is_point_near_bindable_for_binding_hit(
         binding_enabled: bindable.binding_enabled,
         interior_hit_enabled: bindable.interior_hit_enabled,
         visibility_bounds: bindable.visibility_bounds,
-    };
-    is_point_near_core_bindable_for_binding_hit(point, &core_bindable, tolerance)
+    }
 }

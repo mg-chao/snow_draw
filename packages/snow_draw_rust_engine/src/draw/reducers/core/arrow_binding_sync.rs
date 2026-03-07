@@ -6,6 +6,7 @@ use std::sync::Arc;
 use crate::draw::edit::apply::edit_apply::EditApply;
 use crate::draw::elements::core::element_data::ElementData as CoreElementData;
 use crate::draw::elements::types::arrow::arrow_binding::ArrowBindingUtils;
+use crate::draw::elements::types::arrow::arrow_core_bridge::is_arrow_bindable_element;
 use crate::draw::elements::types::arrow::arrow_data::{
     ArrowBinding as DomainArrowBinding, ArrowData, ArrowDataPatch,
     NullableField as ArrowNullableField,
@@ -13,6 +14,11 @@ use crate::draw::elements::types::arrow::arrow_data::{
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_layout::resolve_arrow_geometry_update;
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField as ArrowLikeNullableField;
+use crate::draw::elements::types::arrow::arrow_scene::ArrowScene;
+use crate::draw::elements::types::arrow::core::arrow_binding_lifecycle::{
+    sync_bindings_after_deletion as sync_core_bindings_after_deletion,
+    sync_bindings_after_duplication as sync_core_bindings_after_duplication,
+};
 use crate::draw::elements::types::arrow::elbow::elbow_router::route_elbow_arrow_for_element_points;
 use crate::draw::elements::types::line::line_data::LineData;
 use crate::draw::elements::types::serial_number::serial_number_dependencies::{
@@ -88,21 +94,77 @@ pub fn reorder_elements_by_id_order(
 pub fn sync_arrow_bindings_after_deletion(
     elements: Vec<ElementState>,
     deleted_ids: &HashSet<String>,
-    _deleted_elements_by_id: &HashMap<String, ElementState>,
+    deleted_elements_by_id: &HashMap<String, ElementState>,
 ) -> Vec<ElementState> {
     if elements.is_empty() || deleted_ids.is_empty() {
         return elements;
     }
+
+    let ordered_element_ids = elements
+        .iter()
+        .map(|element| element.id.clone())
+        .collect::<Vec<_>>();
+    let session = ArrowScene::from_elements_with_options(
+        elements.clone(),
+        true,
+        Some(&ordered_element_ids),
+        None,
+    );
 
     let filter = DependencyFilter {
         include_serial_bindings: false,
         include_arrow_bindings: true,
     };
 
-    elements
+    let baseline = elements
         .into_iter()
         .map(|element| clear_element_dependencies_for_ids(&element, deleted_ids, filter))
-        .collect()
+        .collect::<Vec<_>>();
+    if !session.has_arrows() {
+        return baseline;
+    }
+
+    let all_deleted_ids = deleted_ids
+        .iter()
+        .cloned()
+        .chain(deleted_elements_by_id.keys().cloned())
+        .collect::<HashSet<_>>();
+    let mut deleted_arrow_ids = Vec::new();
+    let mut deleted_bindable_ids = Vec::new();
+    for deleted_id in all_deleted_ids {
+        let Some(deleted_element) = deleted_elements_by_id.get(&deleted_id) else {
+            continue;
+        };
+        if decode_arrow_data(deleted_element.data.as_ref()).is_some() {
+            deleted_arrow_ids.push(deleted_id.clone());
+        }
+        if is_arrow_bindable_element(deleted_element) {
+            deleted_bindable_ids.push(deleted_id);
+        }
+    }
+
+    let sync_result = sync_core_bindings_after_deletion(
+        &session
+            .arrows()
+            .iter()
+            .map(to_lifecycle_arrow_state)
+            .collect::<Vec<_>>(),
+        session.bindable_relations(),
+        &session
+            .bindables()
+            .iter()
+            .map(to_lifecycle_bindable_state)
+            .collect::<Vec<_>>(),
+        &deleted_bindable_ids,
+        &deleted_arrow_ids,
+        &to_lifecycle_context(&session.context),
+    );
+    let patched_by_id = session.apply_arrow_patches(&sync_result.arrow_patches);
+    if patched_by_id.is_empty() {
+        return baseline;
+    }
+
+    apply_element_replacements_and_order(baseline, &patched_by_id, None)
 }
 
 /// Remaps duplicated arrow bindings onto duplicated targets.
@@ -115,15 +177,20 @@ pub fn sync_arrow_bindings_after_duplication(
     }
 
     let duplicated_ids = id_map.values().cloned().collect::<HashSet<_>>();
-    elements
+    if duplicated_ids.is_empty() {
+        return elements;
+    }
+
+    let duplicated_elements = elements
+        .iter()
+        .filter(|element| duplicated_ids.contains(element.id.as_str()))
+        .cloned()
+        .collect::<Vec<_>>();
+    let baseline = elements
         .into_iter()
         .map(|element| {
             if !duplicated_ids.contains(element.id.as_str()) {
                 return element;
-            }
-            if let Some(data) = decode_arrow_data(element.data.as_ref()) {
-                let remapped = remap_arrow_data_bindings(&data, id_map);
-                return element.copy_with(None, None, None, None, None, Some(Arc::new(remapped)));
             }
             if let Some(data) = decode_line_data(element.data.as_ref()) {
                 let remapped = remap_line_data_bindings(&data, id_map);
@@ -131,7 +198,69 @@ pub fn sync_arrow_bindings_after_duplication(
             }
             element
         })
-        .collect()
+        .collect::<Vec<_>>();
+    if duplicated_elements.is_empty() {
+        return baseline;
+    }
+
+    let ordered_element_ids = duplicated_elements
+        .iter()
+        .map(|element| element.id.clone())
+        .collect::<Vec<_>>();
+    let elements_by_id = duplicated_elements
+        .iter()
+        .cloned()
+        .map(|element| (element.id.clone(), element))
+        .collect::<HashMap<_, _>>();
+    let mut bindable_id_map = HashMap::<String, String>::new();
+    let mut arrow_id_map = HashMap::<String, String>::new();
+    for (source_id, duplicate_id) in id_map {
+        let Some(duplicate) = elements_by_id.get(duplicate_id) else {
+            continue;
+        };
+        if is_arrow_bindable_element(duplicate) {
+            bindable_id_map.insert(source_id.clone(), duplicate_id.clone());
+            bindable_id_map.insert(duplicate_id.clone(), duplicate_id.clone());
+        }
+        if decode_arrow_data(duplicate.data.as_ref()).is_some() {
+            arrow_id_map.insert(source_id.clone(), duplicate_id.clone());
+            arrow_id_map.insert(duplicate_id.clone(), duplicate_id.clone());
+        }
+    }
+
+    let session = ArrowScene::from_elements_with_options(
+        duplicated_elements,
+        false,
+        Some(&ordered_element_ids),
+        None,
+    );
+    if !session.has_arrows() {
+        return baseline;
+    }
+
+    let sync_result = sync_core_bindings_after_duplication(
+        &session
+            .arrows()
+            .iter()
+            .map(to_lifecycle_arrow_state)
+            .collect::<Vec<_>>(),
+        session.bindable_relations(),
+        &bindable_id_map,
+        &arrow_id_map,
+        &session
+            .bindables()
+            .iter()
+            .map(to_lifecycle_bindable_state)
+            .collect::<Vec<_>>(),
+        &to_lifecycle_context(&session.context),
+        false,
+    );
+    let patched_by_id = session.apply_arrow_patches(&sync_result.arrow_patches);
+    if patched_by_id.is_empty() {
+        return baseline;
+    }
+
+    apply_element_replacements_and_order(baseline, &patched_by_id, None)
 }
 
 fn resolve_bound_element_update(
@@ -361,6 +490,85 @@ fn decode_arrow_data(data: &dyn CoreElementData) -> Option<ArrowData> {
         return None;
     }
     ArrowData::from_json(&data.to_json()).ok()
+}
+
+fn to_lifecycle_arrow_state(
+    arrow: &crate::draw::elements::types::arrow::arrow_core::ArrowState,
+) -> crate::draw::elements::types::arrow::core::arrow_types::ArrowState {
+    crate::draw::elements::types::arrow::core::arrow_types::ArrowState {
+        id: arrow.id.clone(),
+        x: arrow.x,
+        y: arrow.y,
+        width: arrow.width,
+        height: arrow.height,
+        points: arrow.points.clone(),
+        start_binding: arrow.start_binding.as_ref().map(to_lifecycle_binding),
+        end_binding: arrow.end_binding.as_ref().map(to_lifecycle_binding),
+        start_arrowhead: arrow.start_arrowhead.clone(),
+        end_arrowhead: arrow.end_arrowhead.clone(),
+        elbowed: arrow.elbowed,
+        fixed_segments: arrow.fixed_segments.as_ref().map(|segments| {
+            segments
+                .iter()
+                .copied()
+                .map(to_lifecycle_fixed_segment)
+                .collect()
+        }),
+        start_is_special: arrow.start_is_special,
+        end_is_special: arrow.end_is_special,
+    }
+}
+
+fn to_lifecycle_binding(
+    binding: &crate::draw::elements::types::arrow::arrow_binding::ArrowBinding,
+) -> crate::draw::elements::types::arrow::core::arrow_types::FixedPointBinding {
+    crate::draw::elements::types::arrow::core::arrow_types::FixedPointBinding::new(
+        binding.element_id.clone(),
+        binding.anchor,
+        binding.mode.as_str().to_string(),
+    )
+}
+
+fn to_lifecycle_fixed_segment(
+    segment: crate::draw::elements::types::arrow::arrow_data::ElbowFixedSegment,
+) -> crate::draw::elements::types::arrow::core::arrow_types::FixedSegment {
+    crate::draw::elements::types::arrow::core::arrow_types::FixedSegment {
+        start: segment.start,
+        end: segment.end,
+        index: segment.index,
+    }
+}
+
+fn to_lifecycle_bindable_state(
+    bindable: &crate::draw::elements::types::arrow::arrow_core::BindableState,
+) -> crate::draw::elements::types::arrow::core::arrow_types::BindableState {
+    crate::draw::elements::types::arrow::core::arrow_types::BindableState {
+        id: bindable.id.clone(),
+        shape: bindable.shape.as_str().to_string(),
+        x: bindable.x,
+        y: bindable.y,
+        width: bindable.width,
+        height: bindable.height,
+        angle: bindable.angle,
+        stroke_width: bindable.stroke_width,
+        roundness: None,
+        z_index: bindable.z_index,
+        background_opaque: bindable.background_opaque,
+        binding_enabled: bindable.binding_enabled,
+        interior_hit_enabled: bindable.interior_hit_enabled,
+        visibility_bounds: bindable.visibility_bounds,
+    }
+}
+
+fn to_lifecycle_context(
+    context: &crate::draw::elements::types::arrow::arrow_core::EngineContext,
+) -> crate::draw::elements::types::arrow::core::arrow_types::EngineContext {
+    crate::draw::elements::types::arrow::core::arrow_types::EngineContext {
+        zoom: context.zoom,
+        is_binding_enabled: context.is_binding_enabled,
+        bind_mode: context.bind_mode,
+        max_coordinate: context.max_coordinate,
+    }
 }
 
 fn decode_line_data(data: &dyn CoreElementData) -> Option<LineData> {

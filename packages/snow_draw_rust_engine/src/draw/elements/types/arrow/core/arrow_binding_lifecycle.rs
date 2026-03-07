@@ -8,6 +8,7 @@ use super::adapters::apply_arrow_patch;
 use super::arrow_binding_core::{
     calculate_fixed_point_for_binding, get_global_fixed_point_for_bindable_element,
 };
+use super::arrow_elbow_core::update_elbow_arrow_points;
 use super::arrow_state_core::{
     apply_arrow_binding_state_patch, apply_bindable_relation_patches,
     reduce_bindable_patches_to_relation_patches,
@@ -15,7 +16,8 @@ use super::arrow_state_core::{
 use super::arrow_types::{
     ArrowBindingState, ArrowBindingStatePatch, ArrowEndpointEdge, ArrowEngineEvent, ArrowPatch,
     ArrowState, ArrowStatePatchWithId, BindablePatch, BindableRelationPatch, BindableRelationState,
-    BindableState, BindingBrokenEvent, EngineResult, FixedPointBinding, LifecycleSyncResult,
+    BindableState, BindingBrokenEvent, EngineContext, EngineResult, FixedPointBinding,
+    LifecycleSyncResult,
 };
 use crate::draw::types::draw_point::DrawPoint;
 
@@ -496,6 +498,8 @@ pub fn sync_bindings_after_duplication(
     bindables: &[BindableRelationState],
     bindable_id_map: &HashMap<String, String>,
     arrow_id_map: &HashMap<String, String>,
+    geometry_bindables: &[BindableState],
+    context: &EngineContext,
     preserve_unmapped: bool,
 ) -> LifecycleSyncResult {
     let arrow_binding_patches = remap_arrow_bindings_after_duplication(
@@ -508,14 +512,24 @@ pub fn sync_bindings_after_duplication(
     );
     let relation_patches =
         remap_bindable_relations_after_duplication(bindables, arrow_id_map, preserve_unmapped);
-    apply_lifecycle_patches(arrows, bindables, &arrow_binding_patches, &relation_patches)
+    apply_lifecycle_patches(
+        arrows,
+        bindables,
+        &arrow_binding_patches,
+        &relation_patches,
+        geometry_bindables,
+        context,
+        true,
+    )
 }
 
 pub fn sync_bindings_after_deletion(
     arrows: &[ArrowState],
     bindables: &[BindableRelationState],
+    geometry_bindables: &[BindableState],
     deleted_bindable_ids: &[String],
     deleted_arrow_ids: &[String],
+    context: &EngineContext,
 ) -> LifecycleSyncResult {
     let arrow_binding_patches = repair_arrow_bindings_after_bindable_deletion(
         &arrows
@@ -526,7 +540,15 @@ pub fn sync_bindings_after_deletion(
     );
     let relation_patches =
         repair_bindable_relations_after_arrow_deletion(bindables, deleted_arrow_ids);
-    apply_lifecycle_patches(arrows, bindables, &arrow_binding_patches, &relation_patches)
+    apply_lifecycle_patches(
+        arrows,
+        bindables,
+        &arrow_binding_patches,
+        &relation_patches,
+        geometry_bindables,
+        context,
+        false,
+    )
 }
 
 fn apply_lifecycle_patches(
@@ -534,6 +556,9 @@ fn apply_lifecycle_patches(
     bindables: &[BindableRelationState],
     arrow_binding_patches: &[ArrowBindingStatePatch],
     relation_patches: &[BindableRelationPatch],
+    geometry_bindables: &[BindableState],
+    context: &EngineContext,
+    recompute_all_elbows: bool,
 ) -> LifecycleSyncResult {
     let mut patch_by_id = HashMap::<String, ArrowPatch>::new();
     for binding_patch in arrow_binding_patches {
@@ -546,13 +571,44 @@ fn apply_lifecycle_patches(
         }
     }
 
+    let geometry_bindables_value = Value::Array(
+        geometry_bindables
+            .iter()
+            .map(bindable_state_to_value)
+            .collect(),
+    );
+    let context_value = engine_context_to_value(context);
+
     let next_arrows = arrows
         .iter()
         .map(|arrow| {
-            patch_by_id
-                .get(&arrow.id)
-                .map(|patch| apply_arrow_patch(arrow, patch))
-                .unwrap_or_else(|| arrow.clone())
+            let base_patch = patch_by_id.get(&arrow.id).cloned().unwrap_or_default();
+            let with_bindings = if base_patch.is_empty() {
+                arrow.clone()
+            } else {
+                apply_arrow_patch(arrow, &base_patch)
+            };
+            let should_recompute_elbow =
+                arrow.elbowed && (recompute_all_elbows || !base_patch.is_empty());
+            if !should_recompute_elbow {
+                return with_bindings;
+            }
+
+            let elbow_patch = lifecycle_elbow_patch(
+                &with_bindings,
+                &geometry_bindables_value,
+                &context_value,
+                recompute_all_elbows,
+            );
+            if elbow_patch.is_empty() {
+                return with_bindings;
+            }
+
+            let mut merged_patch = base_patch.clone();
+            merged_patch.extend(elbow_patch.clone());
+            patch_by_id.insert(arrow.id.clone(), merged_patch);
+
+            apply_arrow_patch(&with_bindings, &elbow_patch)
         })
         .collect::<Vec<_>>();
     let next_bindables = apply_bindable_relation_patches(bindables, relation_patches);
@@ -722,6 +778,128 @@ fn binding_to_value(binding: Option<&FixedPointBinding>) -> Value {
         ]),
     );
     object.insert("mode".to_string(), Value::String(binding.mode.clone()));
+    Value::Object(object)
+}
+
+fn lifecycle_elbow_patch(
+    arrow: &ArrowState,
+    geometry_bindables: &Value,
+    context: &Value,
+    recompute_all_elbows: bool,
+) -> ArrowPatch {
+    let mut input = ArrowPatch::new();
+    input.insert("arrow".to_string(), arrow_state_to_value(arrow));
+    input.insert("bindables".to_string(), geometry_bindables.clone());
+    input.insert("context".to_string(), context.clone());
+
+    if recompute_all_elbows {
+        let mut updates = Map::new();
+        if let (Some(start), Some(end)) = (arrow.points.first(), arrow.points.last()) {
+            updates.insert(
+                "points".to_string(),
+                Value::Array(vec![point_to_value(start), point_to_value(end)]),
+            );
+        }
+        input.insert("updates".to_string(), Value::Object(updates));
+        input.insert(
+            "options".to_string(),
+            Value::Object(Map::from_iter([(
+                "isDragging".to_string(),
+                Value::Bool(false),
+            )])),
+        );
+    }
+
+    update_elbow_arrow_points(input)
+}
+
+fn arrow_state_to_value(arrow: &ArrowState) -> Value {
+    let mut object = Map::new();
+    object.insert("id".to_string(), Value::String(arrow.id.clone()));
+    object.insert("x".to_string(), Value::from(arrow.x));
+    object.insert("y".to_string(), Value::from(arrow.y));
+    object.insert("width".to_string(), Value::from(arrow.width));
+    object.insert("height".to_string(), Value::from(arrow.height));
+    object.insert(
+        "points".to_string(),
+        Value::Array(arrow.points.iter().map(point_to_value).collect()),
+    );
+    object.insert(
+        "startBinding".to_string(),
+        binding_to_value(arrow.start_binding.as_ref()),
+    );
+    object.insert(
+        "endBinding".to_string(),
+        binding_to_value(arrow.end_binding.as_ref()),
+    );
+    object.insert(
+        "startArrowhead".to_string(),
+        arrow.start_arrowhead
+            .as_ref()
+            .map(|value| Value::String(value.clone()))
+            .unwrap_or(Value::Null),
+    );
+    object.insert(
+        "endArrowhead".to_string(),
+        arrow.end_arrowhead
+            .as_ref()
+            .map(|value| Value::String(value.clone()))
+            .unwrap_or(Value::Null),
+    );
+    object.insert("elbowed".to_string(), Value::Bool(arrow.elbowed));
+    object.insert(
+        "fixedSegments".to_string(),
+        arrow.fixed_segments.as_ref().map_or(Value::Null, |segments| {
+            Value::Array(segments.iter().map(fixed_segment_to_value).collect())
+        }),
+    );
+    object.insert(
+        "startIsSpecial".to_string(),
+        arrow.start_is_special.map(Value::Bool).unwrap_or(Value::Null),
+    );
+    object.insert(
+        "endIsSpecial".to_string(),
+        arrow.end_is_special.map(Value::Bool).unwrap_or(Value::Null),
+    );
+    Value::Object(object)
+}
+
+fn bindable_state_to_value(bindable: &BindableState) -> Value {
+    let mut object = Map::new();
+    object.insert("id".to_string(), Value::String(bindable.id.clone()));
+    object.insert("shape".to_string(), Value::String(bindable.shape.clone()));
+    object.insert("x".to_string(), Value::from(bindable.x));
+    object.insert("y".to_string(), Value::from(bindable.y));
+    object.insert("width".to_string(), Value::from(bindable.width));
+    object.insert("height".to_string(), Value::from(bindable.height));
+    object.insert("angle".to_string(), Value::from(bindable.angle));
+    object.insert("strokeWidth".to_string(), Value::from(bindable.stroke_width));
+    Value::Object(object)
+}
+
+fn engine_context_to_value(context: &EngineContext) -> Value {
+    let mut object = Map::new();
+    object.insert("zoom".to_string(), Value::from(context.zoom));
+    object.insert(
+        "isBindingEnabled".to_string(),
+        Value::Bool(context.is_binding_enabled),
+    );
+    object.insert(
+        "maxCoordinate".to_string(),
+        Value::from(context.max_coordinate),
+    );
+    Value::Object(object)
+}
+
+fn point_to_value(point: &DrawPoint) -> Value {
+    Value::Array(vec![Value::from(point.x), Value::from(point.y)])
+}
+
+fn fixed_segment_to_value(segment: &super::arrow_types::FixedSegment) -> Value {
+    let mut object = Map::new();
+    object.insert("start".to_string(), point_to_value(&segment.start));
+    object.insert("end".to_string(), point_to_value(&segment.end));
+    object.insert("index".to_string(), Value::from(segment.index));
     Value::Object(object)
 }
 

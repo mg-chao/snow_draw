@@ -18,6 +18,11 @@ pub enum EditTransform {
 }
 
 impl EditTransform {
+    /// Builds an edit transform from the connector-facing point transform.
+    pub fn connector_point(transform: ConnectorPointTransform) -> Self {
+        Self::ArrowPoint(transform)
+    }
+
     pub fn apply_to_point(&self, point: DrawPoint, pivot: Option<DrawPoint>) -> DrawPoint {
         match self {
             Self::Move(transform) => transform.apply_to_point(point, pivot),
@@ -42,6 +47,15 @@ impl EditTransform {
             Self::Resize(transform) => transform.is_identity(),
             Self::Rotate(transform) => transform.is_identity(),
             Self::ArrowPoint(transform) => transform.is_identity(),
+        }
+    }
+
+    /// Returns the connector-point transform when this edit session is editing
+    /// connector handles.
+    pub fn as_connector_point(&self) -> Option<&ConnectorPointTransform> {
+        match self {
+            Self::ArrowPoint(transform) => Some(transform),
+            _ => None,
         }
     }
 }
@@ -317,7 +331,7 @@ pub type ArrowBinding = ArrowEndpointBinding;
 /// Elbow fixed-segment payload used by edit transforms.
 pub type ElbowFixedSegment = ArrowElbowFixedSegment;
 
-/// Translation of Dart `ArrowPointTransform`.
+/// Translation of Dart `ConnectorPointTransform`.
 #[derive(Clone, Debug)]
 pub struct ArrowPointTransform {
     pub current_position: DrawPoint,
@@ -454,6 +468,13 @@ impl PartialEq for ArrowPointTransform {
     }
 }
 
+/// Connector-facing alias for the point-edit transform.
+///
+/// Dart now exposes this transform under `ConnectorPointTransform`, while the
+/// Rust engine keeps the legacy `ArrowPointTransform` name internally for
+/// compatibility with already-ported reducers and edit operations.
+pub type ConnectorPointTransform = ArrowPointTransform;
+
 fn point_list_equals(left: &[DrawPoint], right: &[DrawPoint]) -> bool {
     left == right
 }
@@ -478,4 +499,21 @@ fn bounding_rect(a: DrawPoint, b: DrawPoint, c: DrawPoint, d: DrawPoint) -> Draw
     let max_x = a.x.max(b.x).max(c.x.max(d.x));
     let max_y = a.y.max(b.y).max(c.y.max(d.y));
     DrawRect::new(min_x, min_y, max_x, max_y)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn connector_point_alias_round_trips_through_edit_transform() {
+        let transform = ConnectorPointTransform::new(
+            DrawPoint::new(4.0, 5.0),
+            vec![DrawPoint::new(0.0, 0.0), DrawPoint::new(8.0, 9.0)],
+        );
+
+        let edit_transform = EditTransform::connector_point(transform.clone());
+
+        assert_eq!(edit_transform.as_connector_point(), Some(&transform));
+    }
 }

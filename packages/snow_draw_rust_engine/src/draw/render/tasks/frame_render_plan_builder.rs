@@ -8,17 +8,23 @@ use crate::draw::config::grid_config::GridConfig;
 use crate::draw::config::highlight_config::HighlightMaskConfig;
 use crate::draw::config::snap_config::SnapConfig;
 use crate::draw::config::watermark_config::WatermarkConfig;
+use crate::draw::edit::connector::connector_point_operation::{
+    ConnectorPointEditContext, ConnectorPointKind,
+};
 use crate::draw::elements::types::connector::connector_points::{
     ConnectorPointHandle, ConnectorPointUtils,
 };
 use crate::draw::elements::types::text::text_data::TextData;
 use crate::draw::models::application_state::InteractionState;
 use crate::draw::models::draw_state_view::{DrawStateView, ElementState};
+use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_operation_id::EditOperationIds;
-use crate::draw::types::edit_transform::EditTransform;
+use crate::draw::types::edit_transform::{ConnectorPointTransform, EditTransform};
+use crate::draw::types::element_style::{ArrowType, ArrowheadStyle};
 use crate::draw::utils::arrow_binding_highlight::{
-    resolve_arrow_binding_pair, resolve_connector_point_highlight_binding_from_active_index,
+    resolve_arrow_binding_pair, resolve_connector_point_edit_highlight_binding,
+    resolve_connector_point_highlight_binding_from_active_index,
 };
 use crate::draw::utils::arrow_point_metrics::{
     resolve_arrow_point_handle_size, resolve_arrow_point_loop_threshold,
@@ -33,8 +39,9 @@ use super::super::planning::watermark_visibility::is_watermark_visible;
 use super::super::rect_intersection::rects_intersect;
 use super::frame_render_plan::FrameRenderPlan;
 use super::render_tasks::{
-    ArrowBindingHighlightRenderTask, ArrowPointOverlayRenderTask, BackgroundRenderTask,
-    BoxSelectionRenderTask, FrameRenderTask, GridRenderTask, HighlightMaskRenderTask,
+    ArrowBindingHighlightRenderTask, BackgroundRenderTask, BoxSelectionRenderTask,
+    ConnectorPointOverlayRenderTask,
+    FrameRenderTask, GridRenderTask, HighlightMaskRenderTask,
     HoverOutlineRenderTask, SelectionControlsRenderTask, SelectionOutlineRenderTask,
     SnapGuidesRenderTask, WatermarkRenderTask,
 };
@@ -256,8 +263,8 @@ impl FrameRenderPlanBuilder {
                 handles.extend(overlay.loop_points);
                 handles.extend(overlay.focus_points);
                 if !handles.is_empty() {
-                    tasks.push(FrameRenderTask::ArrowPointOverlay(
-                        ArrowPointOverlayRenderTask {
+                    tasks.push(FrameRenderTask::ConnectorPointOverlay(
+                        ConnectorPointOverlayRenderTask {
                             handles,
                             selection_config: selection_config.clone(),
                             active_handle: transient_state.active_arrow_handle.clone(),
@@ -365,22 +372,38 @@ impl FrameRenderPlanBuilder {
             InteractionState::Editing(interaction)
                 if interaction.operation_id == EditOperationIds::CONNECTOR_POINT =>
             {
-                if let EditTransform::ArrowPoint(transform) = &interaction.current_transform {
-                    if let Some(selected_id) = view.selected_ids().iter().next() {
+                if let Some(transform) = interaction.current_transform.as_connector_point() {
+                    let active_element_id = interaction
+                        .context
+                        .selected_ids_at_start
+                        .iter()
+                        .next()
+                        .cloned()
+                        .or_else(|| view.selected_ids().iter().next().cloned());
+
+                    if let Some(element_id) = active_element_id {
                         if let Some(element) =
-                            view.state.domain.document.get_element_by_id(selected_id)
+                            view.state.domain.document.get_element_by_id(&element_id)
                         {
                             let effective = resolve_effective_element(element);
                             if let Some(bindings) =
                                 resolve_arrow_binding_pair(effective.data.as_ref())
                             {
-                                let highlight =
-                                    resolve_connector_point_highlight_binding_from_active_index(
-                                        transform.points.len(),
-                                        transform.active_index,
+                                let highlight = self
+                                    .resolve_connector_point_edit_highlight_binding(
+                                        &effective,
+                                        transform,
                                         &bindings,
-                                        Some(&interaction.current_transform),
-                                    );
+                                        &interaction.current_transform,
+                                    )
+                                    .or_else(|| {
+                                        resolve_connector_point_highlight_binding_from_active_index(
+                                            transform.points.len(),
+                                            transform.active_index,
+                                            &bindings,
+                                            Some(&interaction.current_transform),
+                                        )
+                                    });
                                 self.add_highlight_element_id(
                                     &mut highlight_ids,
                                     highlight.map(|value| value.element_id),
@@ -418,5 +441,166 @@ impl FrameRenderPlanBuilder {
             return;
         }
         target.insert(element_id);
+    }
+
+    fn resolve_connector_point_edit_highlight_binding(
+        &self,
+        element: &ElementState,
+        transform: &ConnectorPointTransform,
+        bindings: &crate::draw::utils::arrow_binding_highlight::ArrowBindingPair,
+        current_transform: &EditTransform,
+    ) -> Option<crate::draw::elements::types::arrow::arrow_data::ArrowBinding> {
+        let context = self.synthetic_connector_point_context(element, transform)?;
+        resolve_connector_point_edit_highlight_binding(
+            &context,
+            bindings,
+            Some(current_transform),
+        )
+    }
+
+    fn synthetic_connector_point_context(
+        &self,
+        element: &ElementState,
+        transform: &ConnectorPointTransform,
+    ) -> Option<ConnectorPointEditContext> {
+        let active_index = transform.active_index?;
+        if transform.points.len() < 2 {
+            return None;
+        }
+
+        let point_kind = if active_index == 0 || active_index + 1 == transform.points.len() {
+            ConnectorPointKind::Turning
+        } else {
+            return None;
+        };
+
+        Some(ConnectorPointEditContext::from_start_position(
+            element.id.clone(),
+            element.rect,
+            element.rotation,
+            transform.current_position,
+            transform.points.clone(),
+            Vec::new(),
+            ArrowType::Straight,
+            point_kind,
+            active_index,
+            false,
+            false,
+            ArrowheadStyle::None,
+            ArrowheadStyle::None,
+            None,
+            None,
+            true,
+        ))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::draw::config::draw_config::SelectionConfig;
+    use crate::draw::elements::types::arrow::arrow_data::{ArrowBinding, ArrowBindingMode, ArrowData};
+    use crate::draw::models::application_state::{ApplicationState, EditingState};
+    use crate::draw::models::draw_state::{DomainDocumentState, DomainState, DrawState};
+    use crate::draw::models::edit_session_id::EditSessionId;
+    use crate::draw::models::selection_state::SelectionState;
+    use std::collections::HashSet;
+    use std::sync::Arc;
+
+    #[test]
+    fn highlight_resolution_prefers_edit_start_element_id_for_connector_edits() {
+        let connector_id = "connector".to_string();
+        let hovered_target_id = "bind-target".to_string();
+        let unrelated_selected_id = "other-selected".to_string();
+
+        let connector = ElementState::new(
+            connector_id.clone(),
+            DrawRect::new(0.0, 0.0, 100.0, 20.0),
+            0.0,
+            1.0,
+            1,
+            Arc::new(ArrowData {
+                start_binding: Some(ArrowBinding::new(
+                    hovered_target_id.clone(),
+                    DrawPoint::new(0.0, 0.0),
+                    ArrowBindingMode::Orbit,
+                )),
+                points: vec![DrawPoint::new(0.0, 0.0), DrawPoint::new(100.0, 0.0)],
+                ..ArrowData::default()
+            }),
+        );
+        let target = ElementState::new(
+            hovered_target_id.clone(),
+            DrawRect::new(-10.0, -10.0, 10.0, 10.0),
+            0.0,
+            1.0,
+            0,
+            Arc::new(ArrowData::default()),
+        );
+        let unrelated = ElementState::new(
+            unrelated_selected_id.clone(),
+            DrawRect::new(200.0, 0.0, 220.0, 20.0),
+            0.0,
+            1.0,
+            2,
+            Arc::new(ArrowData::default()),
+        );
+
+        let selection = SelectionState::default().with_selected(unrelated_selected_id.clone());
+        let document = DomainDocumentState::new(vec![target, connector, unrelated], 1, Default::default());
+        let base_context = crate::draw::types::edit_context::EditContext::new(
+            DrawPoint::ZERO,
+            DrawRect::new(0.0, 0.0, 100.0, 20.0),
+            HashSet::from([connector_id.clone()]),
+            1,
+            1,
+        );
+        let transform = ConnectorPointTransform::with_state(
+            DrawPoint::new(0.0, 0.0),
+            vec![DrawPoint::new(0.0, 0.0), DrawPoint::new(100.0, 0.0)],
+            None,
+            Some(ArrowBinding::new(
+                hovered_target_id.clone(),
+                DrawPoint::new(0.0, 0.0),
+                ArrowBindingMode::Orbit,
+            )),
+            None,
+            None,
+            Some(0),
+            false,
+            false,
+            true,
+            true,
+        );
+        let interaction = InteractionState::Editing(EditingState::new(
+            EditOperationIds::CONNECTOR_POINT,
+            EditSessionId::from("session-1"),
+            base_context,
+            EditTransform::connector_point(transform),
+            Vec::new(),
+        ));
+        let application = ApplicationState::with_parts(
+            crate::draw::models::view_state::ViewState::INITIAL,
+            interaction,
+            Default::default(),
+        );
+        let state = DrawState::new(Some(DomainState::new(document, selection)), Some(application));
+        let view = DrawStateView::from_state(state);
+        let transient = FrameRenderTransientState {
+            selection_config: Some(SelectionConfig::default()),
+            ..FrameRenderTransientState::default()
+        };
+
+        let plan = FrameRenderPlanBuilder::new().build(&view, 1.0, None, &transient);
+
+        assert!(plan.tasks.iter().any(|task| {
+            matches!(
+                task,
+                FrameRenderTask::ArrowBindingHighlight(ArrowBindingHighlightRenderTask {
+                    element_ids,
+                    ..
+                }) if element_ids.contains(&hovered_target_id)
+            )
+        }));
     }
 }
