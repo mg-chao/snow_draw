@@ -16,13 +16,13 @@ use crate::draw::elements::types::arrow::arrow_data::{
     NullableField as ArrowNullableField,
 };
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField as ArrowLikeNullableField;
+use crate::draw::elements::types::connector::connector_type_utils::{
+    decode_connector_payload, is_connector_type_id, ConnectorPayload,
+};
 use crate::draw::elements::types::filter::filter_data::FilterData;
 use crate::draw::elements::types::free_draw::free_draw_data::FreeDrawData;
 use crate::draw::elements::types::highlight::highlight_data::HighlightData;
 use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
-use crate::draw::elements::types::connector::connector_type_utils::{
-    decode_connector_payload, is_connector_type_id, ConnectorPayload,
-};
 use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
 use crate::draw::elements::types::serial_number::serial_number_data::{
     SerialNumberData, SerialNumberDataPatch,
@@ -693,8 +693,8 @@ mod tests {
     use crate::draw::elements::types::serial_number::serial_number_dependencies::{
         clear_element_dependencies_for_ids, DependencyFilter,
     };
-    use crate::draw::types::element_style::ElementStyleUpdate;
     use crate::draw::types::draw_rect::DrawRect;
+    use crate::draw::types::element_style::ElementStyleUpdate;
 
     #[test]
     fn unknown_action_returns_none() {
@@ -748,7 +748,13 @@ mod tests {
         );
         let next_line = decode_line_data(next.data.as_ref()).expect("updated line data");
 
-        assert_eq!(next_line.start_binding.as_ref().map(|binding| binding.element_id.as_str()), Some("rect-a"));
+        assert_eq!(
+            next_line
+                .start_binding
+                .as_ref()
+                .map(|binding| binding.element_id.as_str()),
+            Some("rect-a")
+        );
         assert!(next_line.end_binding.is_none());
         assert!(next_line.end_is_special.is_none());
     }

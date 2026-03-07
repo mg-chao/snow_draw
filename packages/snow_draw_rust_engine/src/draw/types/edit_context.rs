@@ -34,6 +34,9 @@ pub struct EditContext {
     /// Selected element ids at the start of the edit operation.
     pub selected_ids_at_start: HashSet<String>,
 
+    /// Selected element ids in the observable iteration order captured at edit start.
+    pub selected_ids_at_start_in_order: Vec<String>,
+
     /// Selection version captured when the edit session started.
     pub selection_version: i64,
 
@@ -49,10 +52,30 @@ impl EditContext {
         selection_version: i64,
         elements_version: i64,
     ) -> Self {
+        let selected_ids_at_start_in_order = selected_ids_at_start.iter().cloned().collect();
+        Self::new_with_order(
+            start_position,
+            start_bounds,
+            selected_ids_at_start,
+            selected_ids_at_start_in_order,
+            selection_version,
+            elements_version,
+        )
+    }
+
+    pub fn new_with_order(
+        start_position: DrawPoint,
+        start_bounds: DrawRect,
+        selected_ids_at_start: HashSet<String>,
+        selected_ids_at_start_in_order: Vec<String>,
+        selection_version: i64,
+        elements_version: i64,
+    ) -> Self {
         Self {
             start_position,
             start_bounds,
             selected_ids_at_start,
+            selected_ids_at_start_in_order,
             selection_version,
             elements_version,
         }
@@ -68,6 +91,10 @@ impl EditContext {
 
     pub fn is_multi_select(&self) -> bool {
         self.selected_ids_at_start.len() > 1
+    }
+
+    pub fn selected_ids_at_start_in_order(&self) -> &[String] {
+        &self.selected_ids_at_start_in_order
     }
 }
 

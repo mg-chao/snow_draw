@@ -1490,7 +1490,7 @@ fn convert_mapper_params(params: MapperEditOperationParams) -> EditOperationPara
             initial_selection_bounds,
         }) => EditOperationParams::ConnectorPoint(ConnectorPointOperationParams::with_options(
             element_id,
-            map_detector_arrow_point_kind_to_operation(point_kind),
+            point_kind,
             point_index,
             is_double_click,
             initial_selection_bounds,

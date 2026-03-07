@@ -92,7 +92,7 @@ impl ListenerRegistry {
         }
 
         let registry = self.clone();
-        Box::new(move || {
+        Arc::new(move || {
             let _ = registry.unregister_by_key(key);
         })
     }

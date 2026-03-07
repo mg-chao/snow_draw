@@ -1,14 +1,20 @@
 #![allow(dead_code)]
 
+use std::any::Any;
 use std::backtrace::Backtrace;
-use std::collections::BTreeMap;
 use std::error::Error;
 use std::fmt;
-use std::sync::OnceLock;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use crate::draw::models::application_state::{EditingState, InteractionState};
 use crate::draw::models::draw_state::DrawState;
+use crate::draw::services::log::log_service::{LogData, LogService, ModuleLogger};
 use crate::draw::types::edit_operation_id::EditOperationId;
+
+use super::edit_errors::{
+    EditContextTypeMismatchError, EditErrorWithContext, EditMissingDataError,
+    EditParamsTypeMismatchError, EditTransformTypeMismatchError,
+};
 
 /// Unified failure reasons for edit sessions.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -69,82 +75,6 @@ impl EditOutcome {
     }
 }
 
-/// Base marker for edit-domain errors.
-pub trait EditError: Error {}
-
-/// Thrown when an `EditContext` of an unexpected type is provided to an operation.
-#[derive(Debug, Default)]
-pub struct EditContextTypeMismatchError;
-
-impl fmt::Display for EditContextTypeMismatchError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "EditContextTypeMismatchError")
-    }
-}
-
-impl Error for EditContextTypeMismatchError {}
-impl EditError for EditContextTypeMismatchError {}
-
-/// Thrown when an `EditTransform` of an unexpected type is provided to an operation.
-#[derive(Debug, Default)]
-pub struct EditTransformTypeMismatchError;
-
-impl fmt::Display for EditTransformTypeMismatchError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "EditTransformTypeMismatchError")
-    }
-}
-
-impl Error for EditTransformTypeMismatchError {}
-impl EditError for EditTransformTypeMismatchError {}
-
-/// Thrown when `EditOperationParams` of an unexpected type is provided.
-#[derive(Debug, Default)]
-pub struct EditParamsTypeMismatchError;
-
-impl fmt::Display for EditParamsTypeMismatchError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "EditParamsTypeMismatchError")
-    }
-}
-
-impl Error for EditParamsTypeMismatchError {}
-impl EditError for EditParamsTypeMismatchError {}
-
-/// Thrown when required edit-session data is missing.
-#[derive(Debug, Default)]
-pub struct EditMissingDataError;
-
-impl fmt::Display for EditMissingDataError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "EditMissingDataError")
-    }
-}
-
-impl Error for EditMissingDataError {}
-impl EditError for EditMissingDataError {}
-
-/// Wrapper for errors with additional context information.
-#[derive(Debug)]
-pub struct EditErrorWithContext {
-    pub inner_error: Box<dyn Error + Send + Sync + 'static>,
-    pub context: String,
-}
-
-impl fmt::Display for EditErrorWithContext {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}\n{}", self.inner_error, self.context)
-    }
-}
-
-impl Error for EditErrorWithContext {
-    fn source(&self) -> Option<&(dyn Error + 'static)> {
-        Some(self.inner_error.as_ref())
-    }
-}
-
-impl EditError for EditErrorWithContext {}
-
 /// Assertion-style error used by callers that want Dart parity.
 #[derive(Debug, Default)]
 pub struct AssertionError;
@@ -156,26 +86,6 @@ impl fmt::Display for AssertionError {
 }
 
 impl Error for AssertionError {}
-
-/// Minimal logger interface used by edit error handling.
-///
-/// This is intentionally local to keep this module buildable while the
-/// dedicated logging module is translated.
-#[derive(Clone, Debug, Default)]
-pub struct ModuleLogger;
-
-impl ModuleLogger {
-    /// Logs an unexpected error.
-    pub fn error(
-        &self,
-        _message: &str,
-        _error: &(dyn Error + 'static),
-        _backtrace: &Backtrace,
-        _data: &BTreeMap<&'static str, String>,
-    ) {
-        // No-op fallback logger.
-    }
-}
 
 /// Extracts the operation id from `EditingState`.
 pub trait EditingStateOperationIdExt {
@@ -192,9 +102,8 @@ impl EditingStateOperationIdExt for EditingState {
 pub struct EditErrorHandler;
 
 impl EditErrorHandler {
-    fn fallback_log() -> &'static ModuleLogger {
-        static FALLBACK_LOG: OnceLock<ModuleLogger> = OnceLock::new();
-        FALLBACK_LOG.get_or_init(ModuleLogger::default)
+    fn fallback_log() -> ModuleLogger {
+        LogService::fallback().edit()
     }
 
     /// Returns the current operation id when the app is in editing mode.
@@ -257,8 +166,8 @@ impl EditErrorHandler {
         }
     }
 
-    /// Executes an operation and converts errors to an `EditOutcome`.
-    pub fn run_with_error_handling<F, E>(
+    /// Executes an operation and converts thrown failures to an `EditOutcome`.
+    pub fn run_with_error_handling<F>(
         state: &DrawState,
         operation: F,
         keep_state_on_failure: bool,
@@ -267,16 +176,15 @@ impl EditErrorHandler {
         log: Option<&ModuleLogger>,
     ) -> EditOutcome
     where
-        F: FnOnce() -> Result<EditOutcome, E>,
-        E: Error + Send + Sync + 'static,
+        F: FnOnce() -> EditOutcome,
     {
-        match operation() {
+        match catch_unwind(AssertUnwindSafe(operation)) {
             Ok(outcome) => outcome,
-            Err(error) => {
-                let error_ref: &(dyn Error + 'static) = &error;
-                if !Self::is_edit_error(error_ref) {
-                    Self::log_unexpected_error(
-                        error_ref,
+            Err(payload) => {
+                let payload_ref = payload.as_ref();
+                if !Self::is_edit_panic(payload_ref) {
+                    Self::log_unexpected_error_payload(
+                        payload_ref,
                         operation_name,
                         log,
                         fallback_operation_id,
@@ -285,7 +193,7 @@ impl EditErrorHandler {
 
                 Self::create_failure(
                     state,
-                    Self::map_exception_to_reason(error_ref),
+                    Self::map_panic_payload_to_reason(payload_ref),
                     fallback_operation_id,
                     keep_state_on_failure,
                 )
@@ -301,22 +209,95 @@ impl EditErrorHandler {
             || error.is::<EditParamsTypeMismatchError>()
     }
 
-    fn log_unexpected_error(
-        error: &(dyn Error + 'static),
+    fn is_edit_panic(payload: &(dyn Any + Send)) -> bool {
+        payload.is::<EditErrorWithContext>()
+            || payload.is::<EditMissingDataError>()
+            || payload.is::<EditContextTypeMismatchError>()
+            || payload.is::<EditTransformTypeMismatchError>()
+            || payload.is::<EditParamsTypeMismatchError>()
+            || payload.is::<AssertionError>()
+    }
+
+    fn map_panic_payload_to_reason(payload: &(dyn Any + Send)) -> EditFailureReason {
+        if let Some(error) = payload.downcast_ref::<EditErrorWithContext>() {
+            return Self::map_exception_to_reason(error);
+        }
+        if let Some(error) = payload.downcast_ref::<EditMissingDataError>() {
+            return Self::map_exception_to_reason(error);
+        }
+        if let Some(error) = payload.downcast_ref::<EditContextTypeMismatchError>() {
+            return Self::map_exception_to_reason(error);
+        }
+        if let Some(error) = payload.downcast_ref::<EditTransformTypeMismatchError>() {
+            return Self::map_exception_to_reason(error);
+        }
+        if let Some(error) = payload.downcast_ref::<EditParamsTypeMismatchError>() {
+            return Self::map_exception_to_reason(error);
+        }
+        if let Some(error) = payload.downcast_ref::<AssertionError>() {
+            return Self::map_exception_to_reason(error);
+        }
+        EditFailureReason::OperationFailed
+    }
+
+    fn log_unexpected_error_payload(
+        payload: &(dyn Any + Send),
         operation_name: Option<&str>,
         log: Option<&ModuleLogger>,
         operation_id: Option<EditOperationId>,
     ) {
-        let effective_log: &ModuleLogger = match log {
-            Some(logger) => logger,
-            None => Self::fallback_log(),
-        };
-        let mut data = BTreeMap::new();
-        data.insert("operation", operation_name.unwrap_or("unknown").to_owned());
+        let effective_log = log.cloned().unwrap_or_else(Self::fallback_log);
+        let mut data = LogData::new();
+        data.insert(
+            "operation".to_owned(),
+            operation_name.unwrap_or("unknown").to_owned(),
+        );
         if let Some(id) = operation_id {
-            data.insert("operationId", id.to_owned());
+            data.insert("operationId".to_owned(), id.to_owned());
         }
-        let backtrace = Backtrace::capture();
-        effective_log.error("Unexpected edit error", error, &backtrace, &data);
+        let error = panic_payload_message(payload);
+        let backtrace = format!("{:?}", Backtrace::capture());
+        effective_log.error(
+            "Unexpected edit error",
+            Some(&error),
+            Some(&backtrace),
+            Some(&data),
+        );
     }
+}
+
+fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        return (*message).to_owned();
+    }
+
+    if let Some(message) = payload.downcast_ref::<String>() {
+        return message.clone();
+    }
+
+    if let Some(error) = payload.downcast_ref::<EditErrorWithContext>() {
+        return error.to_string();
+    }
+
+    if let Some(error) = payload.downcast_ref::<EditMissingDataError>() {
+        return error.to_string();
+    }
+
+    if let Some(error) = payload.downcast_ref::<EditContextTypeMismatchError>() {
+        return error.to_string();
+    }
+
+    if let Some(error) = payload.downcast_ref::<EditTransformTypeMismatchError>() {
+        return error.to_string();
+    }
+
+    if let Some(error) = payload.downcast_ref::<EditParamsTypeMismatchError>() {
+        return error.to_string();
+    }
+
+    if let Some(error) = payload.downcast_ref::<AssertionError>() {
+        return error.to_string();
+    }
+
+    "unknown panic payload".to_owned()
 }

@@ -1,10 +1,10 @@
 #![allow(dead_code)]
 
-use std::collections::BTreeSet;
 use crate::draw::elements::types::connector::connector_type_utils::read_connector_summary;
 use crate::draw::elements::types::text::text_data::TextData;
 use crate::draw::models::element_state::ElementState;
 use crate::draw::types::element_style::ArrowType;
+use std::collections::BTreeSet;
 
 /// Read-only arrow profile extracted from an element payload.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -109,8 +109,8 @@ mod tests {
     use std::collections::BTreeSet;
     use std::sync::Arc;
 
-    use crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode;
     use crate::draw::elements::types::arrow::arrow_binding::ArrowBinding;
+    use crate::draw::elements::types::arrow::arrow_binding::ArrowBindingMode;
     use crate::draw::elements::types::arrow::arrow_data::{ArrowData, ArrowDataPatch};
     use crate::draw::elements::types::arrow::arrow_like_data::NullableField;
     use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
@@ -160,10 +160,10 @@ mod tests {
             })),
         );
 
-        let profile = resolve_single_selection_profile(
-            &BTreeSet::from([String::from("line-1")]),
-            |id| (id == "line-1").then(|| element.clone()),
-        );
+        let profile =
+            resolve_single_selection_profile(&BTreeSet::from([String::from("line-1")]), |id| {
+                (id == "line-1").then(|| element.clone())
+            });
 
         assert!(profile.is_arrow());
         assert!(profile.is_two_point_arrow());

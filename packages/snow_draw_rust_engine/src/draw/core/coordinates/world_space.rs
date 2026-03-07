@@ -2,6 +2,8 @@
 
 use crate::draw::types::draw_point::DrawPoint;
 
+use super::coordinate_space::CoordinateSpace;
+
 /// Coordinate space that is identical to world coordinates.
 ///
 /// In this space there is no rotation and no translation, so conversions
@@ -36,5 +38,23 @@ impl WorldSpace {
 
     pub const fn rotate_vector_to_local(self, world_vector: DrawPoint) -> DrawPoint {
         world_vector
+    }
+}
+
+impl CoordinateSpace for WorldSpace {
+    fn rotation(&self) -> f64 {
+        0.0
+    }
+
+    fn origin(&self) -> DrawPoint {
+        DrawPoint::ZERO
+    }
+
+    fn from_world(&self, world_point: DrawPoint) -> DrawPoint {
+        world_point
+    }
+
+    fn to_world(&self, local_point: DrawPoint) -> DrawPoint {
+        local_point
     }
 }

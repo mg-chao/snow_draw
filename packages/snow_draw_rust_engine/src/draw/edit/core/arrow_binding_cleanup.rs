@@ -58,10 +58,7 @@ pub fn unbind_arrow_like_elements(
         .cloned()
         .collect::<Vec<_>>();
 
-    let session = ArrowScene::from_elements(
-        lookup.values().cloned().collect::<Vec<_>>(),
-        None,
-    );
+    let session = ArrowScene::from_elements(lookup.values().cloned().collect::<Vec<_>>(), None);
     let sync_result = sync_core_bindings_after_bindable_prune(
         &transformed_arrows
             .iter()
@@ -76,9 +73,11 @@ pub fn unbind_arrow_like_elements(
         return HashMap::new();
     }
 
-    let mut patched_by_id = apply_core_arrow_patches_to_sources(&sync_result.arrow_patches, &arrow_sources);
+    let mut patched_by_id =
+        apply_core_arrow_patches_to_sources(&sync_result.arrow_patches, &arrow_sources);
     for arrow_patch in &sync_result.arrow_patches {
-        let Some((element, ConnectorSourceData::Arrow(data))) = arrow_sources.get(&arrow_patch.id) else {
+        let Some((element, ConnectorSourceData::Arrow(data))) = arrow_sources.get(&arrow_patch.id)
+        else {
             continue;
         };
         if data.arrow_type != ArrowType::Elbow {
@@ -170,7 +169,9 @@ fn binding_override(
     next_binding: Option<&ArrowBinding>,
 ) -> BindingOverride<ArrowBinding> {
     match next_binding {
-        Some(binding) if previous_binding != Some(binding) => BindingOverride::Value(binding.clone()),
+        Some(binding) if previous_binding != Some(binding) => {
+            BindingOverride::Value(binding.clone())
+        }
         None if previous_binding.is_some() => BindingOverride::Clear,
         _ => BindingOverride::Unset,
     }
@@ -250,12 +251,7 @@ mod tests {
         )
     }
 
-    fn arrow_element(
-        id: &str,
-        rect: DrawRect,
-        binding_id: &str,
-        z_index: i64,
-    ) -> ElementState {
+    fn arrow_element(id: &str, rect: DrawRect, binding_id: &str, z_index: i64) -> ElementState {
         let data = ArrowData::default().copy_with(ArrowDataPatch {
             start_binding: NullableField::Value(ArrowBinding::new(
                 binding_id,

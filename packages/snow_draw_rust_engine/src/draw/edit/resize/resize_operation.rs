@@ -17,6 +17,9 @@ use crate::draw::edit::core::edit_operation::{
 };
 use crate::draw::edit::core::edit_operation_helpers::resolve_reference_elements;
 use crate::draw::edit::core::standard_finish_mixin::StandardFinishMixin;
+use crate::draw::edit::resize::bounds::bounds_calculation::{
+    calculate_resize_bounds, ResizeBoundsParams,
+};
 use crate::draw::elements::types::serial_number::serial_number_data::SerialNumberData;
 use crate::draw::history::history_metadata::HistoryMetadata;
 use crate::draw::models::application_state::SelectionOverlayState;
@@ -90,24 +93,6 @@ struct AxisAnchors {
     y: Vec<SnapAxisAnchor>,
 }
 
-#[derive(Clone, Copy, Debug)]
-struct BoundsResult {
-    bounds: DrawRect,
-    flip_x: bool,
-    flip_y: bool,
-}
-
-#[derive(Clone, Copy, Debug)]
-struct ResizeBoundsParams {
-    transform_context: EditTransformContext,
-    mode: ResizeMode,
-    current_pointer_world: DrawPoint,
-    handle_offset_local: DrawPoint,
-    selection_padding: f64,
-    maintain_aspect_ratio: bool,
-    resize_from_center: bool,
-}
-
 #[derive(Clone, Debug)]
 struct SnappedBoundsResult {
     bounds: DrawRect,
@@ -119,6 +104,7 @@ struct ResizeContextFingerprint {
     start_position: DrawPoint,
     start_bounds: DrawRect,
     selected_ids_at_start: HashSet<String>,
+    selected_ids_at_start_in_order: Vec<String>,
     selection_version: i64,
     elements_version: i64,
 }
@@ -129,6 +115,7 @@ impl ResizeContextFingerprint {
             start_position: context.start_position,
             start_bounds: context.start_bounds,
             selected_ids_at_start: context.selected_ids_at_start.clone(),
+            selected_ids_at_start_in_order: context.selected_ids_at_start_in_order.clone(),
             selection_version: context.selection_version,
             elements_version: context.elements_version,
         }
@@ -138,6 +125,7 @@ impl ResizeContextFingerprint {
         self.start_position == context.start_position
             && self.start_bounds == context.start_bounds
             && self.selected_ids_at_start == context.selected_ids_at_start
+            && self.selected_ids_at_start_in_order == context.selected_ids_at_start_in_order
             && self.selection_version == context.selection_version
             && self.elements_version == context.elements_version
     }
@@ -489,10 +477,16 @@ impl EditOperation for ResizeOperation {
         let force_serial_number_aspect_ratio =
             self.should_lock_serial_number_aspect_ratio(state, &selected_ids_at_start);
 
-        let context = EditContext::new(
+        let selected_ids_at_start_in_order = selection_data
+            .selected_elements
+            .iter()
+            .map(|element| element.id.clone())
+            .collect::<Vec<_>>();
+        let context = EditContext::new_with_order(
             position,
             start_bounds,
             selected_ids_at_start,
+            selected_ids_at_start_in_order,
             state.domain.selection.selection_version as i64,
             state.domain.document.elements_version,
         );
@@ -717,261 +711,4 @@ fn to_object_snap_anchors(anchors: &[SnapAxisAnchor]) -> Vec<ObjectSnapAxisAncho
             SnapAxisAnchor::End => ObjectSnapAxisAnchor::End,
         })
         .collect()
-}
-
-fn calculate_resize_bounds(params: ResizeBoundsParams) -> BoundsResult {
-    let ctx = params.transform_context;
-    let start_rect = ctx.start_bounds;
-    let moving_bound_point_world = ctx
-        .transform_pointer_with_offset(params.current_pointer_world, params.handle_offset_local)
-        - ctx.get_padding_offset(params.mode, params.selection_padding);
-
-    let anchor_world = ctx.get_anchor_point(params.mode, params.resize_from_center);
-    let delta_world = moving_bound_point_world - anchor_world;
-    let d_local = rotate_vector(delta_world, -ctx.overlay_space.rotation);
-    let aspect_ratio = ctx.aspect_ratio();
-    let (expected_dx, expected_dy) = expected_anchor_to_moving_direction_local(params.mode);
-
-    let flip_x = !params.resize_from_center
-        && expected_dx != 0
-        && d_local.x != 0.0
-        && d_local.x.signum() != expected_dx as f64;
-    let flip_y = !params.resize_from_center
-        && expected_dy != 0
-        && d_local.y != 0.0
-        && d_local.y.signum() != expected_dy as f64;
-
-    let (new_width, new_height, new_center_world) = if params.resize_from_center {
-        calculate_from_center_resize(
-            params.mode,
-            d_local,
-            start_rect,
-            ctx.center,
-            params.maintain_aspect_ratio,
-            aspect_ratio,
-        )
-    } else {
-        calculate_from_anchor_resize(
-            params.mode,
-            d_local,
-            start_rect,
-            anchor_world,
-            ctx.overlay_space.rotation,
-            params.maintain_aspect_ratio,
-            aspect_ratio,
-        )
-    };
-
-    BoundsResult {
-        bounds: rect_from_center(new_center_world, new_width, new_height),
-        flip_x,
-        flip_y,
-    }
-}
-
-fn calculate_from_center_resize(
-    mode: ResizeMode,
-    d_local: DrawPoint,
-    start_rect: DrawRect,
-    start_center_world: DrawPoint,
-    maintain_aspect_ratio: bool,
-    aspect_ratio: Option<f64>,
-) -> (f64, f64, DrawPoint) {
-    match mode {
-        ResizeMode::TopLeft
-        | ResizeMode::TopRight
-        | ResizeMode::BottomRight
-        | ResizeMode::BottomLeft => {
-            let mut half_width = d_local.x.abs();
-            let mut half_height = d_local.y.abs();
-            if maintain_aspect_ratio {
-                if let Some(ratio) = aspect_ratio {
-                    (half_width, half_height) =
-                        lock_corner_size_to_aspect_ratio(half_width, half_height, ratio);
-                }
-            }
-            (half_width * 2.0, half_height * 2.0, start_center_world)
-        }
-        ResizeMode::Left | ResizeMode::Right => {
-            let width = d_local.x.abs() * 2.0;
-            let height = if maintain_aspect_ratio {
-                aspect_ratio
-                    .map(|ratio| width / ratio)
-                    .unwrap_or(start_rect.height())
-            } else {
-                start_rect.height()
-            };
-            (width, height, start_center_world)
-        }
-        ResizeMode::Top | ResizeMode::Bottom => {
-            let height = d_local.y.abs() * 2.0;
-            let width = if maintain_aspect_ratio {
-                aspect_ratio
-                    .map(|ratio| height * ratio)
-                    .unwrap_or(start_rect.width())
-            } else {
-                start_rect.width()
-            };
-            (width, height, start_center_world)
-        }
-    }
-}
-
-fn calculate_from_anchor_resize(
-    mode: ResizeMode,
-    d_local: DrawPoint,
-    start_rect: DrawRect,
-    anchor_world: DrawPoint,
-    overlay_rotation: f64,
-    maintain_aspect_ratio: bool,
-    aspect_ratio: Option<f64>,
-) -> (f64, f64, DrawPoint) {
-    match mode {
-        ResizeMode::TopLeft
-        | ResizeMode::TopRight
-        | ResizeMode::BottomRight
-        | ResizeMode::BottomLeft => {
-            let mut dx = d_local.x;
-            let mut dy = d_local.y;
-
-            if maintain_aspect_ratio {
-                if let Some(ratio) = aspect_ratio {
-                    let mut abs_width = dx.abs();
-                    let mut abs_height = dy.abs();
-                    (abs_width, abs_height) =
-                        lock_corner_size_to_aspect_ratio(abs_width, abs_height, ratio);
-                    dx = with_sign(abs_width, dx);
-                    dy = with_sign(abs_height, dy);
-                }
-            }
-
-            let moving_world =
-                anchor_world + rotate_vector(DrawPoint::new(dx, dy), overlay_rotation);
-            let center_world = midpoint(anchor_world, moving_world);
-            (dx.abs(), dy.abs(), center_world)
-        }
-        ResizeMode::Left | ResizeMode::Right => {
-            let dx = d_local.x;
-            let moving_world =
-                anchor_world + rotate_vector(DrawPoint::new(dx, 0.0), overlay_rotation);
-            let width = dx.abs();
-            let height = if maintain_aspect_ratio {
-                aspect_ratio
-                    .map(|ratio| width / ratio)
-                    .unwrap_or(start_rect.height())
-            } else {
-                start_rect.height()
-            };
-            (width, height, midpoint(anchor_world, moving_world))
-        }
-        ResizeMode::Top | ResizeMode::Bottom => {
-            let dy = d_local.y;
-            let moving_world =
-                anchor_world + rotate_vector(DrawPoint::new(0.0, dy), overlay_rotation);
-            let height = dy.abs();
-            let width = if maintain_aspect_ratio {
-                aspect_ratio
-                    .map(|ratio| height * ratio)
-                    .unwrap_or(start_rect.width())
-            } else {
-                start_rect.width()
-            };
-            (width, height, midpoint(anchor_world, moving_world))
-        }
-    }
-}
-
-fn lock_corner_size_to_aspect_ratio(width: f64, height: f64, aspect_ratio: f64) -> (f64, f64) {
-    if height == 0.0 || (width / height) >= aspect_ratio {
-        (width, width / aspect_ratio)
-    } else {
-        (height * aspect_ratio, height)
-    }
-}
-
-fn with_sign(magnitude: f64, value: f64) -> f64 {
-    if value >= 0.0 {
-        magnitude
-    } else {
-        -magnitude
-    }
-}
-
-fn midpoint(a: DrawPoint, b: DrawPoint) -> DrawPoint {
-    DrawPoint::new((a.x + b.x) / 2.0, (a.y + b.y) / 2.0)
-}
-
-fn rect_from_center(center: DrawPoint, width: f64, height: f64) -> DrawRect {
-    let half_width = width / 2.0;
-    let half_height = height / 2.0;
-    DrawRect::new(
-        center.x - half_width,
-        center.y - half_height,
-        center.x + half_width,
-        center.y + half_height,
-    )
-}
-
-fn expected_anchor_to_moving_direction_local(mode: ResizeMode) -> (i32, i32) {
-    match mode {
-        ResizeMode::TopLeft => (-1, -1),
-        ResizeMode::TopRight => (1, -1),
-        ResizeMode::BottomRight => (1, 1),
-        ResizeMode::BottomLeft => (-1, 1),
-        ResizeMode::Top => (0, -1),
-        ResizeMode::Bottom => (0, 1),
-        ResizeMode::Left => (-1, 0),
-        ResizeMode::Right => (1, 0),
-    }
-}
-
-fn rotate_vector(vector: DrawPoint, angle: f64) -> DrawPoint {
-    if angle == 0.0 {
-        return vector;
-    }
-
-    let cos_a = angle.cos();
-    let sin_a = angle.sin();
-    DrawPoint::new(
-        vector.x * cos_a - vector.y * sin_a,
-        vector.x * sin_a + vector.y * cos_a,
-    )
-}
-
-fn snap_rect_to_grid(
-    rect: DrawRect,
-    grid_size: f64,
-    snap_min_x: bool,
-    snap_max_x: bool,
-    snap_min_y: bool,
-    snap_max_y: bool,
-) -> DrawRect {
-    if !grid_size.is_finite() || grid_size <= 0.0 {
-        return rect;
-    }
-
-    let mut min_x = rect.min_x;
-    let mut max_x = rect.max_x;
-    let mut min_y = rect.min_y;
-    let mut max_y = rect.max_y;
-
-    if snap_min_x {
-        min_x = (min_x / grid_size).round() * grid_size;
-    }
-    if snap_max_x {
-        max_x = (max_x / grid_size).round() * grid_size;
-    }
-    if snap_min_y {
-        min_y = (min_y / grid_size).round() * grid_size;
-    }
-    if snap_max_y {
-        max_y = (max_y / grid_size).round() * grid_size;
-    }
-
-    DrawRect::new(
-        min_x.min(max_x),
-        min_y.min(max_y),
-        min_x.max(max_x),
-        min_y.max(max_y),
-    )
 }

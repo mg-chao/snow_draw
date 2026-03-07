@@ -20,7 +20,7 @@ use crate::draw::elements::types::arrow::arrow_layout::resolve_arrow_geometry_up
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField as ArrowLikeNullableField;
 use crate::draw::elements::types::arrow::arrow_scene::ArrowScene;
 use crate::draw::elements::types::arrow::core::arrow_types::{
-    ArrowEngineEvent, ArrowEndpointEdge, BindingBrokenEvent, ReorderArrowEvent,
+    ArrowEndpointEdge, ArrowEngineEvent, BindingBrokenEvent, ReorderArrowEvent,
 };
 use crate::draw::elements::types::arrow::elbow::elbow_editing::{
     compute_elbow_edit as compute_domain_elbow_edit,

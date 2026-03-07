@@ -62,7 +62,11 @@ pub trait DrawAction:
 
 macro_rules! impl_draw_action_default {
     ($ty:ty) => {
-        impl HistoryPolicyProvider for $ty {}
+        impl HistoryPolicyProvider for $ty {
+            fn history_policy(&self) -> HistoryPolicy {
+                HistoryPolicy::None
+            }
+        }
         impl HistoryCoalescingProvider for $ty {}
         impl DrawAction for $ty {
             fn as_any(&self) -> &dyn Any {
@@ -74,7 +78,11 @@ macro_rules! impl_draw_action_default {
 
 macro_rules! impl_draw_action_editing_conflict {
     ($ty:ty) => {
-        impl HistoryPolicyProvider for $ty {}
+        impl HistoryPolicyProvider for $ty {
+            fn history_policy(&self) -> HistoryPolicy {
+                HistoryPolicy::None
+            }
+        }
         impl HistoryCoalescingProvider for $ty {}
         impl DrawAction for $ty {
             fn as_any(&self) -> &dyn Any {

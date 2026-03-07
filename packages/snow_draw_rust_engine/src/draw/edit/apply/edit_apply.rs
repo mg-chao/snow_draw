@@ -434,7 +434,9 @@ fn apply_text_resize(
     }
 
     if height_delta > RESIZE_TOLERANCE {
-        let text_metrics_service = context.text_metrics_service.as_text_resize_metrics_service();
+        let text_metrics_service = context
+            .text_metrics_service
+            .as_text_resize_metrics_service();
         let fitted_font_size = fit_text_font_size_to_height(
             &data,
             rect.height(),
@@ -457,7 +459,9 @@ fn apply_text_resize(
         start_rect,
         anchor,
         &data,
-        context.text_metrics_service.as_text_resize_metrics_service(),
+        context
+            .text_metrics_service
+            .as_text_resize_metrics_service(),
         keep_center,
     );
 
@@ -721,17 +725,19 @@ fn decode_line_data(data: &dyn ElementData) -> Option<LineData> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::draw::services::text::text_metrics_service::{
-        TextLayoutRequest as ResizeTextLayoutRequest, TextLineMetrics as ResizeTextLineMetrics,
-        TextMetrics as ResizeTextMetrics, TextMetricsService as ResizeTextMetricsService,
-    };
     use crate::draw::elements::types::arrow::arrow_data::{
         ArrowBinding as ArrowDataBinding, ArrowBindingMode,
     };
     use crate::draw::elements::types::text::text_data::TextData;
-    use crate::draw::types::element_style::{FillStyle, StrokeStyle};
-    use crate::draw::types::edit_context::{EditContext, TextMetricsService as EditTextMetricsService};
+    use crate::draw::services::text::text_metrics_service::{
+        TextLayoutRequest as ResizeTextLayoutRequest, TextLineMetrics as ResizeTextLineMetrics,
+        TextMetrics as ResizeTextMetrics, TextMetricsService as ResizeTextMetricsService,
+    };
+    use crate::draw::types::edit_context::{
+        EditContext, TextMetricsService as EditTextMetricsService,
+    };
     use crate::draw::types::element_geometry::ElementResizeSnapshot;
+    use crate::draw::types::element_style::{FillStyle, StrokeStyle};
     use crate::draw::types::resize_mode::ResizeMode;
 
     #[derive(Debug)]
@@ -750,7 +756,10 @@ mod tests {
                 request.max_width.max(1.0),
                 line_height,
                 line_height,
-                vec![ResizeTextLineMetrics::new(request.max_width.max(1.0), line_height)],
+                vec![ResizeTextLineMetrics::new(
+                    request.max_width.max(1.0),
+                    line_height,
+                )],
             )
         }
     }
@@ -901,13 +910,7 @@ mod tests {
         );
         let selected_ids = HashSet::from([text_id.clone()]);
         let current_elements = HashMap::from([(text_id.clone(), text_element)]);
-        let base = EditContext::new(
-            DrawPoint::ZERO,
-            start_rect,
-            selected_ids.clone(),
-            0,
-            0,
-        );
+        let base = EditContext::new(DrawPoint::ZERO, start_rect, selected_ids.clone(), 0, 0);
         let context = ResizeEditContext::new(
             base,
             ResizeMode::Bottom,

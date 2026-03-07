@@ -7,10 +7,15 @@ use crate::draw::edit::core::edit_errors::{
     EditContextTypeMismatchError, EditMissingDataError, EditParamsTypeMismatchError,
     EditTransformTypeMismatchError,
 };
+pub use crate::draw::edit::core::edit_operation_params::{
+    ConnectorPointOperationParams, EditOperationParams, MoveOperationParams, ResizeOperationParams,
+    RotateOperationParams,
+};
+use crate::draw::edit::preview::edit_preview::{build_selection_preview, EditPreview};
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::element_state::ElementState;
 use crate::draw::models::selection_derived_data::SelectionDerivedData;
-use crate::draw::types::draw_point::DrawPoint;
+use crate::draw::services::selection_data_computer::SelectionDataComputer;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_context::{
     EditContext, MoveEditContext, ResizeEditContext, RotateEditContext,
@@ -23,44 +28,12 @@ use crate::draw::types::element_geometry::{
 };
 use crate::draw::utils::visible_elements::resolve_visible_elements;
 
-/// Lightweight preview of selection geometry during an edit session.
-#[derive(Clone, Debug, PartialEq)]
-pub struct SelectionPreview {
-    pub bounds: DrawRect,
-    pub center: DrawPoint,
-    pub rotation: Option<f64>,
-}
-
-/// Preview payload produced by edit operations.
-#[derive(Clone, Debug, Default, PartialEq)]
-pub struct EditPreview {
-    pub preview_elements_by_id: HashMap<String, ElementState>,
-    pub selection_preview: Option<SelectionPreview>,
-}
-
-impl EditPreview {
-    /// Returns an empty preview payload.
-    pub fn none() -> Self {
-        Self::default()
-    }
-}
-
-/// Common operation-parameter marker.
-///
-/// The dedicated operation-params module is translated separately; this trait
-/// keeps helper APIs usable in the meantime.
-pub trait EditOperationParams: Any {
-    fn initial_selection_bounds(&self) -> Option<DrawRect> {
-        None
-    }
-}
-
 /// Returns a snapshot of selected elements.
 pub fn snapshot_selected_elements(state: &DrawState) -> Vec<ElementState> {
     state
         .domain
         .selection
-        .selected_ids
+        .selected_ids_in_order()
         .iter()
         .filter_map(|id| state.domain.document.get_element_by_id(id).cloned())
         .collect()
@@ -96,54 +69,7 @@ pub fn build_edit_preview(
         multi_select_rotation,
     );
 
-    EditPreview {
-        preview_elements_by_id,
-        selection_preview,
-    }
-}
-
-/// Builds selection-preview geometry from preview element overrides.
-pub fn build_selection_preview(
-    _state: &DrawState,
-    context: &EditContext,
-    preview_elements_by_id: &HashMap<String, ElementState>,
-    multi_select_bounds: Option<DrawRect>,
-    multi_select_rotation: Option<f64>,
-) -> Option<SelectionPreview> {
-    if context.selected_ids_at_start.is_empty() {
-        return None;
-    }
-
-    let selected_preview_elements = context
-        .selected_ids_at_start
-        .iter()
-        .filter_map(|id| preview_elements_by_id.get(id))
-        .collect::<Vec<_>>();
-
-    if selected_preview_elements.is_empty() {
-        let bounds = multi_select_bounds.unwrap_or(context.start_bounds);
-        return Some(SelectionPreview {
-            bounds,
-            center: bounds.center(),
-            rotation: multi_select_rotation,
-        });
-    }
-
-    let computed_bounds = merge_element_world_bounds(&selected_preview_elements)?;
-    let bounds = multi_select_bounds.unwrap_or(computed_bounds);
-    let rotation = multi_select_rotation.or_else(|| {
-        if selected_preview_elements.len() == 1 {
-            Some(selected_preview_elements[0].rotation)
-        } else {
-            None
-        }
-    });
-
-    Some(SelectionPreview {
-        bounds,
-        center: bounds.center(),
-        rotation,
-    })
+    EditPreview::new(preview_elements_by_id, selection_preview)
 }
 
 /// Builds snapshots keyed by element id.
@@ -259,16 +185,47 @@ where
     })
 }
 
-/// Requires and downcasts params to `P`.
-pub fn require_params<'a, P: 'static, A: Any>(
-    params: &'a A,
+/// Variant-ref extraction for concrete operation params types.
+pub trait ParamsRef<'a>: Sized + 'static {
+    fn from_edit_params(params: &'a EditOperationParams) -> Option<&'a Self>;
+}
+
+impl<'a> ParamsRef<'a> for MoveOperationParams {
+    fn from_edit_params(params: &'a EditOperationParams) -> Option<&'a Self> {
+        params.as_move()
+    }
+}
+
+impl<'a> ParamsRef<'a> for ResizeOperationParams {
+    fn from_edit_params(params: &'a EditOperationParams) -> Option<&'a Self> {
+        params.as_resize()
+    }
+}
+
+impl<'a> ParamsRef<'a> for RotateOperationParams {
+    fn from_edit_params(params: &'a EditOperationParams) -> Option<&'a Self> {
+        params.as_rotate()
+    }
+}
+
+impl<'a> ParamsRef<'a> for ConnectorPointOperationParams {
+    fn from_edit_params(params: &'a EditOperationParams) -> Option<&'a Self> {
+        params.as_connector_point()
+    }
+}
+
+/// Requires and extracts the concrete params variant.
+pub fn require_params<'a, P>(
+    params: &'a EditOperationParams,
     operation_name: &str,
-) -> Result<&'a P, EditParamsTypeMismatchError> {
-    let params_any = params as &dyn Any;
-    params_any.downcast_ref::<P>().ok_or_else(|| {
+) -> Result<&'a P, EditParamsTypeMismatchError>
+where
+    P: ParamsRef<'a> + 'static,
+{
+    P::from_edit_params(params).ok_or_else(|| {
         EditParamsTypeMismatchError::new(
             type_name::<P>(),
-            type_name::<A>(),
+            params_type_name(params),
             operation_name.to_owned(),
             None,
         )
@@ -291,6 +248,7 @@ pub fn resolve_reference_elements(
 pub struct StandardContextData<S> {
     pub start_bounds: DrawRect,
     pub selected_ids: HashSet<String>,
+    pub selected_ids_in_order: Vec<String>,
     pub selection_version: i64,
     pub elements_version: i64,
     pub selected_elements: Vec<ElementState>,
@@ -309,12 +267,10 @@ where
     F: FnMut(&ElementState) -> S,
 {
     let resolved_selection_data =
-        selection_data.unwrap_or_else(|| compute_selection_data_fallback(state));
+        selection_data.unwrap_or_else(|| SelectionDataComputer::compute(state));
     let selected_elements = snapshot_selected_elements(state);
-    let selected_ids = state
-        .domain
-        .selection
-        .selected_ids
+    let selected_ids_in_order = state.domain.selection.selected_ids_in_order().to_vec();
+    let selected_ids = selected_ids_in_order
         .iter()
         .cloned()
         .collect::<HashSet<_>>();
@@ -331,74 +287,12 @@ where
     Ok(StandardContextData {
         start_bounds,
         selected_ids,
+        selected_ids_in_order,
         selection_version: state.domain.selection.selection_version as i64,
         elements_version: state.domain.document.elements_version,
         selected_elements,
         element_snapshots,
     })
-}
-
-fn compute_selection_data_fallback(state: &DrawState) -> SelectionDerivedData {
-    let selected_elements = snapshot_selected_elements(state);
-    let selection_bounds =
-        merge_element_world_bounds(&selected_elements.iter().collect::<Vec<_>>());
-
-    let (selection_rotation, selection_center) = if selected_elements.len() == 1 {
-        let element = &selected_elements[0];
-        (Some(element.rotation), Some(element.rect.center()))
-    } else {
-        (None, selection_bounds.map(DrawRect::center))
-    };
-
-    SelectionDerivedData::new(
-        selected_elements,
-        selection_bounds,
-        selection_bounds,
-        selection_rotation,
-        selection_center,
-        selection_rotation,
-        selection_center,
-    )
-}
-
-fn merge_element_world_bounds(elements: &[&ElementState]) -> Option<DrawRect> {
-    let mut iter = elements.iter();
-    let first = iter.next()?;
-    let mut bounds = world_aabb_for_element(first);
-
-    for element in iter {
-        let aabb = world_aabb_for_element(element);
-        bounds = DrawRect::new(
-            bounds.min_x.min(aabb.min_x),
-            bounds.min_y.min(aabb.min_y),
-            bounds.max_x.max(aabb.max_x),
-            bounds.max_y.max(aabb.max_y),
-        );
-    }
-
-    Some(bounds)
-}
-
-fn world_aabb_for_element(element: &ElementState) -> DrawRect {
-    if element.rotation == 0.0 {
-        return element.rect;
-    }
-
-    let rect = element.rect;
-    let center = rect.center();
-    let half_width = rect.width().abs() / 2.0;
-    let half_height = rect.height().abs() / 2.0;
-    let cos_theta = element.rotation.cos().abs();
-    let sin_theta = element.rotation.sin().abs();
-    let x_extent = half_width * cos_theta + half_height * sin_theta;
-    let y_extent = half_width * sin_theta + half_height * cos_theta;
-
-    DrawRect::new(
-        center.x - x_extent,
-        center.y - y_extent,
-        center.x + x_extent,
-        center.y + y_extent,
-    )
 }
 
 fn context_type_name(context: &dyn Any) -> &'static str {
@@ -437,6 +331,15 @@ fn format_context_info(context: &EditContext) -> String {
         context.start_position,
         context.selected_ids_at_start.len()
     )
+}
+
+fn params_type_name(params: &EditOperationParams) -> &'static str {
+    match params {
+        EditOperationParams::Move(_) => type_name::<MoveOperationParams>(),
+        EditOperationParams::Resize(_) => type_name::<ResizeOperationParams>(),
+        EditOperationParams::Rotate(_) => type_name::<RotateOperationParams>(),
+        EditOperationParams::ConnectorPoint(_) => type_name::<ConnectorPointOperationParams>(),
+    }
 }
 
 fn transform_type_name(transform: &EditTransform) -> &'static str {

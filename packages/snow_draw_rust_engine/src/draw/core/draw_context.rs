@@ -211,17 +211,11 @@ mod tests {
     fn with_defaults_uses_provided_registry_as_is() {
         let registry = DefaultElementRegistry::new();
 
-        let context = DrawContext::with_defaults(
-            Some(registry),
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-            None,
-        );
+        let context =
+            DrawContext::with_defaults(Some(registry), None, None, None, None, None, None, None);
 
-        assert!(!context.element_registry.supports_type_value(TEXT_TYPE_VALUE));
+        assert!(!context
+            .element_registry
+            .supports_type_value(TEXT_TYPE_VALUE));
     }
 }

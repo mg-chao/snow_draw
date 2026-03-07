@@ -76,8 +76,11 @@ impl RotateOperationState for DrawState {
     }
 
     fn selected_elements_for_rotate(&self, selected_ids: &HashSet<String>) -> Vec<ElementState> {
-        selected_ids
+        self.domain
+            .selection
+            .selected_ids_in_order()
             .iter()
+            .filter(|id| selected_ids.contains(id.as_str()))
             .filter_map(|id| self.domain.document.get_element_by_id(id).cloned())
             .collect()
     }
@@ -161,10 +164,15 @@ impl RotateOperation {
             multi_select_overlay_rotation,
         );
 
-        let base = EditContext::new(
+        let selected_ids_at_start_in_order = selected_elements
+            .iter()
+            .map(|element| element.id.clone())
+            .collect::<Vec<_>>();
+        let base = EditContext::new_with_order(
             start_position,
             start_bounds,
             selected_ids_at_start,
+            selected_ids_at_start_in_order,
             selection_version,
             elements_version,
         );

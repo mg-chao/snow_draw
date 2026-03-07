@@ -1,11 +1,5 @@
 #![allow(dead_code)]
 
-use std::any::Any;
-use std::backtrace::Backtrace;
-use std::collections::BTreeMap;
-use std::error::Error;
-use std::fmt;
-use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::Arc;
 
 use crate::draw::config::draw_config::DrawConfig;
@@ -13,15 +7,15 @@ use crate::draw::edit::edit_operations::DefaultEditOperationRegistry;
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::edit_session_id::EditSessionId;
 use crate::draw::models::interaction_state::{EditingState, InteractionState};
+use crate::draw::services::log::log_service::{LogData, ModuleLogger};
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::edit_context::{
     default_text_metrics_service, EditContext, TextMetricsService,
 };
 use crate::draw::types::edit_operation_id::EditOperationId;
-use crate::draw::types::edit_transform::EditTransform;
 use crate::draw::types::snap_guides::{snap_guide_list_equals, SnapGuide};
 
-use super::edit_error_handler::{EditErrorHandler, EditFailureReason, EditOutcome, ModuleLogger};
+use super::edit_error_handler::{EditErrorHandler, EditFailureReason, EditOutcome};
 use super::edit_modifiers::EditModifiers;
 use super::edit_operation::{EditOperation, EditOperationParams};
 
@@ -55,27 +49,6 @@ impl SessionRestoreResult {
         }
     }
 }
-
-#[derive(Debug)]
-struct EditSessionPanicError {
-    message: String,
-}
-
-impl EditSessionPanicError {
-    fn new(message: impl Into<String>) -> Self {
-        Self {
-            message: message.into(),
-        }
-    }
-}
-
-impl fmt::Display for EditSessionPanicError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.message)
-    }
-}
-
-impl Error for EditSessionPanicError {}
 
 /// Edit action pipeline.
 pub struct EditSessionService {
@@ -135,9 +108,14 @@ impl EditSessionService {
             );
         };
 
-        self.run_guarded(state, Some(operation_id), true, || {
-            self.perform_start(state, operation, operation_id, position, params, session_id)
-        })
+        EditErrorHandler::run_with_error_handling(
+            state,
+            || self.perform_start(state, operation, operation_id, position, params, session_id),
+            true,
+            Some(operation_id),
+            Some("startEdit"),
+            self.log.as_ref(),
+        )
     }
 
     pub fn update(
@@ -146,17 +124,19 @@ impl EditSessionService {
         current_position: DrawPoint,
         modifiers: EditModifiers,
     ) -> EditOutcome {
-        self.with_restored_session(state, true, |restored| {
+        self.with_restored_session(state, "updateEdit", true, |restored| {
             self.perform_update(state, restored, current_position, modifiers)
         })
     }
 
     pub fn finish(&self, state: &DrawState) -> EditOutcome {
-        self.with_restored_session(state, true, |restored| self.perform_finish(state, restored))
+        self.with_restored_session(state, "finishEdit", true, |restored| {
+            self.perform_finish(state, restored)
+        })
     }
 
     pub fn cancel(&self, state: &DrawState) -> EditOutcome {
-        self.with_restored_session(state, false, |restored| {
+        self.with_restored_session(state, "cancelEdit", false, |restored| {
             self.perform_cancel(state, restored)
         })
     }
@@ -164,6 +144,7 @@ impl EditSessionService {
     fn with_restored_session<F>(
         &self,
         state: &DrawState,
+        operation_name: &str,
         validate_versions: bool,
         action: F,
     ) -> EditOutcome
@@ -190,7 +171,14 @@ impl EditSessionService {
         };
 
         let fallback_operation_id = Some(restored.editing_state.operation_id);
-        self.run_guarded(state, fallback_operation_id, false, || action(restored))
+        EditErrorHandler::run_with_error_handling(
+            state,
+            || action(restored),
+            false,
+            fallback_operation_id,
+            Some(operation_name),
+            self.log.as_ref(),
+        )
     }
 
     fn perform_start(
@@ -227,6 +215,11 @@ impl EditSessionService {
         modifiers: EditModifiers,
     ) -> EditOutcome {
         let editing_state = restored.editing_state;
+        self.log_trace(
+            "Edit session updated",
+            Some(editing_state.operation_id),
+            None,
+        );
         let config = (self.config_provider)();
         let updated = restored.operation.update(
             state,
@@ -259,20 +252,20 @@ impl EditSessionService {
 
     fn perform_finish(&self, state: &DrawState, restored: RestoredSession) -> EditOutcome {
         let operation_id = restored.editing_state.operation_id;
+        self.log_info("Edit session finished", Some(operation_id), None);
         let finished_state = restored.operation.finish(
             state,
             &restored.editing_state.context,
             &restored.editing_state.current_transform,
         );
-        let next_state = self.to_idle_state(&finished_state);
-        self.success_outcome(next_state, operation_id)
+        self.success_outcome(finished_state, operation_id)
     }
 
     fn perform_cancel(&self, state: &DrawState, restored: RestoredSession) -> EditOutcome {
         let operation_id = restored.editing_state.operation_id;
+        self.log_info("Edit session cancelled", Some(operation_id), None);
         let cancelled_state = restored.operation.cancel(state);
-        let next_state = self.to_idle_state(&cancelled_state);
-        self.success_outcome(next_state, operation_id)
+        self.success_outcome(cancelled_state, operation_id)
     }
 
     fn create_session(
@@ -284,6 +277,19 @@ impl EditSessionService {
         params: &EditOperationParams,
         session_id: EditSessionId,
     ) -> EditingState {
+        let mut data = LogData::new();
+        data.insert("operationId".to_owned(), operation_id.to_owned());
+        data.insert(
+            "params".to_owned(),
+            match params {
+                EditOperationParams::Move(_) => "MoveOperationParams",
+                EditOperationParams::Resize(_) => "ResizeOperationParams",
+                EditOperationParams::Rotate(_) => "RotateOperationParams",
+                EditOperationParams::ConnectorPoint(_) => "ConnectorPointOperationParams",
+            }
+            .to_owned(),
+        );
+        self.log_info("Edit session created", Some(operation_id), Some(data));
         let created_context = operation.create_context(state, position, params);
         let context = self.attach_text_metrics_service(operation, created_context);
         let transform = operation.initial_transform(state, &context, position);
@@ -308,6 +314,9 @@ impl EditSessionService {
 
     fn restore_session(&self, state: &DrawState, validate_versions: bool) -> SessionRestoreResult {
         let InteractionState::Editing(editing_state) = &state.application.interaction else {
+            let mut data = LogData::new();
+            data.insert("reason".to_owned(), "not_editing".to_owned());
+            self.log_error("Edit session restore failed", None, Some(data));
             return SessionRestoreResult::failure(EditFailureReason::NotEditing, None);
         };
 
@@ -316,6 +325,13 @@ impl EditSessionService {
             .get_operation(editing_state.operation_id)
             .cloned()
         else {
+            let mut data = LogData::new();
+            data.insert("reason".to_owned(), "unknown_operation".to_owned());
+            self.log_error(
+                "Edit session restore failed",
+                Some(editing_state.operation_id),
+                Some(data),
+            );
             return SessionRestoreResult::failure(
                 EditFailureReason::UnknownOperationId,
                 Some(editing_state.operation_id),
@@ -328,6 +344,13 @@ impl EditSessionService {
             }
         }
 
+        let mut data = LogData::new();
+        data.insert("sessionId".to_owned(), editing_state.session_id.clone());
+        self.log_trace(
+            "Edit session restored",
+            Some(editing_state.operation_id),
+            Some(data),
+        );
         SessionRestoreResult::success(RestoredSession {
             operation,
             editing_state: editing_state.clone(),
@@ -341,11 +364,35 @@ impl EditSessionService {
     ) -> Option<EditFailureReason> {
         let current_selection_version = current_state.domain.selection.selection_version as i64;
         if editing_state.context.selection_version != current_selection_version {
+            let mut data = LogData::new();
+            data.insert("type".to_owned(), "selection".to_owned());
+            data.insert(
+                "expected".to_owned(),
+                editing_state.context.selection_version.to_string(),
+            );
+            data.insert("actual".to_owned(), current_selection_version.to_string());
+            self.log_warning(
+                "Edit session version conflict",
+                Some(editing_state.operation_id),
+                Some(data),
+            );
             return Some(EditFailureReason::SelectionChanged);
         }
 
         let current_elements_version = current_state.domain.document.elements_version;
         if editing_state.context.elements_version != current_elements_version {
+            let mut data = LogData::new();
+            data.insert("type".to_owned(), "elements".to_owned());
+            data.insert(
+                "expected".to_owned(),
+                editing_state.context.elements_version.to_string(),
+            );
+            data.insert("actual".to_owned(), current_elements_version.to_string());
+            self.log_warning(
+                "Edit session version conflict",
+                Some(editing_state.operation_id),
+                Some(data),
+            );
             return Some(EditFailureReason::ElementsChanged);
         }
 
@@ -356,72 +403,69 @@ impl EditSessionService {
         EditOutcome::new(state, None, Some(operation_id))
     }
 
-    fn to_idle_state(&self, state: &DrawState) -> DrawState {
-        let next_application = state.application.to_idle();
-        if next_application == state.application {
-            return state.clone();
-        }
-        state.copy_with(None, Some(next_application))
-    }
-
-    fn run_guarded<F>(
+    fn log_trace(
         &self,
-        state: &DrawState,
-        fallback_operation_id: Option<EditOperationId>,
-        keep_state_on_failure: bool,
-        operation: F,
-    ) -> EditOutcome
-    where
-        F: FnOnce() -> EditOutcome,
-    {
-        match catch_unwind(AssertUnwindSafe(operation)) {
-            Ok(outcome) => outcome,
-            Err(payload) => {
-                self.log_unexpected_panic(payload.as_ref(), fallback_operation_id);
-                EditErrorHandler::create_failure(
-                    state,
-                    EditFailureReason::OperationFailed,
-                    fallback_operation_id,
-                    keep_state_on_failure,
-                )
-            }
-        }
-    }
-
-    fn log_unexpected_panic(
-        &self,
-        payload: &(dyn Any + Send),
+        message: &str,
         operation_id: Option<EditOperationId>,
+        data: Option<LogData>,
     ) {
         let Some(log) = self.log.as_ref() else {
             return;
         };
 
-        let mut data = BTreeMap::new();
-        data.insert("operation", "edit_session_service".to_owned());
-        if let Some(id) = operation_id {
-            data.insert("operationId", id.to_owned());
+        let resolved_data = Self::with_operation_id(data, operation_id);
+        log.trace(message, Some(&resolved_data));
+    }
+
+    fn log_info(
+        &self,
+        message: &str,
+        operation_id: Option<EditOperationId>,
+        data: Option<LogData>,
+    ) {
+        let Some(log) = self.log.as_ref() else {
+            return;
+        };
+
+        let resolved_data = Self::with_operation_id(data, operation_id);
+        log.info(message, Some(&resolved_data));
+    }
+
+    fn log_warning(
+        &self,
+        message: &str,
+        operation_id: Option<EditOperationId>,
+        data: Option<LogData>,
+    ) {
+        let Some(log) = self.log.as_ref() else {
+            return;
+        };
+
+        let resolved_data = Self::with_operation_id(data, operation_id);
+        log.warning(message, Some(&resolved_data));
+    }
+
+    fn log_error(
+        &self,
+        message: &str,
+        operation_id: Option<EditOperationId>,
+        data: Option<LogData>,
+    ) {
+        let Some(log) = self.log.as_ref() else {
+            return;
+        };
+
+        let resolved_data = Self::with_operation_id(data, operation_id);
+        log.error(message, None, None, Some(&resolved_data));
+    }
+
+    fn with_operation_id(data: Option<LogData>, operation_id: Option<EditOperationId>) -> LogData {
+        let mut resolved_data = data.unwrap_or_default();
+        if let Some(operation_id) = operation_id {
+            resolved_data
+                .entry("operationId".to_owned())
+                .or_insert_with(|| operation_id.to_owned());
         }
-
-        let message = panic_payload_message(payload);
-        let error = EditSessionPanicError::new(message);
-        log.error(
-            "Unexpected edit panic",
-            &error,
-            &Backtrace::capture(),
-            &data,
-        );
+        resolved_data
     }
-}
-
-fn panic_payload_message(payload: &(dyn Any + Send)) -> String {
-    if let Some(message) = payload.downcast_ref::<&str>() {
-        return (*message).to_owned();
-    }
-
-    if let Some(message) = payload.downcast_ref::<String>() {
-        return message.clone();
-    }
-
-    "unknown panic payload".to_owned()
 }

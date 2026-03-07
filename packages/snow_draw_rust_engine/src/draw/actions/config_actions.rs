@@ -6,7 +6,7 @@ use crate::draw::config::draw_config::{CanvasConfig, DrawConfig, SelectionConfig
 
 use super::draw_actions::DrawAction;
 use super::history_coalescing::HistoryCoalescingProvider;
-use super::history_policy::HistoryPolicyProvider;
+use super::history_policy::{HistoryPolicy, HistoryPolicyProvider};
 
 /// Replaces the entire store configuration snapshot.
 #[derive(Clone, Debug, PartialEq)]
@@ -20,7 +20,11 @@ impl UpdateConfig {
     }
 }
 
-impl HistoryPolicyProvider for UpdateConfig {}
+impl HistoryPolicyProvider for UpdateConfig {
+    fn history_policy(&self) -> HistoryPolicy {
+        HistoryPolicy::None
+    }
+}
 impl HistoryCoalescingProvider for UpdateConfig {}
 impl DrawAction for UpdateConfig {
     fn as_any(&self) -> &dyn Any {
@@ -40,7 +44,11 @@ impl UpdateSelectionConfig {
     }
 }
 
-impl HistoryPolicyProvider for UpdateSelectionConfig {}
+impl HistoryPolicyProvider for UpdateSelectionConfig {
+    fn history_policy(&self) -> HistoryPolicy {
+        HistoryPolicy::None
+    }
+}
 impl HistoryCoalescingProvider for UpdateSelectionConfig {}
 impl DrawAction for UpdateSelectionConfig {
     fn as_any(&self) -> &dyn Any {
@@ -60,7 +68,11 @@ impl UpdateCanvasConfig {
     }
 }
 
-impl HistoryPolicyProvider for UpdateCanvasConfig {}
+impl HistoryPolicyProvider for UpdateCanvasConfig {
+    fn history_policy(&self) -> HistoryPolicy {
+        HistoryPolicy::None
+    }
+}
 impl HistoryCoalescingProvider for UpdateCanvasConfig {}
 impl DrawAction for UpdateCanvasConfig {
     fn as_any(&self) -> &dyn Any {

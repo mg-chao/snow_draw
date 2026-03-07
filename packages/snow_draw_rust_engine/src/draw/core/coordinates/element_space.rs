@@ -2,6 +2,9 @@
 
 use crate::draw::types::draw_point::DrawPoint;
 use std::fmt;
+use std::hash::{Hash, Hasher};
+
+use super::coordinate_space::CoordinateSpace;
 
 /// Coordinate space for a single element's local frame.
 ///
@@ -58,6 +61,31 @@ impl fmt::Display for ElementSpace {
             "ElementSpace(rotation: {}, origin: {})",
             self.rotation, self.origin
         )
+    }
+}
+
+impl Hash for ElementSpace {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.rotation.to_bits().hash(state);
+        self.origin.hash(state);
+    }
+}
+
+impl CoordinateSpace for ElementSpace {
+    fn rotation(&self) -> f64 {
+        self.rotation
+    }
+
+    fn origin(&self) -> DrawPoint {
+        self.origin
+    }
+
+    fn from_world(&self, world_point: DrawPoint) -> DrawPoint {
+        self.rotate_point(world_point, self.origin, -self.rotation)
+    }
+
+    fn to_world(&self, local_point: DrawPoint) -> DrawPoint {
+        self.rotate_point(local_point, self.origin, self.rotation)
     }
 }
 

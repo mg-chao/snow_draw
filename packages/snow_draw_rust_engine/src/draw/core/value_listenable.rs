@@ -1,35 +1,25 @@
 #![allow(dead_code)]
 
+use std::sync::Arc;
+
 use super::callbacks::VoidCallback;
 
-/// Stable handle returned when registering a listener.
-pub type ListenerId = u64;
-
 /// Read-only value holder that notifies listeners when the value changes.
-///
-/// Dart's API removes listeners by callback identity. In Rust, trait-object
-/// callbacks are not equatable, so listeners are removed by `ListenerId`.
 pub trait ValueListenable<T> {
     /// Current value.
     fn value(&self) -> &T;
 
     /// Registers a listener for change notifications.
-    fn add_listener(&mut self, listener: VoidCallback) -> ListenerId;
+    fn add_listener(&mut self, listener: VoidCallback);
 
-    /// Unregisters a listener by identifier.
-    fn remove_listener(&mut self, listener_id: ListenerId) -> bool;
+    /// Unregisters a listener by callback identity.
+    fn remove_listener(&mut self, listener: &VoidCallback) -> bool;
 }
 
 /// Mutable `ValueListenable` implementation for engine services.
 pub struct ValueNotifier<T> {
     value: T,
-    listeners: Vec<ListenerEntry>,
-    next_listener_id: ListenerId,
-}
-
-struct ListenerEntry {
-    id: ListenerId,
-    callback: VoidCallback,
+    listeners: Vec<VoidCallback>,
 }
 
 impl<T> ValueNotifier<T> {
@@ -38,7 +28,6 @@ impl<T> ValueNotifier<T> {
         Self {
             value,
             listeners: Vec::new(),
-            next_listener_id: 0,
         }
     }
 
@@ -48,8 +37,9 @@ impl<T> ValueNotifier<T> {
     }
 
     fn notify_listeners(&mut self) {
-        for entry in &mut self.listeners {
-            (entry.callback)();
+        let snapshot = self.listeners.clone();
+        for listener in snapshot {
+            listener();
         }
     }
 }
@@ -73,20 +63,21 @@ impl<T> ValueListenable<T> for ValueNotifier<T> {
         &self.value
     }
 
-    fn add_listener(&mut self, listener: VoidCallback) -> ListenerId {
-        let id = self.next_listener_id;
-        self.next_listener_id = self.next_listener_id.wrapping_add(1);
-        self.listeners.push(ListenerEntry {
-            id,
-            callback: listener,
-        });
-        id
+    fn add_listener(&mut self, listener: VoidCallback) {
+        self.listeners.push(listener);
     }
 
-    fn remove_listener(&mut self, listener_id: ListenerId) -> bool {
-        let before = self.listeners.len();
-        self.listeners.retain(|entry| entry.id != listener_id);
-        self.listeners.len() != before
+    fn remove_listener(&mut self, listener: &VoidCallback) -> bool {
+        if let Some(index) = self
+            .listeners
+            .iter()
+            .position(|registered| Arc::ptr_eq(registered, listener))
+        {
+            self.listeners.remove(index);
+            true
+        } else {
+            false
+        }
     }
 }
 
@@ -94,6 +85,8 @@ impl<T> ValueListenable<T> for ValueNotifier<T> {
 mod tests {
     use std::cell::RefCell;
     use std::rc::Rc;
+
+    use crate::draw::core::callbacks::void_callback;
 
     use super::{ValueListenable, ValueNotifier};
 
@@ -103,7 +96,7 @@ mod tests {
         let mut notifier = ValueNotifier::new(10_i32);
 
         let calls_for_listener = Rc::clone(&calls);
-        notifier.add_listener(Box::new(move || {
+        notifier.add_listener(void_callback(move || {
             *calls_for_listener.borrow_mut() += 1;
         }));
 
@@ -118,7 +111,7 @@ mod tests {
         let mut notifier = ValueNotifier::new(10_i32);
 
         let calls_for_listener = Rc::clone(&calls);
-        notifier.add_listener(Box::new(move || {
+        notifier.add_listener(void_callback(move || {
             *calls_for_listener.borrow_mut() += 1;
         }));
 
@@ -134,10 +127,11 @@ mod tests {
         let mut notifier = ValueNotifier::new(10_i32);
 
         let calls_for_listener = Rc::clone(&calls);
-        let listener_id = notifier.add_listener(Box::new(move || {
+        let listener = void_callback(move || {
             *calls_for_listener.borrow_mut() += 1;
-        }));
-        notifier.remove_listener(listener_id);
+        });
+        notifier.add_listener(listener.clone());
+        notifier.remove_listener(&listener);
 
         notifier.set_value(11);
 

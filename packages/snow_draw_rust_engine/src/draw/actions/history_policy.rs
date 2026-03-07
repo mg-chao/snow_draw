@@ -20,7 +20,5 @@ pub enum HistoryPolicy {
 /// Interface used by actions to declare history behavior.
 pub trait HistoryPolicyProvider {
     /// Returns the history policy for the action.
-    fn history_policy(&self) -> HistoryPolicy {
-        HistoryPolicy::None
-    }
+    fn history_policy(&self) -> HistoryPolicy;
 }

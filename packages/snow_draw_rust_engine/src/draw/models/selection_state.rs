@@ -4,6 +4,7 @@ use crate::draw::models::domain_state::DomainSelection;
 use crate::draw::types::draw_rect::DrawRect;
 use std::collections::BTreeSet;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 
 /// Overlay state for multi-selection handles.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -51,17 +52,33 @@ impl fmt::Display for MultiSelectOverlayState {
 ///
 /// Mirrors Dart behavior: selected ids are modeled as a set and
 /// `selection_version` increments only when selection membership changes.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug)]
 pub struct SelectionState {
     pub selected_ids: BTreeSet<String>,
+    pub selected_ids_in_order: Vec<String>,
     pub selection_version: i32,
 }
 
 impl SelectionState {
     /// Creates a selection state from explicit fields.
     pub fn new(selected_ids: BTreeSet<String>, selection_version: i32) -> Self {
+        let frozen_selected_ids = Self::freeze_selected_ids(selected_ids);
+        let selected_ids_in_order = frozen_selected_ids.iter().cloned().collect();
+        Self::new_with_order(
+            frozen_selected_ids,
+            selected_ids_in_order,
+            selection_version,
+        )
+    }
+
+    pub fn new_with_order(
+        selected_ids: BTreeSet<String>,
+        selected_ids_in_order: Vec<String>,
+        selection_version: i32,
+    ) -> Self {
         Self {
             selected_ids: Self::freeze_selected_ids(selected_ids),
+            selected_ids_in_order,
             selection_version,
         }
     }
@@ -91,6 +108,10 @@ impl SelectionState {
         self.selected_ids.len()
     }
 
+    pub fn selected_ids_in_order(&self) -> &[String] {
+        &self.selected_ids_in_order
+    }
+
     /// Returns a copy with optional field replacements.
     ///
     /// If `selected_ids` changes and `selection_version` is not provided, the
@@ -117,8 +138,10 @@ impl SelectionState {
             return self.clone();
         }
 
+        let next_selected_ids_in_order = self.resolve_selected_ids_in_order(&next_selected_ids);
         Self {
             selected_ids: next_selected_ids,
+            selected_ids_in_order: next_selected_ids_in_order,
             selection_version: next_selection_version,
         }
     }
@@ -177,6 +200,7 @@ impl SelectionState {
 
         Self {
             selected_ids: BTreeSet::new(),
+            selected_ids_in_order: Vec::new(),
             selection_version: self.selection_version.saturating_add(1),
         }
     }
@@ -187,8 +211,10 @@ impl SelectionState {
             return self.clone();
         }
 
+        let selected_ids_in_order = self.resolve_selected_ids_in_order(&frozen_ids);
         Self {
             selected_ids: frozen_ids,
+            selected_ids_in_order,
             selection_version: self.selection_version.saturating_add(1),
         }
     }
@@ -200,14 +226,45 @@ impl SelectionState {
     fn freeze_selected_ids(ids: BTreeSet<String>) -> BTreeSet<String> {
         ids
     }
+
+    fn resolve_selected_ids_in_order(&self, ids: &BTreeSet<String>) -> Vec<String> {
+        let mut ordered = self
+            .selected_ids_in_order
+            .iter()
+            .filter(|id| ids.contains(id.as_str()))
+            .cloned()
+            .collect::<Vec<_>>();
+        for id in ids {
+            if !ordered.contains(id) {
+                ordered.push(id.clone());
+            }
+        }
+        ordered
+    }
 }
 
 impl Default for SelectionState {
     fn default() -> Self {
         Self {
             selected_ids: BTreeSet::new(),
+            selected_ids_in_order: Vec::new(),
             selection_version: 0,
         }
+    }
+}
+
+impl PartialEq for SelectionState {
+    fn eq(&self, other: &Self) -> bool {
+        self.selection_version == other.selection_version && self.selected_ids == other.selected_ids
+    }
+}
+
+impl Eq for SelectionState {}
+
+impl Hash for SelectionState {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.selected_ids.hash(state);
+        self.selection_version.hash(state);
     }
 }
 

@@ -177,7 +177,17 @@ mod tests {
         });
 
         let pair = resolve_arrow_binding_pair(&line).expect("line connector binding pair");
-        assert_eq!(pair.start_binding.as_ref().map(|binding| binding.element_id.as_str()), Some("rect-start"));
-        assert_eq!(pair.end_binding.as_ref().map(|binding| binding.element_id.as_str()), Some("rect-end"));
+        assert_eq!(
+            pair.start_binding
+                .as_ref()
+                .map(|binding| binding.element_id.as_str()),
+            Some("rect-start")
+        );
+        assert_eq!(
+            pair.end_binding
+                .as_ref()
+                .map(|binding| binding.element_id.as_str()),
+            Some("rect-end")
+        );
     }
 }

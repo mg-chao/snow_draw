@@ -1,6 +1,6 @@
 ﻿#![allow(dead_code)]
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::element_state::ElementState;
@@ -73,7 +73,7 @@ pub fn build_selection_preview(
     multi_select_rotation: Option<f64>,
 ) -> Option<SelectionPreview> {
     let mut selected_elements = Vec::with_capacity(context.selected_ids_at_start.len());
-    for id in &context.selected_ids_at_start {
+    for id in context.selected_ids_at_start_in_order() {
         if let Some(preview) = preview_elements_by_id.get(id) {
             selected_elements.push(preview.clone());
             continue;
@@ -101,7 +101,7 @@ pub fn build_selection_preview_with_base_elements(
     multi_select_rotation: Option<f64>,
 ) -> Option<SelectionPreview> {
     let selected_elements = selected_elements_from_maps(
-        &context.selected_ids_at_start,
+        context.selected_ids_at_start_in_order(),
         preview_elements_by_id,
         base_elements_by_id,
     );
@@ -115,7 +115,7 @@ pub fn build_selection_preview_with_base_elements(
 }
 
 fn selected_elements_from_maps(
-    selected_ids: &HashSet<String>,
+    selected_ids: &[String],
     preview_elements_by_id: &HashMap<String, ElementState>,
     base_elements_by_id: &HashMap<String, ElementState>,
 ) -> Vec<ElementState> {

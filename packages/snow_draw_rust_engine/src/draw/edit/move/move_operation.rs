@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::collections::{HashMap, HashSet};
+use std::panic::panic_any;
 
 use crate::draw::config::draw_config::DrawConfig;
 use crate::draw::core::geometry::move_geometry::MoveGeometry;
@@ -9,6 +10,7 @@ use crate::draw::edit::core::edit_compute_pipeline::{
     finalize_domain_result, ordered_element_ids_from_element_map,
 };
 use crate::draw::edit::core::edit_computed_result::EditComputedResult;
+use crate::draw::edit::core::edit_errors::EditMissingDataError;
 use crate::draw::edit::core::edit_modifiers::EditModifiers;
 use crate::draw::edit::core::edit_operation_params::MoveOperationParams;
 use crate::draw::edit::core::edit_result::EditUpdateResult;
@@ -17,7 +19,9 @@ use crate::draw::history::history_metadata::HistoryMetadata;
 use crate::draw::models::draw_state::DrawState;
 use crate::draw::models::element_state::ElementState;
 use crate::draw::models::multi_select_lifecycle::{MultiSelectLifecycle, SelectionOverlayState};
+use crate::draw::models::selection_derived_data::SelectionDerivedData;
 use crate::draw::services::object_snap_service::OBJECT_SNAP_SERVICE;
+use crate::draw::services::selection_data_computer::SelectionDataComputer;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_context::{
@@ -53,6 +57,11 @@ pub trait MoveOperationState {
         1.0
     }
 
+    /// Selection-derived geometry captured at edit start.
+    fn selection_derived_data_for_move(&self) -> Option<SelectionDerivedData> {
+        None
+    }
+
     /// Selected elements snapshot source used to build move snapshots.
     fn selected_elements_for_move(&self, _selected_ids: &HashSet<String>) -> Vec<ElementState> {
         Vec::new()
@@ -86,9 +95,16 @@ impl MoveOperationState for DrawState {
         self.application.view.camera.zoom
     }
 
+    fn selection_derived_data_for_move(&self) -> Option<SelectionDerivedData> {
+        Some(SelectionDataComputer::compute(self))
+    }
+
     fn selected_elements_for_move(&self, selected_ids: &HashSet<String>) -> Vec<ElementState> {
-        selected_ids
+        self.domain
+            .selection
+            .selected_ids_in_order()
             .iter()
+            .filter(|id| selected_ids.contains(id.as_str()))
             .filter_map(|id| self.domain.document.get_element_by_id(id).cloned())
             .collect()
     }
@@ -98,7 +114,7 @@ impl MoveOperationState for DrawState {
             .document
             .elements
             .iter()
-            .filter(|element| !selected_ids.contains(&element.id))
+            .filter(|element| element.opacity > 0.0 && !selected_ids.contains(&element.id))
             .cloned()
             .collect()
     }
@@ -139,10 +155,19 @@ impl MoveOperation {
         let selected_ids = state.selected_ids_at_start();
         let selected_elements = state.selected_elements_for_move(&selected_ids);
         let reference_elements = state.reference_elements_for_move(&selected_ids);
+        let selection_data = state.selection_derived_data_for_move();
+        let start_bounds = params
+            .initial_selection_bounds
+            .or_else(|| selection_data.as_ref().and_then(|data| data.overlay_bounds))
+            .or_else(|| {
+                selection_data
+                    .as_ref()
+                    .and_then(|data| data.selection_bounds)
+            });
 
         self.create_context_from_elements(
             position,
-            params.initial_selection_bounds,
+            start_bounds,
             selected_ids,
             state.selection_version(),
             state.elements_version(),
@@ -164,14 +189,24 @@ impl MoveOperation {
     ) -> MoveEditContext {
         let start_bounds = initial_selection_bounds
             .or_else(|| compute_selection_bounds_for_elements(selected_elements))
-            .unwrap_or_else(|| DrawRect::from_point(start_position));
+            .unwrap_or_else(|| {
+                panic_any(EditMissingDataError::new(
+                    "selection bounds",
+                    Some("MoveOperation.createContext".to_owned()),
+                ))
+            });
         let snap_bounds =
             compute_selection_bounds_for_elements(selected_elements).unwrap_or(start_bounds);
 
-        let base = EditContext::new(
+        let selected_ids_at_start_in_order = selected_elements
+            .iter()
+            .map(|element| element.id.clone())
+            .collect::<Vec<_>>();
+        let base = EditContext::new_with_order(
             start_position,
             start_bounds,
             selected_ids_at_start,
+            selected_ids_at_start_in_order,
             selection_version,
             elements_version,
         );
@@ -269,10 +304,6 @@ impl MoveOperation {
             transform.dy,
             current_elements_by_id,
         );
-
-        if updated_by_id.is_empty() {
-            return None;
-        }
 
         let translated_bounds = context
             .base
@@ -584,4 +615,96 @@ fn build_axis_guide(
         DrawPoint::new(min_x, reference_line),
         DrawPoint::new(max_x, reference_line),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::sync::Arc;
+
+    use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
+    use crate::draw::models::selection_derived_data::SelectionDerivedData;
+
+    #[derive(Clone, Debug)]
+    struct FakeMoveState {
+        selected_ids: HashSet<String>,
+        selected_elements: Vec<ElementState>,
+        reference_elements: Vec<ElementState>,
+        selection_data: Option<SelectionDerivedData>,
+        selection_version: i64,
+        elements_version: i64,
+    }
+
+    impl MoveOperationState for FakeMoveState {
+        fn selected_ids_at_start(&self) -> HashSet<String> {
+            self.selected_ids.clone()
+        }
+
+        fn selection_version(&self) -> i64 {
+            self.selection_version
+        }
+
+        fn elements_version(&self) -> i64 {
+            self.elements_version
+        }
+
+        fn selection_derived_data_for_move(&self) -> Option<SelectionDerivedData> {
+            self.selection_data.clone()
+        }
+
+        fn selected_elements_for_move(&self, _selected_ids: &HashSet<String>) -> Vec<ElementState> {
+            self.selected_elements.clone()
+        }
+
+        fn reference_elements_for_move(
+            &self,
+            _selected_ids: &HashSet<String>,
+        ) -> Vec<ElementState> {
+            self.reference_elements.clone()
+        }
+    }
+
+    fn rectangle_element(id: &str, rect: DrawRect) -> ElementState {
+        ElementState::new(id, rect, 0.0, 1.0, 0, Arc::new(RectangleData::default()))
+    }
+
+    #[test]
+    fn create_context_prefers_overlay_bounds_for_start_bounds() {
+        let selected_elements = vec![
+            rectangle_element("a", DrawRect::new(0.0, 0.0, 10.0, 10.0)),
+            rectangle_element("b", DrawRect::new(20.0, 0.0, 30.0, 10.0)),
+        ];
+        let selection_bounds = DrawRect::new(0.0, 0.0, 30.0, 10.0);
+        let overlay_bounds = DrawRect::new(-5.0, -5.0, 35.0, 15.0);
+        let state = FakeMoveState {
+            selected_ids: ["a".to_owned(), "b".to_owned()].into_iter().collect(),
+            selected_elements: selected_elements.clone(),
+            reference_elements: Vec::new(),
+            selection_data: Some(SelectionDerivedData::new(
+                selected_elements.clone(),
+                Some(selection_bounds),
+                Some(overlay_bounds),
+                Some(0.25),
+                Some(overlay_bounds.center()),
+                None,
+                None,
+            )),
+            selection_version: 7,
+            elements_version: 11,
+        };
+
+        let context = MoveOperation::new().create_context(
+            &state,
+            DrawPoint::new(3.0, 4.0),
+            MoveOperationParams::default(),
+        );
+
+        assert_eq!(context.base.start_bounds, overlay_bounds);
+        assert_eq!(context.snap_bounds(), selection_bounds);
+        assert_eq!(
+            context.base.selected_ids_at_start_in_order(),
+            &["a".to_owned(), "b".to_owned()]
+        );
+    }
 }

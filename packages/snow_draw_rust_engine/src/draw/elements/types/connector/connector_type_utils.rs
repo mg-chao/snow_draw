@@ -4,9 +4,7 @@ use crate::draw::elements::core::element_data::ElementData;
 use crate::draw::elements::types::arrow::arrow_binding::{
     ArrowBinding as LineArrowBinding, ArrowBindingMode as LineArrowBindingMode,
 };
-use crate::draw::elements::types::arrow::arrow_data::{
-    ArrowBinding, ArrowBindingMode, ArrowData,
-};
+use crate::draw::elements::types::arrow::arrow_data::{ArrowBinding, ArrowBindingMode, ArrowData};
 use crate::draw::elements::types::line::line_data::LineData;
 use crate::draw::types::element_style::ArrowType;
 use serde_json::Value;
@@ -72,7 +70,9 @@ impl ConnectorPayload {
 
     /// Returns the bound end target id when present.
     pub fn end_binding_element_id(&self) -> Option<String> {
-        self.binding_pair().end_binding.map(|binding| binding.element_id)
+        self.binding_pair()
+            .end_binding
+            .map(|binding| binding.element_id)
     }
 }
 
@@ -155,10 +155,10 @@ mod tests {
     use crate::draw::elements::types::arrow::arrow_binding::{
         ArrowBinding as LineArrowBinding, ArrowBindingMode,
     };
-    use crate::draw::elements::types::arrow::arrow_data::{ArrowData, ArrowDataPatch};
     use crate::draw::elements::types::arrow::arrow_data::NullableField as ArrowNullableField;
-    use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
+    use crate::draw::elements::types::arrow::arrow_data::{ArrowData, ArrowDataPatch};
     use crate::draw::elements::types::arrow::arrow_like_data::NullableField;
+    use crate::draw::elements::types::line::line_data::{LineData, LineDataPatch};
     use crate::draw::types::draw_point::DrawPoint;
     use crate::draw::types::element_style::ArrowType;
 
@@ -181,8 +181,14 @@ mod tests {
         let decoded = decode_connector_payload(&line).expect("line connector payload");
         assert_eq!(decoded.points_len(), 2);
         assert_eq!(decoded.arrow_type(), ArrowType::Curved);
-        assert_eq!(decoded.start_binding_element_id().as_deref(), Some("rect-start"));
-        assert_eq!(decoded.end_binding_element_id().as_deref(), Some("rect-end"));
+        assert_eq!(
+            decoded.start_binding_element_id().as_deref(),
+            Some("rect-start")
+        );
+        assert_eq!(
+            decoded.end_binding_element_id().as_deref(),
+            Some("rect-end")
+        );
     }
 
     #[test]

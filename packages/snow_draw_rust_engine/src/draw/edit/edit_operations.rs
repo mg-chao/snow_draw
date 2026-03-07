@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::fmt;
+use std::panic::panic_any;
 use std::sync::{Arc, Mutex};
 
 use crate::draw::config::draw_config::DrawConfig;
@@ -12,12 +13,15 @@ use crate::draw::edit::arrow::arrow_point_operation::{
     ArrowPointTransform as InternalArrowPointTransform, ArrowPointUpdateOptions,
 };
 use crate::draw::edit::core::edit_computed_result::EditComputedResult;
+use crate::draw::edit::core::edit_errors::{
+    EditContextTypeMismatchError, EditParamsTypeMismatchError, EditTransformTypeMismatchError,
+};
 use crate::draw::edit::core::edit_operation_params::{
     ArrowPointOperationParams as TypedArrowPointOperationParams,
     MoveOperationParams as TypedMoveOperationParams,
     RotateOperationParams as TypedRotateOperationParams,
 };
-use crate::draw::edit::core::standard_finish_mixin::build_edit_preview;
+use crate::draw::edit::core::standard_finish_mixin::{build_edit_preview, StandardFinishMixin};
 use crate::draw::edit::r#move::move_operation::MoveOperation;
 use crate::draw::edit::resize::resize_operation::ResizeOperation;
 use crate::draw::edit::rotate::rotate_operation::RotateOperation;
@@ -134,12 +138,10 @@ impl DefaultEditOperationRegistry {
         let mut order = Vec::new();
         for operation in operations {
             let operation_id = operation.id();
-            if map.insert(operation_id, operation).is_some() {
-                if let Some(index) = order.iter().position(|value| *value == operation_id) {
-                    order.remove(index);
-                }
+            let is_new_operation_id = map.insert(operation_id, operation).is_none();
+            if is_new_operation_id {
+                order.push(operation_id);
             }
-            order.push(operation_id);
         }
         Self::from_ordered_parts(map, order)
     }
@@ -202,6 +204,7 @@ struct EditContextFingerprint {
     start_position: DrawPoint,
     start_bounds: DrawRect,
     selected_ids_at_start: HashSet<String>,
+    selected_ids_at_start_in_order: Vec<String>,
     selection_version: i64,
     elements_version: i64,
 }
@@ -212,6 +215,7 @@ impl EditContextFingerprint {
             start_position: context.start_position,
             start_bounds: context.start_bounds,
             selected_ids_at_start: context.selected_ids_at_start.clone(),
+            selected_ids_at_start_in_order: context.selected_ids_at_start_in_order.clone(),
             selection_version: context.selection_version,
             elements_version: context.elements_version,
         }
@@ -221,6 +225,7 @@ impl EditContextFingerprint {
         self.start_position == context.start_position
             && self.start_bounds == context.start_bounds
             && self.selected_ids_at_start == context.selected_ids_at_start
+            && self.selected_ids_at_start_in_order == context.selected_ids_at_start_in_order
             && self.selection_version == context.selection_version
             && self.elements_version == context.elements_version
     }
@@ -245,7 +250,7 @@ impl MoveEditOperationAdapter {
         *guard = session;
     }
 
-    fn resolve_context(&self, context: &EditContext) -> MoveEditContext {
+    fn require_context(&self, context: &EditContext, operation_name: &str) -> MoveEditContext {
         let guard = self
             .session
             .lock()
@@ -255,7 +260,17 @@ impl MoveEditOperationAdapter {
                 return cached_context.clone();
             }
         }
-        MoveEditContext::new(context.clone(), HashMap::new())
+
+        panic_any(EditContextTypeMismatchError::new(
+            std::any::type_name::<MoveEditContext>(),
+            std::any::type_name::<EditContext>(),
+            operation_name.to_owned(),
+            Some(format!(
+                "startPosition={}, selectedIds={}",
+                context.start_position,
+                context.selected_ids_at_start.len()
+            )),
+        ))
     }
 }
 
@@ -264,17 +279,66 @@ impl EditOperation for MoveEditOperationAdapter {
         EditOperationIds::MOVE
     }
 
+    fn create_history_metadata(
+        &self,
+        context: &EditContext,
+        transform: &EditTransform,
+    ) -> HistoryMetadata {
+        let typed_context = self.require_context(context, "MoveOperation.createHistoryMetadata");
+        let EditTransform::Move(typed_transform) = transform else {
+            panic_any(EditTransformTypeMismatchError::new(
+                std::any::type_name::<crate::draw::types::edit_transform::MoveTransform>(),
+                match transform {
+                    EditTransform::Move(_) => {
+                        std::any::type_name::<crate::draw::types::edit_transform::MoveTransform>()
+                    }
+                    EditTransform::Resize(_) => {
+                        std::any::type_name::<crate::draw::types::edit_transform::ResizeTransform>()
+                    }
+                    EditTransform::Rotate(_) => {
+                        std::any::type_name::<crate::draw::types::edit_transform::RotateTransform>()
+                    }
+                    EditTransform::ArrowPoint(_) => std::any::type_name::<
+                        crate::draw::types::edit_transform::ArrowPointTransform,
+                    >(),
+                },
+                "MoveOperation.createHistoryMetadata".to_owned(),
+                None,
+            ));
+        };
+
+        self.operation
+            .create_history_metadata(&typed_context, *typed_transform)
+    }
+
     fn create_context(
         &self,
         state: &DrawState,
         position: DrawPoint,
         params: &EditOperationParams,
     ) -> EditContext {
-        let typed_context = self.operation.create_context(
-            state,
-            position,
-            TypedMoveOperationParams::new(params.initial_selection_bounds()),
-        );
+        let typed_params = params.as_move().copied().unwrap_or_else(|| {
+            panic_any(EditParamsTypeMismatchError::new(
+                std::any::type_name::<TypedMoveOperationParams>(),
+                match params {
+                    EditOperationParams::Move(_) => {
+                        std::any::type_name::<TypedMoveOperationParams>()
+                    }
+                    EditOperationParams::Resize(_) => {
+                        std::any::type_name::<crate::draw::edit::core::edit_operation_params::ResizeOperationParams>()
+                    }
+                    EditOperationParams::Rotate(_) => {
+                        std::any::type_name::<crate::draw::edit::core::edit_operation_params::RotateOperationParams>()
+                    }
+                    EditOperationParams::ConnectorPoint(_) => {
+                        std::any::type_name::<crate::draw::edit::core::edit_operation_params::ConnectorPointOperationParams>()
+                    }
+                },
+                "MoveOperation.createContext".to_owned(),
+                None,
+            ))
+        });
+        let typed_context = self.operation.create_context(state, position, typed_params);
         let base = typed_context.base.clone();
         self.replace_session(Some((
             EditContextFingerprint::from_context(&base),
@@ -285,15 +349,11 @@ impl EditOperation for MoveEditOperationAdapter {
 
     fn initial_transform(
         &self,
-        state: &DrawState,
-        context: &EditContext,
-        start_position: DrawPoint,
+        _state: &DrawState,
+        _context: &EditContext,
+        _start_position: DrawPoint,
     ) -> EditTransform {
-        let typed_context = self.resolve_context(context);
-        EditTransform::Move(
-            self.operation
-                .initial_transform(state, &typed_context, start_position),
-        )
+        EditTransform::Move(crate::draw::types::edit_transform::MoveTransform::ZERO)
     }
 
     fn update(
@@ -305,11 +365,29 @@ impl EditOperation for MoveEditOperationAdapter {
         modifiers: EditModifiers,
         config: &DrawConfig,
     ) -> EditUpdateResult<EditTransform> {
+        let typed_context = self.require_context(context, "MoveOperation.update");
         let EditTransform::Move(typed_transform) = transform else {
-            return EditUpdateResult::new(transform.clone());
+            panic_any(EditTransformTypeMismatchError::new(
+                std::any::type_name::<crate::draw::types::edit_transform::MoveTransform>(),
+                match transform {
+                    EditTransform::Move(_) => {
+                        std::any::type_name::<crate::draw::types::edit_transform::MoveTransform>()
+                    }
+                    EditTransform::Resize(_) => {
+                        std::any::type_name::<crate::draw::types::edit_transform::ResizeTransform>()
+                    }
+                    EditTransform::Rotate(_) => {
+                        std::any::type_name::<crate::draw::types::edit_transform::RotateTransform>()
+                    }
+                    EditTransform::ArrowPoint(_) => std::any::type_name::<
+                        crate::draw::types::edit_transform::ArrowPointTransform,
+                    >(),
+                },
+                "MoveOperation.update".to_owned(),
+                None,
+            ));
         };
 
-        let typed_context = self.resolve_context(context);
         let updated = self.operation.update(
             state,
             &typed_context,
@@ -330,24 +408,9 @@ impl EditOperation for MoveEditOperationAdapter {
         context: &EditContext,
         transform: &EditTransform,
     ) -> DrawState {
-        let EditTransform::Move(typed_transform) = transform else {
-            self.replace_session(None);
-            return to_idle_state(state);
-        };
-
-        let typed_context = self.resolve_context(context);
-        let current_elements_by_id = state.domain.document.element_map();
-        if let Some(result) = self.operation.compute_result_with_element_map(
-            &typed_context,
-            *typed_transform,
-            &current_elements_by_id,
-        ) {
-            self.replace_session(None);
-            return to_idle_state(&apply_computed_result(state, &result));
-        }
-
+        let next_state = self.finish_standard(state, context, transform);
         self.replace_session(None);
-        to_idle_state(state)
+        next_state
     }
 
     fn build_preview(
@@ -356,27 +419,57 @@ impl EditOperation for MoveEditOperationAdapter {
         context: &EditContext,
         transform: &EditTransform,
     ) -> EditPreview {
+        self.build_preview_standard(state, context, transform)
+    }
+}
+
+impl StandardFinishMixin for MoveEditOperationAdapter {
+    fn compute_result(
+        &self,
+        state: &DrawState,
+        context: &EditContext,
+        transform: &EditTransform,
+    ) -> Option<EditComputedResult> {
+        let typed_context = self.require_context(context, "MoveOperation.computeResult");
         let EditTransform::Move(typed_transform) = transform else {
-            return EditPreview::none();
+            panic_any(EditTransformTypeMismatchError::new(
+                std::any::type_name::<crate::draw::types::edit_transform::MoveTransform>(),
+                match transform {
+                    EditTransform::Move(_) => {
+                        std::any::type_name::<crate::draw::types::edit_transform::MoveTransform>()
+                    }
+                    EditTransform::Resize(_) => {
+                        std::any::type_name::<crate::draw::types::edit_transform::ResizeTransform>()
+                    }
+                    EditTransform::Rotate(_) => {
+                        std::any::type_name::<crate::draw::types::edit_transform::RotateTransform>()
+                    }
+                    EditTransform::ArrowPoint(_) => std::any::type_name::<
+                        crate::draw::types::edit_transform::ArrowPointTransform,
+                    >(),
+                },
+                "MoveOperation.computeResult".to_owned(),
+                None,
+            ));
         };
 
-        let typed_context = self.resolve_context(context);
         let current_elements_by_id = state.domain.document.element_map();
-        let Some(result) = self.operation.compute_result_with_element_map(
+        self.operation.compute_result_with_element_map(
             &typed_context,
             *typed_transform,
             &current_elements_by_id,
-        ) else {
-            return EditPreview::none();
-        };
-
-        build_edit_preview(
-            state,
-            context,
-            &result.updated_elements,
-            result.multi_select_bounds,
-            result.multi_select_rotation,
         )
+    }
+
+    fn update_overlay(
+        &self,
+        current: crate::draw::models::selection_overlay_state::SelectionOverlayState,
+        result: &EditComputedResult,
+        context: &EditContext,
+    ) -> crate::draw::models::selection_overlay_state::SelectionOverlayState {
+        let typed_context = self.require_context(context, "MoveOperation.updateOverlay");
+        self.operation
+            .update_overlay(current, result, &typed_context)
     }
 }
 
@@ -492,24 +585,9 @@ impl EditOperation for RotateEditOperationAdapter {
         context: &EditContext,
         transform: &EditTransform,
     ) -> DrawState {
-        let EditTransform::Rotate(typed_transform) = transform else {
-            self.replace_session(None);
-            return to_idle_state(state);
-        };
-
-        let typed_context = self.resolve_context(context);
-        let current_elements_by_id = state.domain.document.element_map();
-        if let Some(result) = self.operation.compute_result_with_element_map(
-            &typed_context,
-            *typed_transform,
-            &current_elements_by_id,
-        ) {
-            self.replace_session(None);
-            return to_idle_state(&apply_computed_result(state, &result));
-        }
-
+        let next_state = self.finish_standard(state, context, transform);
         self.replace_session(None);
-        to_idle_state(state)
+        next_state
     }
 
     fn build_preview(
@@ -518,27 +596,39 @@ impl EditOperation for RotateEditOperationAdapter {
         context: &EditContext,
         transform: &EditTransform,
     ) -> EditPreview {
+        self.build_preview_standard(state, context, transform)
+    }
+}
+
+impl StandardFinishMixin for RotateEditOperationAdapter {
+    fn compute_result(
+        &self,
+        state: &DrawState,
+        context: &EditContext,
+        transform: &EditTransform,
+    ) -> Option<EditComputedResult> {
         let EditTransform::Rotate(typed_transform) = transform else {
-            return EditPreview::none();
+            return None;
         };
 
         let typed_context = self.resolve_context(context);
         let current_elements_by_id = state.domain.document.element_map();
-        let Some(result) = self.operation.compute_result_with_element_map(
+        self.operation.compute_result_with_element_map(
             &typed_context,
             *typed_transform,
             &current_elements_by_id,
-        ) else {
-            return EditPreview::none();
-        };
-
-        build_edit_preview(
-            state,
-            context,
-            &result.updated_elements,
-            result.multi_select_bounds,
-            result.multi_select_rotation,
         )
+    }
+
+    fn update_overlay(
+        &self,
+        current: crate::draw::models::selection_overlay_state::SelectionOverlayState,
+        result: &EditComputedResult,
+        context: &EditContext,
+    ) -> crate::draw::models::selection_overlay_state::SelectionOverlayState {
+        let typed_context = self.resolve_context(context);
+        self.operation
+            .update_overlay(current, result, &typed_context)
     }
 }
 
@@ -766,10 +856,13 @@ impl EditOperation for ArrowPointEditOperationAdapter {
             .initial_selection_bounds()
             .or_else(|| target.as_ref().map(|value| value.element.rect))
             .unwrap_or_else(|| DrawRect::from_point(position));
-        let base = EditContext::new(
+        let selected_ids_at_start_in_order =
+            state.domain.selection.selected_ids_in_order().to_vec();
+        let base = EditContext::new_with_order(
             position,
             start_bounds,
             selected_ids_at_start,
+            selected_ids_at_start_in_order,
             state.domain.selection.selection_version as i64,
             state.domain.document.elements_version,
         );
@@ -2433,6 +2526,22 @@ mod tests {
         DrawState::new(Some(domain), Some(ApplicationState::initial(None)))
     }
 
+    #[test]
+    fn custom_registry_preserves_first_insertion_order_for_duplicate_ids() {
+        let registry = DefaultEditOperationRegistry::custom(vec![
+            Arc::new(MoveEditOperationAdapter::new()) as SharedEditOperation,
+            Arc::new(RotateEditOperationAdapter::new()) as SharedEditOperation,
+            Arc::new(MoveEditOperationAdapter::new()) as SharedEditOperation,
+        ]);
+
+        let operation_ids = registry.all_operation_ids().collect::<Vec<_>>();
+
+        assert_eq!(
+            operation_ids,
+            vec![EditOperationIds::MOVE, EditOperationIds::ROTATE]
+        );
+    }
+
     fn draw_state_with_selection(
         elements: Vec<DomainElementState>,
         selected_ids: &[&str],
@@ -3401,6 +3510,121 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn move_initial_transform_returns_zero_without_cached_context() {
+        let operation = MoveEditOperationAdapter::new();
+        let state = draw_state(vec![]);
+        let context = EditContext::new(
+            DrawPoint::new(1.0, 2.0),
+            DrawRect::new(0.0, 0.0, 10.0, 10.0),
+            HashSet::new(),
+            0,
+            0,
+        );
+
+        let initial = operation.initial_transform(&state, &context, DrawPoint::new(5.0, 6.0));
+
+        assert_eq!(
+            initial,
+            EditTransform::Move(crate::draw::types::edit_transform::MoveTransform::ZERO)
+        );
+    }
+
+    #[test]
+    fn move_create_history_metadata_checks_context_before_transform() {
+        let operation = MoveEditOperationAdapter::new();
+        let context = EditContext::new(
+            DrawPoint::new(1.0, 2.0),
+            DrawRect::new(0.0, 0.0, 10.0, 10.0),
+            HashSet::new(),
+            0,
+            0,
+        );
+
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = operation.create_history_metadata(
+                &context,
+                &EditTransform::Resize(
+                    crate::draw::types::edit_transform::ResizeTransform::incomplete(
+                        DrawPoint::ZERO,
+                    ),
+                ),
+            );
+        }))
+        .expect_err("expected panic");
+
+        let error = panic
+            .downcast_ref::<EditContextTypeMismatchError>()
+            .expect("expected context mismatch panic");
+        assert_eq!(error.operation_name, "MoveOperation.createHistoryMetadata");
+    }
+
+    #[test]
+    fn move_update_checks_context_before_transform() {
+        let operation = MoveEditOperationAdapter::new();
+        let state = draw_state(vec![]);
+        let context = EditContext::new(
+            DrawPoint::new(1.0, 2.0),
+            DrawRect::new(0.0, 0.0, 10.0, 10.0),
+            HashSet::new(),
+            0,
+            0,
+        );
+
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = operation.update(
+                &state,
+                &context,
+                &EditTransform::Resize(
+                    crate::draw::types::edit_transform::ResizeTransform::incomplete(
+                        DrawPoint::ZERO,
+                    ),
+                ),
+                DrawPoint::new(4.0, 5.0),
+                EditModifiers::default(),
+                &DrawConfig::default(),
+            );
+        }))
+        .expect_err("expected panic");
+
+        let error = panic
+            .downcast_ref::<EditContextTypeMismatchError>()
+            .expect("expected context mismatch panic");
+        assert_eq!(error.operation_name, "MoveOperation.update");
+    }
+
+    #[test]
+    fn move_compute_result_checks_context_before_transform() {
+        let operation = MoveEditOperationAdapter::new();
+        let state = draw_state(vec![]);
+        let context = EditContext::new(
+            DrawPoint::new(1.0, 2.0),
+            DrawRect::new(0.0, 0.0, 10.0, 10.0),
+            HashSet::new(),
+            0,
+            0,
+        );
+
+        let panic = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let _ = StandardFinishMixin::compute_result(
+                &operation,
+                &state,
+                &context,
+                &EditTransform::Resize(
+                    crate::draw::types::edit_transform::ResizeTransform::incomplete(
+                        DrawPoint::ZERO,
+                    ),
+                ),
+            );
+        }))
+        .expect_err("expected panic");
+
+        let error = panic
+            .downcast_ref::<EditContextTypeMismatchError>()
+            .expect("expected context mismatch panic");
+        assert_eq!(error.operation_name, "MoveOperation.computeResult");
     }
 
     #[test]

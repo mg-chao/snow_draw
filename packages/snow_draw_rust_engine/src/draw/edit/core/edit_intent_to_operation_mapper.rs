@@ -2,184 +2,18 @@
 
 use std::sync::Arc;
 
-use crate::draw::config::draw_config::{ConfigDefaults, DrawConfig};
+pub use crate::draw::actions::draw_actions::StartEdit;
+use crate::draw::config::draw_config::DrawConfig;
+pub use crate::draw::edit::core::edit_operation_params::{
+    ConnectorPointOperationParams, EditOperationParams, MoveOperationParams, ResizeOperationParams,
+    RotateOperationParams,
+};
+use crate::draw::elements::types::connector::connector_points::ConnectorPointKind;
 use crate::draw::types::draw_point::DrawPoint;
-use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::edit_operation_id::{EditOperationId, EditOperationIds};
-use crate::draw::types::resize_mode::ResizeMode;
-use crate::draw::utils::edit_intent_detector::{ConnectorPointKind, EditIntent};
-
-/// Parameters carried by a start-edit action.
-///
-/// This mirrors the Dart `EditOperationParams` hierarchy and keeps this module
-/// compile-friendly while `draw_actions` and `edit_operation_params` modules
-/// are still being translated.
-#[derive(Clone, Debug, PartialEq)]
-pub enum EditOperationParams {
-    Move(MoveOperationParams),
-    Resize(ResizeOperationParams),
-    Rotate(RotateOperationParams),
-    ConnectorPoint(ConnectorPointOperationParams),
-}
-
-impl From<MoveOperationParams> for EditOperationParams {
-    fn from(value: MoveOperationParams) -> Self {
-        Self::Move(value)
-    }
-}
-
-impl From<ResizeOperationParams> for EditOperationParams {
-    fn from(value: ResizeOperationParams) -> Self {
-        Self::Resize(value)
-    }
-}
-
-impl From<RotateOperationParams> for EditOperationParams {
-    fn from(value: RotateOperationParams) -> Self {
-        Self::Rotate(value)
-    }
-}
-
-impl From<ConnectorPointOperationParams> for EditOperationParams {
-    fn from(value: ConnectorPointOperationParams) -> Self {
-        Self::ConnectorPoint(value)
-    }
-}
-
-/// Parameters for the move edit operation.
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct MoveOperationParams {
-    pub initial_selection_bounds: Option<DrawRect>,
-}
-
-impl MoveOperationParams {
-    pub const fn new(initial_selection_bounds: Option<DrawRect>) -> Self {
-        Self {
-            initial_selection_bounds,
-        }
-    }
-}
-
-/// Parameters for the resize edit operation.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct ResizeOperationParams {
-    pub resize_mode: ResizeMode,
-    pub handle_offset: Option<DrawPoint>,
-    pub selection_padding: f64,
-    pub initial_selection_bounds: Option<DrawRect>,
-}
-
-impl ResizeOperationParams {
-    pub fn new(
-        resize_mode: ResizeMode,
-        handle_offset: Option<DrawPoint>,
-        selection_padding: f64,
-        initial_selection_bounds: Option<DrawRect>,
-    ) -> Self {
-        assert!(
-            selection_padding >= 0.0,
-            "selection_padding must be non-negative"
-        );
-        Self {
-            resize_mode,
-            handle_offset,
-            selection_padding,
-            initial_selection_bounds,
-        }
-    }
-}
-
-/// Parameters for the rotate edit operation.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct RotateOperationParams {
-    pub start_rotation_angle: Option<f64>,
-    pub rotation_snap_angle: f64,
-    pub initial_selection_bounds: Option<DrawRect>,
-}
-
-impl Default for RotateOperationParams {
-    fn default() -> Self {
-        Self {
-            start_rotation_angle: None,
-            rotation_snap_angle: ConfigDefaults::ROTATION_SNAP_ANGLE,
-            initial_selection_bounds: None,
-        }
-    }
-}
-
-impl RotateOperationParams {
-    pub fn new(
-        start_rotation_angle: Option<f64>,
-        rotation_snap_angle: f64,
-        initial_selection_bounds: Option<DrawRect>,
-    ) -> Self {
-        assert!(
-            rotation_snap_angle >= 0.0,
-            "rotation_snap_angle must be non-negative"
-        );
-        Self {
-            start_rotation_angle,
-            rotation_snap_angle,
-            initial_selection_bounds,
-        }
-    }
-}
-
-/// Parameters for connector-point editing.
-#[derive(Clone, Debug, PartialEq)]
-pub struct ConnectorPointOperationParams {
-    pub element_id: String,
-    pub point_kind: ConnectorPointKind,
-    pub point_index: usize,
-    pub is_double_click: bool,
-    pub initial_selection_bounds: Option<DrawRect>,
-}
-
-pub type ArrowPointOperationParams = ConnectorPointOperationParams;
-
-impl ConnectorPointOperationParams {
-    pub fn new(
-        element_id: impl Into<String>,
-        point_kind: ConnectorPointKind,
-        point_index: usize,
-        is_double_click: bool,
-        initial_selection_bounds: Option<DrawRect>,
-    ) -> Self {
-        let element_id = element_id.into();
-        assert!(!element_id.is_empty(), "element_id must not be empty");
-        Self {
-            element_id,
-            point_kind,
-            point_index,
-            is_double_click,
-            initial_selection_bounds,
-        }
-    }
-}
-
-/// Minimal StartEdit action shape generated by this mapper.
-///
-/// This mirrors Dart `StartEdit` while the full actions module is translated.
-#[derive(Clone, Debug, PartialEq)]
-pub struct StartEdit {
-    pub operation_id: EditOperationId,
-    pub position: DrawPoint,
-    pub params: EditOperationParams,
-}
-
-impl StartEdit {
-    pub fn new(
-        operation_id: EditOperationId,
-        position: DrawPoint,
-        params: EditOperationParams,
-    ) -> Self {
-        Self {
-            operation_id,
-            position,
-            params,
-        }
-    }
-}
+use crate::draw::utils::edit_intent_detector::{
+    ConnectorPointKind as IntentConnectorPointKind, EditIntent,
+};
 
 /// Resolved operation mapping for an [`EditIntent`].
 #[derive(Clone, Debug, PartialEq)]
@@ -253,9 +87,9 @@ pub fn resolve_default_intent(
     match intent {
         EditIntent::StartConnectorPoint(start) => Some(EditIntentResolution {
             operation_id: EditOperationIds::CONNECTOR_POINT,
-            params: ConnectorPointOperationParams::new(
+            params: ConnectorPointOperationParams::with_options(
                 start.element_id.clone(),
-                start.point_kind,
+                connector_point_kind_from_intent(start.point_kind),
                 start.point_index,
                 start.is_double_click,
                 None,
@@ -264,13 +98,22 @@ pub fn resolve_default_intent(
         }),
         EditIntent::StartRotate(_) => Some(EditIntentResolution {
             operation_id: EditOperationIds::ROTATE,
-            params: RotateOperationParams::new(None, config.element.rotation_snap_angle, None)
-                .into(),
+            params: RotateOperationParams::with_options(
+                None,
+                config.element.rotation_snap_angle,
+                None,
+            )
+            .into(),
         }),
         EditIntent::StartResize(start) => Some(EditIntentResolution {
             operation_id: EditOperationIds::RESIZE,
-            params: ResizeOperationParams::new(start.mode, None, start.selection_padding, None)
-                .into(),
+            params: ResizeOperationParams::with_options(
+                start.mode,
+                None,
+                start.selection_padding,
+                None,
+            )
+            .into(),
         }),
         EditIntent::StartMove(_) => Some(EditIntentResolution {
             operation_id: EditOperationIds::MOVE,
@@ -280,11 +123,24 @@ pub fn resolve_default_intent(
     }
 }
 
+fn connector_point_kind_from_intent(kind: IntentConnectorPointKind) -> ConnectorPointKind {
+    match kind {
+        IntentConnectorPointKind::Turning => ConnectorPointKind::Turning,
+        IntentConnectorPointKind::Addable => ConnectorPointKind::Addable,
+        IntentConnectorPointKind::LoopStart => ConnectorPointKind::LoopStart,
+        IntentConnectorPointKind::LoopEnd => ConnectorPointKind::LoopEnd,
+        IntentConnectorPointKind::FocusStart => ConnectorPointKind::FocusStart,
+        IntentConnectorPointKind::FocusEnd => ConnectorPointKind::FocusEnd,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::draw::types::resize_mode::ResizeMode;
     use crate::draw::utils::edit_intent_detector::{
-        StartConnectorPointIntent, StartMoveIntent, StartResizeIntent, StartRotateIntent,
+        ConnectorPointKind as IntentConnectorPointKind, StartConnectorPointIntent, StartMoveIntent,
+        StartResizeIntent, StartRotateIntent,
     };
 
     #[test]
@@ -318,7 +174,7 @@ mod tests {
         assert_eq!(start.operation_id, EditOperationIds::RESIZE);
         assert_eq!(
             start.params,
-            EditOperationParams::Resize(ResizeOperationParams::new(
+            EditOperationParams::Resize(ResizeOperationParams::with_options(
                 ResizeMode::BottomRight,
                 None,
                 12.0,
@@ -341,7 +197,7 @@ mod tests {
         assert_eq!(start.operation_id, EditOperationIds::ROTATE);
         assert_eq!(
             start.params,
-            EditOperationParams::Rotate(RotateOperationParams::new(None, 0.25, None))
+            EditOperationParams::Rotate(RotateOperationParams::with_options(None, 0.25, None))
         );
     }
 
@@ -350,7 +206,7 @@ mod tests {
         let mapper = EditIntentToOperationMapper::with_defaults();
         let intent = EditIntent::StartConnectorPoint(StartConnectorPointIntent {
             element_id: "arrow-1".to_owned(),
-            point_kind: ConnectorPointKind::Turning,
+            point_kind: IntentConnectorPointKind::Turning,
             point_index: 2,
             is_double_click: true,
         });
@@ -362,7 +218,7 @@ mod tests {
         assert_eq!(start.operation_id, EditOperationIds::CONNECTOR_POINT);
         assert_eq!(
             start.params,
-            EditOperationParams::ConnectorPoint(ConnectorPointOperationParams::new(
+            EditOperationParams::ConnectorPoint(ConnectorPointOperationParams::with_options(
                 "arrow-1",
                 ConnectorPointKind::Turning,
                 2,
