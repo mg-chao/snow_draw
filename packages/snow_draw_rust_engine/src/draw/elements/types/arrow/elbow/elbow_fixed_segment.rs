@@ -66,7 +66,7 @@ impl ElbowFixedSegment {
 
     /// The [`ElbowAxis`] of this segment.
     pub fn axis(self) -> ElbowAxis {
-        axis_for_segment(self.start, self.end, ElbowConstants::DEDUP_THRESHOLD)
+        axis_for_segment(self.start, self.end, ElbowConstants::INTERSECTION_EPSILON)
     }
 
     /// Whether this segment runs horizontally.
@@ -201,5 +201,17 @@ fn axis_value(start: DrawPoint, end: DrawPoint, axis: ElbowAxis) -> f64 {
         (start.y + end.y) / 2.0
     } else {
         (start.x + end.x) / 2.0
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn axis_falls_back_to_dominant_direction_for_non_axis_aligned_short_segments() {
+        let segment = ElbowFixedSegment::new(1, DrawPoint::new(0.0, 0.0), DrawPoint::new(0.5, 0.8));
+
+        assert_eq!(segment.axis(), ElbowAxis::Vertical);
     }
 }

@@ -8,6 +8,7 @@ use crate::draw::elements::types::arrow::arrow_binding::{
 use crate::draw::elements::types::arrow::elbow::elbow_constants::ElbowConstants;
 use crate::draw::elements::types::arrow::elbow::elbow_heading::ElbowHeading;
 use crate::draw::elements::types::arrow::elbow::elbow_router::ElbowRouteResult;
+use crate::draw::elements::types::arrow::elbow::elbow_spacing::ElbowSpacing;
 use crate::draw::types::draw_point::DrawPoint;
 use crate::draw::types::draw_rect::DrawRect;
 use crate::draw::types::element_style::ArrowheadStyle;
@@ -575,9 +576,198 @@ fn harmonize_bound_spacing(
         return points;
     }
 
-    // Full spacing harmonization depends on elbow_spacing and obstacle-path
-    // modules that are still being translated. Keep routed points stable here.
-    points
+    let Some(start_bounds) = start.element_bounds else {
+        return points;
+    };
+    let Some(end_bounds) = end.element_bounds else {
+        return points;
+    };
+
+    let mut segments = Vec::new();
+    for index in 0..points.len().saturating_sub(1) {
+        if manhattan_distance(points[index], points[index + 1]) <= ElbowConstants::DEDUP_THRESHOLD {
+            continue;
+        }
+        segments.push(RouteSegment {
+            index,
+            start: points[index],
+            end: points[index + 1],
+            heading: heading_for_segment(points[index], points[index + 1]),
+        });
+    }
+
+    if segments.len() == 3 {
+        return balance_three_segment_path(
+            &points,
+            &segments,
+            start,
+            end,
+            start_bounds,
+            end_bounds,
+        );
+    }
+
+    if segments.len() < 4 {
+        return points;
+    }
+
+    let start_segment = segments[1];
+    let end_segment = segments[segments.len() - 2];
+    if start_segment.heading.is_horizontal() == start.heading.is_horizontal()
+        || end_segment.heading.is_horizontal() == end.heading.is_horizontal()
+    {
+        return points;
+    }
+
+    let start_spacing = segment_spacing(start_segment, start_bounds, start.heading);
+    let end_spacing = segment_spacing(end_segment, end_bounds, end.heading);
+    let Some(resolved_spacing) = ElbowSpacing::resolve_shared_spacing(
+        start_spacing,
+        end_spacing,
+        start.has_arrowhead,
+        end.has_arrowhead,
+    ) else {
+        return points;
+    };
+
+    let mut updated = points;
+    apply_segment_spacing(
+        &mut updated,
+        start_segment,
+        start_bounds,
+        start.heading,
+        resolved_spacing,
+    );
+    apply_segment_spacing(
+        &mut updated,
+        end_segment,
+        end_bounds,
+        end.heading,
+        resolved_spacing,
+    );
+
+    updated
+}
+
+#[derive(Clone, Copy, Debug)]
+struct RouteSegment {
+    index: usize,
+    start: DrawPoint,
+    end: DrawPoint,
+    heading: ElbowHeading,
+}
+
+impl RouteSegment {
+    fn mid_x(self) -> f64 {
+        (self.start.x + self.end.x) / 2.0
+    }
+
+    fn mid_y(self) -> f64 {
+        (self.start.y + self.end.y) / 2.0
+    }
+}
+
+fn balance_three_segment_path(
+    points: &[DrawPoint],
+    segments: &[RouteSegment],
+    start: ResolvedEndpoint,
+    end: ResolvedEndpoint,
+    start_bounds: DrawRect,
+    end_bounds: DrawRect,
+) -> Vec<DrawPoint> {
+    let first = segments[0];
+    let last = segments[segments.len() - 1];
+    if first.heading.is_horizontal() != last.heading.is_horizontal() {
+        return points.to_vec();
+    }
+
+    let horizontal = first.heading.is_horizontal();
+    let min_spacing = ElbowSpacing::min_binding_spacing(start.has_arrowhead)
+        .max(ElbowSpacing::min_binding_spacing(end.has_arrowhead));
+    let forward = if horizontal {
+        first.heading != ElbowHeading::Left
+    } else {
+        first.heading != ElbowHeading::Up
+    };
+
+    let bounds_limit = |bounds: DrawRect, for_start: bool| -> f64 {
+        if horizontal {
+            if forward == for_start {
+                bounds.max_x + min_spacing
+            } else {
+                bounds.min_x - min_spacing
+            }
+        } else if forward == for_start {
+            bounds.max_y + min_spacing
+        } else {
+            bounds.min_y - min_spacing
+        }
+    };
+
+    let start_limit = bounds_limit(start_bounds, true);
+    let end_limit = bounds_limit(end_bounds, false);
+    let start_value = if horizontal { points[0].x } else { points[0].y };
+    let end_value = if horizontal {
+        points[points.len() - 1].x
+    } else {
+        points[points.len() - 1].y
+    };
+    let lo = start_limit.min(end_limit);
+    let hi = start_limit.max(end_limit);
+    let balanced = clamp((start_value + end_value) / 2.0, lo, hi);
+
+    let mid = segments[1];
+    let mut updated = points.to_vec();
+    if horizontal {
+        updated[mid.index] = point_with_x(updated[mid.index], balanced);
+        updated[mid.index + 1] = point_with_x(updated[mid.index + 1], balanced);
+    } else {
+        updated[mid.index] = point_with_y(updated[mid.index], balanced);
+        updated[mid.index + 1] = point_with_y(updated[mid.index + 1], balanced);
+    }
+
+    updated
+}
+
+fn segment_spacing(segment: RouteSegment, bounds: DrawRect, heading: ElbowHeading) -> Option<f64> {
+    let spacing = match heading {
+        ElbowHeading::Up => bounds.min_y - segment.mid_y(),
+        ElbowHeading::Right => segment.mid_x() - bounds.max_x,
+        ElbowHeading::Down => segment.mid_y() - bounds.max_y,
+        ElbowHeading::Left => bounds.min_x - segment.mid_x(),
+    };
+    if !spacing.is_finite() || spacing <= ElbowConstants::INTERSECTION_EPSILON {
+        return None;
+    }
+    Some(spacing)
+}
+
+fn apply_segment_spacing(
+    points: &mut [DrawPoint],
+    segment: RouteSegment,
+    bounds: DrawRect,
+    heading: ElbowHeading,
+    spacing: f64,
+) {
+    let index = segment.index;
+    if index + 1 >= points.len() {
+        return;
+    }
+
+    let is_vertical_segment = matches!(heading, ElbowHeading::Up | ElbowHeading::Down);
+    let value = match heading {
+        ElbowHeading::Up => bounds.min_y - spacing,
+        ElbowHeading::Right => bounds.max_x + spacing,
+        ElbowHeading::Down => bounds.max_y + spacing,
+        ElbowHeading::Left => bounds.min_x - spacing,
+    };
+    if is_vertical_segment {
+        points[index] = point_with_y(points[index], value);
+        points[index + 1] = point_with_y(points[index + 1], value);
+    } else {
+        points[index] = point_with_x(points[index], value);
+        points[index + 1] = point_with_x(points[index + 1], value);
+    }
 }
 
 fn ensure_orthogonal_path(points: &[DrawPoint], start_heading: ElbowHeading) -> Vec<DrawPoint> {
@@ -806,6 +996,10 @@ fn heading_for_vector(dx: f64, dy: f64) -> ElbowHeading {
     }
 }
 
+fn heading_for_segment(from: DrawPoint, to: DrawPoint) -> ElbowHeading {
+    heading_for_vector(to.x - from.x, to.y - from.y)
+}
+
 fn heading_for_point_on_bounds(bounds: DrawRect, point: DrawPoint) -> ElbowHeading {
     let left = (point.x - bounds.min_x).abs();
     let right = (bounds.max_x - point.x).abs();
@@ -841,6 +1035,14 @@ fn approx_eq(a: f64, b: f64) -> bool {
     (a - b).abs() <= ElbowConstants::INTERSECTION_EPSILON
 }
 
+fn point_with_x(point: DrawPoint, x: f64) -> DrawPoint {
+    DrawPoint::new(x, point.y)
+}
+
+fn point_with_y(point: DrawPoint, y: f64) -> DrawPoint {
+    DrawPoint::new(point.x, y)
+}
+
 fn clamp(value: f64, min: f64, max: f64) -> f64 {
     value.max(min).min(max)
 }
@@ -864,4 +1066,38 @@ fn compute_element_world_aabb(rect: DrawRect, rotation: f64) -> DrawRect {
         center.x + x_extent,
         center.y + y_extent,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn harmonize_bound_spacing_balances_three_segment_routes() {
+        let points = vec![
+            DrawPoint::new(20.0, 20.0),
+            DrawPoint::new(80.0, 20.0),
+            DrawPoint::new(80.0, 120.0),
+            DrawPoint::new(180.0, 120.0),
+        ];
+        let start = ResolvedEndpoint {
+            point: points[0],
+            heading: ElbowHeading::Right,
+            has_arrowhead: false,
+            element_bounds: Some(DrawRect::new(0.0, 0.0, 40.0, 40.0)),
+            anchor: None,
+        };
+        let end = ResolvedEndpoint {
+            point: points[3],
+            heading: ElbowHeading::Left,
+            has_arrowhead: false,
+            element_bounds: Some(DrawRect::new(160.0, 100.0, 200.0, 140.0)),
+            anchor: None,
+        };
+
+        let harmonized = harmonize_bound_spacing(points, start, end);
+
+        assert_eq!(harmonized[1], DrawPoint::new(100.0, 20.0));
+        assert_eq!(harmonized[2], DrawPoint::new(100.0, 120.0));
+    }
 }
