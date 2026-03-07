@@ -14,6 +14,10 @@ pub fn should_preview_arrow_binding(snap_config: &SnapConfig, snap_override_acti
 pub trait ArrowBindingPreviewElement {
     fn opacity(&self) -> f64;
     fn is_bindable_target(&self) -> bool;
+
+    fn is_bindable_background_opaque(&self) -> bool {
+        true
+    }
 }
 
 /// Minimal state/document capabilities required by arrow-binding preview.
@@ -45,7 +49,7 @@ where
         }
 
         targets.push(element.clone());
-        false
+        !element.is_bindable_background_opaque()
     });
     targets
 }
@@ -75,7 +79,19 @@ impl ArrowBindingPreviewElement for ElementState {
     fn is_bindable_target(&self) -> bool {
         matches!(
             &self.data,
-            ElementData::Rectangle | ElementData::Text | ElementData::SerialNumber(_)
+            ElementData::Rectangle
+                | ElementData::Text
+                | ElementData::SerialNumber(_)
+                | ElementData::Highlight(_)
+        )
+    }
+
+    fn is_bindable_background_opaque(&self) -> bool {
+        matches!(
+            &self.data,
+            ElementData::Rectangle
+                | ElementData::SerialNumber(_)
+                | ElementData::Highlight(_)
         )
     }
 }
@@ -133,7 +149,7 @@ mod tests {
     }
 
     #[test]
-    fn resolves_first_visible_bindable_target_in_top_down_order() {
+    fn resolves_bindable_targets_using_current_dart_top_down_rules() {
         let state = DocumentState::new(
             vec![
                 element("rect", 1, 1.0, ElementData::Rectangle),
@@ -156,7 +172,47 @@ mod tests {
             .map(|element| element.id)
             .collect::<Vec<_>>();
 
-        assert_eq!(target_ids, vec!["serial".to_owned()]);
+        assert_eq!(target_ids, vec!["highlight".to_owned()]);
+    }
+
+    #[test]
+    fn generic_resolution_keeps_transparent_bindables_before_opaque_target() {
+        let state = DocumentState::new(
+            vec![
+                element("rect", 1, 1.0, ElementData::Rectangle),
+                element("text", 2, 1.0, ElementData::Text),
+            ],
+            0,
+            Default::default(),
+        );
+
+        let targets = resolve_arrow_binding_targets(&state, DrawPoint::new(5.0, 5.0), 8.0);
+        let target_ids = targets
+            .into_iter()
+            .map(|element| element.id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(target_ids, vec!["text".to_owned(), "rect".to_owned()]);
+    }
+
+    #[test]
+    fn generic_resolution_treats_highlights_as_bindable_targets() {
+        let state = DocumentState::new(
+            vec![
+                element("rect", 1, 1.0, ElementData::Rectangle),
+                element("highlight", 2, 1.0, ElementData::Highlight(HighlightData)),
+            ],
+            0,
+            Default::default(),
+        );
+
+        let targets = resolve_arrow_binding_targets(&state, DrawPoint::new(5.0, 5.0), 8.0);
+        let target_ids = targets
+            .into_iter()
+            .map(|element| element.id)
+            .collect::<Vec<_>>();
+
+        assert_eq!(target_ids, vec!["highlight".to_owned()]);
     }
 
     #[test]
