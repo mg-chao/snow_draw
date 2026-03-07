@@ -206,12 +206,20 @@ fn compute_elbow_patch(input: &ArrowPatch, updates: Option<&Map<String, Value>>)
         .and_then(|options| options.get("isDragging"))
         .and_then(Value::as_bool)
         .unwrap_or(false);
+    let validate_invariants = input
+        .get("options")
+        .and_then(Value::as_object)
+        .and_then(|options| options.get("validateInvariants"))
+        .and_then(Value::as_bool)
+        .unwrap_or(false);
 
     let update_points = match updates.and_then(|value| value.get("points")) {
         Some(value) => Some(apply_point_update(&arrow.points, read_points(value))),
         None => None,
     };
-    validate_point_update(&arrow.points, update_points.as_deref());
+    if validate_invariants {
+        validate_point_update(&arrow.points, update_points.as_deref());
+    }
 
     let fixed_segments_update = updates
         .and_then(|value| value.get("fixedSegments"))
@@ -689,6 +697,7 @@ fn fixed_segment_to_value(segment: &FixedSegment) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::draw::elements::types::arrow::core::adapters::apply_arrow_patch;
     use serde_json::json;
 
     fn read_patch_points(patch: &ArrowPatch) -> Vec<DrawPoint> {
@@ -823,5 +832,137 @@ mod tests {
             &read_patch_points(&patch),
             DEDUP_THRESHOLD
         ));
+    }
+
+    #[test]
+    fn update_elbow_arrow_points_allows_endpoint_drag_point_growth_by_default() {
+        let input = json!({
+            "arrow": {
+                "id": "arrow-3",
+                "x": 0.0,
+                "y": 0.0,
+                "width": 80.0,
+                "height": 60.0,
+                "points": [
+                    [0.0, 0.0],
+                    [20.0, 0.0],
+                    [20.0, 20.0],
+                    [40.0, 20.0],
+                    [40.0, 40.0],
+                    [60.0, 40.0],
+                    [60.0, 60.0],
+                    [80.0, 60.0]
+                ],
+                "fixedSegments": [
+                    {"index": 2, "start": [20.0, 0.0], "end": [20.0, 20.0]},
+                    {"index": 4, "start": [40.0, 20.0], "end": [40.0, 40.0]}
+                ],
+                "elbowed": true,
+                "startArrowhead": "none",
+                "endArrowhead": "standard"
+            },
+            "updates": {
+                "points": [
+                    [0.0, 10.0],
+                    [20.0, 0.0],
+                    [20.0, 20.0],
+                    [40.0, 20.0],
+                    [40.0, 40.0],
+                    [60.0, 40.0],
+                    [60.0, 60.0],
+                    [80.0, 60.0],
+                    [80.0, 90.0]
+                ]
+            },
+            "options": {
+                "isDragging": true
+            },
+            "context": {
+                "zoom": 1.0,
+                "maxCoordinate": 1000000.0
+            }
+        });
+
+        let patch = update_elbow_arrow_points(
+            input
+                .as_object()
+                .cloned()
+                .expect("input object for elbow growth update"),
+        );
+        let patched = apply_arrow_patch(
+            &read_arrow_state(&input["arrow"]).expect("arrow state"),
+            &patch,
+        );
+        let global_start = [
+            patched.x + patched.points[0].x,
+            patched.y + patched.points[0].y,
+        ];
+        let global_end = [
+            patched.x + patched.points.last().expect("end point").x,
+            patched.y + patched.points.last().expect("end point").y,
+        ];
+
+        assert_eq!(patched.points.len(), 9);
+        assert!(validate_elbow_invariant(&patched).is_empty());
+        assert!((global_start[0] - 0.0).abs() < 1e-9);
+        assert!((global_start[1] - 10.0).abs() < 1e-9);
+        assert!((global_end[0] - 80.0).abs() < 1e-9);
+        assert!((global_end[1] - 90.0).abs() < 1e-9);
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "Updated point array length must match the arrow point length or contain exactly the new start and end points"
+    )]
+    fn update_elbow_arrow_points_rejects_point_growth_when_validation_is_enabled() {
+        let input = json!({
+            "arrow": {
+                "id": "arrow-4",
+                "x": 0.0,
+                "y": 0.0,
+                "width": 80.0,
+                "height": 60.0,
+                "points": [
+                    [0.0, 0.0],
+                    [20.0, 0.0],
+                    [20.0, 20.0],
+                    [40.0, 20.0],
+                    [40.0, 40.0],
+                    [60.0, 40.0],
+                    [60.0, 60.0],
+                    [80.0, 60.0]
+                ],
+                "elbowed": true,
+                "startArrowhead": "none",
+                "endArrowhead": "standard"
+            },
+            "updates": {
+                "points": [
+                    [0.0, 10.0],
+                    [20.0, 0.0],
+                    [20.0, 20.0],
+                    [40.0, 20.0],
+                    [40.0, 40.0],
+                    [60.0, 40.0],
+                    [60.0, 60.0],
+                    [80.0, 60.0],
+                    [80.0, 90.0]
+                ]
+            },
+            "options": {
+                "validateInvariants": true
+            },
+            "context": {
+                "zoom": 1.0,
+                "maxCoordinate": 1000000.0
+            }
+        });
+
+        let _ = update_elbow_arrow_points(
+            input
+                .as_object()
+                .cloned()
+                .expect("input object for validated elbow growth update"),
+        );
     }
 }
