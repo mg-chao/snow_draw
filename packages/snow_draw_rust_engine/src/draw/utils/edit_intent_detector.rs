@@ -512,6 +512,7 @@ impl EditIntentDetector {
         is_shift_pressed: bool,
         config: &SelectionConfig,
         registry: &DefaultElementRegistry,
+        is_binding_enabled: bool,
         filter_type_id: Option<&CoreElementTypeId<DynElementData>>,
         hit_tester: &dyn HitTestService,
     ) -> Option<EditIntent> {
@@ -521,6 +522,7 @@ impl EditIntentDetector {
             is_shift_pressed,
             config,
             registry,
+            is_binding_enabled,
             filter_type_id,
             hit_tester,
         )
@@ -534,10 +536,13 @@ impl EditIntentDetector {
         is_shift_pressed: bool,
         config: &SelectionConfig,
         registry: &DefaultElementRegistry,
+        is_binding_enabled: bool,
         filter_type_id: Option<&CoreElementTypeId<DynElementData>>,
         hit_tester: &dyn HitTestService,
     ) -> Option<EditIntent> {
-        if let Some(intent) = self.detect_connector_point_intent(state_view, position, config) {
+        if let Some(intent) =
+            self.detect_connector_point_intent(state_view, position, config, is_binding_enabled)
+        {
             return Some(intent);
         }
 
@@ -666,6 +671,7 @@ impl EditIntentDetector {
         state_view: &DrawStateView,
         position: DrawPoint,
         config: &SelectionConfig,
+        is_binding_enabled: bool,
     ) -> Option<EditIntent> {
         let selected_ids = &state_view.state.domain.selection.selected_ids;
         if selected_ids.len() != 1 {
@@ -687,9 +693,14 @@ impl EditIntentDetector {
         let handle_size = resolve_connector_point_handle_size(config.render.control_point_size);
         let loop_threshold = resolve_connector_point_loop_threshold(hit_radius);
         let effective_element = state_view.effective_element(element);
+        let hit_test_element = if is_binding_enabled {
+            effective_element
+        } else {
+            strip_connector_focus_handles(&effective_element)
+        };
 
         let handle = ArrowPointUtils::hit_test(
-            &effective_element,
+            &hit_test_element,
             position,
             hit_radius,
             loop_threshold,
@@ -702,6 +713,19 @@ impl EditIntentDetector {
             point_index: handle.index,
             is_double_click: false,
         }))
+    }
+}
+
+fn strip_connector_focus_handles(element: &ElementState) -> ElementState {
+    match &element.data {
+        ElementData::ArrowLike(data) if !data.focus_points.is_empty() => ElementState {
+            id: element.id.clone(),
+            data: ElementData::ArrowLike(ArrowLikeData {
+                points: data.points.clone(),
+                focus_points: Vec::new(),
+            }),
+        },
+        _ => element.clone(),
     }
 }
 
@@ -755,6 +779,7 @@ mod tests {
             false,
             &SelectionConfig::default(),
             &registry,
+            true,
             None,
             &hit_tester,
         );
@@ -788,6 +813,7 @@ mod tests {
             false,
             &SelectionConfig::default(),
             &registry,
+            true,
             None,
             &hit_tester,
         );
@@ -821,6 +847,7 @@ mod tests {
             false,
             &SelectionConfig::default(),
             &registry,
+            true,
             None,
             &hit_tester,
         );
@@ -856,6 +883,7 @@ mod tests {
             false,
             &SelectionConfig::default(),
             &registry,
+            true,
             None,
             &hit_tester,
         );
@@ -898,6 +926,7 @@ mod tests {
             false,
             &SelectionConfig::default(),
             &registry,
+            true,
             None,
             &hit_tester,
         );
@@ -909,6 +938,46 @@ mod tests {
                 point_kind: ConnectorPointKind::FocusStart,
                 point_index: 0,
                 is_double_click: false,
+            }))
+        );
+    }
+
+    #[test]
+    fn binding_disabled_skips_focus_handle_intent() {
+        let detector = EditIntentDetector::new();
+        let arrow = ElementState::new(
+            "arrow-1",
+            ElementData::ArrowLike(ArrowLikeData {
+                points: vec![DrawPoint::new(0.0, 0.0), DrawPoint::new(10.0, 0.0)],
+                focus_points: vec![ConnectorPointHandle {
+                    element_id: "arrow-1".to_string(),
+                    kind: ConnectorPointKind::FocusStart,
+                    index: 0,
+                    position: DrawPoint::new(20.0, 20.0),
+                }],
+            }),
+        );
+        let state_view = test_state(vec![arrow], &["arrow-1"]);
+        let registry = DefaultElementRegistry::default();
+        let hit_tester = StaticHitTestService {
+            result: HitTestResult::none(),
+        };
+
+        let intent = detector.detect_intent_with_hit_test(
+            &state_view,
+            DrawPoint::new(20.0, 20.0),
+            false,
+            &SelectionConfig::default(),
+            &registry,
+            false,
+            None,
+            &hit_tester,
+        );
+
+        assert_eq!(
+            intent,
+            Some(EditIntent::BoxSelect(BoxSelectIntent {
+                start_position: DrawPoint::new(20.0, 20.0),
             }))
         );
     }

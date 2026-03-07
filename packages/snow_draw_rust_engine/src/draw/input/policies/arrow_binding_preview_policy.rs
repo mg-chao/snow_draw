@@ -45,7 +45,7 @@ where
         }
 
         targets.push(element.clone());
-        true
+        false
     });
     targets
 }
@@ -133,7 +133,7 @@ mod tests {
     }
 
     #[test]
-    fn resolves_only_visible_bindable_targets_in_top_down_order() {
+    fn resolves_first_visible_bindable_target_in_top_down_order() {
         let state = DocumentState::new(
             vec![
                 element("rect", 1, 1.0, ElementData::Rectangle),
@@ -156,7 +156,7 @@ mod tests {
             .map(|element| element.id)
             .collect::<Vec<_>>();
 
-        assert_eq!(target_ids, vec!["serial".to_owned(), "rect".to_owned()]);
+        assert_eq!(target_ids, vec!["serial".to_owned()]);
     }
 
     #[test]

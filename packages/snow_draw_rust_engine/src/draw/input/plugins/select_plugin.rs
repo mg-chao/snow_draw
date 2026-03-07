@@ -346,6 +346,7 @@ impl SelectPlugin {
                     modifiers.shift,
                     &snapshot.selection_config,
                     draw_context.element_registry.as_ref(),
+                    snapshot.draw_config.snap.enable_arrow_binding,
                     self.current_tool_type_id.as_ref(),
                     &hit_test_service,
                 ),
@@ -1361,6 +1362,7 @@ fn build_detector_state_view(
         snapshot.selection_config.interaction.handle_tolerance,
     );
     let zoom = snapshot.draw_state.application.view.camera.zoom;
+    let is_binding_enabled = snapshot.draw_config.snap.enable_arrow_binding;
     let elements = effective_elements
         .iter()
         .map(|element| {
@@ -1371,7 +1373,7 @@ fn build_detector_state_view(
                     Some(handle_size),
                     &effective_elements,
                     zoom,
-                    true,
+                    is_binding_enabled,
                 );
                 DetectorElementData::ArrowLike(DetectorArrowLikeData {
                     points: arrow_data.points,
