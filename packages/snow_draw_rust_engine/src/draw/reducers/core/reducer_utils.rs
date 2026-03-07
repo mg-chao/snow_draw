@@ -201,24 +201,28 @@ mod tests {
     #[test]
     fn apply_selection_change_force_refresh_updates_multi_select_overlay_bounds() {
         let mut state = DrawState::default();
-        state.domain.document.elements = vec![
-            ElementState::new(
-                "a",
-                DrawRect::new(0.0, 0.0, 10.0, 10.0),
-                0.0,
-                1.0,
-                0,
-                Arc::new(RectangleData::default()),
-            ),
-            ElementState::new(
-                "b",
-                DrawRect::new(20.0, 20.0, 30.0, 30.0),
-                0.0,
-                1.0,
-                1,
-                Arc::new(RectangleData::default()),
-            ),
-        ];
+        state.domain.document = state.domain.document.copy_with(
+            Some(vec![
+                ElementState::new(
+                    "a",
+                    DrawRect::new(0.0, 0.0, 10.0, 10.0),
+                    0.0,
+                    1.0,
+                    0,
+                    Arc::new(RectangleData::default()),
+                ),
+                ElementState::new(
+                    "b",
+                    DrawRect::new(20.0, 20.0, 30.0, 30.0),
+                    0.0,
+                    1.0,
+                    1,
+                    Arc::new(RectangleData::default()),
+                ),
+            ]),
+            None,
+            None,
+        );
         let selected_ids = ["a".to_string(), "b".to_string()]
             .into_iter()
             .collect::<BTreeSet<_>>();

@@ -4,10 +4,16 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::draw::elements::types::arrow::arrow_binding::ArrowBindingUtils;
-use crate::draw::elements::types::arrow::arrow_core_bridge::to_core_bindable_state;
+use crate::draw::elements::types::arrow::arrow_core::BindableState as CachedBindableState;
+use crate::draw::elements::types::arrow::arrow_core_bridge::{
+    collect_core_anchor_element_ids_by_bindable_id, collect_core_bindable_relations,
+    collect_core_bindables,
+};
 use crate::draw::elements::types::arrow::arrow_data::ArrowData;
 use crate::draw::elements::types::arrow::core::arrow_hit_test::is_point_near_bindable_for_binding_hit;
-use crate::draw::elements::types::arrow::core::arrow_types::BindableState as CoreBindableState;
+use crate::draw::elements::types::arrow::core::arrow_types::{
+    BindableRelationState, BindableState as OrderBindableState,
+};
 use crate::draw::elements::types::highlight::highlight_data::HighlightData;
 use crate::draw::elements::types::line::line_data::LineData;
 use crate::draw::elements::types::serial_number::serial_number_data::SerialNumberData;
@@ -28,6 +34,16 @@ pub struct DomainDocumentState {
     pub elements: Vec<DomainElementState>,
     pub elements_version: i64,
     pub global_elements: GlobalElementsState,
+    element_map: HashMap<String, DomainElementState>,
+    ordered_element_ids: Vec<String>,
+    highlight_elements: Vec<DomainElementState>,
+    bound_text_ids: HashSet<String>,
+    bound_arrow_target_ids: HashSet<String>,
+    arrow_bindable_states: Vec<CachedBindableState>,
+    arrow_bindable_state_by_id: HashMap<String, CachedBindableState>,
+    arrow_bindable_relations: Vec<BindableRelationState>,
+    arrow_anchor_element_ids_by_bindable_id: HashMap<String, Vec<String>>,
+    has_arrow_bindable_elements: bool,
 }
 
 impl DomainDocumentState {
@@ -36,34 +52,68 @@ impl DomainDocumentState {
         elements_version: i64,
         global_elements: GlobalElementsState,
     ) -> Self {
+        let element_map = elements
+            .iter()
+            .cloned()
+            .map(|element| (element.id.clone(), element))
+            .collect::<HashMap<_, _>>();
+        let ordered_element_ids = elements
+            .iter()
+            .map(|element| element.id.clone())
+            .collect::<Vec<_>>();
+        let highlight_elements = Self::build_highlight_elements(&elements);
+        let bound_text_ids = Self::build_bound_text_ids(&elements);
+        let bound_arrow_target_ids = Self::build_bound_arrow_target_ids(&elements);
+        let arrow_bindable_states = collect_core_bindables(&elements);
+        let arrow_bindable_state_by_id = arrow_bindable_states
+            .iter()
+            .cloned()
+            .map(|bindable| (bindable.id.clone(), bindable))
+            .collect::<HashMap<_, _>>();
+        let arrow_bindable_relations = collect_core_bindable_relations(&elements);
+        let arrow_anchor_element_ids_by_bindable_id =
+            collect_core_anchor_element_ids_by_bindable_id(&elements);
+        let has_arrow_bindable_elements = !arrow_bindable_states.is_empty();
+
         Self {
             elements,
             elements_version,
             global_elements,
+            element_map,
+            ordered_element_ids,
+            highlight_elements,
+            bound_text_ids,
+            bound_arrow_target_ids,
+            arrow_bindable_states,
+            arrow_bindable_state_by_id,
+            arrow_bindable_relations,
+            arrow_anchor_element_ids_by_bindable_id,
+            has_arrow_bindable_elements,
         }
     }
 
     pub fn get_element_by_id(&self, id: &str) -> Option<&DomainElementState> {
-        self.elements.iter().find(|element| element.id == id)
+        self.element_map.get(id)
     }
 
     pub fn element_map(&self) -> HashMap<String, DomainElementState> {
-        self.elements
-            .iter()
-            .cloned()
-            .map(|element| (element.id.clone(), element))
-            .collect()
+        self.element_map.clone()
+    }
+
+    pub fn element_map_ref(&self) -> &HashMap<String, DomainElementState> {
+        &self.element_map
     }
 
     pub fn order(&self) -> Vec<String> {
-        self.elements
-            .iter()
-            .map(|element| element.id.clone())
-            .collect()
+        self.ordered_element_ids.clone()
     }
 
     pub fn ordered_element_ids(&self) -> Vec<String> {
-        self.order()
+        self.ordered_element_ids.clone()
+    }
+
+    pub fn ordered_element_ids_ref(&self) -> &[String] {
+        &self.ordered_element_ids
     }
 
     pub fn copy_with(
@@ -84,24 +134,28 @@ impl DomainDocumentState {
             }
         });
 
-        Self {
-            elements: next_elements,
-            elements_version: next_elements_version,
-            global_elements: next_global_elements,
-        }
+        Self::new(next_elements, next_elements_version, next_global_elements)
     }
 
-    pub fn highlight_elements(&self) -> Vec<DomainElementState> {
-        self.elements
+    fn build_highlight_elements(elements: &[DomainElementState]) -> Vec<DomainElementState> {
+        elements
             .iter()
             .filter(|element| element.data.type_id().as_str() == HighlightData::TYPE_ID_TOKEN)
             .cloned()
             .collect()
     }
 
-    pub fn bound_text_ids(&self) -> HashSet<String> {
+    pub fn highlight_elements(&self) -> Vec<DomainElementState> {
+        self.highlight_elements.clone()
+    }
+
+    pub fn highlight_elements_ref(&self) -> &[DomainElementState] {
+        &self.highlight_elements
+    }
+
+    fn build_bound_text_ids(elements: &[DomainElementState]) -> HashSet<String> {
         let mut bound_text_ids = HashSet::new();
-        for element in &self.elements {
+        for element in elements {
             if element.data.type_id().as_str() != SerialNumberData::TYPE_ID_TOKEN {
                 continue;
             }
@@ -117,9 +171,17 @@ impl DomainDocumentState {
         bound_text_ids
     }
 
-    pub fn bound_arrow_target_ids(&self) -> HashSet<String> {
+    pub fn bound_text_ids(&self) -> HashSet<String> {
+        self.bound_text_ids.clone()
+    }
+
+    pub fn bound_text_ids_ref(&self) -> &HashSet<String> {
+        &self.bound_text_ids
+    }
+
+    fn build_bound_arrow_target_ids(elements: &[DomainElementState]) -> HashSet<String> {
         let mut target_ids = HashSet::new();
-        for element in &self.elements {
+        for element in elements {
             match element.data.type_id().as_str() {
                 ArrowData::TYPE_ID_TOKEN => {
                     let Ok(data) = ArrowData::from_json_value(&element.data.to_json_value()) else {
@@ -149,17 +211,42 @@ impl DomainDocumentState {
         target_ids
     }
 
+    pub fn bound_arrow_target_ids(&self) -> HashSet<String> {
+        self.bound_arrow_target_ids.clone()
+    }
+
+    pub fn bound_arrow_target_ids_ref(&self) -> &HashSet<String> {
+        &self.bound_arrow_target_ids
+    }
+
+    pub fn arrow_bindable_states(&self) -> &[CachedBindableState] {
+        &self.arrow_bindable_states
+    }
+
+    pub fn arrow_bindable_state_by_id_ref(&self) -> &HashMap<String, CachedBindableState> {
+        &self.arrow_bindable_state_by_id
+    }
+
+    pub fn arrow_bindable_relations(&self) -> &[BindableRelationState] {
+        &self.arrow_bindable_relations
+    }
+
+    pub fn arrow_anchor_element_ids_by_bindable_id(&self) -> &HashMap<String, Vec<String>> {
+        &self.arrow_anchor_element_ids_by_bindable_id
+    }
+
     pub fn has_arrow_bindable_elements(&self) -> bool {
-        self.elements
-            .iter()
-            .any(ArrowBindingUtils::is_bindable_target)
+        self.has_arrow_bindable_elements
     }
 
     pub fn has_arrow_bindable_elements_except(&self, excluded_element_id: Option<&str>) -> bool {
-        self.elements.iter().any(|element| {
-            element.opacity > 0.0
-                && excluded_element_id.is_none_or(|excluded| excluded != element.id.as_str())
-                && ArrowBindingUtils::is_bindable_target(element)
+        self.ordered_element_ids.iter().any(|element_id| {
+            excluded_element_id.is_none_or(|excluded| excluded != element_id.as_str())
+                && self.element_map.get(element_id).is_some_and(|element| {
+                    element.opacity > 0.0
+                        && self.arrow_bindable_state_by_id.contains_key(element_id)
+                        && ArrowBindingUtils::is_bindable_target(element)
+                })
         })
     }
 
@@ -175,21 +262,19 @@ impl DomainDocumentState {
         }
 
         let mut result = Vec::new();
-        for element in self.elements.iter().rev() {
-            if element.opacity <= 0.0 {
-                continue;
-            }
-            if excluded_element_id.is_some_and(|excluded| excluded == element.id.as_str()) {
+        for element_id in self.ordered_element_ids.iter().rev() {
+            if excluded_element_id.is_some_and(|excluded| excluded == element_id.as_str()) {
                 continue;
             }
 
-            let Some(bindable) = to_core_bindable_state(
-                element,
-                Some(element.z_index as usize),
-                true,
-                true,
-                Some(element.rect),
-            ) else {
+            let Some(element) = self.element_map.get(element_id) else {
+                continue;
+            };
+            if element.opacity <= 0.0 {
+                continue;
+            }
+
+            let Some(bindable) = self.arrow_bindable_state_by_id.get(element_id) else {
                 continue;
             };
 
@@ -201,7 +286,7 @@ impl DomainDocumentState {
                 continue;
             }
 
-            let stop_here = stop_at_opaque && bindable.background_opaque.unwrap_or(true);
+            let stop_here = stop_at_opaque && bindable.background_opaque.unwrap_or(false);
             result.push(element.clone());
             if stop_here {
                 break;
@@ -214,8 +299,8 @@ impl DomainDocumentState {
 
 fn to_order_core_bindable_state(
     bindable: &crate::draw::elements::types::arrow::arrow_core::BindableState,
-) -> CoreBindableState {
-    CoreBindableState {
+) -> OrderBindableState {
+    OrderBindableState {
         id: bindable.id.clone(),
         shape: bindable.shape.as_str().to_string(),
         x: bindable.x,
@@ -384,6 +469,32 @@ mod tests {
             .map(|element| element.id)
             .collect::<Vec<_>>();
         assert_eq!(ids, vec!["top".to_string(), "bottom".to_string()]);
+    }
+
+    #[test]
+    fn document_caches_bindable_projection_and_order_metadata() {
+        let state = DomainDocumentState::new(
+            vec![
+                rect_element("rect", 0, DrawColor::new(0xFF11_2233)),
+                text_element("text", 1, DrawColor::new(0xFF22_3344)),
+            ],
+            0,
+            GlobalElementsState::default(),
+        );
+
+        assert_eq!(
+            state.ordered_element_ids_ref(),
+            &["rect".to_owned(), "text".to_owned()]
+        );
+        assert_eq!(state.arrow_bindable_states().len(), 2);
+        assert!(state.arrow_bindable_state_by_id_ref().contains_key("rect"));
+        assert!(state.arrow_bindable_state_by_id_ref().contains_key("text"));
+        assert!(state
+            .arrow_anchor_element_ids_by_bindable_id()
+            .contains_key("rect"));
+        assert!(state
+            .arrow_anchor_element_ids_by_bindable_id()
+            .contains_key("text"));
     }
 }
 

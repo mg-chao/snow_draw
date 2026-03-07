@@ -26,7 +26,10 @@ fn build_line_definition() -> LineDefinition {
         "Line",
         LineHitTester,
         LineData::default,
-        |json| LineData::from_json(json).unwrap_or_default(),
+        |json| {
+            LineData::from_json(json)
+                .unwrap_or_else(|error| panic!("failed to decode LineData: {error}"))
+        },
         LineTaskEncoder,
         Some(LineCreationStrategy::new()),
     )

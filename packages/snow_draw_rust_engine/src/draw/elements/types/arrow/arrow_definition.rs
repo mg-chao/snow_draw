@@ -26,7 +26,10 @@ fn build_arrow_definition() -> ArrowDefinition {
         "Arrow",
         ConnectorHitTester::new(),
         ArrowData::default,
-        |json| ArrowData::from_json(json).unwrap_or_default(),
+        |json| {
+            ArrowData::from_json(json)
+                .unwrap_or_else(|error| panic!("failed to decode ArrowData: {error}"))
+        },
         ArrowTaskEncoder,
         Some(ArrowCreationStrategy::new()),
     )

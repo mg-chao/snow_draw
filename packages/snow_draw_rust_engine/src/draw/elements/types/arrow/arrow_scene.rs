@@ -6,20 +6,25 @@ use crate::draw::models::draw_state::DomainDocumentState;
 use crate::draw::models::element_state::ElementState;
 use crate::draw::types::draw_point::DrawPoint;
 
-use super::arrow_binding::{ArrowBinding, ArrowBindingUtils};
+use super::arrow_binding::ArrowBinding;
 use super::arrow_core::{ArrowState, BindableState, EngineContext};
 use super::arrow_core_bridge::{
-    apply_core_arrow_patches_to_sources, project_core_document, to_core_bindable_state,
+    apply_core_arrow_patches_to_sources, build_core_engine_context,
+    collect_core_arrow_states_with_sources, project_core_document, to_core_bindable_state,
     ArrowCoreDocumentProjection,
 };
+use super::arrow_core_ops::reordered_element_ids_from_core_result;
 use super::core::arrow_hit_test::is_point_near_bindable_for_binding_hit as is_point_near_core_bindable_for_binding_hit;
 use super::core::arrow_order_core::{
     reorder_arrow_above_hovered_bindable, reordered_element_ids_from_hovered_reorder,
 };
-use super::core::arrow_state_core::reduce_arrow_engine_events_to_order;
+use super::core::arrow_state_core::{
+    apply_engine_result as apply_core_engine_result, reduce_arrow_engine_events_to_order,
+};
 use super::core::arrow_types::{
-    ArrowEngineEvent, ArrowStatePatchWithId, BindableRelationState,
-    BindableState as CoreBindableState, ReduceArrowEngineEventsToOrderInput,
+    ApplyEngineResultInput, ApplyEngineResultValue, ArrowEngineEvent,
+    ArrowState as LifecycleArrowState, ArrowStatePatchWithId, BindableRelationState,
+    BindableState as CoreBindableState, EngineResult, ReduceArrowEngineEventsToOrderInput,
     ReorderArrowAboveHoveredBindableInput,
 };
 
@@ -53,6 +58,16 @@ pub fn project_arrow_bindable_candidates<I>(elements: I) -> ArrowBindableCandida
 where
     I: IntoIterator<Item = ElementState>,
 {
+    project_arrow_bindable_candidates_with_bindables(elements, None)
+}
+
+pub fn project_arrow_bindable_candidates_with_bindables<I>(
+    elements: I,
+    bindables_by_id: Option<&HashMap<String, BindableState>>,
+) -> ArrowBindableCandidates
+where
+    I: IntoIterator<Item = ElementState>,
+{
     let mut seen_ids = HashSet::<String>::new();
     let mut projected_elements = Vec::new();
     let mut projected_bindables = Vec::new();
@@ -63,15 +78,25 @@ where
         if !seen_ids.insert(element.id.clone()) {
             continue;
         }
-        let Some(bindable) = to_core_bindable_state(
-            &element,
-            Some(element.z_index as usize),
-            true,
-            true,
-            Some(element.rect),
-        ) else {
+        let bindable =
+            if let Some(bindable) = bindables_by_id.and_then(|value| value.get(&element.id)) {
+                bindable.clone()
+            } else {
+                let Some(bindable) = to_core_bindable_state(
+                    &element,
+                    Some(element.z_index as usize),
+                    true,
+                    true,
+                    Some(element.rect),
+                ) else {
+                    continue;
+                };
+                bindable
+            };
+
+        if bindable.id.is_empty() {
             continue;
-        };
+        }
         element_by_id.insert(element.id.clone(), element.clone());
         bindable_by_id.insert(bindable.id.clone(), bindable.clone());
         projected_elements.push(element);
@@ -118,15 +143,23 @@ pub fn resolve_arrow_bindable_candidates(
         return ArrowBindableCandidates::empty();
     }
 
-    project_arrow_bindable_candidates(
-        document
-            .elements
-            .iter()
-            .cloned()
-            .into_iter()
-            .filter(|element| candidate_ids.contains(element.id.as_str())),
+    let mut candidate_elements = Vec::<ElementState>::new();
+    for candidate_id in document.ordered_element_ids_ref() {
+        if !candidate_ids.contains(candidate_id.as_str()) {
+            continue;
+        }
+        let Some(element) = document.element_map_ref().get(candidate_id).cloned() else {
+            continue;
+        };
+        candidate_elements.push(element);
+    }
+
+    project_arrow_bindable_candidates_with_bindables(
+        candidate_elements,
+        Some(document.arrow_bindable_state_by_id_ref()),
     )
 }
+
 pub fn resolve_arrow_bindable_candidates_for_endpoint_strategy(
     document: &DomainDocumentState,
     allow_new_binding: bool,
@@ -144,6 +177,8 @@ pub fn resolve_arrow_bindable_candidates_for_endpoint_strategy(
         }
     };
     let has_order_override = ordered_element_ids.is_some_and(|ids| !ids.is_empty());
+    let can_reuse_cached_bindable_projection =
+        !has_order_override || string_list_equals(ordered_ids, document.ordered_element_ids_ref());
 
     let mut bound_ids = HashSet::<&str>::new();
     if let Some(binding) = active_binding {
@@ -156,43 +191,128 @@ pub fn resolve_arrow_bindable_candidates_for_endpoint_strategy(
             bound_ids.insert(binding.element_id.as_str());
         }
     }
-    if !allow_new_binding && bound_ids.is_empty() {
+    if allow_new_binding {
+        let mut all_bindable_elements = Vec::<ElementState>::new();
+        for element_id in ordered_ids {
+            if excluded_element_id.is_some_and(|excluded| excluded == element_id.as_str()) {
+                continue;
+            }
+            if !document
+                .arrow_bindable_state_by_id_ref()
+                .contains_key(element_id)
+            {
+                continue;
+            }
+            let Some(element) = document.element_map_ref().get(element_id).cloned() else {
+                continue;
+            };
+            all_bindable_elements.push(element);
+        }
+
+        if all_bindable_elements.is_empty() {
+            return ArrowBindableCandidates::empty();
+        }
+
+        if can_reuse_cached_bindable_projection {
+            return project_arrow_bindable_candidates_with_bindables(
+                all_bindable_elements,
+                Some(document.arrow_bindable_state_by_id_ref()),
+            );
+        }
+
+        let mut bindables_by_id = HashMap::<String, BindableState>::new();
+        for (index, element_id) in ordered_ids.iter().enumerate() {
+            if excluded_element_id.is_some_and(|excluded| excluded == element_id.as_str()) {
+                continue;
+            }
+            if !document
+                .arrow_bindable_state_by_id_ref()
+                .contains_key(element_id)
+            {
+                continue;
+            }
+            let Some(element) = document.element_map_ref().get(element_id) else {
+                continue;
+            };
+            let Some(bindable) =
+                to_core_bindable_state(element, Some(index), true, true, Some(element.rect))
+            else {
+                continue;
+            };
+            bindables_by_id.insert(element.id.clone(), bindable);
+        }
+
+        return project_arrow_bindable_candidates_with_bindables(
+            all_bindable_elements,
+            Some(&bindables_by_id),
+        );
+    }
+
+    if bound_ids.is_empty() {
         return ArrowBindableCandidates::empty();
     }
 
-    let mut elements = Vec::<ElementState>::new();
-    for (index, element_id) in ordered_ids.iter().enumerate() {
+    let mut bound_elements = Vec::<ElementState>::new();
+    for element_id in ordered_ids {
+        if !bound_ids.contains(element_id.as_str()) {
+            continue;
+        }
         if excluded_element_id.is_some_and(|excluded| excluded == element_id.as_str()) {
             continue;
         }
-        if !allow_new_binding && !bound_ids.contains(element_id.as_str()) {
-            continue;
-        }
-
-        let Some(element) = document.get_element_by_id(element_id).cloned() else {
+        let Some(element) = document.element_map_ref().get(element_id).cloned() else {
             continue;
         };
-        if !ArrowBindingUtils::is_bindable_target(&element) {
-            continue;
-        }
-
-        let adjusted = if has_order_override {
-            element.copy_with(None, None, None, None, Some(index as i64), None)
-        } else {
-            element
-        };
-        elements.push(adjusted);
+        bound_elements.push(element);
     }
 
-    if elements.is_empty() {
+    if bound_elements.is_empty() {
         return ArrowBindableCandidates::empty();
     }
-    project_arrow_bindable_candidates(elements)
+
+    if can_reuse_cached_bindable_projection {
+        return project_arrow_bindable_candidates_with_bindables(
+            bound_elements,
+            Some(document.arrow_bindable_state_by_id_ref()),
+        );
+    }
+
+    let mut bindables_by_id = HashMap::<String, BindableState>::new();
+    for (index, element_id) in ordered_ids.iter().enumerate() {
+        if !bound_ids.contains(element_id.as_str()) {
+            continue;
+        }
+        if excluded_element_id.is_some_and(|excluded| excluded == element_id.as_str()) {
+            continue;
+        }
+        let Some(element) = document.element_map_ref().get(element_id) else {
+            continue;
+        };
+        let Some(bindable) =
+            to_core_bindable_state(element, Some(index), true, true, Some(element.rect))
+        else {
+            continue;
+        };
+        bindables_by_id.insert(element.id.clone(), bindable);
+    }
+
+    project_arrow_bindable_candidates_with_bindables(bound_elements, Some(&bindables_by_id))
 }
 
-#[derive(Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ArrowAppliedResult {
+    pub value: ApplyEngineResultValue,
     pub ordered_element_ids: Option<Vec<String>>,
+}
+
+impl ArrowAppliedResult {
+    pub fn arrow(&self) -> &LifecycleArrowState {
+        &self.value.arrow
+    }
+
+    pub fn order_changed(&self) -> bool {
+        self.ordered_element_ids.is_some()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -204,12 +324,55 @@ pub struct ArrowScene {
 
 impl ArrowScene {
     pub fn from_document(document: &DomainDocumentState, context: Option<EngineContext>) -> Self {
-        Self::from_elements_with_options(
+        Self::from_document_with_options(document, false, None, context)
+    }
+
+    pub fn from_document_with_options(
+        document: &DomainDocumentState,
+        only_bound_arrows: bool,
+        ordered_element_ids: Option<&[String]>,
+        context: Option<EngineContext>,
+    ) -> Self {
+        let has_order_override = ordered_element_ids.is_some_and(|ids| !ids.is_empty());
+        let should_reuse_document_projection = !has_order_override
+            || ordered_element_ids
+                .map(|ids| string_list_equals(ids, document.ordered_element_ids_ref()))
+                .unwrap_or(true);
+
+        if !should_reuse_document_projection {
+            return Self::from_elements_with_options(
+                document.elements.iter().cloned(),
+                only_bound_arrows,
+                ordered_element_ids,
+                context,
+            );
+        }
+
+        let (arrows, arrow_sources) =
+            collect_core_arrow_states_with_sources(&document.elements, only_bound_arrows);
+        let candidates = project_arrow_bindable_candidates_with_bindables(
             document.elements.iter().cloned(),
-            false,
-            Some(&document.ordered_element_ids()),
-            context,
-        )
+            Some(document.arrow_bindable_state_by_id_ref()),
+        );
+
+        Self {
+            candidates,
+            projection: ArrowCoreDocumentProjection {
+                bindables: document.arrow_bindable_states().to_vec(),
+                bindable_relations: document.arrow_bindable_relations().to_vec(),
+                arrows,
+                arrow_sources,
+                ordered_element_ids: ordered_element_ids
+                    .map(|value| value.to_vec())
+                    .unwrap_or_else(|| document.ordered_element_ids()),
+                anchor_element_ids_by_bindable_id: document
+                    .arrow_anchor_element_ids_by_bindable_id()
+                    .clone(),
+            },
+            context: context.unwrap_or_else(|| {
+                build_core_engine_context(1.0, true, super::arrow_core::BIND_MODE_ORBIT, 1e6)
+            }),
+        }
     }
 
     pub fn from_elements<I>(elements: I, context: Option<EngineContext>) -> Self
@@ -237,7 +400,7 @@ impl ArrowScene {
             candidates,
             projection,
             context: context.unwrap_or_else(|| {
-                EngineContext::new(1.0, true, super::arrow_core::BIND_MODE_ORBIT, 1e6)
+                build_core_engine_context(1.0, true, super::arrow_core::BIND_MODE_ORBIT, 1e6)
             }),
         }
     }
@@ -320,6 +483,69 @@ impl ArrowScene {
             });
         reordered_element_ids_from_hovered_reorder(&reorder)
     }
+
+    pub fn apply_engine_result(
+        &self,
+        arrow: &ArrowState,
+        result: &EngineResult,
+        ordered_element_ids: Option<&[String]>,
+    ) -> ApplyEngineResultValue {
+        apply_core_engine_result(&ApplyEngineResultInput {
+            arrow: to_lifecycle_arrow_state(arrow),
+            bindables: self.projection.bindable_relations.clone(),
+            result: result.clone(),
+            ordered_element_ids: Some(
+                ordered_element_ids
+                    .map(|value| value.to_vec())
+                    .unwrap_or_else(|| self.projection.ordered_element_ids.clone()),
+            ),
+            anchor_element_ids_by_bindable_id: Some(
+                self.projection.anchor_element_ids_by_bindable_id.clone(),
+            ),
+        })
+    }
+
+    pub fn apply_engine_result_with_order_fallback(
+        &self,
+        arrow: &ArrowState,
+        result: &EngineResult,
+        hovered_bindable_id: Option<&str>,
+        point: Option<DrawPoint>,
+        ordered_element_ids: Option<&[String]>,
+        tolerance: Option<f64>,
+    ) -> ArrowAppliedResult {
+        let applied = self.apply_engine_result(arrow, result, ordered_element_ids);
+
+        let mut next_order = reordered_element_ids_from_core_result(&applied);
+        if next_order.is_none() && self.context.is_binding_enabled {
+            let explicit_hovered_id = hovered_bindable_id.filter(|value| !value.is_empty());
+            let suggested_id = result.suggested_binding.as_ref().and_then(|binding| {
+                binding
+                    .bindable_id
+                    .as_deref()
+                    .filter(|value| !value.is_empty())
+                    .or_else(|| {
+                        (!binding.element.id.is_empty()).then_some(binding.element.id.as_str())
+                    })
+            });
+            let reorder_target_id = explicit_hovered_id.or(suggested_id);
+
+            if reorder_target_id.is_some() || point.is_some() {
+                next_order = self.reorder_arrow_above_hovered_bindable(
+                    &arrow.id,
+                    reorder_target_id,
+                    point,
+                    ordered_element_ids,
+                    tolerance,
+                );
+            }
+        }
+
+        ArrowAppliedResult {
+            value: applied,
+            ordered_element_ids: next_order,
+        }
+    }
 }
 
 pub fn reduce_arrow_events_to_ordered_ids(
@@ -368,6 +594,53 @@ fn to_order_core_bindable_state(bindable: &BindableState) -> CoreBindableState {
         interior_hit_enabled: bindable.interior_hit_enabled,
         visibility_bounds: bindable.visibility_bounds,
     }
+}
+
+fn to_lifecycle_arrow_state(arrow: &ArrowState) -> LifecycleArrowState {
+    LifecycleArrowState {
+        id: arrow.id.clone(),
+        x: arrow.x,
+        y: arrow.y,
+        width: arrow.width,
+        height: arrow.height,
+        points: arrow.points.clone(),
+        start_binding: arrow.start_binding.as_ref().map(|binding| {
+            crate::draw::elements::types::arrow::core::arrow_types::FixedPointBinding::new(
+                binding.element_id.clone(),
+                binding.anchor,
+                binding.mode.as_str().to_string(),
+            )
+        }),
+        end_binding: arrow.end_binding.as_ref().map(|binding| {
+            crate::draw::elements::types::arrow::core::arrow_types::FixedPointBinding::new(
+                binding.element_id.clone(),
+                binding.anchor,
+                binding.mode.as_str().to_string(),
+            )
+        }),
+        start_arrowhead: arrow.start_arrowhead.clone(),
+        end_arrowhead: arrow.end_arrowhead.clone(),
+        elbowed: arrow.elbowed,
+        fixed_segments: arrow.fixed_segments.as_ref().map(|segments| {
+            segments
+                .iter()
+                .copied()
+                .map(|segment| {
+                    crate::draw::elements::types::arrow::core::arrow_types::FixedSegment {
+                        start: segment.start,
+                        end: segment.end,
+                        index: segment.index,
+                    }
+                })
+                .collect()
+        }),
+        start_is_special: arrow.start_is_special,
+        end_is_special: arrow.end_is_special,
+    }
+}
+
+fn string_list_equals(left: &[String], right: &[String]) -> bool {
+    left == right
 }
 
 #[cfg(test)]

@@ -1544,7 +1544,7 @@ mod tests {
             .collect::<BTreeSet<_>>();
 
         let mut draw_state = DrawState::default();
-        draw_state.domain.document.elements = elements
+        let document_elements = elements
             .iter()
             .map(|element| {
                 ModelElementState::new(
@@ -1557,6 +1557,11 @@ mod tests {
                 )
             })
             .collect();
+        draw_state.domain.document =
+            draw_state
+                .domain
+                .document
+                .copy_with(Some(document_elements), None, None);
         draw_state.domain.selection.selected_ids = selected_ids.clone();
 
         let elements_by_id = elements

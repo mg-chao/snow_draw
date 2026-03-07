@@ -34,6 +34,10 @@ pub fn resolve_arrow_binding_targets<S>(
 where
     S: ArrowBindingPreviewState,
 {
+    if distance <= 0.0 {
+        return Vec::new();
+    }
+
     let mut targets = Vec::<S::Element>::new();
     state.visit_elements_at_point_top_down(position, distance, |element| {
         if element.opacity() <= 0.0 || !element.is_bindable_target() {
@@ -146,7 +150,7 @@ mod tests {
             Default::default(),
         );
 
-        let targets = resolve_arrow_binding_targets(&state, DrawPoint::new(5.0, 5.0), 0.0);
+        let targets = resolve_arrow_binding_targets(&state, DrawPoint::new(5.0, 5.0), 8.0);
         let target_ids = targets
             .into_iter()
             .map(|element| element.id)
@@ -167,6 +171,7 @@ mod tests {
             resolve_arrow_binding_targets_in_document(&state, DrawPoint::new(5.0, 5.0), 0.0,)
                 .is_empty()
         );
+        assert!(resolve_arrow_binding_targets(&state, DrawPoint::new(5.0, 5.0), 0.0).is_empty());
     }
 
     #[test]
