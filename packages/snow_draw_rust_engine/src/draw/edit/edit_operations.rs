@@ -46,6 +46,10 @@ use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
 use crate::draw::elements::types::arrow::arrow_layout::resolve_arrow_geometry_update;
 use crate::draw::elements::types::arrow::arrow_like_data::NullableField as ArrowLikeNullableField;
 use crate::draw::elements::types::arrow::arrow_two_point_layout::compute_arrow_two_point_layout;
+use crate::draw::elements::types::arrow::core::arrow_order_core::{
+    reorder_arrow_above_hovered_bindable, reordered_element_ids_from_hovered_reorder,
+};
+use crate::draw::elements::types::arrow::core::arrow_types::ReorderArrowAboveHoveredBindableInput;
 use crate::draw::elements::types::arrow::elbow::elbow_editing::{
     compute_elbow_edit, transform_fixed_segments, BindingOverride as ElbowBindingOverride,
 };
@@ -1453,6 +1457,7 @@ fn finalize_elbow_endpoint_drag_on_finish(
 
     let mut next_start_binding = transform.start_binding.clone();
     let mut next_end_binding = transform.end_binding.clone();
+    let mut hovered_bindable_id = None;
     let mut reordered_element_ids = None;
 
     if !transform.allow_binding_on_finalize {
@@ -1509,7 +1514,7 @@ fn finalize_elbow_endpoint_drag_on_finish(
             .end_binding
             .as_ref()
             .map(compat_binding_to_internal);
-        reordered_element_ids = drag_result.ordered_element_ids;
+        hovered_bindable_id = drag_result.suggested_bindable_id;
     }
 
     if dragged_start {
@@ -1553,6 +1558,26 @@ fn finalize_elbow_endpoint_drag_on_finish(
         ElbowBindingOverride::Unset,
         true,
     );
+
+    if let Some(hovered_bindable_id) = hovered_bindable_id {
+        let reorder =
+            reorder_arrow_above_hovered_bindable(&ReorderArrowAboveHoveredBindableInput {
+                ordered_element_ids: ordered_element_ids.to_vec(),
+                arrow_id: context.element_id.clone(),
+                hovered_bindable_id: Some(hovered_bindable_id),
+                point: None,
+                bindables: None,
+                tolerance: None,
+                anchor_element_ids_by_bindable_id: Some(
+                    state
+                        .domain
+                        .document
+                        .arrow_anchor_element_ids_by_bindable_id()
+                        .clone(),
+                ),
+            });
+        reordered_element_ids = reordered_element_ids_from_hovered_reorder(&reorder);
+    }
 
     let base_fixed_segments = if context.initial_fixed_segments.is_empty() {
         None
@@ -1970,6 +1995,10 @@ mod tests {
     use super::*;
 
     use crate::draw::elements::types::rectangle::rectangle_data::RectangleData;
+    use crate::draw::elements::types::serial_number::serial_number_data::{
+        SerialNumberData, SerialNumberDataPatch,
+    };
+    use crate::draw::elements::types::text::text_data::TextData;
     use crate::draw::history::history_metadata::HistoryRecordType;
     use crate::draw::models::application_state::ApplicationState;
     use crate::draw::models::draw_state::{DomainDocumentState, DomainState, DrawState};
@@ -1992,6 +2021,30 @@ mod tests {
             z_index,
             Arc::new(RectangleData::default()),
         )
+    }
+
+    fn text_element(id: &str, rect: DrawRect, z_index: i64) -> DomainElementState {
+        DomainElementState::new(
+            id.to_owned(),
+            rect,
+            0.0,
+            1.0,
+            z_index,
+            Arc::new(TextData::default()),
+        )
+    }
+
+    fn serial_number_element(
+        id: &str,
+        rect: DrawRect,
+        z_index: i64,
+        text_element_id: &str,
+    ) -> DomainElementState {
+        let data = SerialNumberData::default().copy_with(SerialNumberDataPatch {
+            text_element_id: Some(Some(text_element_id.to_owned())),
+            ..SerialNumberDataPatch::default()
+        });
+        DomainElementState::new(id.to_owned(), rect, 0.0, 1.0, z_index, Arc::new(data))
     }
 
     fn draw_state(elements: Vec<DomainElementState>) -> DrawState {
@@ -2214,6 +2267,74 @@ mod tests {
             Some(DrawPoint::new(80.0, 90.0))
         );
         assert_eq!(updated_data.fixed_segments.as_ref().map(Vec::len), Some(2));
+    }
+
+    #[test]
+    fn finalize_elbow_endpoint_drag_reorders_above_serial_text_anchor_group() {
+        let arrow_data = ArrowData::default().copy_with(ArrowDataPatch {
+            arrow_type: Some(ArrowType::Elbow),
+            end_arrowhead: Some(ArrowheadStyle::Standard),
+            ..ArrowDataPatch::default()
+        });
+        let arrow = arrow_element("arrow", DrawRect::new(0.0, 0.0, 80.0, 60.0), arrow_data, 0);
+        let serial = serial_number_element(
+            "serial",
+            DrawRect::new(90.0, 90.0, 130.0, 130.0),
+            2,
+            "serial-text",
+        );
+        let text = text_element("serial-text", DrawRect::new(140.0, 90.0, 190.0, 130.0), 1);
+        let state = draw_state(vec![arrow.clone(), text, serial]);
+        let local_points = vec![
+            DrawPoint::new(0.0, 0.0),
+            DrawPoint::new(20.0, 0.0),
+            DrawPoint::new(20.0, 20.0),
+            DrawPoint::new(110.0, 110.0),
+        ];
+        let context = ArrowPointEditContext::from_start_position(
+            arrow.id.clone(),
+            arrow.rect,
+            arrow.rotation,
+            DrawPoint::new(110.0, 110.0),
+            local_points.clone(),
+            Vec::new(),
+            ArrowType::Elbow,
+            OperationArrowPointKind::Turning,
+            local_points.len() - 1,
+            false,
+            false,
+            ArrowheadStyle::None,
+            ArrowheadStyle::Standard,
+            None,
+            None,
+            true,
+        );
+        let transform = ArrowPointTransform::with_state(
+            DrawPoint::new(110.0, 110.0),
+            local_points.clone(),
+            None,
+            None,
+            None,
+            None,
+            Some(local_points.len() - 1),
+            false,
+            false,
+            true,
+            true,
+        );
+
+        let finalized =
+            finalize_endpoint_drag_on_finish(&state, &context, &transform, &local_points)
+                .expect("finalized elbow endpoint drag");
+
+        assert_eq!(
+            finalized.ordered_element_ids,
+            Some(vec![
+                "serial-text".to_owned(),
+                "arrow".to_owned(),
+                "serial".to_owned(),
+            ])
+        );
     }
 
     #[test]
