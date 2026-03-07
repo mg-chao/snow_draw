@@ -103,9 +103,8 @@ pub fn resolve_arrow_bindable_candidates(
         candidate_ids.insert(binding.element_id.clone());
     }
 
-    if include_nearby && distance > 0.0 {
-        for element in query_arrow_bindable_elements_at_point_top_down(
-            document,
+    if include_nearby && distance > 0.0 && document.has_arrow_bindable_elements() {
+        for element in document.query_arrow_bindable_elements_at_point_top_down(
             world_point,
             distance,
             excluded_element_id,
@@ -128,48 +127,6 @@ pub fn resolve_arrow_bindable_candidates(
             .filter(|element| candidate_ids.contains(element.id.as_str())),
     )
 }
-
-fn query_arrow_bindable_elements_at_point_top_down(
-    document: &DomainDocumentState,
-    point: DrawPoint,
-    tolerance: f64,
-    excluded_element_id: Option<&str>,
-    stop_at_opaque: bool,
-) -> Vec<ElementState> {
-    let mut result = Vec::<ElementState>::new();
-
-    for element in document.elements.iter().rev() {
-        if element.opacity <= 0.0 {
-            continue;
-        }
-        if excluded_element_id.is_some_and(|excluded| excluded == element.id.as_str()) {
-            continue;
-        }
-
-        let Some(bindable) = to_core_bindable_state(
-            element,
-            Some(element.z_index as usize),
-            true,
-            true,
-            Some(element.rect),
-        ) else {
-            continue;
-        };
-
-        if !is_point_near_bindable_for_binding_hit(point, &bindable, tolerance) {
-            continue;
-        }
-
-        let stop_on_element = stop_at_opaque && bindable.background_opaque.unwrap_or(true);
-        result.push(element.clone());
-        if stop_on_element {
-            break;
-        }
-    }
-
-    result
-}
-
 pub fn resolve_arrow_bindable_candidates_for_endpoint_strategy(
     document: &DomainDocumentState,
     allow_new_binding: bool,
@@ -182,7 +139,7 @@ pub fn resolve_arrow_bindable_candidates_for_endpoint_strategy(
     let ordered_ids = match ordered_element_ids {
         Some(ids) if !ids.is_empty() => ids,
         _ => {
-            ordered_ids_storage = document.order();
+            ordered_ids_storage = document.ordered_element_ids();
             ordered_ids_storage.as_slice()
         }
     };
@@ -246,6 +203,15 @@ pub struct ArrowScene {
 }
 
 impl ArrowScene {
+    pub fn from_document(document: &DomainDocumentState, context: Option<EngineContext>) -> Self {
+        Self::from_elements_with_options(
+            document.elements.iter().cloned(),
+            false,
+            Some(&document.ordered_element_ids()),
+            context,
+        )
+    }
+
     pub fn from_elements<I>(elements: I, context: Option<EngineContext>) -> Self
     where
         I: IntoIterator<Item = ElementState>,
@@ -532,6 +498,22 @@ mod tests {
             .collect::<Vec<_>>();
 
         assert_eq!(ids, vec!["bottom"]);
+    }
+
+    #[test]
+    fn scene_from_document_preserves_document_order() {
+        let document = DomainDocumentState::new(
+            vec![bindable("a", 0), bindable("b", 1), bindable("c", 2)],
+            0,
+            GlobalElementsState::default(),
+        );
+
+        let scene = super::ArrowScene::from_document(&document, None);
+
+        assert_eq!(
+            scene.ordered_element_ids(),
+            &["a".to_owned(), "b".to_owned(), "c".to_owned()]
+        );
     }
 
     #[test]

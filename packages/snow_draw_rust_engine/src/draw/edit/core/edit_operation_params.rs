@@ -53,17 +53,17 @@ impl EditOperationParams {
         Some(value)
     }
 
-    /// Returns arrow-point params when this is an arrow-point operation.
-    pub fn as_arrow_point(&self) -> Option<&ArrowPointOperationParams> {
+    /// Returns connector-point params when this is a connector-point operation.
+    pub fn as_connector_point(&self) -> Option<&ConnectorPointOperationParams> {
         let Self::ConnectorPoint(value) = self else {
             return None;
         };
         Some(value)
     }
 
-    /// Returns connector-point params when this is a connector-point operation.
-    pub fn as_connector_point(&self) -> Option<&ConnectorPointOperationParams> {
-        self.as_arrow_point()
+    /// Compatibility accessor for older arrow-point naming.
+    pub fn as_arrow_point(&self) -> Option<&ArrowPointOperationParams> {
+        self.as_connector_point()
     }
 }
 

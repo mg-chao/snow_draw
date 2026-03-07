@@ -158,7 +158,7 @@ impl CreateStartPolicy for DefaultCreateStartPolicy {
             .iter()
             .map(|element| state_view.effective_element(element))
             .collect::<Vec<_>>();
-        let bound_text_ids = collect_bound_text_ids(state.domain.document.elements.as_slice());
+        let bound_text_ids = state.domain.document.bound_text_ids();
 
         effective_elements.sort_by(|left, right| {
             left.z_index
@@ -677,26 +677,6 @@ fn resample_pointer_samples(sampled_points: &[DrawPoint], max_samples: usize) ->
     }
 
     reduced
-}
-
-fn collect_bound_text_ids(
-    elements: &[crate::draw::models::element_state::ElementState],
-) -> std::collections::HashSet<String> {
-    let mut bound_text_ids = std::collections::HashSet::new();
-    for element in elements {
-        if element.type_id().as_str() != SerialNumberData::TYPE_ID_TOKEN {
-            continue;
-        }
-
-        let Ok(data) = SerialNumberData::from_json_value(&element.data.to_json_value()) else {
-            continue;
-        };
-
-        if let Some(text_element_id) = data.text_element_id {
-            bound_text_ids.insert(text_element_id);
-        }
-    }
-    bound_text_ids
 }
 
 fn hit_test_with_registry(

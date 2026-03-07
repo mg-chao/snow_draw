@@ -13,8 +13,8 @@ use crate::draw::types::snap_guides::SnapGuide;
 
 use super::edit_modifiers::EditModifiers;
 pub use super::edit_operation_params::{
-    ArrowPointOperationParams, EditOperationParams, MoveOperationParams, ResizeOperationParams,
-    RotateOperationParams,
+    ArrowPointOperationParams, ConnectorPointOperationParams, EditOperationParams,
+    MoveOperationParams, ResizeOperationParams, RotateOperationParams,
 };
 pub use crate::draw::edit::preview::edit_preview::EditPreview;
 

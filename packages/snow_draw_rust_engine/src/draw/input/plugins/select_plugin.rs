@@ -26,10 +26,9 @@ use crate::draw::elements::core::element_data::{DynElementData, ElementTypeId};
 use crate::draw::elements::core::element_registry::DefaultElementRegistry;
 use crate::draw::elements::types::arrow::arrow_data::ArrowData;
 use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
-use crate::draw::elements::types::arrow::arrow_points::{
-    ArrowPointHandle, ArrowPointKind as DomainArrowPointKind,
+use crate::draw::elements::types::connector::connector_points::{
+    ConnectorPointHandle, ConnectorPointKind as DomainConnectorPointKind, ConnectorPointUtils,
 };
-use crate::draw::elements::types::connector::connector_points::ConnectorPointUtils;
 use crate::draw::elements::types::line::line_data::LineData;
 use crate::draw::elements::types::serial_number::serial_number_data::SerialNumberData;
 use crate::draw::elements::types::text::text_data::TextData;
@@ -183,7 +182,7 @@ impl SelectPluginStateAdapter for DefaultSelectPluginStateAdapter {
             selected_ids: state.domain.selection.selected_ids.clone(),
             elements,
             elements_by_id,
-            bound_text_ids: collect_bound_text_ids(&state.domain.document.elements),
+            bound_text_ids: state.domain.document.bound_text_ids().into_iter().collect(),
         }
     }
 }
@@ -279,7 +278,7 @@ impl HitTestService for SelectPluginHitTestService<'_> {
 
 pub struct SelectPlugin {
     base: InputPluginBase,
-    arrow_handle_double_tap_tracker: DoubleTapTracker<ArrowPointHandle>,
+    arrow_handle_double_tap_tracker: DoubleTapTracker<ConnectorPointHandle>,
     routing_policy: InputRoutingPolicy,
     state_adapter: Arc<dyn SelectPluginStateAdapter>,
     pub current_tool_type_id: Option<ElementTypeId<DynElementData>>,
@@ -1113,12 +1112,12 @@ impl SelectPlugin {
         intent: &StartConnectorPointIntent,
         position: DrawPoint,
         data: &ArrowLikeDataSnapshot,
-    ) -> ArrowPointHandle {
+    ) -> ConnectorPointHandle {
         let is_fixed = data.arrow_type == ArrowType::Elbow
             && intent.point_kind == DetectorConnectorPointKind::Addable
             && data.is_fixed_segment(intent.point_index + 1);
 
-        ArrowPointHandle::with_fixed(
+        ConnectorPointHandle::with_fixed(
             intent.element_id.clone(),
             map_detector_arrow_point_kind(intent.point_kind),
             intent.point_index,
@@ -1129,13 +1128,13 @@ impl SelectPlugin {
 
     fn is_arrow_handle_double_click_candidate(
         &self,
-        handle: &ArrowPointHandle,
+        handle: &ConnectorPointHandle,
         data: &ArrowLikeDataSnapshot,
     ) -> bool {
         if handle.is_fixed {
             return true;
         }
-        if handle.kind != DomainArrowPointKind::Turning {
+        if handle.kind != DomainConnectorPointKind::Turning {
             return false;
         }
 
@@ -1345,26 +1344,6 @@ fn arrow_data_snapshot_for_element(
     None
 }
 
-fn collect_bound_text_ids(
-    elements: &[crate::draw::models::element_state::ElementState],
-) -> BTreeSet<String> {
-    let mut bound_text_ids = BTreeSet::new();
-    for element in elements {
-        if element.type_id().as_str() != SerialNumberData::TYPE_ID_TOKEN {
-            continue;
-        }
-
-        let Ok(data) = SerialNumberData::from_json_value(&element.data.to_json_value()) else {
-            continue;
-        };
-
-        if let Some(text_element_id) = data.text_element_id {
-            bound_text_ids.insert(text_element_id);
-        }
-    }
-    bound_text_ids
-}
-
 fn build_detector_state_view(
     snapshot: &SelectPluginStateSnapshot,
     draw_context: &DrawContext,
@@ -1431,52 +1410,40 @@ fn build_detector_state_view(
     })
 }
 
-fn map_detector_arrow_point_kind(kind: DetectorConnectorPointKind) -> DomainArrowPointKind {
+fn map_detector_arrow_point_kind(kind: DetectorConnectorPointKind) -> DomainConnectorPointKind {
     match kind {
-        DetectorConnectorPointKind::Turning => DomainArrowPointKind::Turning,
-        DetectorConnectorPointKind::Addable => DomainArrowPointKind::Addable,
-        DetectorConnectorPointKind::LoopStart => DomainArrowPointKind::LoopStart,
-        DetectorConnectorPointKind::LoopEnd => DomainArrowPointKind::LoopEnd,
-        DetectorConnectorPointKind::FocusStart => DomainArrowPointKind::FocusStart,
-        DetectorConnectorPointKind::FocusEnd => DomainArrowPointKind::FocusEnd,
+        DetectorConnectorPointKind::Turning => DomainConnectorPointKind::Turning,
+        DetectorConnectorPointKind::Addable => DomainConnectorPointKind::Addable,
+        DetectorConnectorPointKind::LoopStart => DomainConnectorPointKind::LoopStart,
+        DetectorConnectorPointKind::LoopEnd => DomainConnectorPointKind::LoopEnd,
+        DetectorConnectorPointKind::FocusStart => DomainConnectorPointKind::FocusStart,
+        DetectorConnectorPointKind::FocusEnd => DomainConnectorPointKind::FocusEnd,
     }
 }
 
 fn map_domain_arrow_point_kind_to_detector(
-    kind: DomainArrowPointKind,
+    kind: DomainConnectorPointKind,
 ) -> DetectorConnectorPointKind {
     match kind {
-        DomainArrowPointKind::Turning => DetectorConnectorPointKind::Turning,
-        DomainArrowPointKind::Addable => DetectorConnectorPointKind::Addable,
-        DomainArrowPointKind::LoopStart => DetectorConnectorPointKind::LoopStart,
-        DomainArrowPointKind::LoopEnd => DetectorConnectorPointKind::LoopEnd,
-        DomainArrowPointKind::FocusStart => DetectorConnectorPointKind::FocusStart,
-        DomainArrowPointKind::FocusEnd => DetectorConnectorPointKind::FocusEnd,
+        DomainConnectorPointKind::Turning => DetectorConnectorPointKind::Turning,
+        DomainConnectorPointKind::Addable => DetectorConnectorPointKind::Addable,
+        DomainConnectorPointKind::LoopStart => DetectorConnectorPointKind::LoopStart,
+        DomainConnectorPointKind::LoopEnd => DetectorConnectorPointKind::LoopEnd,
+        DomainConnectorPointKind::FocusStart => DetectorConnectorPointKind::FocusStart,
+        DomainConnectorPointKind::FocusEnd => DetectorConnectorPointKind::FocusEnd,
     }
 }
 
 fn map_detector_arrow_point_kind_to_operation(
     kind: DetectorConnectorPointKind,
-) -> crate::draw::elements::types::arrow::arrow_points::ArrowPointKind {
+) -> crate::draw::elements::types::connector::connector_points::ConnectorPointKind {
     match kind {
-        DetectorConnectorPointKind::Turning => {
-            crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::Turning
-        }
-        DetectorConnectorPointKind::Addable => {
-            crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::Addable
-        }
-        DetectorConnectorPointKind::LoopStart => {
-            crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::LoopStart
-        }
-        DetectorConnectorPointKind::LoopEnd => {
-            crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::LoopEnd
-        }
-        DetectorConnectorPointKind::FocusStart => {
-            crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::FocusStart
-        }
-        DetectorConnectorPointKind::FocusEnd => {
-            crate::draw::elements::types::arrow::arrow_points::ArrowPointKind::FocusEnd
-        }
+        DetectorConnectorPointKind::Turning => DomainConnectorPointKind::Turning,
+        DetectorConnectorPointKind::Addable => DomainConnectorPointKind::Addable,
+        DetectorConnectorPointKind::LoopStart => DomainConnectorPointKind::LoopStart,
+        DetectorConnectorPointKind::LoopEnd => DomainConnectorPointKind::LoopEnd,
+        DetectorConnectorPointKind::FocusStart => DomainConnectorPointKind::FocusStart,
+        DetectorConnectorPointKind::FocusEnd => DomainConnectorPointKind::FocusEnd,
     }
 }
 

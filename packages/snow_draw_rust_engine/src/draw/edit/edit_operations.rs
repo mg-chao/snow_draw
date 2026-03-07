@@ -729,9 +729,9 @@ impl EditOperation for ArrowPointEditOperationAdapter {
         position: DrawPoint,
         params: &EditOperationParams,
     ) -> EditContext {
-        let arrow_params = params.as_arrow_point();
+        let arrow_params = params.as_connector_point();
         let target = params
-            .as_arrow_point()
+            .as_connector_point()
             .and_then(|details| {
                 state
                     .domain
@@ -1304,13 +1304,10 @@ fn resolve_closest_arrow_point(
 }
 
 fn has_bindable_targets(state: &DrawState, excluded_element_id: &str) -> bool {
-    state.domain.document.elements.iter().any(|element| {
-        element.id != excluded_element_id && element.opacity > 0.0 && is_bindable_target(element)
-    })
-}
-
-fn is_bindable_target(element: &DomainElementState) -> bool {
-    ArrowBindingUtils::is_bindable_target(element)
+    state
+        .domain
+        .document
+        .has_arrow_bindable_elements_except(Some(excluded_element_id))
 }
 
 #[derive(Clone, Debug, PartialEq)]
