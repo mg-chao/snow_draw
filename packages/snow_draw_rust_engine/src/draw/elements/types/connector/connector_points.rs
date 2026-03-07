@@ -237,7 +237,7 @@ fn build_focus_handle(
         element.id.clone(),
         kind,
         index,
-        focus_point,
+        to_local_position(element, focus_point),
     ))
 }
 
@@ -318,6 +318,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::*;
+    use crate::draw::elements::types::arrow::arrow_geometry::ArrowGeometry;
     use crate::draw::elements::types::arrow::arrow_data::{
         ArrowBinding as DataArrowBinding, ArrowBindingMode as DataArrowBindingMode, ArrowData,
     };
@@ -430,6 +431,36 @@ mod tests {
         assert!(hit.is_none());
     }
 
+    #[test]
+    fn build_overlay_projects_rotated_focus_handles_into_local_space() {
+        let bindable = bindable_element();
+        let arrow = rotated_bound_arrow_element();
+        let elements = vec![bindable.clone(), arrow.clone()];
+
+        let overlay = ConnectorPointUtils::build_overlay_with_options(
+            &arrow,
+            16.0,
+            Some(10.0),
+            &elements,
+            1.0,
+            true,
+        );
+
+        let data = resolve_connector_data(&arrow).expect("connector data");
+        let world_points = ArrowGeometry::resolve_world_points(arrow.rect, &data.points);
+        let binding = data.start_binding.as_ref().expect("start binding");
+        let world_focus_point =
+            ArrowBindingUtils::resolve_bound_point(binding, &bindable, Some(world_points[0]))
+                .expect("world focus point");
+
+        assert_eq!(overlay.focus_points.len(), 1);
+        assert_eq!(
+            overlay.focus_points[0].position,
+            to_local_position(&arrow, world_focus_point)
+        );
+        assert_ne!(overlay.focus_points[0].position, world_focus_point);
+    }
+
     fn bindable_element() -> ElementState {
         ElementState::new(
             "bindable-focus",
@@ -454,6 +485,25 @@ mod tests {
             "arrow-focus",
             DrawRect::new(120.0, 20.0, 320.0, 21.0),
             0.0,
+            1.0,
+            1,
+            Arc::new(data),
+        )
+    }
+
+    fn rotated_bound_arrow_element() -> ElementState {
+        let mut data = ArrowData::default();
+        data.points = vec![DrawPoint::new(0.0, 0.5), DrawPoint::new(1.0, 0.5)];
+        data.start_binding = Some(DataArrowBinding::new(
+            "bindable-focus",
+            DrawPoint::new(1.0, 0.5),
+            DataArrowBindingMode::Orbit,
+        ));
+
+        ElementState::new(
+            "arrow-focus-rotated",
+            DrawRect::new(120.0, 20.0, 320.0, 120.0),
+            std::f64::consts::FRAC_PI_4,
             1.0,
             1,
             Arc::new(data),

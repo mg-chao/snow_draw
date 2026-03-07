@@ -634,6 +634,12 @@ fn resolve_creation_endpoints(
     let mut adjusted_current =
         snap_point_to_grid_if_needed(current_position, config, snapping_mode);
 
+    let start_binding_reference_point = if preferred_start_binding.is_some() {
+        adjusted_current
+    } else {
+        start_position
+    };
+
     let start_binding_result = resolve_start_binding_point(
         state,
         config,
@@ -643,7 +649,7 @@ fn resolve_creation_endpoints(
         arrow_type,
         start_arrowhead,
         preferred_start_binding,
-        adjusted_current,
+        start_binding_reference_point,
         angle_locked,
         alt_key,
         session_data,
@@ -902,7 +908,7 @@ fn resolve_start_binding_point(
         }
     }
 
-    let resolved = snap_binding_point(
+    let mut resolved = snap_binding_point(
         state,
         config,
         start_position,
@@ -917,6 +923,10 @@ fn resolve_start_binding_point(
         cache_policy,
     );
     if preferred_binding.is_none() {
+        if let Some(binding) = resolved.binding.as_mut() {
+            binding.mode = ArrowBindingMode::Inside;
+            resolved.position = start_position;
+        }
         match resolved.binding.as_ref().map(|binding| binding.mode) {
             Some(ArrowBindingMode::Inside) => {
                 session_data.preserve_start_inside_binding = true;
